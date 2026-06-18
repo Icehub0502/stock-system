@@ -1,0 +1,40 @@
+import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
+import logo from '../image/champpower-logo.jpg';
+
+export default function LoginPage() {
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const { login } = useAuth();
+  const navigate = useNavigate();
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    try {
+      const user = await login(username, password);
+      navigate(user.role === 'office' ? '/office' : '/scan');
+    } catch (err) {
+      setError(err.response?.data?.error || 'เข้าสู่ระบบไม่สำเร็จ');
+    }
+  };
+
+  return (
+    <div className="login-card">
+      <div className="login-logo">
+        <img src={logo} alt="Champ Power" />
+      </div>
+      <h2>เข้าสู่ระบบ</h2>
+      <form onSubmit={handleSubmit}>
+        <label>Username</label>
+        <input value={username} onChange={(e) => setUsername(e.target.value)} autoFocus />
+        <label>Password</label>
+        <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+        {error && <p className="error-text">{error}</p>}
+        <button type="submit">เข้าสู่ระบบ</button>
+      </form>
+    </div>
+  );
+}

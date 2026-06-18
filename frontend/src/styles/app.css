@@ -1,0 +1,624 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: 'Segoe UI', 'Sarabun', Arial, sans-serif;
+  background: #f4f5f7;
+  color: #222;
+}
+
+.container {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 16px;
+}
+
+/* ── Navbar ── */
+.navbar {
+  background: #1f2937;
+  color: white;
+  padding: 0 20px;
+  display: flex;
+  flex-direction: column;        /* brand + links วางแนวตั้ง */
+}
+
+.navbar-brand {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 0;
+  width: 100%;
+}
+
+.navbar-title {
+  font-weight: 600;
+  font-size: 1rem;
+}
+
+.navbar-hamburger {
+  display: none;                 /* ซ่อนบน desktop */
+  background: transparent;
+  border: 1px solid #4b5563;
+  color: white;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 1.1rem;
+  min-height: unset;
+  cursor: pointer;
+}
+
+.navbar-links {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding-bottom: 12px;
+}
+
+.navbar-links a {
+  color: #cbd5e1;
+  text-decoration: none;
+  font-size: 0.95rem;
+  padding: 4px 0;
+}
+
+.navbar-links a:hover { color: white; }
+
+.navbar-user-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+  flex-wrap: wrap;
+}
+
+.navbar-user {
+  font-size: 0.85em;
+  color: #9ca3af;
+  white-space: nowrap;
+}
+
+.navbar-role {
+  margin-left: 4px;
+}
+
+.btn-logout {
+  background: #ef4444;
+  border: none;
+  color: white;
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  min-height: 36px;
+  white-space: nowrap;
+}
+
+/* ── Login Card ── */
+.login-card {
+  max-width: 360px;
+  margin: 40px auto;
+  background: white;
+  padding: 24px;
+  border-radius: 10px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.login-card h2 {
+  text-align: center;
+}
+
+.login-logo {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 16px;
+}
+
+.login-logo img {
+  max-width: 160px;
+  width: 100%;
+  height: auto;
+}
+
+.login-card form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* ── Base Inputs & Buttons ── */
+input, button {
+  font-size: 1em;
+  padding: 10px 12px;     /* เพิ่ม touch area */
+  border-radius: 6px;
+  border: 1px solid #d1d5db;
+  min-height: 42px;       /* touch-friendly minimum */
+  touch-action: manipulation;
+}
+
+button {
+  cursor: pointer;
+  background: #2563eb;
+  color: white;
+  border: none;
+}
+
+button:hover {
+  opacity: 0.9;
+}
+
+button:disabled {
+  background: #9ca3af;
+  cursor: not-allowed;
+}
+
+.btn-danger {
+  background: #dc2626 !important;
+}
+
+.btn-primary {
+  background: #16a34a !important;
+}
+
+/* ── Text Helpers ── */
+.error-text {
+  color: #dc2626;
+  font-weight: 600;
+}
+
+.success-text {
+  color: #16a34a;
+  font-weight: 600;
+}
+
+/* ── Rack Form ── */
+.rack-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+  background: white;
+  padding: 16px;
+  border-radius: 10px;
+}
+
+.rack-form input {
+  flex: 1 1 160px;
+  min-width: 0;           /* ป้องกัน overflow บน flex */
+}
+
+.rack-form button {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+/* ── Search Bar ── */
+.search-bar {
+  position: relative;
+  margin-bottom: 16px;
+}
+
+.search-bar input {
+  width: 100%;
+  padding: 10px 40px 10px 14px;
+  border-radius: 8px;
+  background: white;
+}
+
+.search-clear {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: transparent;
+  border: none;
+  color: #9ca3af;
+  min-height: unset;
+  padding: 4px 8px;
+  font-size: 1rem;
+}
+
+.search-clear:hover {
+  color: #374151;
+  opacity: 1;
+}
+
+.no-result-text {
+  text-align: center;
+  color: #9ca3af;
+  padding: 32px;
+}
+
+/* ── Rack Table ── */
+.rack-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: white;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.rack-table th,
+.rack-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid #e5e7eb;
+  text-align: left;
+  font-size: 0.95rem;
+}
+
+.rack-table tr.low-stock td {
+  background: #fef3c7;
+}
+
+/* ตัวเลขสต็อก + ป้ายเตือน อยู่บรรทัดเดียวกันเสมอ ไม่ตกบรรทัด */
+.stock-value {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.warn-badge {
+  font-size: 0.8em;
+  color: #b45309;
+  white-space: nowrap;
+}
+
+/* ── Actions ── */
+.actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: nowrap;       /* ปุ่มอยู่แถวเดียวกันเสมอในมุมมองตาราง */
+}
+
+.actions button {
+  padding: 8px 12px;
+  font-size: 0.85em;
+  min-height: 36px;
+  white-space: nowrap;
+}
+
+/* กันคอลัมน์ปุ่มถูกตารางบีบแคบจนปุ่มตกบรรทัด */
+.rack-table th:last-child,
+.rack-table td.actions {
+  min-width: 170px;
+  white-space: nowrap;
+}
+
+/* ── Scan Page ── */
+.scan-page {
+  text-align: center;
+}
+
+.mode-toggle {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.mode-toggle button {
+  background: #e5e7eb;
+  color: #111827;
+  padding: 10px 20px;
+  flex: 1 1 120px;        /* ยืดเต็มแถวบนมือถือ */
+  max-width: 200px;
+}
+
+.mode-toggle button.active {
+  background: #2563eb;
+  color: white;
+}
+
+/* ── Modal ── */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  z-index: 50;
+}
+
+.modal-card {
+  background: white;
+  border-radius: 12px;
+  padding: 24px;
+  max-width: 400px;
+  width: 100%;
+  text-align: left;
+  max-height: 90vh;       /* ป้องกัน modal ล้นหน้าจอ */
+  overflow-y: auto;
+}
+
+.modal-warning {
+  border: 3px solid #dc2626;
+}
+
+.modal-rack-info p {
+  margin: 4px 0;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 16px;
+  flex-wrap: wrap;
+}
+
+.modal-actions button {
+  flex: 1;
+  min-width: 100px;
+}
+
+/* ── Dashboard Header ── */
+.dashboard-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.dashboard-header h2 {
+  margin: 0;
+  font-size: 1.2rem;
+}
+
+/* ── Table wrapper: scroll แนวนอนบนจอแคบ (สำรองไว้สำหรับ tablet) ── */
+.table-wrapper {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border-radius: 10px;
+}
+
+/* ── Modal Form ── */
+.modal-title {
+  margin: 0 0 16px;
+  font-size: 1.1rem;
+}
+
+.modal-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.modal-form label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #374151;
+  margin-top: 4px;
+}
+
+/* ── Delete Zone ── */
+.modal-delete-zone {
+  margin-top: 8px;
+}
+
+.modal-delete-zone hr {
+  border: none;
+  border-top: 1px solid #e5e7eb;
+  margin: 16px 0 12px;
+}
+
+.btn-full {
+  width: 100%;
+}
+
+/* ════════════════════════════════════════
+   RESPONSIVE BREAKPOINTS
+   ════════════════════════════════════════ */
+
+/* ── มือถือ: < 480px ── */
+@media (max-width: 480px) {
+  .container {
+    padding: 10px;
+  }
+
+  .login-card {
+    margin: 20px auto;
+    padding: 18px;
+  }
+
+  .modal-card {
+    padding: 16px;
+    border-radius: 10px;
+  }
+
+  .modal-actions {
+    flex-direction: column;
+  }
+}
+
+/* ── แท็บเล็ต / iPad แนวตั้ง: 481px – 768px ── */
+@media (min-width: 481px) and (max-width: 768px) {
+  .container {
+    padding: 12px;
+  }
+
+  .rack-form input {
+    flex: 1 1 130px;
+  }
+
+  .login-card {
+    margin: 30px auto;
+  }
+}
+
+/* ── iPad Pro / Landscape Tablet: 769px – 1024px ── */
+@media (min-width: 769px) and (max-width: 1024px) {
+  .container {
+    padding: 14px 20px;
+  }
+
+  .rack-table th,
+  .rack-table td {
+    padding: 10px 14px;
+  }
+}
+
+/* ── Desktop: > 1024px ── */
+@media (min-width: 1025px) {
+  .container {
+    padding: 20px 24px;
+  }
+
+  .login-card {
+    margin: 60px auto;
+  }
+}
+
+/* ════════════════════════════════════════
+   RACK TABLE → CARD LAYOUT บนจอแคบ (≤ 640px)
+   ทุกคอลัมน์รวมถึงปุ่มแก้ไข/QR แสดงครบเสมอ ไม่มีการซ่อน
+   ════════════════════════════════════════ */
+@media (max-width: 640px) {
+  .rack-table thead {
+    display: none;
+  }
+
+  .rack-table,
+  .rack-table tbody,
+  .rack-table tr,
+  .rack-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .rack-table tbody tr {
+    margin-bottom: 12px;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    overflow: hidden;
+  }
+
+  .rack-table tbody tr.low-stock {
+    border-color: #fbbf24;
+  }
+
+  .rack-table td {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 14px;
+    border-bottom: 1px solid #f3f4f6;
+    text-align: right;
+    white-space: normal;
+  }
+
+  .rack-table tr td:last-child {
+    border-bottom: none;
+  }
+
+  .rack-table td::before {
+    content: attr(data-label);
+    font-weight: 600;
+    font-size: 0.85rem;
+    color: #6b7280;
+    text-align: left;
+    flex-shrink: 0;
+  }
+
+  /* แถวปุ่มจัดการ: ไม่ต้องมี label ซ้ำ ปุ่มวางเต็มแถวคู่กัน */
+  .rack-table td.actions::before {
+    display: none;
+  }
+
+  .rack-table td.actions {
+    justify-content: stretch;
+    gap: 8px;
+    min-width: 0;
+    white-space: normal;
+  }
+
+  .rack-table td.actions button {
+    flex: 1;
+    width: auto;
+  }
+
+  /* แถวข้อความ "ยังไม่มีรายการ" ไม่ต้องมี label */
+  .no-result-text::before {
+    display: none;
+  }
+}
+
+/* ── มือถือ < 768px: เปิด hamburger บน navbar ── */
+@media (max-width: 768px) {
+  .navbar {
+    padding: 0 14px;
+  }
+
+  .navbar-hamburger {
+    display: block;              /* แสดงปุ่ม ☰ */
+  }
+
+  .navbar-links {
+    display: none;               /* ซ่อน menu ไว้ก่อน */
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0;
+    padding-bottom: 10px;
+    width: 100%;
+    border-top: 1px solid #374151;
+  }
+
+  .navbar-links.open {
+    display: flex;               /* เปิด menu เมื่อกด hamburger */
+  }
+
+  .navbar-links a {
+    width: 100%;
+    padding: 12px 0;
+    border-bottom: 1px solid #374151;
+    font-size: 1rem;
+  }
+
+  .navbar-user-row {
+    width: 100%;
+    margin-left: 0;
+    padding: 12px 0;
+    justify-content: space-between;
+  }
+
+  .btn-logout {
+    min-height: 40px;
+    padding: 8px 14px;
+  }
+}
+
+/* ── Desktop ≥ 769px: navbar links inline ── */
+@media (min-width: 769px) {
+  .navbar {
+    flex-direction: row;
+    align-items: center;
+    padding: 0 20px;
+  }
+
+  .navbar-brand {
+    padding: 12px 0;
+    width: auto;
+    margin-right: 24px;
+  }
+
+  .navbar-links {
+    flex-direction: row;
+    padding-bottom: 0;
+    flex: 1;
+  }
+}
+
+/* ── ลด animation สำหรับผู้ใช้ที่ตั้งค่า reduced motion ── */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    animation: none !important;
+  }
+}
