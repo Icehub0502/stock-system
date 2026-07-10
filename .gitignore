@@ -3,3 +3,14 @@ dist/
 backend/certs/*.pem
 .env
 *.log
+
+# Personal/business reference documents — not source code
+เอกสาร Champ/
+~$*.xlsx
+*.zip
+*.rar
+*.lnk
+
+# Personal photo/video sync folder that ended up under backend/public/ —
+# unrelated to the landing-page car-brand image galleries (those stay).
+backend/public/Pictures/

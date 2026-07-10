@@ -1,52 +1,165 @@
-import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
+// components/NavBar.jsx
+import React, { useEffect, useRef, useState } from "react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
+import ChangePasswordModal from "./ChangePasswordModal";
+
+const NAV_CATEGORIES = [
+  {
+    key: "stock",
+    label: "สต๊อกสินค้า",
+    items: [
+      { to: "/stock-rack", label: "StockRack" },
+      { to: "/wing-arms", label: "ปีกนก" },
+      { to: "/service-items", label: "รายการสินค้า/บริการ" },
+      { to: "/receipts", label: "บิลรับเข้า" },
+      { to: "/product-costs", label: "ต้นทุนสินค้า" },
+    ],
+  },
+  {
+    key: "customers",
+    label: "ลูกค้า",
+    items: [
+      { to: "/customers", label: "ลูกค้า" },
+      { to: "/vehicles", label: "รถลูกค้า" },
+      { to: "/warranties", label: "การรับประกัน" },
+    ],
+  },
+  {
+    key: "sales",
+    label: "งานขาย",
+    items: [
+      { to: "/receipt-list", label: "ใบเสร็จรับเงิน" },
+      { to: "/quotations", label: "ใบเสนอราคา" },
+      { to: "/daily-summary", label: "สรุปยอดขายรายวัน" },
+    ],
+  },
+  {
+    key: "reports",
+    label: "รายงาน",
+    items: [
+      { to: "/history", label: "ประวัติรายการ" },
+    ],
+  },
+];
 
 export default function NavBar() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [openCategory, setOpenCategory] = useState(null);
+  const [showChangePassword, setShowChangePassword] = useState(false);
+  const navRef = useRef(null);
+
+  useEffect(() => {
+    function handleClickOutside(e) {
+      if (navRef.current && !navRef.current.contains(e.target)) {
+        setOpenCategory(null);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    setMenuOpen(false);
+    setOpenCategory(null);
+  }, [location.pathname]);
 
   if (!user) return null;
 
   const handleLogout = () => {
     logout();
-    navigate('/login');
+    navigate("/login");
   };
 
+  const close = () => {
+    setMenuOpen(false);
+    setOpenCategory(null);
+  };
+
+  const toggleCategory = (key) => {
+    setOpenCategory((cur) => (cur === key ? null : key));
+  };
+
+  const isCategoryActive = (items) => items.some((it) => location.pathname === it.to);
+
   return (
-    <nav className="navbar">
+    <nav className="navbar" ref={navRef}>
       <div className="navbar-brand">
-        <div className="navbar-title">ระบบจัดการสต๊อกแร็ค OEM</div>
-        {/* Hamburger — แสดงเฉพาะมือถือ */}
+        <div className="navbar-title navbar-brand-text">
+          <span className="brand-champ">Champ</span><span className="brand-power">power</span><span className="brand-spk">SPK</span>
+        </div>
         <button
           className="navbar-hamburger"
           onClick={() => setMenuOpen((o) => !o)}
           aria-label="เมนู"
         >
-          {menuOpen ? '✕' : '☰'}
+          {menuOpen ? "✕" : "☰"}
         </button>
       </div>
 
-      <div className={`navbar-links ${menuOpen ? 'open' : ''}`}>
-        {user.role === 'office' && (
-          <Link to="/office" onClick={() => setMenuOpen(false)}>รายการแร็ค</Link>
+      <div className={`navbar-links ${menuOpen ? "open" : ""}`}>
+        {user.role === "office" && (
+          <Link
+            to="/dashboard"
+            className={`navbar-standalone-link ${location.pathname === "/dashboard" ? "active" : ""}`}
+            onClick={close}
+          >
+            แดชบอร์ด
+          </Link>
         )}
-        {user.role === 'office' && (
-          <Link to="/history" onClick={() => setMenuOpen(false)}>ประวัติรายการ</Link>
-        )}
-        <Link to="/scan" onClick={() => setMenuOpen(false)}>สแกน QR</Link>
+        {user.role === "office" &&
+          NAV_CATEGORIES.map((cat) => (
+            <div
+              className={`navbar-category ${openCategory === cat.key ? "open" : ""} ${isCategoryActive(cat.items) ? "active" : ""}`}
+              key={cat.key}
+            >
+              <button
+                type="button"
+                className="navbar-category-trigger"
+                onClick={() => toggleCategory(cat.key)}
+              >
+                {cat.label}
+                <span className="navbar-category-caret">▾</span>
+              </button>
+              <div className="navbar-category-menu">
+                {cat.items.map((it) => (
+                  <Link
+                    key={it.to}
+                    to={it.to}
+                    className={location.pathname === it.to ? "active" : ""}
+                    onClick={close}
+                  >
+                    {it.label}
+                  </Link>
+                ))}
+              </div>
+            </div>
+          ))}
+
+        <Link to="/scan" className="navbar-standalone-link" onClick={close}>สแกน QR</Link>
 
         <div className="navbar-user-row">
           <span className="navbar-user">
             {user.full_name}
             <span className="navbar-role">
-              ({user.role === 'office' ? 'ออฟฟิส' : 'ช่าง'})
+              ({user.role === "office" ? "ออฟฟิส" : "ช่าง"})
             </span>
           </span>
-          <button className="btn-logout" onClick={handleLogout}>ออกจากระบบ</button>
+          <button className="btn-change-password" onClick={() => setShowChangePassword(true)}>
+            เปลี่ยนรหัสผ่าน
+          </button>
+          <button className="btn-logout" onClick={handleLogout}>
+            ออกจากระบบ
+          </button>
         </div>
       </div>
+
+      {showChangePassword && (
+        <ChangePasswordModal onClose={() => setShowChangePassword(false)} />
+      )}
     </nav>
   );
 }

@@ -37,4 +37,32 @@ router.get('/me', authenticate, (req, res) => {
   res.json({ user: req.user });
 });
 
+// Self-service password change — any logged-in user, for their own account
+// only (unlike PUT /api/users/:id, which is office-only and can reset
+// anyone's password but requires no proof of the old one).
+router.put('/change-password', authenticate, async (req, res) => {
+  const { current_password, new_password } = req.body || {};
+  if (!current_password || !new_password) {
+    return res.status(400).json({ error: 'กรุณากรอกรหัสผ่านเดิมและรหัสผ่านใหม่' });
+  }
+  if (new_password.length < 4) {
+    return res.status(400).json({ error: 'รหัสผ่านใหม่ต้องมีอย่างน้อย 4 ตัวอักษร' });
+  }
+  try {
+    const [rows] = await pool.execute('SELECT * FROM users WHERE id = ?', [req.user.id]);
+    const user = rows[0];
+    if (!user || !bcrypt.compareSync(current_password, user.password_hash)) {
+      return res.status(401).json({ error: 'รหัสผ่านเดิมไม่ถูกต้อง' });
+    }
+    await pool.execute(
+      'UPDATE users SET password_hash = ? WHERE id = ?',
+      [bcrypt.hashSync(new_password, 10), req.user.id]
+    );
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'เปลี่ยนรหัสผ่านไม่สำเร็จ' });
+  }
+});
+
 module.exports = router;

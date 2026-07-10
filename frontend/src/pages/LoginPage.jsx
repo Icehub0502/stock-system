@@ -15,7 +15,7 @@ export default function LoginPage() {
     setError('');
     try {
       const user = await login(username, password);
-      navigate(user.role === 'office' ? '/office' : '/scan');
+      navigate(user.role === 'office' ? '/dashboard' : '/scan');
     } catch (err) {
       setError(err.response?.data?.error || 'เข้าสู่ระบบไม่สำเร็จ');
     }
@@ -28,9 +28,9 @@ export default function LoginPage() {
       </div>
       <h2>เข้าสู่ระบบ</h2>
       <form onSubmit={handleSubmit}>
-        <label>Username</label>
+        <label>ชื่อผู้ใช้งาน</label>
         <input value={username} onChange={(e) => setUsername(e.target.value)} autoFocus />
-        <label>Password</label>
+        <label>รหัสผ่าน</label>
         <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
         {error && <p className="error-text">{error}</p>}
         <button type="submit">เข้าสู่ระบบ</button>

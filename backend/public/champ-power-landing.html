@@ -1,0 +1,870 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <!-- Google Tag Manager -->
+<script>(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
+new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
+j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
+'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
+})(window,document,'script','dataLayer','GTM-PGRG6M38');</script>
+<!-- End Google Tag Manager -->
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="ศูนย์ซ่อมรถยนต์ครบวงจร Champ Power SPK สมุทรปราการ ช่างมืออาชีพ อะไหล่แท้ บริการด่วน รับประกันงาน">
+<meta name="keywords" content="ซ่อมรถ สมุทรปราการ ร้านซ่อมรถ อะไหล่รถ ช่างรถ Champ Power">
+<meta property="og:title" content="Champ Power SPK | ศูนย์ซ่อมรถยนต์ครบวงจร">
+<meta property="og:description" content="ช่างมืออาชีพ อะไหล่แท้ รับประกันงาน บริการด่วน สมุทรปราการ">
+<title>Champ Power SPK | ศูนย์ซ่อมรถยนต์ครบวงจร สมุทรปราการ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0A0A0F;
+    --bg2: #111118;
+    --bg3: #18181F;
+    --yellow: #F5C400;
+    --yellow-dark: #C99E00;
+    --text: #E8E8E8;
+    --text-muted: #888;
+    --red-cta: #E83A1E;
+    --red-hover: #FF4D2E;
+    --border: rgba(245,196,0,0.18);
+  }
+
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: 'Sarabun', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 16px;
+    line-height: 1.6;
+    overflow-x: hidden;
+  }
+
+  /* ===== NAVBAR ===== */
+  .nav {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 5%;
+    background: rgba(10,10,15,0.95);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--border);
+  }
+  .nav-logo {
+    font-size: 20px; font-weight: 800;
+    color: var(--yellow); letter-spacing: 1px;
+    text-decoration: none;
+  }
+  .nav-logo span { color: var(--text); font-weight: 400; }
+  .nav-tel {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 15px; font-weight: 700; color: #000;
+    text-decoration: none;
+    background: var(--yellow);
+    padding: 9px 20px; border-radius: 4px;
+    transition: background 0.2s;
+  }
+  .nav-tel:hover { background: var(--yellow-dark); }
+  .nav-tel svg { width: 15px; height: 15px; flex-shrink: 0; }
+
+  /* ===== HERO ===== */
+  .hero {
+    min-height: 100vh;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    align-items: center;
+    padding: 100px 5% 60px;
+    position: relative;
+    overflow: hidden;
+    background: var(--bg);
+  }
+  .hero-content { position: relative; z-index: 2; max-width: 560px; }
+  .hero-image {
+    position: relative; z-index: 2;
+    align-self: stretch;
+    overflow: hidden;
+    clip-path: polygon(10% 0, 100% 0, 100% 100%, 0% 100%);
+    margin-right: -5%;
+    margin-top: -100px;
+    margin-bottom: -60px;
+    min-height: 520px;
+  }
+  .hero-image img {
+    width: 100%; height: 100%;
+    object-fit: cover; object-position: center; display: block;
+  }
+  .hero-image-overlay {
+    position: absolute; inset: 0;
+    background: linear-gradient(to right, var(--bg) 0%, transparent 20%);
+  }
+  .hero-eyebrow {
+    font-size: 12px; font-weight: 700; letter-spacing: 3px;
+    color: var(--yellow); text-transform: uppercase;
+    margin-bottom: 20px;
+    display: flex; align-items: center; gap: 12px;
+  }
+  .hero-eyebrow::before {
+    content: ''; display: block; width: 28px; height: 2px;
+    background: var(--yellow); flex-shrink: 0;
+  }
+  .hero h1 {
+    font-size: clamp(40px, 6vw, 72px);
+    font-weight: 800; line-height: 1.08; margin-bottom: 10px;
+  }
+  .hero h1 .accent { color: var(--yellow); }
+  .hero-sub {
+    font-size: clamp(17px, 2.5vw, 26px);
+    font-weight: 300; color: var(--text-muted); margin-bottom: 24px;
+  }
+  .hero-desc {
+    font-size: 15px; color: #aaa;
+    max-width: 440px; margin-bottom: 36px; line-height: 1.85;
+  }
+  .hero-cta-group { display: flex; gap: 12px; flex-wrap: wrap; }
+  .btn-primary {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: var(--red-cta); color: #fff;
+    font-size: 16px; font-weight: 700;
+    padding: 14px 28px; border-radius: 4px; text-decoration: none;
+    transition: background 0.2s, transform 0.15s; white-space: nowrap;
+  }
+  .btn-primary:hover { background: var(--red-hover); transform: translateY(-2px); }
+  .btn-primary svg { width: 17px; height: 17px; flex-shrink: 0; }
+  .btn-line {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: #06C755; color: #fff;
+    font-size: 16px; font-weight: 700;
+    padding: 14px 24px; border-radius: 4px; text-decoration: none;
+    transition: opacity 0.2s, transform 0.15s; white-space: nowrap;
+  }
+  .btn-line:hover { opacity: 0.88; transform: translateY(-2px); }
+  .btn-line svg { width: 17px; height: 17px; flex-shrink: 0; }
+  .hero-trust { margin-top: 40px; display: flex; gap: 24px; flex-wrap: wrap; }
+  .trust-item { display: flex; align-items: center; gap: 8px; }
+  .trust-check {
+    width: 22px; height: 22px; border-radius: 50%;
+    background: rgba(245,196,0,0.15);
+    border: 1px solid var(--yellow);
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  }
+  .trust-check svg { width: 12px; height: 12px; color: var(--yellow); }
+  .trust-text { font-size: 13px; color: #aaa; }
+  .trust-text strong { color: var(--text); }
+
+  /* ===== YELLOW BAR ===== */
+  .yellow-bar { height: 4px; background: var(--yellow); }
+
+  /* ===== SECTIONS ===== */
+  .section { padding: 80px 5%; }
+  .section-label {
+    font-size: 11px; font-weight: 700; letter-spacing: 3px;
+    color: var(--yellow); text-transform: uppercase; margin-bottom: 10px;
+  }
+  .section-title {
+    font-size: clamp(26px, 4vw, 42px);
+    font-weight: 800; line-height: 1.2; margin-bottom: 12px;
+  }
+  .section-desc { font-size: 15px; color: var(--text-muted); max-width: 520px; margin-bottom: 44px; line-height: 1.8; }
+
+  /* ===== SERVICES ===== */
+  .services-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 1px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.04);
+  }
+  .service-card {
+    background: var(--bg2); padding: 32px 26px;
+    transition: background 0.2s; position: relative; overflow: hidden;
+  }
+  .service-card::after {
+    content: ''; position: absolute; bottom: 0; left: 0; right: 0;
+    height: 2px; background: var(--yellow);
+    transform: scaleX(0); transform-origin: left; transition: transform 0.3s;
+  }
+  .service-card:hover { background: var(--bg3); }
+  .service-card:hover::after { transform: scaleX(1); }
+  .service-icon {
+    width: 48px; height: 48px;
+    background: rgba(245,196,0,0.08);
+    border: 1px solid rgba(245,196,0,0.2);
+    border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    margin-bottom: 18px; color: var(--yellow);
+  }
+  .service-icon svg { width: 24px; height: 24px; }
+  .service-card h3 { font-size: 17px; font-weight: 700; margin-bottom: 9px; }
+  .service-card p { font-size: 13.5px; color: var(--text-muted); line-height: 1.75; }
+
+  /* ===== BRANDS GALLERY SECTION ===== */
+  .brands-section { padding: 60px 5%; background: var(--bg2); }
+
+  .stage-wrap {
+    max-width: 900px;
+    margin: 0 auto;
+    background: #111118;
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  .stage-header {
+    display: flex; justify-content: space-between; align-items: center;
+    gap: 12px; padding: 14px 16px; border-bottom: 1px solid rgba(255,255,255,0.05);
+  }
+  .stage-brand {
+    font-size: 13px; font-weight: 700; letter-spacing: 1px;
+    color: var(--yellow); text-transform: uppercase;
+  }
+  .stage-counter {
+    font-size: 12px; color: #777;
+  }
+  .stage-counter span { color: var(--yellow); font-weight: 700; }
+
+  .brand-tabs {
+    display: flex; flex-wrap: wrap; justify-content: center;
+    gap: 8px; max-width: 900px; margin: 0 auto 18px;
+  }
+  .brand-tab {
+    border: 1px solid rgba(255,255,255,0.12);
+    background: rgba(255,255,255,0.04);
+    color: #ddd;
+    padding: 8px 12px;
+    border-radius: 999px;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+  }
+  .brand-tab:hover { background: rgba(255,255,255,0.08); }
+  .brand-tab.active {
+    background: var(--yellow); color: #000; border-color: var(--yellow);
+  }
+
+  .slide-area {
+    position: relative; overflow: hidden;
+    background: #05060a;
+    min-height: 260px;
+  }
+  .slide-track {
+    display: flex; width: 100%; height: 100%; transition: transform 0.45s cubic-bezier(0.25,0.46,0.45,0.94);
+  }
+  .slide-item {
+    min-width: 100%; display: flex; gap: 6px; padding: 10px; box-sizing: border-box;
+  }
+  .img-main { flex: 1.2; position: relative; border-radius: 12px; overflow: hidden; cursor: zoom-in; min-height: 190px; }
+  .img-side { flex: 0.5; position: relative; border-radius: 12px; overflow: hidden; cursor: zoom-in; opacity: 0.65; transition: opacity 0.2s ease; min-height: 190px; }
+  .img-side:hover { opacity: 0.92; }
+  .img-main img, .img-side img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .img-main-label {
+    position: absolute; inset: auto 0 0 0;
+    padding: 10px 12px;
+    background: linear-gradient(transparent, rgba(0,0,0,0.75));
+    color: #fff; font-size: 13px; font-weight: 700;
+    line-height: 1.3;
+  }
+
+  .slide-prev, .slide-next {
+    position: absolute; top: 50%; transform: translateY(-50%);
+    width: 42px; height: 42px; border-radius: 50%; border: none;
+    background: rgba(0,0,0,0.65); color: #fff; font-size: 20px;
+    display: grid; place-items: center; cursor: pointer; z-index: 2;
+    transition: background 0.2s ease;
+  }
+  .slide-prev:hover, .slide-next:hover { background: rgba(245,196,0,0.85); color: #000; }
+  .slide-prev { left: 12px; }
+  .slide-next { right: 12px; }
+
+  .dots-strip { display: flex; justify-content: center; align-items: center; gap: 6px; padding: 12px 0; }
+  .dot {
+    width: 8px; height: 8px; border-radius: 50%; background: rgba(255,255,255,0.18);
+    border: none; cursor: pointer; padding: 0; transition: all 0.2s ease;
+  }
+  .dot.active { background: var(--yellow); transform: scale(1.2); }
+
+  .thumb-row {
+    display: flex; gap: 8px; padding: 10px 12px 14px; overflow-x: auto;
+    border-top: 1px solid rgba(255,255,255,0.05);
+    scrollbar-width: none;
+  }
+  .thumb-row::-webkit-scrollbar { display: none; }
+  .thumb {
+    flex: 0 0 64px; height: 48px; border-radius: 8px; overflow: hidden;
+    cursor: pointer; border: 2px solid transparent; transition: border-color 0.2s ease;
+  }
+  .thumb.active { border-color: var(--yellow); }
+  .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+  .empty-state {
+    display: flex; align-items: center; justify-content: center;
+    flex: 1; min-height: 320px;
+    padding: 24px 16px;
+    color: #999; font-size: 14px; text-align: center;
+  }
+
+  .modal-overlay {
+    position: fixed; inset: 0; z-index: 400;
+    display: none; align-items: center; justify-content: center;
+    background: rgba(0,0,0,0.88);
+  }
+  .modal-overlay.open { display: flex; }
+  .modal-img {
+    max-width: 90vw; max-height: 85vh; object-fit: contain; border-radius: 10px;
+  }
+  .modal-close {
+    position: fixed; top: 18px; right: 18px; width: 40px; height: 40px;
+    border-radius: 50%; border: none; background: rgba(0,0,0,0.7);
+    color: #fff; font-size: 22px; cursor: pointer; display: grid; place-items: center;
+  }
+
+  /* ===== WHY US ===== */
+  .why-section { padding: 80px 5%; background: var(--bg3); }
+  .why-grid {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 64px; align-items: center;
+    max-width: 1100px; margin: 0 auto;
+  }
+  .why-numbers { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .num-card {
+    text-align: center; padding: 28px 16px;
+    border: 1px solid var(--border); border-radius: 4px; background: var(--bg2);
+  }
+  .num-card .big { font-size: 48px; font-weight: 800; color: var(--yellow); line-height: 1; margin-bottom: 8px; }
+  .num-card .label { font-size: 13px; color: var(--text-muted); }
+  .why-points { display: flex; flex-direction: column; gap: 22px; }
+  .why-point { display: flex; gap: 14px; align-items: flex-start; }
+  .why-dot { flex-shrink: 0; width: 7px; height: 7px; background: var(--yellow); border-radius: 50%; margin-top: 9px; }
+  .why-point h4 { font-size: 16px; font-weight: 700; margin-bottom: 4px; }
+  .why-point p { font-size: 13.5px; color: var(--text-muted); line-height: 1.75; }
+
+  /* ===== CONTACT ===== */
+  .contact-section { padding: 80px 5%; background: var(--bg2); }
+  .contact-inner {
+    max-width: 900px; margin: 0 auto;
+    display: grid; grid-template-columns: 1fr 1fr; gap: 56px;
+  }
+  .contact-item { display: flex; gap: 14px; align-items: flex-start; margin-bottom: 26px; }
+  .contact-icon {
+    flex-shrink: 0; width: 42px; height: 42px;
+    background: rgba(245,196,0,0.08);
+    border: 1px solid var(--border); border-radius: 4px;
+    display: flex; align-items: center; justify-content: center; color: var(--yellow);
+  }
+  .contact-icon svg { width: 18px; height: 18px; }
+  .contact-label { font-size: 11px; color: var(--text-muted); margin-bottom: 3px; text-transform: uppercase; letter-spacing: 1.5px; }
+  .contact-val { font-size: 16px; font-weight: 600; }
+  .contact-val a { color: var(--text); text-decoration: none; }
+  .contact-val a:hover { color: var(--yellow); }
+  .map-box { border: 1px solid var(--border); border-radius: 4px; height: 280px; overflow: hidden; }
+  .map-box iframe { width: 100%; height: 100%; border: none; }
+
+  /* ===== CTA BANNER ===== */
+  .cta-banner { padding: 68px 5%; background: var(--yellow); text-align: center; }
+  .cta-banner h2 { font-size: clamp(24px, 4vw, 40px); font-weight: 800; color: #000; margin-bottom: 10px; }
+  .cta-banner p { font-size: 16px; color: rgba(0,0,0,0.6); margin-bottom: 30px; }
+  .cta-btns { display: flex; justify-content: center; gap: 12px; flex-wrap: wrap; }
+  .btn-dark {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: #000; color: #fff; font-size: 16px; font-weight: 700;
+    padding: 14px 28px; border-radius: 4px; text-decoration: none; transition: opacity 0.2s; white-space: nowrap;
+  }
+  .btn-dark:hover { opacity: 0.8; }
+  .btn-green {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: #06C755; color: #fff; font-size: 16px; font-weight: 700;
+    padding: 14px 24px; border-radius: 4px; text-decoration: none; transition: opacity 0.2s; white-space: nowrap;
+  }
+  .btn-green:hover { opacity: 0.88; }
+  .btn-facebook {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: #1877F2; color: #fff; font-size: 16px; font-weight: 700;
+    padding: 14px 24px; border-radius: 4px; text-decoration: none; transition: opacity 0.2s; white-space: nowrap;
+  }
+  .btn-facebook:hover { opacity: 0.88; }
+
+  /* ===== FOOTER ===== */
+  footer {
+    padding: 28px 5%; background: var(--bg);
+    border-top: 1px solid var(--border);
+    display: flex; justify-content: space-between; align-items: center;
+    flex-wrap: wrap; gap: 12px;
+  }
+  .footer-logo { font-size: 17px; font-weight: 800; color: var(--yellow); }
+  .footer-logo span { color: var(--text); font-weight: 400; }
+  footer p { font-size: 12px; color: var(--text-muted); }
+  footer a { font-size: 12px; color: var(--yellow); text-decoration: none; }
+
+  /* ===== STICKY MOBILE CTA ===== */
+  .sticky-cta {
+    display: none;
+    position: fixed; bottom: 0; left: 0; right: 0; z-index: 200;
+    background: rgba(10,10,15,0.97);
+    border-top: 1px solid var(--border);
+    padding: 10px 14px; gap: 8px;
+  }
+  .sticky-cta a {
+    flex: 1; display: flex; align-items: center; justify-content: center;
+    gap: 6px; padding: 13px 0; border-radius: 4px;
+    font-size: 15px; font-weight: 700; text-decoration: none;
+  }
+  .sticky-cta .s-call { background: var(--red-cta); color: #fff; }
+  .sticky-cta .s-line { background: #06C755; color: #fff; }
+  .sticky-cta .s-facebook { background: #1877F2; color: #fff; }
+
+  @media (max-width: 900px) {
+    .hero { grid-template-columns: 1fr; min-height: auto; padding-top: 100px; }
+    .hero-image { display: none; }
+  }
+  @media (max-width: 768px) {
+    .why-grid { grid-template-columns: 1fr; gap: 40px; }
+    .contact-inner { grid-template-columns: 1fr; gap: 32px; }
+    .sticky-cta { display: flex; }
+    body { padding-bottom: 68px; }
+    footer { flex-direction: column; text-align: center; }
+  }
+</style>
+</head>
+<body>
+<!-- Google Tag Manager (noscript) -->
+<noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-PGRG6M38"
+height="0" width="0" style="display:none;visibility:hidden"></iframe></noscript>
+<!-- End Google Tag Manager (noscript) -->
+<!-- NAVBAR -->
+<nav class="nav">
+  <a href="#" class="nav-logo">CHAMP POWER <span>SPK</span></a>
+  <a href="tel:0938245551" class="nav-tel">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 9.81 19.79 19.79 0 01.07 1.17 2 2 0 012.06 0h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L6.09 7.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 16.92z"/></svg>
+    โทรเลย
+  </a>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-content">
+    <div class="hero-eyebrow">ศูนย์ซ่อมรถยนต์ครบวงจร · สมุทรปราการ</div>
+    <h1>ซ่อม <span class="accent">ตรงจุด</span><br>บริการตรงเวลา</h1>
+    <div class="hero-sub">ช่างมืออาชีพ อะไหล่แท้ รับประกันงาน</div>
+    <p class="hero-desc">บริการซ่อมรถยนต์ทุกยี่ห้อ โดยช่างเทคนิคที่มีประสบการณ์กว่า 10 ปี พร้อมอะไหล่แท้คุณภาพสูง รับประกันทุกงาน</p>
+    <div class="hero-cta-group">
+      <a href="tel:0938245551" class="btn-primary">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 9.81 19.79 19.79 0 01.07 1.17 2 2 0 012.06 0h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L6.09 7.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 16.92z"/></svg>
+        โทรนัดหมาย
+      </a>
+      <a href="https://line.me/R/ti/p/@champ5" class="btn-line" target="_blank">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19.365 9.863c.349 0 .63.285.63.631 0 .345-.281.63-.63.63H17.61v1.125h1.755c.349 0 .63.283.63.63 0 .344-.281.629-.63.629h-2.386c-.345 0-.627-.285-.627-.629V8.108c0-.345.282-.63.63-.63h2.386c.346 0 .627.285.627.63 0 .349-.281.63-.63.63H17.61v1.125h1.755zm-3.855 3.016c0 .27-.174.51-.432.596-.064.021-.133.031-.199.031-.211 0-.391-.09-.51-.25l-2.443-3.317v2.94c0 .344-.279.629-.631.629-.346 0-.626-.285-.626-.629V8.108c0-.27.173-.51.43-.595.06-.023.136-.033.194-.033.195 0 .375.105.495.254l2.462 3.33V8.108c0-.345.282-.63.63-.63.345 0 .63.285.63.63v4.771zm-5.741 0c0 .344-.282.629-.631.629-.345 0-.627-.285-.627-.629V8.108c0-.345.282-.63.63-.63.346 0 .628.285.628.63v4.771zm-2.466.629H4.917c-.345 0-.63-.285-.63-.629V8.108c0-.345.285-.63.63-.63.348 0 .63.285.63.63v4.141h1.756c.348 0 .629.283.629.63 0 .344-.281.629-.629.629M24 10.314C24 4.943 18.615.572 12 .572S0 4.943 0 10.314c0 4.811 4.27 8.842 10.035 9.608.391.082.923.258 1.058.59.12.301.079.766.038 1.08l-.164 1.02c-.045.301-.24 1.186 1.049.645 1.291-.539 6.916-4.078 9.436-6.975C23.176 14.393 24 12.458 24 10.314"/></svg>
+        แอด LINE
+      </a>
+      <a href="https://www.facebook.com/Champpowerspk" class="btn-facebook" target="_blank">
+        <svg viewBox="0 0 24 24" fill="currentColor" width="17" height="17"><path d="M22 12.07C22 6.55 17.52 2.07 12 2.07S2 6.55 2 12.07c0 4.99 3.66 9.12 8.44 9.95v-7.05H8.08v-2.9h2.36V9.41c0-2.33 1.38-3.62 3.5-3.62 1.01 0 2.06.18 2.06.18v2.26h-1.16c-1.15 0-1.5.71-1.5 1.44v1.73h2.55l-.41 2.9h-2.14v7.05C18.34 21.19 22 17.06 22 12.07z"/></svg>
+        Facebook
+      </a>
+    </div>
+    <div class="hero-trust">
+      <div class="trust-item">
+        <div class="trust-check"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="2,6 5,9 10,3"/></svg></div>
+        <div class="trust-text"><strong>รับประกันงาน</strong>ทุกรายการ</div>
+      </div>
+      <div class="trust-item">
+        <div class="trust-check"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="2,6 5,9 10,3"/></svg></div>
+        <div class="trust-text"><strong>อะไหล่แท้</strong>มีใบรับประกัน</div>
+      </div>
+      <div class="trust-item">
+        <div class="trust-check"><svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="2,6 5,9 10,3"/></svg></div>
+        <div class="trust-text"><strong>แจ้งราคา</strong>ก่อนซ่อมทุกครั้ง</div>
+      </div>
+    </div>
+  </div>
+  <div class="hero-image">
+    <img src="/landing-assets/Champpower-buttom.jpg" alt="ร้าน Champ Power SPK">
+    <div class="hero-image-overlay"></div>
+  </div>
+</section>
+
+<div class="yellow-bar"></div>
+
+<!-- SERVICES -->
+<section class="section">
+  <div class="section-label">บริการของเรา</div>
+  <h2 class="section-title">ครอบคลุมทุกปัญหารถ</h2>
+  <p class="section-desc">บริการซ่อมรถยนต์ครบวงจร พร้อมอุปกรณ์ทันสมัย ช่างผ่านการฝึกอบรม</p>
+  <div class="services-grid">
+    <div class="service-card">
+      <div class="service-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="3"/><path d="M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg></div>
+      <h3>ซ่อมเครื่องยนต์</h3>
+      <p>วิเคราะห์ปัญหาด้วยคอมพิวเตอร์ scan OBD แม่นยำ ซ่อมตรงจุด ไม่ซ่อมเกินความจำเป็น</p>
+    </div>
+    <div class="service-card">
+      <div class="service-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="5.5" cy="17.5" r="3.5"/><circle cx="18.5" cy="17.5" r="3.5"/><path d="M8 17.5h7M5.5 14V9l5-5h6l3 3v7"/><path d="M11 4v5h6"/></svg></div>
+      <h3>เบรก & ช่วงล่าง</h3>
+      <p>เปลี่ยนผ้าเบรก จานเบรก โช้คอัพ ปีกนก บัสซิ่ง อะไหล่แท้ทุกชิ้น รับประกันมาตรฐาน</p>
+    </div>
+    <div class="service-card">
+      <div class="service-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg></div>
+      <h3>บำรุงรักษาตามระยะ</h3>
+      <p>เปลี่ยนถ่ายน้ำมันเครื่อง กรองอากาศ หัวเทียน ไส้กรองต่าง ๆ ตามคู่มือผู้ผลิต</p>
+    </div>
+    <div class="service-card">
+      <div class="service-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v2M12 12v3M12 15h.01"/></svg></div>
+      <h3>เช็กระยะ & ตรวจสภาพ</h3>
+      <p>ตรวจเช็กรถก่อนเดินทางไกล ออกใบรายงานสภาพรถ แนะนำการบำรุงรักษาที่ถูกต้อง</p>
+    </div>
+    <div class="service-card">
+      <div class="service-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 3h15v13H1zM16 8h5l3 3v5h-8V8z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg></div>
+      <h3>รับ-ส่งรถยก</h3>
+      <p>ส่งรถยกออกรับรถนอกสถานที่ในเขตสมุทรปราการ กรณีรถเสียกลางทางหรือเคลื่อนที่ไม่ได้</p>
+    </div>
+  </div>
+</section>
+
+<!-- BRANDS GALLERY -->
+<section class="brands-section" id="gallery">
+  <div class="section-label">ผลงานของเรา</div>
+  <h2 class="section-title">งานจริง คุณภาพจริง</h2>
+  <p class="section-desc" style="margin-bottom: 32px;">ตัวอย่างงานซ่อมจริงจากร้าน ทุกงานทำด้วยความใส่ใจและอะไหล่แท้</p>
+
+  <div class="brand-tabs" id="brandTabs"></div>
+
+  <div class="stage-wrap">
+    <div class="stage-header">
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+        <div class="stage-brand" id="stageBrand">HONDA</div>
+        <div class="stage-counter"><span id="curIdx">1</span> / <span id="totalCount">0</span></div>
+      </div>
+    </div>
+
+    <div class="slide-area">
+      <button class="slide-prev" id="prevBtn" aria-label="ก่อนหน้า">‹</button>
+      <button class="slide-next" id="nextBtn" aria-label="ถัดไป">›</button>
+      <div class="slide-track" id="slideTrack"></div>
+    </div>
+
+    <div class="dots-strip" id="dotsStrip"></div>
+    <div class="thumb-row" id="thumbRow"></div>
+  </div>
+</section>
+
+<div class="modal-overlay" id="modalOverlay">
+  <button class="modal-close" id="modalClose" aria-label="ปิดภาพ">×</button>
+  <img class="modal-img" id="modalImg" src="" alt="" />
+</div>
+
+<!-- WHY US -->
+<section class="why-section">
+  <div class="why-grid">
+    <div>
+      <div class="section-label">ทำไมต้องเลือกเรา</div>
+      <h2 class="section-title">ไว้ใจได้<br>มากกว่าแค่ซ่อม</h2>
+      <p class="section-desc" style="margin-bottom: 36px;">เราไม่ใช่แค่ซ่อมรถ แต่ดูแลความปลอดภัยของคุณทุกครั้งที่ออกเดินทาง</p>
+      <div class="why-points">
+        <div class="why-point"><div class="why-dot"></div><div><h4>แจ้งราคาก่อนซ่อมทุกครั้ง</h4><p>ไม่มีค่าใช้จ่ายแอบแฝง ลูกค้าอนุมัติก่อนดำเนินการเสมอ</p></div></div>
+        <div class="why-point"><div class="why-dot"></div><div><h4>อะไหล่แท้ มีที่มาตรวจสอบได้</h4><p>จัดหาอะไหล่จากตัวแทนจำหน่ายที่ได้รับการรับรอง ไม่ใช้ของปลอม</p></div></div>
+        <div class="why-point"><div class="why-dot"></div><div><h4>ช่างมีใบรับรองวิชาชีพ</h4><p>ผ่านการฝึกอบรมและทดสอบมาตรฐานช่างยนต์ระดับสากล</p></div></div>
+        <div class="why-point"><div class="why-dot"></div><div><h4>รับประกันงานซ่อม</h4><p>มีการรับประกันงานทุกรายการ หากมีปัญหาเรายินดีแก้ไขให้ฟรี</p></div></div>
+      </div>
+    </div>
+    <div class="why-numbers">
+      <div class="num-card"><div class="big">10+</div><div class="label">ปีประสบการณ์</div></div>
+      <div class="num-card"><div class="big">5k+</div><div class="label">ลูกค้าที่ไว้วางใจ</div></div>
+      <div class="num-card"><div class="big">98%</div><div class="label">ความพึงพอใจ</div></div>
+      <div class="num-card"><div class="big">1วัน</div><div class="label">งานส่วนใหญ่เสร็จใน</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- CONTACT -->
+<section class="contact-section" id="contact">
+  <div style="max-width:900px; margin: 0 auto;">
+    <h2 class="section-title">ติดต่อเรา</h2>
+    <p class="section-desc">เปิดบริการทุกวัน จันทร์ – เสาร์ 8:00 – 18:00 น.</p>
+  </div>
+  <div class="contact-inner">
+    <div>
+      <div class="contact-item">
+        <div class="contact-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 9.81 19.79 19.79 0 01.07 1.17 2 2 0 012.06 0h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L6.09 7.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 16.92z"/></svg></div>
+        <div>
+          <div class="contact-label">โทรศัพท์</div>
+          <div class="contact-val"><a href="tel:0938245551">093-824-5551</a></div>
+        </div>
+      </div>
+      <div class="contact-item">
+        <div class="contact-icon"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M19.365 9.863c.349 0 .63.285.63.631 0 .345-.281.63-.63.63H17.61v1.125h1.755c.349 0 .63.283.63.63 0 .344-.281.629-.63.629h-2.386c-.345 0-.627-.285-.627-.629V8.108c0-.345.282-.63.63-.63h2.386c.346 0 .627.285.627.63 0 .349-.281.63-.63.63H17.61v1.125h1.755zm-3.855 3.016c0 .27-.174.51-.432.596-.064.021-.133.031-.199.031-.211 0-.391-.09-.51-.25l-2.443-3.317v2.94c0 .344-.279.629-.631.629-.346 0-.626-.285-.626-.629V8.108c0-.27.173-.51.43-.595.06-.023.136-.033.194-.033.195 0 .375.105.495.254l2.462 3.33V8.108c0-.345.282-.63.63-.63.345 0 .63.285.63.63v4.771zm-5.741 0c0 .344-.282.629-.631.629-.345 0-.627-.285-.627-.629V8.108c0-.345.282-.63.63-.63.346 0 .628.285.628.63v4.771zm-2.466.629H4.917c-.345 0-.63-.285-.63-.629V8.108c0-.345.285-.63.63-.63.348 0 .63.285.63.63v4.141h1.756c.348 0 .629.283.629.63 0 .344-.281.629-.629.629M24 10.314C24 4.943 18.615.572 12 .572S0 4.943 0 10.314c0 4.811 4.27 8.842 10.035 9.608.391.082.923.258 1.058.59.12.301.079.766.038 1.08l-.164 1.02c-.045.301-.24 1.186 1.049.645 1.291-.539 6.916-4.078 9.436-6.975C23.176 14.393 24 12.458 24 10.314"/></svg></div>
+        <div>
+          <div class="contact-label">LINE Official</div>
+          <div class="contact-val"><a href="https://line.me/R/ti/p/@champ5" target="_blank">@champ5</a></div>
+        </div>
+      </div>
+      <div class="contact-item">
+        <div class="contact-icon"><svg viewBox="0 0 24 24" fill="currentColor" width="24" height="24"><path d="M22 12.07C22 6.55 17.52 2.07 12 2.07S2 6.55 2 12.07c0 4.99 3.66 9.12 8.44 9.95v-7.05H8.08v-2.9h2.36V9.41c0-2.33 1.38-3.62 3.5-3.62 1.01 0 2.06.18 2.06.18v2.26h-1.16c-1.15 0-1.5.71-1.5 1.44v1.73h2.55l-.41 2.9h-2.14v7.05C18.34 21.19 22 17.06 22 12.07z"/></svg></div>
+        <div>
+          <div class="contact-label">Facebook</div>
+          <div class="contact-val"><a href="https://www.facebook.com/Champpowerspk" target="_blank">/Champpowerspk</a></div>
+        </div>
+      </div>
+      <div class="contact-item">
+        <div class="contact-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg></div>
+        <div>
+          <div class="contact-label">ที่อยู่</div>
+          <div class="contact-val" style="font-size:15px; font-weight:400; line-height:1.7">
+            784 ม.4 ซ.แพรกษา 12<br>ต.แพรกษา อ.เมืองสมุทรปราการ<br>จ.สมุทรปราการ 10280
+          </div>
+        </div>
+      </div>
+      <div class="contact-item">
+        <div class="contact-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
+        <div>
+          <div class="contact-label">เวลาทำการ</div>
+          <div class="contact-val" style="font-weight:400; font-size:15px; line-height:1.9">
+            จันทร์ – เสาร์: 08:00 – 18:00 น.<br>
+            <span style="color:#666; font-size:13px;">อาทิตย์: ปิดทำการ</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div>
+      <div class="map-box">
+        <iframe src="https://maps.google.com/maps?q=HM96%2B67+Phraeksa,+Mueang+Samut+Prakan+District,+Samut+Prakan&t=&z=17&ie=UTF8&iwloc=&output=embed" allowfullscreen loading="lazy"></iframe>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CTA BANNER -->
+<section class="cta-banner">
+  <h2>พร้อมให้บริการแล้ววันนี้</h2>
+  <p>โทรนัดล่วงหน้า หรือแวะมาได้เลย ไม่ต้องรอนาน</p>
+  <div class="cta-btns">
+    <a href="tel:0938245551" class="btn-dark">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 9.81 19.79 19.79 0 01.07 1.17 2 2 0 012.06 0h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L6.09 7.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 16.92z"/></svg>
+      โทร 093-824-5551
+    </a>
+    <a href="https://line.me/R/ti/p/@champ5" class="btn-green" target="_blank">
+      แอด LINE @champ5
+    </a>
+    <a href="https://www.facebook.com/Champpowerspk" class="btn-facebook" target="_blank">
+      Facebook Champ Power
+    </a>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-logo">CHAMP POWER <span>SPK</span></div>
+  <p>© 2024 Champ Power SPK | ศูนย์ซ่อมรถยนต์ครบวงจร สมุทรปราการ</p>
+  <a href="https://champ-powerspk.com/champ-power-landing.html" target="_blank">champ-powerspk.com</a>
+</footer>
+
+<!-- STICKY MOBILE CTA -->
+<div class="sticky-cta">
+  <a href="tel:0938245551" class="s-call">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 9.81 19.79 19.79 0 01.07 1.17 2 2 0 012.06 0h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L6.09 7.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 16.92z"/></svg>
+    โทรเลย
+  </a>
+  <a href="https://line.me/R/ti/p/@champ5" class="s-line" target="_blank">
+    LINE สอบถาม
+  </a>
+  <a href="https://www.facebook.com/Champpowerspk" class="s-facebook" target="_blank">
+    Facebook
+  </a>
+</div>
+
+<script>
+const FALLBACK_BRANDS = ['ทั้งหมด', 'Honda', 'Toyota', 'Mazda', 'Nissan', 'Isuzu', 'Ford', 'Mitsubishi', 'MG', 'Suzuki', 'Chevrolet', 'Subaru', 'BMW', 'Volvo', 'Benz', 'Hyundai', 'Jeep', 'BYD', 'Other'];
+const PLACEHOLDER = '/landing-assets/Champpower-buttom.jpg';
+
+let brands = [];
+let activeBrand = 'ทั้งหมด';
+let images = [];
+let currentIdx = 0;
+let autoTimer = null;
+let isAuto = false;
+
+const stageBrand = document.getElementById('stageBrand');
+const curIdxEl = document.getElementById('curIdx');
+const totalCountEl = document.getElementById('totalCount');
+const slideTrack = document.getElementById('slideTrack');
+const dotsStrip = document.getElementById('dotsStrip');
+const thumbRow = document.getElementById('thumbRow');
+const modalOverlay = document.getElementById('modalOverlay');
+const modalImg = document.getElementById('modalImg');
+const brandTabs = document.getElementById('brandTabs');
+
+function formatImage(img, brandName) {
+  return {
+    url: img.url,
+    name: img.name ? `${brandName} — ${img.name.replace(/\.[^.]+$/, '')}` : brandName,
+    brand: brandName
+  };
+}
+
+function renderBrandTabs() {
+  brandTabs.innerHTML = '';
+  brands.forEach((name) => {
+    const btn = document.createElement('button');
+    btn.className = 'brand-tab' + (name === activeBrand ? ' active' : '');
+    btn.textContent = name;
+    btn.onclick = () => switchBrand(name);
+    brandTabs.appendChild(btn);
+  });
+}
+
+function setAutoMode(enabled) {
+  isAuto = enabled;
+  clearInterval(autoTimer);
+  if (isAuto) {
+    autoTimer = setInterval(() => goTo(currentIdx + 1), 3000);
+  }
+}
+
+function openModal(url, alt) {
+  modalImg.src = url || PLACEHOLDER;
+  modalImg.alt = alt || '';
+  modalOverlay.classList.add('open');
+}
+
+function closeModal() {
+  modalOverlay.classList.remove('open');
+}
+
+function updateUI() {
+  totalCountEl.textContent = images.length || 0;
+  curIdxEl.textContent = images.length ? currentIdx + 1 : 0;
+  stageBrand.textContent = activeBrand.toUpperCase();
+  slideTrack.style.transform = `translateX(-${currentIdx * 100}%)`;
+  dotsStrip.querySelectorAll('.dot').forEach((dot, index) => dot.classList.toggle('active', index === currentIdx));
+  thumbRow.querySelectorAll('.thumb').forEach((thumb, index) => thumb.classList.toggle('active', index === currentIdx));
+  // Do not force scrolling when slides auto-change
+}
+
+function goTo(index) {
+  if (!images.length) return;
+  currentIdx = ((index % images.length) + images.length) % images.length;
+  updateUI();
+}
+
+function renderSlides() {
+  slideTrack.innerHTML = '';
+  if (!images.length) {
+    slideTrack.innerHTML = `<div class="slide-item"><div class="empty-state">ยังไม่มีภาพสำหรับยี่ห้อ ${activeBrand}</div></div>`;
+    dotsStrip.innerHTML = '';
+    thumbRow.innerHTML = '';
+    updateUI();
+    return;
+  }
+
+  images.forEach((img, index) => {
+    const prev = images[(index - 1 + images.length) % images.length];
+    const next = images[(index + 1) % images.length];
+    const slide = document.createElement('div');
+    slide.className = 'slide-item';
+    slide.innerHTML = `
+      <div class="img-side"><img src="${prev.url}" alt="" loading="lazy" onerror="this.src='${PLACEHOLDER}'"></div>
+      <div class="img-main" data-idx="${index}">
+        <img src="${img.url}" alt="${img.name}" loading="lazy" onerror="this.src='${PLACEHOLDER}'">
+        <div class="img-main-label">${img.name}</div>
+      </div>
+      <div class="img-side"><img src="${next.url}" alt="" loading="lazy" onerror="this.src='${PLACEHOLDER}'"></div>
+    `;
+    slide.querySelector('.img-main').onclick = () => openModal(img.url, img.name);
+    slideTrack.appendChild(slide);
+  });
+}
+
+function renderDots() {
+  dotsStrip.innerHTML = '';
+  images.forEach((_, index) => {
+    const dot = document.createElement('button');
+    dot.className = 'dot' + (index === currentIdx ? ' active' : '');
+    dot.onclick = () => goTo(index);
+    dotsStrip.appendChild(dot);
+  });
+}
+
+function renderThumbs() {
+  thumbRow.innerHTML = '';
+  images.forEach((img, index) => {
+    const thumb = document.createElement('div');
+    thumb.className = 'thumb' + (index === currentIdx ? ' active' : '');
+    thumb.innerHTML = `<img src="${img.url}" alt="" loading="lazy" onerror="this.src='${PLACEHOLDER}'">`;
+    thumb.onclick = () => goTo(index);
+    thumbRow.appendChild(thumb);
+  });
+}
+
+function prepareImages(data) {
+  return data.map((img) => formatImage(img, img.folder || activeBrand));
+}
+
+function loadBrandImages(brand) {
+  const query = brand === 'ทั้งหมด' ? '/api/landing-images' : `/api/landing-images?folder=${encodeURIComponent(brand)}`;
+  fetch(query)
+    .then((res) => {
+      if (!res.ok) throw new Error('load failed');
+      return res.json();
+    })
+    .then((data) => {
+      const rawImages = Array.isArray(data.images) ? data.images : [];
+      const prepared = rawImages.map((img) => formatImage(img, brand === 'ทั้งหมด' ? img.folder || 'ทั้งหมด' : brand));
+      images = prepared;
+      currentIdx = 0;
+      renderSlides();
+      renderDots();
+      renderThumbs();
+      updateUI();
+    })
+    .catch((err) => {
+      console.warn('ไม่สามารถโหลดอัลบั้มภาพได้:', err);
+      images = [];
+      renderSlides();
+      renderDots();
+      renderThumbs();
+      updateUI();
+    });
+}
+
+function switchBrand(brand) {
+  activeBrand = brand;
+  document.querySelectorAll('.brand-tab').forEach((tab) => tab.classList.toggle('active', tab.textContent === brand));
+  stageBrand.textContent = brand.toUpperCase();
+  setAutoMode(false);
+  loadBrandImages(brand);
+}
+
+function loadBrandCatalog() {
+  return fetch('/api/landing-images')
+    .then((res) => {
+      if (!res.ok) throw new Error('catalog load failed');
+      return res.json();
+    })
+    .then((data) => {
+      const folders = Array.isArray(data.folders) ? data.folders.filter(Boolean) : [];
+      brands = ['ทั้งหมด', ...folders];
+    })
+    .catch((err) => {
+      console.warn('ไม่สามารถโหลดรายการยี่ห้อจากโฟลเดอร์ได้:', err);
+      brands = FALLBACK_BRANDS;
+    });
+}
+
+function init() {
+  document.getElementById('prevBtn').onclick = () => goTo(currentIdx - 1);
+  document.getElementById('nextBtn').onclick = () => goTo(currentIdx + 1);
+  document.getElementById('modalClose').onclick = closeModal;
+  modalOverlay.onclick = (event) => { if (event.target === modalOverlay) closeModal(); };
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') closeModal();
+  });
+
+  loadBrandCatalog().then(() => {
+    renderBrandTabs();
+    switchBrand(brands[0] || 'ทั้งหมด');
+    setAutoMode(true);
+  });
+}
+
+document.addEventListener('DOMContentLoaded', () => init());
+</script>
+</body>
+</html>
