@@ -211,21 +211,24 @@ router.patch('/:id/date', async (req, res) => {
 
 router.get('/top-products', async (req, res) => {
   try {
-    const days = Number(req.query.days) > 0 ? Number(req.query.days) : 30;
-    const limit = Number(req.query.limit) > 0 ? Number(req.query.limit) : 5;
+    // LIMIT/INTERVAL as bound placeholders (`?`) trip up some MySQL/MariaDB
+    // versions (works on XAMPP's bundled MySQL, 500s on plain `apt install
+    // mysql-server`) — safe to inline here since both are coerced through
+    // Number(...) above, never raw user input reaching the SQL string.
+    const days = Number(req.query.days) > 0 ? Math.floor(Number(req.query.days)) : 30;
+    const limit = Number(req.query.limit) > 0 ? Math.floor(Number(req.query.limit)) : 5;
     const [rows] = await pool.execute(
       `SELECT ri.product_name_snapshot AS product_name,
               SUM(ri.qty) AS total_qty,
               COUNT(DISTINCT ri.receipt_id) AS bill_count
        FROM receipt_items ri
        JOIN receipts r ON r.id = ri.receipt_id
-       WHERE r.receipt_date >= DATE_SUB(CURDATE(), INTERVAL ? DAY)
+       WHERE r.receipt_date >= DATE_SUB(CURDATE(), INTERVAL ${days} DAY)
          AND ri.product_name_snapshot IS NOT NULL AND ri.product_name_snapshot != ''
          AND ri.product_name_snapshot NOT LIKE '%ค่าแรง%'
        GROUP BY ri.product_name_snapshot
        ORDER BY total_qty DESC
-       LIMIT ?`,
-      [days, limit]
+       LIMIT ${limit}`
     );
     res.json({ success: true, data: rows, days });
   } catch (err) {
@@ -236,7 +239,7 @@ router.get('/top-products', async (req, res) => {
 
 router.get('/top-vehicle-models', async (req, res) => {
   try {
-    const limit = Number(req.query.limit) > 0 ? Number(req.query.limit) : 10;
+    const limit = Number(req.query.limit) > 0 ? Math.floor(Number(req.query.limit)) : 10;
     const [rows] = await pool.execute(
       `SELECT v.brand, v.model,
               COUNT(*) AS visit_count,
@@ -245,8 +248,7 @@ router.get('/top-vehicle-models', async (req, res) => {
        JOIN vehicles v ON v.id = r.vehicle_id
        GROUP BY v.brand, v.model
        ORDER BY visit_count DESC
-       LIMIT ?`,
-      [limit]
+       LIMIT ${limit}`
     );
     res.json({ success: true, data: rows });
   } catch (err) {
