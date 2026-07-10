@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import client from '../api/client';
 import QRScanner from '../components/QRScanner';
+import { useAuth } from '../context/AuthContext';
 
 // ─────────────────────────────────────────
 //  ICONS
@@ -207,6 +208,8 @@ function Toast({ msg, onDone }) {
 //  MAIN PAGE
 // ─────────────────────────────────────────
 export default function TechnicianScanPage() {
+  const { user } = useAuth();
+  const isOffice = user?.role === 'office';
   const [step, setStep]           = useState(STEP.MODE);
   const [mode, setMode]           = useState(null);           // 'IN' | 'OUT'
   const [invoice, setInvoice]     = useState('');
@@ -354,15 +357,17 @@ export default function TechnicianScanPage() {
           <p style={{ fontSize: 13, color: '#6b7280', marginBottom: 20 }}>เลือกประเภทรายการก่อนเริ่ม</p>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <button style={styles.modeCard} onClick={() => selectMode('IN')}>
-              <div style={{ ...styles.modeIcon, background: '#dcfce7' }}>
-                <span style={{ color: '#166534' }}><IconArrowDown /></span>
-              </div>
-              <div>
-                <p style={styles.modeLabel}>รับเข้าสต็อก</p>
-                <p style={styles.modeSub}>นำสินค้าเข้าคลัง · ต้องใส่เลขบิล</p>
-              </div>
-            </button>
+            {isOffice && (
+              <button style={styles.modeCard} onClick={() => selectMode('IN')}>
+                <div style={{ ...styles.modeIcon, background: '#dcfce7' }}>
+                  <span style={{ color: '#166534' }}><IconArrowDown /></span>
+                </div>
+                <div>
+                  <p style={styles.modeLabel}>รับเข้าสต็อก</p>
+                  <p style={styles.modeSub}>นำสินค้าเข้าคลัง · ต้องใส่เลขบิล</p>
+                </div>
+              </button>
+            )}
             <button style={{ ...styles.modeCard, borderColor: '#fecaca' }} onClick={() => selectMode('OUT')}>
               <div style={{ ...styles.modeIcon, background: '#fee2e2' }}>
                 <span style={{ color: '#991b1b' }}><IconArrowUp /></span>

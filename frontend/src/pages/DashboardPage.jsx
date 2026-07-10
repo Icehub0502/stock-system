@@ -22,7 +22,9 @@ const QUICK_LINKS = [
 export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [todaySummary, setTodaySummary] = useState({ bill_count: 0, customer_count: 0, total_revenue: 0 });
-  const [lowStockItems, setLowStockItems] = useState([]);
+  const [lowStockCount, setLowStockCount] = useState(0);
+  const [topProducts, setTopProducts] = useState([]);
+  const [topVehicleModels, setTopVehicleModels] = useState([]);
   const [recentReceipts, setRecentReceipts] = useState([]);
 
   useEffect(() => {
@@ -33,7 +35,9 @@ export default function DashboardPage() {
       client.get('/racks').catch(() => ({ data: [] })),
       client.get('/wing-arms').catch(() => ({ data: [] })),
       client.get('/receipts').catch(() => ({ data: { data: [] } })),
-    ]).then(([summaryRes, racksRes, wingArmsRes, receiptsRes]) => {
+      client.get('/receipts/top-products', { params: { days: 30, limit: 5 } }).catch(() => ({ data: { data: [] } })),
+      client.get('/receipts/top-vehicle-models', { params: { limit: 10 } }).catch(() => ({ data: { data: [] } })),
+    ]).then(([summaryRes, racksRes, wingArmsRes, receiptsRes, topProductsRes, topVehicleModelsRes]) => {
       if (cancelled) return;
 
       const today = todayStr();
@@ -44,16 +48,12 @@ export default function DashboardPage() {
         total_revenue: Number(todayRow?.total_revenue ?? 0),
       });
 
-      const lowRacks = (racksRes.data || [])
-        .filter((r) => r.stock_qty <= r.min_stock)
-        .map((r) => ({ id: `rack-${r.id}`, code: r.model_code, name: r.name, qty: r.stock_qty, type: 'แร็ค' }));
-      const lowWingArms = (wingArmsRes.data || [])
-        .filter((r) => r.stock_qty <= r.min_stock)
-        .map((r) => ({ id: `wa-${r.id}`, code: r.sku, name: r.name, qty: r.stock_qty, type: 'ปีกนก' }));
-      setLowStockItems(
-        [...lowRacks, ...lowWingArms].sort((a, b) => a.qty - b.qty).slice(0, 8)
-      );
+      const lowRacksCount = (racksRes.data || []).filter((r) => r.stock_qty <= r.min_stock).length;
+      const lowWingArmsCount = (wingArmsRes.data || []).filter((r) => r.stock_qty <= r.min_stock).length;
+      setLowStockCount(lowRacksCount + lowWingArmsCount);
 
+      setTopProducts(topProductsRes.data.data || []);
+      setTopVehicleModels(topVehicleModelsRes.data.data || []);
       setRecentReceipts((receiptsRes.data.data || []).slice(0, 5));
     }).finally(() => {
       if (!cancelled) setLoading(false);
@@ -91,27 +91,25 @@ export default function DashboardPage() {
             </div>
             <div className="dash-stat-card">
               <div className="dash-stat-label">สต็อกใกล้หมด/หมด</div>
-              <div className="dash-stat-value">{lowStockItems.length.toLocaleString('en-US')}</div>
+              <div className="dash-stat-value">{lowStockCount.toLocaleString('en-US')}</div>
             </div>
           </div>
 
           <div className="dash-columns">
-            {/* ── Low stock alerts ── */}
+            {/* ── Top selling products (last 30 days) ── */}
             <div className="dash-panel">
-              <div className="dash-panel-title">แจ้งเตือนสต็อกใกล้หมด/หมด</div>
-              {lowStockItems.length === 0 ? (
-                <div className="dash-empty">สต็อกปกติทุกรายการ</div>
+              <div className="dash-panel-title">สินค้าขายดี 5 อันดับแรก (30 วันล่าสุด)</div>
+              {topProducts.length === 0 ? (
+                <div className="dash-empty">ยังไม่มีข้อมูลการขาย</div>
               ) : (
                 <div className="dash-list">
-                  {lowStockItems.map((item) => (
-                    <div key={item.id} className="dash-list-row">
-                      <div>
-                        <span className="dash-list-code">{item.code}</span>
-                        <span className="dash-list-name">{item.name}</span>
+                  {topProducts.map((p, idx) => (
+                    <div key={p.product_name} className="dash-list-row">
+                      <div className="dash-rank-row">
+                        <span className="dash-rank-badge">{idx + 1}</span>
+                        <span className="dash-list-name">{p.product_name}</span>
                       </div>
-                      <span className={`dash-qty-badge ${item.qty === 0 ? 'zero' : ''}`}>
-                        {item.type} · {item.qty}
-                      </span>
+                      <span className="dash-qty-badge sold">{Number(p.total_qty).toLocaleString('en-US')} ชิ้น</span>
                     </div>
                   ))}
                 </div>
@@ -137,6 +135,26 @@ export default function DashboardPage() {
                 </div>
               )}
             </div>
+          </div>
+
+          {/* ── Most frequent vehicle models ── */}
+          <div className="dash-panel">
+            <div className="dash-panel-title">รถที่เข้ามาทำบ่อยที่สุด 10 อันดับแรก</div>
+            {topVehicleModels.length === 0 ? (
+              <div className="dash-empty">ยังไม่มีข้อมูล</div>
+            ) : (
+              <div className="dash-rank-grid">
+                {topVehicleModels.map((v, idx) => (
+                  <div key={`${v.brand}-${v.model}`} className="dash-list-row">
+                    <div className="dash-rank-row">
+                      <span className="dash-rank-badge">{idx + 1}</span>
+                      <span className="dash-list-name">{v.brand} {v.model}</span>
+                    </div>
+                    <span className="dash-qty-badge visit">{Number(v.visit_count).toLocaleString('en-US')} ครั้ง</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* ── Quick links ── */}

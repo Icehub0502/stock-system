@@ -2980,6 +2980,41 @@ button:disabled { background: #f3f4f6; color: #9ca3af; cursor: not-allowed; }
   background: #fee2e2;
   border-color: #fca5a5;
 }
+.dash-qty-badge.sold {
+  color: #065f46;
+  background: #d1fae5;
+  border-color: #6ee7b7;
+}
+.dash-qty-badge.visit {
+  color: #1e40af;
+  background: #dbeafe;
+  border-color: #93c5fd;
+}
+
+.dash-rank-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 24px;
+}
+.dash-rank-grid .dash-list-row { border-bottom: 1px solid #f3f4f6; }
+@media (max-width: 640px) {
+  .dash-rank-grid { grid-template-columns: 1fr; }
+}
+
+.dash-rank-row { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.dash-rank-badge {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #111111;
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
 
 .dash-quicklinks { display: flex; flex-wrap: wrap; gap: 10px; }
 .dash-quicklink-btn {
