@@ -14,3 +14,6 @@ backend/certs/*.pem
 # Personal photo/video sync folder that ended up under backend/public/ —
 # unrelated to the landing-page car-brand image galleries (those stay).
 backend/public/Pictures/
+
+# Local DB dumps — real customer/financial data, never belongs in git
+backend/backups/

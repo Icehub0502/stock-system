@@ -70,6 +70,7 @@ export default function DailySummaryDetailModal({ date, onClose, onReceiptsMoved
         payment_method: current.payment_method || '',
         technician_name: current.technician_name || '',
         remark: current.remark || '',
+        total_amount: current.total_amount,
         ...changes,
       });
     } catch (err) {
@@ -98,6 +99,19 @@ export default function DailySummaryDetailModal({ date, onClose, onReceiptsMoved
 
   const handleRemarkBlur = (receiptId, value) => {
     persistMeta(receiptId, { remark: value });
+  };
+
+  const handleAmountChange = (receiptId, value) => {
+    updateLocal(receiptId, { total_amount: value });
+  };
+
+  const handleAmountBlur = (receiptId, value) => {
+    const num = Number(value);
+    if (!Number.isFinite(num) || num < 0) {
+      alert('จำนวนเงินไม่ถูกต้อง');
+      return;
+    }
+    persistMeta(receiptId, { total_amount: num });
   };
 
   const toggleSelected = (receiptId) => {
@@ -193,6 +207,12 @@ export default function DailySummaryDetailModal({ date, onClose, onReceiptsMoved
             span.className = sel.className;
             span.style.cssText = 'display:inline-block;padding:2px 8px;font-size:0.9rem;border-radius:4px;';
             sel.replaceWith(span);
+          });
+          clonedDoc.querySelectorAll('.daily-summary-capture-area .daily-summary-amount-input').forEach((inp) => {
+            const span = clonedDoc.createElement('span');
+            span.textContent = `฿${formatBaht(inp.value)}`;
+            span.style.cssText = 'display:block;padding:2px 0;color:#1f2937;font-size:0.9rem;font-weight:700;';
+            inp.closest('.daily-summary-amount-edit')?.replaceWith(span) ?? inp.replaceWith(span);
           });
           clonedDoc.querySelectorAll('.daily-summary-capture-area input[type="text"]').forEach((inp) => {
             const span = clonedDoc.createElement('span');
@@ -335,7 +355,21 @@ export default function DailySummaryDetailModal({ date, onClose, onReceiptsMoved
                           ))}
                         </select>
                       </td>
-                      <td className="amount col-amount" data-label="จำนวนเงิน">฿{formatBaht(r.total_amount)}</td>
+                      <td className="amount col-amount" data-label="จำนวนเงิน">
+                        <div className="daily-summary-amount-edit">
+                          <span>฿</span>
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            className="daily-summary-amount-input"
+                            value={r.total_amount}
+                            disabled={savingId === r.id}
+                            onChange={(e) => handleAmountChange(r.id, e.target.value)}
+                            onBlur={(e) => handleAmountBlur(r.id, e.target.value)}
+                          />
+                        </div>
+                      </td>
                       <td data-label="ช่างซ่อม">
                         <input
                           type="text"

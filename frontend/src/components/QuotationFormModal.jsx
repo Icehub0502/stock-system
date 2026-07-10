@@ -313,18 +313,16 @@ export default function QuotationFormModal({ quotation, onClose, onSuccess }) {
     setFieldErrors((prev) => ({ ...prev, items: null }));
   };
 
-  const addItem = () => setItems((prev) => ([...prev, { ...defaultItem }]));
+  // insertAfterIndex lets each row's "+ แทรกบรรทัด" button drop a new blank
+  // line exactly where it's needed, instead of always appending to the end
+  // and having to move it up into place by hand.
+  const addItem = (insertAfterIndex) => setItems((prev) => {
+    if (insertAfterIndex == null) return [...prev, { ...defaultItem }];
+    const next = [...prev];
+    next.splice(insertAfterIndex + 1, 0, { ...defaultItem });
+    return next;
+  });
   const removeItem = (index) => setItems((prev) => prev.filter((_, idx) => idx !== index));
-
-  const moveItem = (index, direction) => {
-    setItems((prev) => {
-      const targetIndex = index + direction;
-      if (targetIndex < 0 || targetIndex >= prev.length) return prev;
-      const next = [...prev];
-      [next[index], next[targetIndex]] = [next[targetIndex], next[index]];
-      return next;
-    });
-  };
 
   const calculateTotal = () => items.reduce((sum, item) => sum + Number(item.amount || 0), 0);
 
@@ -504,7 +502,6 @@ export default function QuotationFormModal({ quotation, onClose, onSuccess }) {
                 handleSelectItem={selectProductSuggestion}
                 handleAddItem={addItem}
                 handleRemoveItem={removeItem}
-                handleMoveItem={moveItem}
                 onItemNameChange={handleItemNameChange}
                 itemNameRefs={itemNameRefs}
                 itemQtyRefs={itemQtyRefs}

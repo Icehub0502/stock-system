@@ -163,11 +163,21 @@ router.get('/by-date', async (req, res) => {
 router.patch('/:id/meta', async (req, res) => {
   try {
     const { id } = req.params;
-    const { payment_method, technician_name, remark } = req.body || {};
-    const [result] = await pool.execute(
-      'UPDATE receipts SET payment_method = ?, technician_name = ?, remark = ? WHERE id = ?',
-      [payment_method || null, technician_name || null, remark || null, id]
-    );
+    const { payment_method, technician_name, remark, total_amount } = req.body || {};
+
+    // total_amount is optional here — the daily summary page lets office
+    // manually override it (e.g. a late discount), but most callers
+    // (payment method / technician / remark edits) don't send it at all,
+    // and must not accidentally reset it to 0.
+    const setTotal = total_amount !== undefined && total_amount !== null && total_amount !== '';
+    const sql = setTotal
+      ? 'UPDATE receipts SET payment_method = ?, technician_name = ?, remark = ?, total_amount = ? WHERE id = ?'
+      : 'UPDATE receipts SET payment_method = ?, technician_name = ?, remark = ? WHERE id = ?';
+    const params = setTotal
+      ? [payment_method || null, technician_name || null, remark || null, Number(total_amount), id]
+      : [payment_method || null, technician_name || null, remark || null, id];
+
+    const [result] = await pool.execute(sql, params);
     if (result.affectedRows === 0) {
       return res.status(404).json({ error: 'ไม่พบบิลนี้' });
     }

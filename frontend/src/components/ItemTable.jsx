@@ -11,7 +11,6 @@ export default function ItemTable({
   handleSelectItem,
   handleAddItem,
   handleRemoveItem,
-  handleMoveItem,
   onItemNameChange,
   itemNameRefs,
   itemQtyRefs,
@@ -53,7 +52,7 @@ export default function ItemTable({
           <h3>รายการสินค้า/บริการ</h3>
           <p className="receipt-subtle">เลือกจากฐานข้อมูลสินค้าและบริการที่มีอยู่ พร้อมรับประกันอัตโนมัติ</p>
         </div>
-        <button type="button" className="btn btn-secondary" onClick={handleAddItem}>
+        <button type="button" className="btn btn-secondary" onClick={() => handleAddItem()}>
           + เพิ่มรายการ
         </button>
       </div>
@@ -115,10 +114,9 @@ export default function ItemTable({
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') {
                         e.preventDefault();
-                        handleAddItem();
+                        handleAddItem(idx);
                         setTimeout(() => {
-                          const nextIndex = items.length;
-                          const nameRef = itemNameRefs.current[nextIndex];
+                          const nameRef = itemNameRefs.current[idx + 1];
                           if (nameRef && nameRef.focus) nameRef.focus();
                         }, 0);
                       }
@@ -127,28 +125,15 @@ export default function ItemTable({
                 </td>
                 <td className="price-cell" data-label={amountHeader}>฿{formatMoney(item.amount)}</td>
                 <td className="item-row-actions">
-                  {handleMoveItem && (
-                    <>
-                      <button
-                        type="button"
-                        className="btn-move"
-                        onClick={() => handleMoveItem(idx, -1)}
-                        disabled={idx === 0}
-                        title="เลื่อนขึ้น"
-                      >
-                        ▲
-                      </button>
-                      <button
-                        type="button"
-                        className="btn-move"
-                        onClick={() => handleMoveItem(idx, 1)}
-                        disabled={idx === items.length - 1}
-                        title="เลื่อนลง"
-                      >
-                        ▼
-                      </button>
-                    </>
-                  )}
+                  <button
+                    type="button"
+                    className="btn-insert-row"
+                    onClick={() => handleAddItem(idx)}
+                    title="แทรกบรรทัดใหม่ถัดจากรายการนี้"
+                    aria-label="แทรกบรรทัดใหม่ถัดจากรายการนี้"
+                  >
+                    +
+                  </button>
                   <button type="button" className="btn-remove" onClick={() => handleRemoveItem(idx)}>
                     ✕
                   </button>

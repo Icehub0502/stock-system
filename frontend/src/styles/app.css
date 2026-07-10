@@ -1233,25 +1233,24 @@ button:disabled { background: #f3f4f6; color: #9ca3af; cursor: not-allowed; }
   white-space: nowrap;
 }
 
-.btn-move {
+.btn-insert-row {
   background: #f3f4f6;
   border: 1px solid #e5e7eb;
   color: #374151;
-  padding: 4px 8px;
+  width: 32px;
+  padding: 6px 0;
   border-radius: 4px;
   cursor: pointer;
-  font-size: 0.75rem;
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1;
   min-height: 32px;
+  white-space: nowrap;
   transition: background 0.2s;
 }
 
-.btn-move:hover:not(:disabled) {
+.btn-insert-row:hover {
   background: #e5e7eb;
-}
-
-.btn-move:disabled {
-  opacity: 0.35;
-  cursor: not-allowed;
 }
 
 /* Summary Section */
@@ -1852,6 +1851,28 @@ button:disabled { background: #f3f4f6; color: #9ca3af; cursor: not-allowed; }
   resize: vertical;
   font-family: inherit;
   color: #374151;
+}
+
+.daily-summary-amount-edit {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  justify-content: flex-end;
+}
+.daily-summary-amount-edit span {
+  font-weight: 700;
+  color: #059669;
+}
+.daily-summary-amount-input {
+  width: 100px;
+  min-height: unset;
+  padding: 5px 8px;
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #059669;
+  text-align: right;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
 }
 
 /* ── Payment method color chips ── */

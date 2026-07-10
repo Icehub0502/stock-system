@@ -308,36 +308,33 @@ export default function ReceiptFormModal({ onClose, onSuccess, receiptId }) {
     }, 300);
   };
 
-  const handleAddItem = () => {
-    setItems((prev) => ([
-      ...prev,
-      {
-        service_item_id: null,
-        product_name_snapshot: '',
-        category: '',
-        warranty_name: '',
-        warranty_year: 0,
-        warranty_month: 0,
-        warranty_km: 0,
-        qty: 1,
-        price: '',
-        amount: 0,
-      }
-    ]));
+  const blankItem = () => ({
+    service_item_id: null,
+    product_name_snapshot: '',
+    category: '',
+    warranty_name: '',
+    warranty_year: 0,
+    warranty_month: 0,
+    warranty_km: 0,
+    qty: 1,
+    price: '',
+    amount: 0,
+  });
+
+  // insertAfterIndex lets each row's "+ แทรกบรรทัด" button drop a new blank
+  // line exactly where it's needed, instead of always appending to the end
+  // and having to move it up into place by hand.
+  const handleAddItem = (insertAfterIndex) => {
+    setItems((prev) => {
+      if (insertAfterIndex == null) return [...prev, blankItem()];
+      const next = [...prev];
+      next.splice(insertAfterIndex + 1, 0, blankItem());
+      return next;
+    });
   };
 
   const handleRemoveItem = (index) => {
     setItems((prev) => prev.filter((_, idx) => idx !== index));
-  };
-
-  const handleMoveItem = (index, direction) => {
-    setItems((prev) => {
-      const targetIndex = index + direction;
-      if (targetIndex < 0 || targetIndex >= prev.length) return prev;
-      const next = [...prev];
-      [next[index], next[targetIndex]] = [next[targetIndex], next[index]];
-      return next;
-    });
   };
 
   const handleItemChange = (index, field, value) => {
@@ -643,7 +640,6 @@ export default function ReceiptFormModal({ onClose, onSuccess, receiptId }) {
                 handleSelectServiceItem={handleSelectServiceItem}
                 handleAddItem={handleAddItem}
                 handleRemoveItem={handleRemoveItem}
-                handleMoveItem={handleMoveItem}
                 onItemNameChange={handleItemNameChange}
                 itemNameRefs={itemNameRefs}
                 itemQtyRefs={itemQtyRefs}
