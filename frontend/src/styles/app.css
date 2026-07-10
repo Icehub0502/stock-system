@@ -3016,6 +3016,42 @@ button:disabled { background: #f3f4f6; color: #9ca3af; cursor: not-allowed; }
   justify-content: center;
 }
 
+.dash-trend-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  height: 160px;
+  padding-top: 8px;
+}
+.dash-trend-bar-wrap {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  height: 100%;
+  gap: 4px;
+}
+.dash-trend-value {
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: #6b7280;
+  white-space: nowrap;
+}
+.dash-trend-bar {
+  width: 100%;
+  max-width: 28px;
+  background: #111111;
+  border-radius: 4px 4px 0 0;
+  transition: height 0.2s;
+}
+.dash-trend-label {
+  font-size: 0.68rem;
+  color: #9ca3af;
+  white-space: nowrap;
+}
+
 .dash-quicklinks { display: flex; flex-wrap: wrap; gap: 10px; }
 .dash-quicklink-btn {
   display: inline-block;

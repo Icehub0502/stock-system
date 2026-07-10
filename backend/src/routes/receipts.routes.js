@@ -257,6 +257,26 @@ router.get('/top-vehicle-models', async (req, res) => {
   }
 });
 
+router.get('/top-customers', async (req, res) => {
+  try {
+    const limit = Number(req.query.limit) > 0 ? Math.floor(Number(req.query.limit)) : 10;
+    const [rows] = await pool.execute(
+      `SELECT c.id AS customer_id, c.customer_name, c.customer_code,
+              COUNT(*) AS bill_count,
+              SUM(r.total_amount) AS total_spent
+       FROM receipts r
+       JOIN customers c ON c.id = r.customer_id
+       GROUP BY c.id, c.customer_name, c.customer_code
+       ORDER BY total_spent DESC
+       LIMIT ${limit}`
+    );
+    res.json({ success: true, data: rows });
+  } catch (err) {
+    console.error('Error loading top customers:', err);
+    res.status(500).json({ error: 'โหลดอันดับลูกค้าไม่สำเร็จ' });
+  }
+});
+
 router.get('/daily-summary', async (req, res) => {
   try {
     const [rows] = await pool.execute(
