@@ -316,7 +316,49 @@ export default function QuotationFormModal({ quotation, onClose, onSuccess }) {
     }, 300);
   };
 
+  // A "set" (e.g. ชุดโปรช่วงล่างเก๋ง) carries one warranty for the whole
+  // group, same as a regular item — picking it expands into one row per
+  // component instead of a single line, mirroring ReceiptFormModal.jsx's
+  // expandSetIntoItems. Price is left blank on every row for staff to fill
+  // in manually. The set's warranty is copied onto every expanded row (not
+  // just the first) so whichever row matches a printed warranty slot
+  // (แร็ค/ลูกหมาก) still carries it through to the printed quotation.
+  const expandSetIntoItems = async (index, product) => {
+    try {
+      const response = await client.get(`/service-items/${product.id}/components`);
+      const components = response.data.data || [];
+      const rows = (components.length > 0 ? components : [{ component_name: product.product_name, default_qty: 1 }]).map((comp) => {
+        const qty = Number(comp.default_qty) > 0 ? Number(comp.default_qty) : 1;
+        return {
+          product_id: null,
+          product_name: comp.component_name,
+          category: product.category || '',
+          warranty_name: product.warranty_name || '',
+          warranty_year: product.warranty_year || 0,
+          warranty_month: product.warranty_month || 0,
+          warranty_km: product.warranty_km || 0,
+          quantity: qty,
+          unit_price: '',
+          amount: 0,
+        };
+      });
+      setItems((prev) => {
+        const next = [...prev];
+        next.splice(index, 1, ...rows);
+        return next;
+      });
+    } catch (err) {
+      console.error('Error expanding set into items:', err);
+    }
+    setProductSuggestions((prev) => ({ ...prev, [index]: null }));
+    setFieldErrors((prev) => ({ ...prev, items: null }));
+  };
+
   const selectProductSuggestion = (index, product) => {
+    if (product.is_set) {
+      expandSetIntoItems(index, product);
+      return;
+    }
     setItems((prev) => {
       const next = [...prev];
       // service_items has no price column (same as the receipt flow) — price
