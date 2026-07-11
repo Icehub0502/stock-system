@@ -5,6 +5,12 @@ import client from "../api/client";
 import QuotationFormModal from "../components/QuotationFormModal";
 import QuotationPrintModal from "../components/QuotationPrintModal";
 import ScheduleDateDialog from "../components/ScheduleDateDialog";
+import { defaultChecklist } from "../utils/repairChecklist";
+
+function todayStr() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
 
 function StatusBadge({ status, scheduledDate }) {
   if (status === 'approved') {
@@ -76,25 +82,27 @@ export default function QuotationListPage() {
     try {
       await client.patch(`/quotations/${q.id}/approve`);
       // Flash the row green so the office can see it flip to "approved"
-      // before we jump them to a pre-filled repair notice — approving still
-      // creates the receipt in the background (unchanged), but the repair
-      // checklist is the more useful next screen right after approval since
-      // it guides the actual work about to happen on the car.
+      // before jumping to the repair notice — approving still creates the
+      // receipt in the background (unchanged).
       setQuotations((prev) => prev.map((row) => (row.id === q.id ? { ...row, status: 'approved' } : row)));
       setJustApprovedId(q.id);
+
+      // The repair notice itself is created here immediately (blank
+      // checklist) rather than waiting for someone to fill it in and press
+      // save — the vehicle/customer must land on this record for certain
+      // the moment a quotation is approved, so it already exists and shows
+      // up in the list even if nobody has ticked a single box yet. What's
+      // left for whoever opens it next is purely picking what needs repair.
+      const noticeRes = await client.post('/repair-notices', {
+        customer_id: q.customer_id,
+        vehicle_id: q.vehicle_id,
+        quotation_id: q.id,
+        notice_date: todayStr(),
+        checklist: defaultChecklist(),
+      });
+
       setTimeout(() => {
-        navigate('/repair-notices/new', {
-          state: {
-            vehicleId: q.vehicle_id,
-            customerId: q.customer_id,
-            quotationId: q.id,
-            brand: q.brand || q.car_brand,
-            model: q.model || q.car_model,
-            color: q.color || q.car_color,
-            licensePlate: q.license_plate,
-            customerName: q.customer_name,
-          },
-        });
+        navigate(`/repair-notices/${noticeRes.data.id}`);
       }, 700);
     } catch (err) {
       alert(err.response?.data?.error || "อนุมัติไม่สำเร็จ");
