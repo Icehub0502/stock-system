@@ -212,7 +212,18 @@ export default function DailySummaryDetailModal({ date, onClose, onReceiptsMoved
             const span = clonedDoc.createElement('span');
             span.textContent = `฿${formatBaht(inp.value)}`;
             span.style.cssText = 'display:block;padding:2px 0;color:#1f2937;font-size:0.9rem;font-weight:700;';
-            inp.closest('.daily-summary-amount-edit')?.replaceWith(span) ?? inp.replaceWith(span);
+            // NOT `wrapper?.replaceWith(span) ?? inp.replaceWith(span)` — replaceWith()
+            // always returns undefined, so `??` treated that as "missing" and ran
+            // BOTH branches every time: span landed in the TD correctly, then got
+            // immediately ripped back out and stuffed into the now-detached wrapper
+            // div by the second call, leaving it outside the document html2canvas
+            // actually rasterizes. That's why the amount column rendered blank.
+            const wrapper = inp.closest('.daily-summary-amount-edit');
+            if (wrapper) {
+              wrapper.replaceWith(span);
+            } else {
+              inp.replaceWith(span);
+            }
           });
           clonedDoc.querySelectorAll('.daily-summary-capture-area input[type="text"]').forEach((inp) => {
             const span = clonedDoc.createElement('span');
