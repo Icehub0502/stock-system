@@ -308,6 +308,13 @@ export default function ReceiptFormModal({ onClose, onSuccess, receiptId }) {
     }, 300);
   };
 
+  // Closes a row's dropdown once focus leaves it without a selection being
+  // made — see the delay in ItemSearch.jsx's onBlur wiring for why a
+  // selection still wins the race against this.
+  const handleItemBlur = (index) => {
+    setItemSuggestions((prev) => ({ ...prev, [index]: null }));
+  };
+
   const blankItem = () => ({
     service_item_id: null,
     product_name_snapshot: '',
@@ -649,6 +656,7 @@ export default function ReceiptFormModal({ onClose, onSuccess, receiptId }) {
                 handleAddItem={handleAddItem}
                 handleRemoveItem={handleRemoveItem}
                 onItemNameChange={handleItemNameChange}
+                onItemBlur={handleItemBlur}
                 itemNameRefs={itemNameRefs}
                 itemQtyRefs={itemQtyRefs}
                 itemPriceRefs={itemPriceRefs}

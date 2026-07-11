@@ -12,6 +12,7 @@ export default function ItemSearch({
   handleSelectServiceItem,
   handleSelectItem,
   onItemNameChange,
+  onItemBlur,
   itemNameRef,
   nameField = 'product_name_snapshot',
   placeholder = 'พิมพ์ชื่อสินค้า/บริการ',
@@ -40,6 +41,18 @@ export default function ItemSearch({
         }}
         onKeyDown={(e) => handleItemKeyDown(e, index)}
         onSelect={(suggestion) => selectHandler(index, suggestion)}
+        onBlur={() => {
+          // Selecting a suggestion fires via onMouseDown, which runs before
+          // this blur — the delay lets that handler clear the suggestions
+          // first, so this only actually closes the dropdown when focus
+          // left *without* picking anything (e.g. clicking straight into
+          // another row). Without it, a row's dropdown that was typed into
+          // but never resolved stays open forever, stacking on top of
+          // whichever row gets focused next.
+          window.setTimeout(() => {
+            if (typeof onItemBlur === 'function') onItemBlur(index);
+          }, 150);
+        }}
         inputRef={itemNameRef}
       />
       {showWarranty && (

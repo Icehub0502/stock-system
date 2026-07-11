@@ -12,6 +12,7 @@ export default function ItemTable({
   handleAddItem,
   handleRemoveItem,
   onItemNameChange,
+  onItemBlur,
   itemNameRefs,
   itemQtyRefs,
   itemPriceRefs,
@@ -85,6 +86,7 @@ export default function ItemTable({
                     handleSelectServiceItem={handleSelectServiceItem}
                     handleSelectItem={handleSelectItem}
                     onItemNameChange={onItemNameChange}
+                    onItemBlur={onItemBlur}
                     itemNameRef={(el) => { itemNameRefs.current[idx] = el; }}
                     nameField={nameField}
                     placeholder={placeholder}

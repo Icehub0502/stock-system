@@ -10,6 +10,7 @@ export default function SearchAutocomplete({
   onChange,
   onKeyDown,
   onSelect,
+  onBlur,
   inputRef,
 }) {
   const activeId = activeIndex >= 0 ? `${listId}-${activeIndex}` : undefined;
@@ -28,6 +29,7 @@ export default function SearchAutocomplete({
         role="combobox"
         onChange={(e) => onChange(e.target.value)}
         onKeyDown={onKeyDown}
+        onBlur={onBlur}
         placeholder={placeholder}
       />
       {isOpen && (

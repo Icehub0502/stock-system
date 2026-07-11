@@ -316,6 +316,13 @@ export default function QuotationFormModal({ quotation, onClose, onSuccess }) {
     }, 300);
   };
 
+  // Closes a row's dropdown once focus leaves it without a selection being
+  // made — see the delay in ItemSearch.jsx's onBlur wiring for why a
+  // selection still wins the race against this.
+  const handleItemBlur = (index) => {
+    setProductSuggestions((prev) => ({ ...prev, [index]: null }));
+  };
+
   // A "set" (e.g. ชุดโปรช่วงล่างเก๋ง) carries one warranty for the whole
   // group, same as a regular item — picking it expands into one row per
   // component instead of a single line, mirroring ReceiptFormModal.jsx's
@@ -613,6 +620,7 @@ export default function QuotationFormModal({ quotation, onClose, onSuccess }) {
                 handleAddItem={addItem}
                 handleRemoveItem={removeItem}
                 onItemNameChange={handleItemNameChange}
+                onItemBlur={handleItemBlur}
                 itemNameRefs={itemNameRefs}
                 itemQtyRefs={itemQtyRefs}
                 itemPriceRefs={itemPriceRefs}
