@@ -44,11 +44,12 @@ function findWarrantySlotText(items, matchKeyword) {
 // different computers and printers. The total/warranty/remark/signature
 // block now renders on every page (not just the last), so every page needs
 // the same reserved room for it — capacity is uniform across all pages.
-// Deliberately kept well under what fits in a PDF export test: physical
-// printers commonly enforce their own small hardware margin that CSS
-// `@page { margin: 0 }` cannot override, so a page sized to the full
-// nominal 297mm on-screen/PDF can still overflow on a real printer.
-const ITEMS_PER_PAGE = 8;
+// Measured against real A4 (297mm): 13 rows lands ~3mm from the edge and 14+
+// overflows outright, so both are too tight — physical printers commonly
+// enforce their own small hardware margin that CSS `@page { margin: 0 }`
+// cannot override, meaning content sized to the full nominal 297mm can still
+// clip on a real printer. 12 rows measured ~286mm, leaving an ~11mm buffer.
+const ITEMS_PER_PAGE = 12;
 
 function chunkItems(items, size) {
   if (items.length === 0) return [[]];

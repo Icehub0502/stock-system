@@ -173,20 +173,18 @@ export default function QuotationFormModal({ quotation, onClose, onSuccess }) {
     }
   };
 
+  // Same catalog + search source as the receipt form (`/service-items`) so
+  // staff see the same item list when quoting as when billing — `/product-costs`
+  // queries a separate internal cost-tracking table that isn't kept in sync
+  // with what's actually sold, which is why results there looked "wrong".
   const searchProduct = async (query, index) => {
     if (!query) {
       setProductSuggestions((prev) => ({ ...prev, [index]: null }));
       return;
     }
     try {
-      const response = await client.get('/product-costs', { params: { search: query } });
-      const suggestions = (response.data.data || []).map((p) => ({
-        id: p.id,
-        product_name: p.parts ? `${p.parts} — ${p.description}` : p.description,
-        category: p.category,
-        price: p.price,
-      }));
-      setProductSuggestions((prev) => ({ ...prev, [index]: suggestions }));
+      const response = await client.get('/service-items', { params: { search: query } });
+      setProductSuggestions((prev) => ({ ...prev, [index]: response.data.data || [] }));
       setSuggestionIndex((prev) => ({ ...prev, [index]: 0 }));
     } catch (err) {
       console.error('Error searching products:', err);
@@ -267,18 +265,25 @@ export default function QuotationFormModal({ quotation, onClose, onSuccess }) {
   const handleItemKeyDown = (e, index) => {
     const suggestions = productSuggestions[index] || [];
     const current = Number.isInteger(suggestionIndex[index]) ? suggestionIndex[index] : 0;
-    if (!suggestions.length) return;
-
-    if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      setSuggestionIndex((prev) => ({ ...prev, [index]: Math.min(current + 1, suggestions.length - 1) }));
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      setSuggestionIndex((prev) => ({ ...prev, [index]: Math.max(current - 1, 0) }));
+    if (suggestions.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setSuggestionIndex((prev) => ({ ...prev, [index]: Math.min(current + 1, suggestions.length - 1) }));
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setSuggestionIndex((prev) => ({ ...prev, [index]: Math.max(current - 1, 0) }));
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        const selected = suggestions[current];
+        if (selected) selectProductSuggestion(index, selected);
+      } else if (e.key === 'Tab') {
+        const selected = suggestions[current];
+        if (selected) selectProductSuggestion(index, selected);
+      }
     } else if (e.key === 'Enter') {
       e.preventDefault();
-      const selected = suggestions[current];
-      if (selected) selectProductSuggestion(index, selected);
+      const qtyRef = itemQtyRefs.current[index];
+      if (qtyRef && qtyRef.focus) qtyRef.focus();
     }
   };
 
@@ -298,19 +303,23 @@ export default function QuotationFormModal({ quotation, onClose, onSuccess }) {
   const selectProductSuggestion = (index, product) => {
     setItems((prev) => {
       const next = [...prev];
-      const qty = Number(next[index].quantity || 1);
-      const price = Number(product.unit_price ?? product.price ?? next[index].unit_price ?? 0);
+      // service_items has no price column (same as the receipt flow) — price
+      // is always filled in by hand per line, so only the name changes here.
+      // product_id stays null: it's a FK to the separate `products` cost
+      // table, and a service_items id would violate that constraint.
       next[index] = {
         ...next[index],
-        product_id: product.id,
+        product_id: null,
         product_name: product.product_name,
-        unit_price: price,
-        amount: qty * price,
       };
       return next;
     });
     setProductSuggestions((prev) => ({ ...prev, [index]: null }));
     setFieldErrors((prev) => ({ ...prev, items: null }));
+    setTimeout(() => {
+      const qtyRef = itemQtyRefs.current[index];
+      if (qtyRef && qtyRef.focus) qtyRef.focus();
+    }, 0);
   };
 
   // insertAfterIndex lets each row's "+ แทรกบรรทัด" button drop a new blank

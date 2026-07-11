@@ -3,12 +3,16 @@ import champpowerLogo from '../image/champpower-logo.jpg';
 import { COMPANY, amountToWords } from '../utils/printDoc';
 import { formatMoney } from '../utils/format';
 
-// Mirrors ReceiptPrintTemplate.jsx's layout/pagination exactly, so a
+// Mirrors ReceiptPrintTemplate.jsx's layout/pagination approach, so a
 // quotation and a receipt look like the same physical document family —
 // only the title, numbering, and signature labels differ (a quotation has
 // no payment-method checkboxes or warranty tags since nothing's been sold
-// yet).
-const ITEMS_PER_PAGE = 8;
+// yet). That missing warranty/payment-method block is exactly why this
+// template's row count differs from the receipt's: with less fixed content
+// per page, 15 rows measures ~291mm against real A4 (297mm), leaving a
+// ~6mm buffer — the receipt only had room for 12 before hitting the same
+// kind of margin (see ITEMS_PER_PAGE comment there).
+const ITEMS_PER_PAGE = 15;
 
 function formatThaiDate(dateInput) {
   const d = new Date(dateInput);
