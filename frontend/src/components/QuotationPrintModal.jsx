@@ -28,6 +28,8 @@ export default function QuotationPrintModal({ quotation, onClose }) {
   const data = {
     quotation_no: detail.quotation_no,
     quotation_date: detail.quotation_date,
+    queue_no: detail.queue_no,
+    symptom: detail.symptom,
     customer: {
       customer_name: detail.customer_name,
       phone: detail.phone,

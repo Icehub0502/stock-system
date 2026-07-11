@@ -43,7 +43,7 @@ export default function SearchAutocomplete({
                 className={`autocomplete-item ${activeIndex === idx ? 'is-active' : ''}`}
                 onMouseDown={() => onSelect(suggestion)}
               >
-                {suggestion.is_set && <span className="autocomplete-set-badge">📦 ชุด</span>}
+                {Boolean(suggestion.is_set) && <span className="autocomplete-set-badge">📦 ชุด</span>}
                 {suggestion.category ? `${suggestion.category} · ${suggestion.product_name}` : suggestion.product_name}
               </button>
             ))

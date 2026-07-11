@@ -71,7 +71,7 @@ function buildValidItems(items) {
 
 // POST - Create new quotation
 router.post('/', async (req, res) => {
-  const { customer_id, newCustomer, vehicle_id, newVehicle, quotation_date, mileage, remark, items } = req.body;
+  const { customer_id, newCustomer, vehicle_id, newVehicle, quotation_date, mileage, remark, queue_no, symptom, items } = req.body;
 
   const toNumber = (value) => {
     const n = Number(value);
@@ -133,8 +133,8 @@ router.post('/', async (req, res) => {
     const total_amount = validItems.reduce((sum, item) => sum + Number(item.quantity || 1) * Number(item.unit_price || 0), 0);
 
     const [quotationResult] = await conn.execute(
-      `INSERT INTO quotations (quotation_no, quotation_date, customer_id, vehicle_id, mileage, remark, product_summary, total_amount)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO quotations (quotation_no, quotation_date, customer_id, vehicle_id, mileage, remark, product_summary, total_amount, queue_no, symptom)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         quotation_no,
         quotation_date,
@@ -143,7 +143,9 @@ router.post('/', async (req, res) => {
         Number(mileage) || 0,
         remark || null,
         validItems.map((i) => i.product_name).join(', '),
-        total_amount
+        total_amount,
+        queue_no || null,
+        symptom || null
       ]
     );
 
@@ -151,9 +153,19 @@ router.post('/', async (req, res) => {
 
     for (const item of validItems) {
       await conn.execute(
-        `INSERT INTO quotation_items (quotation_id, product_id, product_name, quantity, unit_price)
-         VALUES (?, ?, ?, ?, ?)`,
-        [quotation_id, item.product_id || null, item.product_name, parseInt(item.quantity || 1), parseFloat(item.unit_price || 0)]
+        `INSERT INTO quotation_items (quotation_id, product_id, product_name, quantity, unit_price, warranty_name, warranty_year, warranty_month, warranty_km)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          quotation_id,
+          item.product_id || null,
+          item.product_name,
+          parseInt(item.quantity || 1),
+          parseFloat(item.unit_price || 0),
+          item.warranty_name || null,
+          Number(item.warranty_year || 0),
+          Number(item.warranty_month || 0),
+          Number(item.warranty_km || 0)
+        ]
       );
     }
 
@@ -238,7 +250,7 @@ router.get('/:id', async (req, res) => {
 // PUT - Update quotation
 router.put('/:id', async (req, res) => {
   const { id } = req.params;
-  const { customer_id, newCustomer, vehicle_id, newVehicle, quotation_date, mileage, remark, items } = req.body;
+  const { customer_id, newCustomer, vehicle_id, newVehicle, quotation_date, mileage, remark, queue_no, symptom, items } = req.body;
 
   const toNumber = (value) => {
     const n = Number(value);
@@ -306,7 +318,7 @@ router.put('/:id', async (req, res) => {
 
     await conn.execute(
       `UPDATE quotations
-       SET customer_id = ?, vehicle_id = ?, quotation_date = ?, mileage = ?, remark = ?, product_summary = ?, total_amount = ?
+       SET customer_id = ?, vehicle_id = ?, quotation_date = ?, mileage = ?, remark = ?, product_summary = ?, total_amount = ?, queue_no = ?, symptom = ?
        WHERE id = ?`,
       [
         selectedCustomerId,
@@ -316,6 +328,8 @@ router.put('/:id', async (req, res) => {
         remark || null,
         validItems.map((i) => i.product_name).join(', '),
         total_amount,
+        queue_no || null,
+        symptom || null,
         id
       ]
     );
@@ -324,9 +338,19 @@ router.put('/:id', async (req, res) => {
 
     for (const item of validItems) {
       await conn.execute(
-        `INSERT INTO quotation_items (quotation_id, product_id, product_name, quantity, unit_price)
-         VALUES (?, ?, ?, ?, ?)`,
-        [id, item.product_id || null, item.product_name, parseInt(item.quantity || 1), parseFloat(item.unit_price || 0)]
+        `INSERT INTO quotation_items (quotation_id, product_id, product_name, quantity, unit_price, warranty_name, warranty_year, warranty_month, warranty_km)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          id,
+          item.product_id || null,
+          item.product_name,
+          parseInt(item.quantity || 1),
+          parseFloat(item.unit_price || 0),
+          item.warranty_name || null,
+          Number(item.warranty_year || 0),
+          Number(item.warranty_month || 0),
+          Number(item.warranty_km || 0)
+        ]
       );
     }
 
@@ -395,9 +419,9 @@ router.patch('/:id/approve', async (req, res) => {
       const qty = Number(item.quantity);
       const price = Number(item.unit_price);
       await conn.execute(
-        `INSERT INTO receipt_items (receipt_id, service_item_id, product_name_snapshot, qty, price, amount)
-         VALUES (?, NULL, ?, ?, ?, ?)`,
-        [receiptId, item.product_name, qty, price, qty * price]
+        `INSERT INTO receipt_items (receipt_id, service_item_id, product_name_snapshot, qty, price, amount, warranty_name, warranty_year, warranty_month, warranty_km)
+         VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [receiptId, item.product_name, qty, price, qty * price, item.warranty_name || null, item.warranty_year || 0, item.warranty_month || 0, item.warranty_km || 0]
       );
     }
 

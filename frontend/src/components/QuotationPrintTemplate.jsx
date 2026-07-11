@@ -6,13 +6,28 @@ import { formatMoney } from '../utils/format';
 // Mirrors ReceiptPrintTemplate.jsx's layout/pagination approach, so a
 // quotation and a receipt look like the same physical document family —
 // only the title, numbering, and signature labels differ (a quotation has
-// no payment-method checkboxes or warranty tags since nothing's been sold
-// yet). That missing warranty/payment-method block is exactly why this
-// template's row count differs from the receipt's: with less fixed content
-// per page, 15 rows measures ~291mm against real A4 (297mm), leaving a
-// ~6mm buffer — the receipt only had room for 12 before hitting the same
-// kind of margin (see ITEMS_PER_PAGE comment there).
-const ITEMS_PER_PAGE = 15;
+// no payment-method checkboxes since nothing's been paid for yet).
+// ITEMS_PER_PAGE is re-measured whenever the fixed (non-item-row) content on
+// the page changes — see the comment at its assignment below.
+const WARRANTY_SLOTS = [
+  { label: 'แร็คพวงมาลัย', matchKeyword: 'แร็ค' },
+  { label: 'ลูกหมากช่วงล่าง', matchKeyword: 'ลูกหมาก' },
+];
+
+function findWarrantySlotText(items, matchKeyword) {
+  const match = items.find((it) => {
+    const name = it.product_name || it.product_name_snapshot || '';
+    return name.includes(matchKeyword) && it.warranty_name;
+  });
+  return match ? match.warranty_name : '';
+}
+
+// Measured against real A4 (297mm) with the symptom + warranty rows now
+// included: 13 rows leaves only ~2mm, 14+ overflows outright. 12 rows
+// measures ~287mm, leaving a ~10mm buffer — matches ReceiptPrintTemplate.jsx's
+// own ITEMS_PER_PAGE now that both pages carry almost the same fixed content
+// (this template is just missing the payment-method checkbox row).
+const ITEMS_PER_PAGE = 12;
 
 function formatThaiDate(dateInput) {
   const d = new Date(dateInput);
@@ -58,6 +73,8 @@ export default function QuotationPrintTemplate({ data }) {
   const {
     quotation_no,
     quotation_date,
+    queue_no,
+    symptom,
     customer = {},
     vehicle = {},
     items = [],
@@ -101,7 +118,7 @@ export default function QuotationPrintTemplate({ data }) {
                   <div className="doc-infobox">
                     <div className="doc-meta-row doc-meta-primary"><span>เลขที่เอกสาร :</span><strong>{quotation_no || '-'}</strong></div>
                     <div className="doc-meta-row"><span>วันที่ :</span><strong>{quotation_date ? formatThaiDate(quotation_date) : '-'}</strong></div>
-                    <div className="doc-meta-row"><span>รหัสลูกค้า :</span><strong>{customer.customer_code || '-'}</strong></div>
+                    <div className="doc-meta-row"><span>เลขคิว/เลขงาน :</span><strong>{queue_no || '-'}</strong></div>
                   </div>
                 </div>
               </div>
@@ -118,6 +135,8 @@ export default function QuotationPrintTemplate({ data }) {
                 <div><span className="doc-info-label">สีรถ :</span> <span className="doc-info-value">{vehicle.color || vehicle.car_color || '-'}</span></div>
               </div>
             </div>
+
+            <div className="doc-remark-row"><b>อาการ :</b> {symptom || ''}</div>
 
             <table className="doc-items">
               <thead>
@@ -161,6 +180,17 @@ export default function QuotationPrintTemplate({ data }) {
                 <span>รวมเป็นเงินทั้งสิ้น</span>
                 <strong>{formatMoney(grandTotal)} บาท</strong>
               </span>
+            </div>
+
+            <div className="doc-warranty-row">
+              {WARRANTY_SLOTS.map((slot) => {
+                const text = findWarrantySlotText(items, slot.matchKeyword);
+                return (
+                  <span key={slot.label}>
+                    <b>{slot.label} :</b> <span className={text ? 'doc-warranty-value' : ''}>{text || '-'}</span>
+                  </span>
+                );
+              })}
             </div>
 
             <div className="doc-remark-row"><b>หมายเหตุ :</b> {remark || ''}</div>

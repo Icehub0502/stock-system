@@ -168,6 +168,18 @@ async function initDatabase() {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
   `);
 
+  // Mirrors receipt_items' warranty columns so a quotation can carry the
+  // same warranty info as a receipt (picked from the same service_items
+  // catalog) — these get copied onto the receipt_items row created when a
+  // quotation is approved, same as picking the item directly on a receipt.
+  await conn.query(`
+    ALTER TABLE quotation_items
+    ADD COLUMN warranty_name VARCHAR(255) DEFAULT NULL,
+    ADD COLUMN warranty_year INT DEFAULT 0,
+    ADD COLUMN warranty_month INT DEFAULT 0,
+    ADD COLUMN warranty_km INT DEFAULT 0
+  `).catch(() => {});
+
   await conn.query(`
     CREATE TABLE IF NOT EXISTS vehicles (
       id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -272,6 +284,16 @@ async function initDatabase() {
     ADD COLUMN converted_receipt_id BIGINT UNSIGNED DEFAULT NULL,
     ADD CONSTRAINT fk_quotation_vehicle FOREIGN KEY (vehicle_id) REFERENCES vehicles(id) ON DELETE SET NULL,
     ADD CONSTRAINT fk_quotation_receipt FOREIGN KEY (converted_receipt_id) REFERENCES receipts(id) ON DELETE SET NULL
+  `).catch(() => {});
+
+  // queue_no: a hand-entered job/queue number (replaces showing the auto
+  // customer_code in the printed header — staff track their own numbering).
+  // symptom: the customer's reported issue with the vehicle, captured before
+  // quoting repairs.
+  await conn.query(`
+    ALTER TABLE quotations
+    ADD COLUMN queue_no VARCHAR(50) DEFAULT NULL,
+    ADD COLUMN symptom TEXT DEFAULT NULL
   `).catch(() => {});
 
   await conn.query(`

@@ -10,6 +10,11 @@ import { todayStr, formatMoney } from "../utils/format";
 const defaultItem = {
   product_id: null,
   product_name: '',
+  category: '',
+  warranty_name: '',
+  warranty_year: 0,
+  warranty_month: 0,
+  warranty_km: 0,
   quantity: 1,
   unit_price: '',
   amount: 0,
@@ -29,6 +34,8 @@ export default function QuotationFormModal({ quotation, onClose, onSuccess }) {
   const [newVehicle, setNewVehicle] = useState({ brand: '', model: '', color: '', license_plate: '' });
   const [mileage, setMileage] = useState('0');
   const [remark, setRemark] = useState('');
+  const [queueNo, setQueueNo] = useState('');
+  const [symptom, setSymptom] = useState('');
   const [items, setItems] = useState([{ ...defaultItem }]);
   const [productSuggestions, setProductSuggestions] = useState({});
   const [suggestionIndex, setSuggestionIndex] = useState({});
@@ -66,6 +73,8 @@ export default function QuotationFormModal({ quotation, onClose, onSuccess }) {
     setNewVehicle({ brand: '', model: '', color: '', license_plate: '' });
     setMileage('0');
     setRemark('');
+    setQueueNo('');
+    setSymptom('');
     setItems([{ ...defaultItem }]);
     setProductSuggestions({});
     setSuggestionIndex({});
@@ -91,6 +100,8 @@ export default function QuotationFormModal({ quotation, onClose, onSuccess }) {
       setNewCustomer({ customer_name: '', phone: '' });
       setMileage(detail.mileage?.toString() || '0');
       setRemark(detail.remark || '');
+      setQueueNo(detail.queue_no || '');
+      setSymptom(detail.symptom || '');
       setVehicleMode(detail.vehicle_id ? 'existing' : 'new');
       setVehicleId(detail.vehicle_id?.toString() || '');
       setNewVehicle({ brand: '', model: '', color: '', license_plate: '' });
@@ -98,6 +109,11 @@ export default function QuotationFormModal({ quotation, onClose, onSuccess }) {
         (detail.items && detail.items.length > 0 ? detail.items : [{ ...defaultItem }]).map((item) => ({
           product_id: item.product_id || null,
           product_name: item.product_name || '',
+          category: item.category || '',
+          warranty_name: item.warranty_name || '',
+          warranty_year: item.warranty_year || 0,
+          warranty_month: item.warranty_month || 0,
+          warranty_km: item.warranty_km || 0,
           quantity: item.quantity ?? 1,
           unit_price: item.unit_price ?? '',
           amount: Number(item.quantity ?? 0) * Number(item.unit_price ?? 0),
@@ -304,13 +320,19 @@ export default function QuotationFormModal({ quotation, onClose, onSuccess }) {
     setItems((prev) => {
       const next = [...prev];
       // service_items has no price column (same as the receipt flow) — price
-      // is always filled in by hand per line, so only the name changes here.
-      // product_id stays null: it's a FK to the separate `products` cost
-      // table, and a service_items id would violate that constraint.
+      // is always filled in by hand per line, so only the name/warranty
+      // change here. product_id stays null: it's a FK to the separate
+      // `products` cost table, and a service_items id would violate that
+      // constraint.
       next[index] = {
         ...next[index],
         product_id: null,
         product_name: product.product_name,
+        category: product.category || '',
+        warranty_name: product.warranty_name || '',
+        warranty_year: product.warranty_year || 0,
+        warranty_month: product.warranty_month || 0,
+        warranty_km: product.warranty_km || 0,
       };
       return next;
     });
@@ -394,11 +416,17 @@ export default function QuotationFormModal({ quotation, onClose, onSuccess }) {
         quotation_date: quotationDate,
         mileage: Number(mileage || 0),
         remark: remark.trim(),
+        queue_no: queueNo.trim() || null,
+        symptom: symptom.trim() || null,
         items: validItems.map((item) => ({
           product_id: item.product_id || null,
           product_name: item.product_name.trim(),
           quantity: Number(item.quantity || 0),
           unit_price: Number(item.unit_price || 0),
+          warranty_name: item.warranty_name || null,
+          warranty_year: item.warranty_year || 0,
+          warranty_month: item.warranty_month || 0,
+          warranty_km: item.warranty_km || 0,
         })),
       };
 
@@ -433,6 +461,8 @@ export default function QuotationFormModal({ quotation, onClose, onSuccess }) {
   const previewData = {
     quotation_no: quotationNo || '-',
     quotation_date: quotationDate,
+    queue_no: queueNo,
+    symptom,
     customer: customerMode === 'existing' ? customer || {} : { ...newCustomer },
     vehicle: { ...previewVehicle },
     items,
@@ -470,6 +500,27 @@ export default function QuotationFormModal({ quotation, onClose, onSuccess }) {
                       required
                     />
                   </div>
+                  <div className="form-group">
+                    <label>เลขคิว/เลขงาน</label>
+                    <input
+                      type="text"
+                      value={queueNo}
+                      onChange={(e) => setQueueNo(e.target.value)}
+                      placeholder="เช่น 001"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="info-card note-card">
+                <div className="info-card-title">อาการรถ</div>
+                <div className="form-group">
+                  <textarea
+                    value={symptom}
+                    onChange={(e) => setSymptom(e.target.value)}
+                    rows={3}
+                    placeholder="เช่น มีเสียงดังช่วงล่างเวลาเข้าโค้ง, พวงมาลัยสั่น..."
+                  />
                 </div>
               </div>
 
@@ -518,7 +569,7 @@ export default function QuotationFormModal({ quotation, onClose, onSuccess }) {
                 formatMoney={formatMoney}
                 fieldErrors={fieldErrors}
                 nameField="product_name"
-                showWarranty={false}
+                showWarranty={true}
                 placeholder="พิมพ์ชื่อสินค้า/บริการ"
                 compactRows={true}
               />
