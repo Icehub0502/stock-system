@@ -26,7 +26,7 @@ export default function ItemSearch({
   const listId = `item-suggestions-${index}`;
 
   return (
-    <div className="autocomplete-field">
+    <div className={`autocomplete-field${isOpen ? ' is-open' : ''}`}>
       <SearchAutocomplete
         value={value}
         placeholder={placeholder}

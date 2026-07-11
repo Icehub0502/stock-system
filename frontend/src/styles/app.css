@@ -2279,6 +2279,17 @@ button:disabled { background: #f3f4f6; color: #9ca3af; cursor: not-allowed; }
   width: 100%;
 }
 
+/* Each item-table row's .autocomplete-field is `position: relative`, which
+   makes it its own stacking context — a dropdown escaping downward out of
+   its cell was still losing to the *next* table row in paint order (same
+   z-index, later in DOM = drawn on top), no matter how high the dropdown's
+   own z-index was set, since that only ever competed within its own row's
+   context. Bumping the open row's context above its siblings — instead of
+   the dropdown itself — is what actually lets it float over later rows. */
+.autocomplete-field.is-open {
+  z-index: 1000;
+}
+
 .product-dropdown {
   max-height: 180px;
 }

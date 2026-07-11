@@ -1285,7 +1285,7 @@
 }
 
 /* Autocomplete dropdown styles */
-.autocomplete-dropdown.product-dropdown { position: absolute; background: #fff; border: 1px solid #e5e7eb; border-radius: 6px; max-height: 220px; overflow: auto; z-index: 50; width: 100%; box-shadow: 0 4px 8px rgba(0,0,0,0.06); }
+.autocomplete-dropdown.product-dropdown { position: absolute; background: #fff; border: 1px solid #e5e7eb; border-radius: 6px; max-height: 220px; overflow: auto; z-index: 999; width: 100%; box-shadow: 0 4px 8px rgba(0,0,0,0.06); }
 .autocomplete-item { display: block; width: 100%; text-align: left; padding: 8px 10px; background: transparent; border: none; cursor: pointer; }
 .autocomplete-item:hover, .autocomplete-item.is-active { background: #eef2ff; }
 .detail-content .detail-section { margin-bottom: 20px; }
