@@ -2,6 +2,17 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import client from '../api/client';
 import { defaultChecklist, normalizeChecklist, SUSPENSION_LABELS } from '../utils/repairChecklist';
+import {
+  IconRack, IconWishbone, IconTieRodEnd, IconSwayBarLink, IconSwayBarBushing,
+  IconWheelBearing, IconDriveShaft, IconShock, IconEquipment,
+} from '../components/RepairPartIcons';
+
+const SUSPENSION_ICONS = {
+  wing: IconWishbone,
+  tie_rod_end: IconTieRodEnd,
+  sway_bar_link: IconSwayBarLink,
+  sway_bar_bushing: IconSwayBarBushing,
+};
 
 function todayStr() {
   const d = new Date();
@@ -9,7 +20,7 @@ function todayStr() {
 }
 
 // ── Checkbox + note row (rack / suspension sub-items / shock / equipment) ──
-function CheckNoteRow({ label, checked, note, onToggle, onNoteChange }) {
+function CheckNoteRow({ label, checked, note, onToggle, onNoteChange, Icon }) {
   return (
     <div style={styles.checkRow}>
       <button
@@ -17,6 +28,11 @@ function CheckNoteRow({ label, checked, note, onToggle, onNoteChange }) {
         style={{ ...styles.checkTap, ...(checked ? styles.checkTapOn : {}) }}
         onClick={onToggle}
       >
+        {Icon && (
+          <span style={{ ...styles.partIcon, ...(checked ? styles.partIconOn : {}) }}>
+            <Icon size={26} />
+          </span>
+        )}
         <span style={{ ...styles.checkbox, ...(checked ? styles.checkboxOn : {}) }}>
           {checked && '✓'}
         </span>
@@ -51,12 +67,13 @@ function ChipCheck({ label, checked, onToggle }) {
   );
 }
 
-function Section({ number, title, children }) {
+function Section({ number, title, Icon, children }) {
   return (
     <div style={styles.section}>
       <div style={styles.sectionHeader}>
         <span style={styles.sectionNum}>{number}</span>
         <span style={styles.sectionTitle}>{title}</span>
+        {Icon && <span style={styles.sectionIcon}><Icon size={26} /></span>}
       </div>
       <div style={styles.sectionBody}>{children}</div>
     </div>
@@ -287,7 +304,7 @@ export default function RepairNoticePage() {
       <div style={styles.container}>
         {error && <div style={styles.errorBox}>{error}</div>}
 
-        <Section number="1" title="แร็คพวงมาลัย (Rack)">
+        <Section number="1" title="แร็คพวงมาลัย (Rack)" Icon={IconRack}>
           <CheckNoteRow
             label="แร็คพวงมาลัย"
             checked={checklist.rack.checked}
@@ -306,11 +323,12 @@ export default function RepairNoticePage() {
               note={checklist.suspension[key].note}
               onToggle={() => toggleChecked(`suspension.${key}`)}
               onNoteChange={(v) => setNote(`suspension.${key}.note`, v)}
+              Icon={SUSPENSION_ICONS[key]}
             />
           ))}
         </Section>
 
-        <Section number="3" title="ลูกปืนล้อ (Wheel Bearing)">
+        <Section number="3" title="ลูกปืนล้อ (Wheel Bearing)" Icon={IconWheelBearing}>
           <div style={styles.axleLabel}>หน้า / Front</div>
           <div style={styles.chipRow}>
             <ChipCheck label="L" checked={checklist.wheel_bearing.front_l} onToggle={() => toggleSimple('wheel_bearing.front_l')} />
@@ -323,7 +341,7 @@ export default function RepairNoticePage() {
           </div>
         </Section>
 
-        <Section number="4" title="เพลาขับ (Drive Shaft)">
+        <Section number="4" title="เพลาขับ (Drive Shaft)" Icon={IconDriveShaft}>
           <div style={styles.axleLabel}>หน้า / Front</div>
           <div style={styles.chipRow}>
             <ChipCheck label="L" checked={checklist.drive_shaft.front_l} onToggle={() => toggleSimple('drive_shaft.front_l')} />
@@ -331,7 +349,7 @@ export default function RepairNoticePage() {
           </div>
         </Section>
 
-        <Section number="5" title="โช็ค (Shock)">
+        <Section number="5" title="โช็ค (Shock)" Icon={IconShock}>
           <div style={styles.axleLabel}>หน้า / Front</div>
           <CheckNoteRow
             label="โช็คหน้า"
@@ -350,7 +368,7 @@ export default function RepairNoticePage() {
           />
         </Section>
 
-        <Section number="6" title="อุปกรณ์ (Equipment)">
+        <Section number="6" title="อุปกรณ์ (Equipment)" Icon={IconEquipment}>
           <CheckNoteRow
             label="อุปกรณ์"
             checked={checklist.equipment.checked}
@@ -438,7 +456,8 @@ const styles = {
     width: 24, height: 24, borderRadius: '50%', background: '#111', color: '#fff',
     fontSize: 12, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
   },
-  sectionTitle: { fontSize: 14, fontWeight: 700, color: '#111' },
+  sectionTitle: { fontSize: 14, fontWeight: 700, color: '#111', flex: 1 },
+  sectionIcon: { color: '#6b7280', flexShrink: 0, display: 'flex' },
   sectionBody: { padding: '10px 14px 14px' },
 
   checkRow: { marginBottom: 8 },
@@ -447,6 +466,8 @@ const styles = {
     background: '#f9fafb', border: '1.5px solid #e5e7eb', borderRadius: 10,
     padding: '12px 12px', cursor: 'pointer', minHeight: 48,
   },
+  partIcon: { color: '#9ca3af', flexShrink: 0, display: 'flex' },
+  partIconOn: { color: '#2563eb' },
   checkTapOn: { background: '#eff6ff', borderColor: '#93c5fd' },
   checkbox: {
     width: 24, height: 24, borderRadius: 7, border: '2px solid #d1d5db', flexShrink: 0,

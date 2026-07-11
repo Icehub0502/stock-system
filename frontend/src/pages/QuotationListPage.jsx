@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import client from "../api/client";
 import QuotationFormModal from "../components/QuotationFormModal";
@@ -25,7 +24,6 @@ function StatusBadge({ status, scheduledDate }) {
 
 export default function QuotationListPage() {
   const { user } = useAuth();
-  const navigate = useNavigate();
   const [quotations, setQuotations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -81,19 +79,20 @@ export default function QuotationListPage() {
     setActioningId(q.id);
     try {
       await client.patch(`/quotations/${q.id}/approve`);
-      // Flash the row green so the office can see it flip to "approved"
-      // before jumping to the repair notice — approving still creates the
-      // receipt in the background (unchanged).
+      // Flash the row green so the office can see it flip to "approved" —
+      // office stays right here on the quotation list; nobody gets
+      // redirected away.
       setQuotations((prev) => prev.map((row) => (row.id === q.id ? { ...row, status: 'approved' } : row)));
       setJustApprovedId(q.id);
 
-      // The repair notice itself is created here immediately (blank
-      // checklist) rather than waiting for someone to fill it in and press
-      // save — the vehicle/customer must land on this record for certain
-      // the moment a quotation is approved, so it already exists and shows
-      // up in the list even if nobody has ticked a single box yet. What's
-      // left for whoever opens it next is purely picking what needs repair.
-      const noticeRes = await client.post('/repair-notices', {
+      // The repair notice itself is created here immediately in the
+      // background (blank checklist) rather than waiting for someone to
+      // fill it in and press save — the vehicle/customer must land on this
+      // record for certain the moment a quotation is approved, so it
+      // already shows up in the repair notice list even though nobody has
+      // opened it yet. Whoever picks it up next (usually a technician, on
+      // their phone) is the one who actually ticks what needs repair.
+      await client.post('/repair-notices', {
         customer_id: q.customer_id,
         vehicle_id: q.vehicle_id,
         quotation_id: q.id,
@@ -101,9 +100,7 @@ export default function QuotationListPage() {
         checklist: defaultChecklist(),
       });
 
-      setTimeout(() => {
-        navigate(`/repair-notices/${noticeRes.data.id}`);
-      }, 700);
+      setActioningId(null);
     } catch (err) {
       alert(err.response?.data?.error || "อนุมัติไม่สำเร็จ");
       setActioningId(null);
