@@ -1,6 +1,17 @@
 import React from 'react';
 import { COMPANY } from '../utils/printDoc';
 import { normalizeChecklist, SUSPENSION_LABELS } from '../utils/repairChecklist';
+import {
+  IconRack, IconWishbone, IconTieRodEnd, IconSwayBarLink, IconSwayBarBushing,
+  IconWheelBearing, IconDriveShaft, IconShock, IconEquipment,
+} from './RepairPartIcons';
+
+const SUSPENSION_ICONS = {
+  wing: IconWishbone,
+  tie_rod_end: IconTieRodEnd,
+  sway_bar_link: IconSwayBarLink,
+  sway_bar_bushing: IconSwayBarBushing,
+};
 
 function formatThaiDate(dateInput) {
   if (!dateInput) return '-';
@@ -21,6 +32,21 @@ function CheckLine({ checked, note }) {
       <Box checked={checked} />
       <span className="rn-note-line">{note || ''}</span>
     </div>
+  );
+}
+
+// The printed copy is what a Burmese-speaking technician actually works
+// from on the shop floor — rather than adding a second language (which
+// would look unprofessional on a document the customer also sees), every
+// part gets the same recognizable icon shown on the phone checklist, so
+// the part is identifiable by shape regardless of which language someone
+// reads.
+function LabelWithIcon({ Icon, children }) {
+  return (
+    <span className="rn-label-row">
+      {Icon && <Icon size={22} />}
+      <span>{children}</span>
+    </span>
   );
 }
 
@@ -60,7 +86,7 @@ export default function RepairNoticePrintTemplate({ data }) {
           <tbody>
             <tr>
               <td className="rn-num">1</td>
-              <td className="rn-label">แร็คพวงมาลัย (Rack)</td>
+              <td className="rn-label"><LabelWithIcon Icon={IconRack}>แร็คพวงมาลัย (Rack)</LabelWithIcon></td>
               <td className="rn-value"><CheckLine checked={checklist.rack.checked} note={checklist.rack.note} /></td>
             </tr>
 
@@ -71,7 +97,9 @@ export default function RepairNoticePrintTemplate({ data }) {
             </tr>
             {Object.keys(SUSPENSION_LABELS).map((key, idx) => (
               <tr key={key}>
-                <td className="rn-sublabel">2.{idx + 1} {SUSPENSION_LABELS[key]}</td>
+                <td className="rn-sublabel">
+                  <LabelWithIcon Icon={SUSPENSION_ICONS[key]}>2.{idx + 1} {SUSPENSION_LABELS[key]}</LabelWithIcon>
+                </td>
                 <td className="rn-value">
                   <CheckLine checked={checklist.suspension[key].checked} note={checklist.suspension[key].note} />
                 </td>
@@ -80,7 +108,7 @@ export default function RepairNoticePrintTemplate({ data }) {
 
             <tr>
               <td className="rn-num">3</td>
-              <td className="rn-label">ลูกปืนล้อ / Wheel Bearing</td>
+              <td className="rn-label"><LabelWithIcon Icon={IconWheelBearing}>ลูกปืนล้อ / Wheel Bearing</LabelWithIcon></td>
               <td className="rn-value">
                 <div className="rn-axle-grid">
                   <span>หน้า: L<Box checked={checklist.wheel_bearing.front_l} /> R<Box checked={checklist.wheel_bearing.front_r} /></span>
@@ -91,7 +119,7 @@ export default function RepairNoticePrintTemplate({ data }) {
 
             <tr>
               <td className="rn-num">4</td>
-              <td className="rn-label">เพลาขับ / Drive Shaft</td>
+              <td className="rn-label"><LabelWithIcon Icon={IconDriveShaft}>เพลาขับ / Drive Shaft</LabelWithIcon></td>
               <td className="rn-value">
                 <div className="rn-axle-grid">
                   <span>หน้า: L<Box checked={checklist.drive_shaft.front_l} /> R<Box checked={checklist.drive_shaft.front_r} /></span>
@@ -101,17 +129,17 @@ export default function RepairNoticePrintTemplate({ data }) {
 
             <tr>
               <td className="rn-num" rowSpan={2}>5</td>
-              <td className="rn-sublabel">หน้า / Front</td>
+              <td className="rn-sublabel"><LabelWithIcon Icon={IconShock}>หน้า / Front</LabelWithIcon></td>
               <td className="rn-value"><CheckLine checked={checklist.shock.front.checked} note={checklist.shock.front.note} /></td>
             </tr>
             <tr>
-              <td className="rn-sublabel">หลัง / Rear (โช็ค / Shock)</td>
+              <td className="rn-sublabel"><LabelWithIcon Icon={IconShock}>หลัง / Rear (โช็ค / Shock)</LabelWithIcon></td>
               <td className="rn-value"><CheckLine checked={checklist.shock.rear.checked} note={checklist.shock.rear.note} /></td>
             </tr>
 
             <tr>
               <td className="rn-num">6</td>
-              <td className="rn-label">อุปกรณ์ / Equipment</td>
+              <td className="rn-label"><LabelWithIcon Icon={IconEquipment}>อุปกรณ์ / Equipment</LabelWithIcon></td>
               <td className="rn-value"><CheckLine checked={checklist.equipment.checked} note={checklist.equipment.note} /></td>
             </tr>
 

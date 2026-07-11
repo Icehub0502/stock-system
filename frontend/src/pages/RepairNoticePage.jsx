@@ -6,6 +6,7 @@ import {
   IconRack, IconWishbone, IconTieRodEnd, IconSwayBarLink, IconSwayBarBushing,
   IconWheelBearing, IconDriveShaft, IconShock, IconEquipment,
 } from '../components/RepairPartIcons';
+import RepairNoticePrintModal from '../components/RepairNoticePrintModal';
 
 const SUSPENSION_ICONS = {
   wing: IconWishbone,
@@ -92,6 +93,7 @@ export default function RepairNoticePage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [toast, setToast] = useState('');
+  const [showPrint, setShowPrint] = useState(false);
 
   const [vehicleQuery, setVehicleQuery] = useState('');
   const [vehicleResults, setVehicleResults] = useState([]);
@@ -231,11 +233,16 @@ export default function RepairNoticePage() {
       };
       if (isEdit) {
         await client.put(`/repair-notices/${id}`, payload);
+        setToast('บันทึกการแก้ไขสำเร็จ');
       } else {
-        await client.post('/repair-notices', payload);
+        // Land on this new record's own edit page instead of the list —
+        // the print button only shows once a real id exists, and someone
+        // filling this out on their phone likely wants to print right away
+        // without an extra trip back through the list to find it again.
+        const res = await client.post('/repair-notices', payload);
+        setToast('บันทึกใบแจ้งซ่อมสำเร็จ');
+        navigate(`/repair-notices/${res.data.id}`, { replace: true });
       }
-      setToast('บันทึกใบแจ้งซ่อมสำเร็จ');
-      setTimeout(() => navigate('/repair-notices'), 900);
     } catch (err) {
       setError(err.response?.data?.error || 'บันทึกไม่สำเร็จ');
     } finally {
@@ -294,11 +301,18 @@ export default function RepairNoticePage() {
             {selectedVehicle?.customer_name ? ` · ${selectedVehicle.customer_name}` : ''}
           </p>
         </div>
-        {!prefill.vehicleId && !isEdit && (
-          <button type="button" style={styles.changeVehicleBtn} onClick={() => setStep('vehicle')}>
-            เปลี่ยนรถ
-          </button>
-        )}
+        <div style={styles.topBarActions}>
+          {isEdit && (
+            <button type="button" style={styles.printTopBtn} onClick={() => setShowPrint(true)}>
+              🖨️ พิมพ์
+            </button>
+          )}
+          {!prefill.vehicleId && !isEdit && (
+            <button type="button" style={styles.changeVehicleBtn} onClick={() => setStep('vehicle')}>
+              เปลี่ยนรถ
+            </button>
+          )}
+        </div>
       </div>
 
       <div style={styles.container}>
@@ -407,6 +421,8 @@ export default function RepairNoticePage() {
       </div>
 
       {toast && <div style={styles.toast}>{toast}</div>}
+
+      {showPrint && <RepairNoticePrintModal noticeId={id} onClose={() => setShowPrint(false)} />}
     </div>
   );
 }
@@ -436,8 +452,14 @@ const styles = {
   },
   topBarTitle: { fontSize: 15, fontWeight: 700, margin: 0 },
   topBarSub: { fontSize: 12, color: '#d1d5db', margin: '2px 0 0' },
+  topBarActions: { display: 'flex', gap: 8, flexShrink: 0 },
   changeVehicleBtn: {
     background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.25)',
+    color: '#fff', borderRadius: 8, padding: '8px 12px', fontSize: 12, fontWeight: 600,
+    cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0,
+  },
+  printTopBtn: {
+    background: '#2563eb', border: '1px solid #2563eb',
     color: '#fff', borderRadius: 8, padding: '8px 12px', fontSize: 12, fontWeight: 600,
     cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0,
   },

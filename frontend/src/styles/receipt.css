@@ -1654,6 +1654,8 @@
 .rn-box-checked { background: #111111; color: #fff; }
 .rn-axle-grid { display: flex; gap: 24px; font-size: 12.5px; }
 .rn-axle-grid span { display: inline-flex; align-items: center; gap: 6px; }
+.rn-label-row { display: inline-flex; align-items: center; gap: 8px; }
+.rn-label-row svg { flex-shrink: 0; color: #6b6155; }
 
 .rn-footer { display: flex; justify-content: space-between; gap: 16px; margin-top: 20px; font-size: 13px; }
 .rn-footer-fill { font-weight: 700; color: #17171a; border-bottom: 1px solid #a9a29a; padding: 0 6px 2px; }
