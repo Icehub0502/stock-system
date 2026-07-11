@@ -18,6 +18,8 @@ import WarrantyManagementPage from "./pages/WarrantyManagementPage";
 import ProductCostPage from "./pages/ProductCostPage";
 import WingArmDashboard from "./pages/WingArmDashboard";
 import DailySalesSummaryPage from "./pages/DailySalesSummaryPage";
+import RepairNoticeListPage from "./pages/RepairNoticeListPage";
+import RepairNoticePage from "./pages/RepairNoticePage";
 
 function Home() {
   const { user } = useAuth();
@@ -146,6 +148,30 @@ function AppRoutes() {
             element={
               <ProtectedRoute roles={["office"]}>
                 <DailySalesSummaryPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/repair-notices"
+            element={
+              <ProtectedRoute roles={["office", "technician"]}>
+                <RepairNoticeListPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/repair-notices/new"
+            element={
+              <ProtectedRoute roles={["office", "technician"]}>
+                <RepairNoticePage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/repair-notices/:id"
+            element={
+              <ProtectedRoute roles={["office", "technician"]}>
+                <RepairNoticePage />
               </ProtectedRoute>
             }
           />

@@ -1619,6 +1619,45 @@
   .doc-page { width: 100%; }
 }
 
+/* ── Repair notice ("ใบแจ้งซ่อม") print — digitizes a fixed paper checklist,
+   so it reuses .doc-page/.doc-print-wrap for A4 sizing/print behavior but
+   has its own table layout instead of the item-table used by receipts/
+   quotations. */
+.rn-page { padding: 14mm 15mm; }
+.rn-header { border-bottom: 2px solid #17171a; padding-bottom: 10px; margin-bottom: 12px; }
+.rn-brand { display: flex; justify-content: space-between; align-items: baseline; }
+.rn-brand-name { font-size: 15px; font-weight: 800; color: #17171a; }
+.rn-code { font-size: 13px; color: #6b6155; }
+.rn-code-value { font-weight: 800; color: #b91c1c; font-size: 15px; }
+.rn-title-row { display: flex; justify-content: space-between; align-items: baseline; margin-top: 6px; }
+.rn-title-row h1 { margin: 0; font-size: 18px; font-weight: 800; color: #17171a; }
+.rn-plate { font-size: 13px; color: #17171a; }
+.rn-vehicle-line { font-size: 12.5px; color: #45403a; margin-top: 4px; }
+
+.rn-table { width: 100%; border-collapse: collapse; border: 1px solid #17171a; font-size: 12.5px; }
+.rn-table td { border: 1px solid #a9a29a; padding: 8px 10px; vertical-align: middle; }
+.rn-num {
+  width: 30px; text-align: center; font-weight: 800; font-size: 14px;
+  background: #f1e6d2; color: #17171a;
+}
+.rn-label { font-weight: 700; color: #17171a; width: 200px; }
+.rn-sublabel { color: #45403a; width: 200px; padding-left: 18px; }
+.rn-other { min-height: 40px; white-space: pre-wrap; }
+
+.rn-check-line { display: flex; align-items: center; gap: 10px; }
+.rn-note-line { color: #1d4ed8; font-weight: 600; border-bottom: 1px solid #d8d2c6; flex: 1; min-height: 16px; padding-bottom: 2px; }
+.rn-box {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 16px; height: 16px; border: 1.5px solid #17171a; flex-shrink: 0;
+  font-size: 12px; font-weight: 800; line-height: 1;
+}
+.rn-box-checked { background: #111111; color: #fff; }
+.rn-axle-grid { display: flex; gap: 24px; font-size: 12.5px; }
+.rn-axle-grid span { display: inline-flex; align-items: center; gap: 6px; }
+
+.rn-footer { display: flex; justify-content: space-between; gap: 16px; margin-top: 20px; font-size: 13px; }
+.rn-footer-fill { font-weight: 700; color: #17171a; border-bottom: 1px solid #a9a29a; padding: 0 6px 2px; }
+
 @media print {
   * {
     -webkit-print-color-adjust: exact !important;

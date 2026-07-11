@@ -20,6 +20,7 @@ const vehiclesRoutes = require('./routes/vehicles.routes');
 const serviceItemsRoutes = require('./routes/service-items.routes');
 const warrantiesRoutes = require('./routes/warranties.routes');
 const productsRoutes = require('./routes/products.routes');
+const repairNoticesRoutes = require('./routes/repairNotices.routes');
 
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 const FRONTEND_DIST = path.join(__dirname, '..', '..', 'frontend', 'dist');
@@ -88,6 +89,7 @@ function createApp() {
   app.use('/api/service-items', serviceItemsRoutes);
   app.use('/api/warranties', warrantiesRoutes);
   app.use('/api/products', productsRoutes);
+  app.use('/api/repair-notices', repairNoticesRoutes);
 
   app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
   app.get('/api/landing-images', (req, res) => {

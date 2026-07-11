@@ -314,6 +314,29 @@ async function initDatabase() {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
   `);
 
+  // The physical "ใบแจ้งซ่อม" checklist form (fixed sections/sub-items, not
+  // a variable line-item list like receipts/quotations) — stored as one
+  // JSON blob since the shape is owned and rendered entirely by the
+  // frontend; the backend just persists and returns it opaquely.
+  await conn.query(`
+    CREATE TABLE IF NOT EXISTS repair_notices (
+      id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+      code VARCHAR(20) NOT NULL,
+      customer_id BIGINT UNSIGNED DEFAULT NULL,
+      vehicle_id BIGINT UNSIGNED DEFAULT NULL,
+      quotation_id BIGINT UNSIGNED DEFAULT NULL,
+      notice_date DATE NOT NULL,
+      checklist JSON NOT NULL,
+      checked_by VARCHAR(100) DEFAULT NULL,
+      repaired_by VARCHAR(100) DEFAULT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      CONSTRAINT fk_repair_notice_customer FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE SET NULL,
+      CONSTRAINT fk_repair_notice_vehicle FOREIGN KEY (vehicle_id) REFERENCES vehicles(id) ON DELETE SET NULL,
+      CONSTRAINT fk_repair_notice_quotation FOREIGN KEY (quotation_id) REFERENCES quotations(id) ON DELETE SET NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+  `);
+
   const [userRows] = await conn.query(
     'SELECT COUNT(*) AS c FROM users'
   );

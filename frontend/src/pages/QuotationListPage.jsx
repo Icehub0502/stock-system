@@ -76,10 +76,26 @@ export default function QuotationListPage() {
     try {
       await client.patch(`/quotations/${q.id}/approve`);
       // Flash the row green so the office can see it flip to "approved"
-      // before we jump them to the receipt list to finish the paperwork.
+      // before we jump them to a pre-filled repair notice — approving still
+      // creates the receipt in the background (unchanged), but the repair
+      // checklist is the more useful next screen right after approval since
+      // it guides the actual work about to happen on the car.
       setQuotations((prev) => prev.map((row) => (row.id === q.id ? { ...row, status: 'approved' } : row)));
       setJustApprovedId(q.id);
-      setTimeout(() => navigate('/receipt-list'), 700);
+      setTimeout(() => {
+        navigate('/repair-notices/new', {
+          state: {
+            vehicleId: q.vehicle_id,
+            customerId: q.customer_id,
+            quotationId: q.id,
+            brand: q.brand || q.car_brand,
+            model: q.model || q.car_model,
+            color: q.color || q.car_color,
+            licensePlate: q.license_plate,
+            customerName: q.customer_name,
+          },
+        });
+      }, 700);
     } catch (err) {
       alert(err.response?.data?.error || "อนุมัติไม่สำเร็จ");
       setActioningId(null);

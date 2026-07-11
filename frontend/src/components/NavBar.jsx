@@ -139,6 +139,7 @@ export default function NavBar() {
             </div>
           ))}
 
+        <Link to="/repair-notices" className="navbar-standalone-link" onClick={close}>ใบแจ้งซ่อม</Link>
         <Link to="/scan" className="navbar-standalone-link" onClick={close}>สแกน QR</Link>
 
         <div className="navbar-user-row">
