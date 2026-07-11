@@ -428,10 +428,14 @@ export default function QuotationFormModal({ quotation, onClose, onSuccess }) {
       return;
     }
 
+    // Price is intentionally NOT required — a set-expanded component row
+    // (e.g. from ชุดโปรช่วงล่าง) is often left at its default blank price
+    // since it's already covered by the set's combined price, and should
+    // still be saved (as ฿0), not silently dropped for lacking a price.
     const validItems = items.filter((item) => {
       const name = item.product_name?.toString().trim();
       const qty = Number(item.quantity || 0);
-      return Boolean(name) && qty > 0 && item.unit_price !== '' && item.unit_price != null;
+      return Boolean(name) && qty > 0;
     });
 
     if (validItems.length === 0) {
@@ -506,7 +510,11 @@ export default function QuotationFormModal({ quotation, onClose, onSuccess }) {
     queue_no: queueNo,
     symptom,
     customer: customerMode === 'existing' ? customer || {} : { ...newCustomer },
-    vehicle: { ...previewVehicle },
+    // previewVehicle (from the vehicles list / newVehicle) never carries the
+    // document's own mileage reading — that's tracked separately as its own
+    // form field, not part of the vehicle record — so it must be merged in
+    // explicitly or the live preview shows blank even after typing it in.
+    vehicle: { ...previewVehicle, mileage },
     items,
     remark,
     subtotal: calculateTotal(),

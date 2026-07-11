@@ -471,7 +471,11 @@ export default function ReceiptFormModal({ onClose, onSuccess, receiptId }) {
     receipt_date: receiptDate,
     pic,
     customer: customerMode === 'existing' ? customer || {} : { ...newCustomer },
-    vehicle: { ...previewVehicle },
+    // previewVehicle (from the vehicles list / newVehicle) never carries the
+    // document's own mileage reading — that's tracked separately as its own
+    // form field, not part of the vehicle record — so it must be merged in
+    // explicitly or the live preview shows blank even after typing it in.
+    vehicle: { ...previewVehicle, mileage },
     items,
     remark,
     total_amount: calculateTotal(),
@@ -512,10 +516,14 @@ export default function ReceiptFormModal({ onClose, onSuccess, receiptId }) {
       return;
     }
 
+    // Price is intentionally NOT required — a set-expanded component row
+    // (e.g. from ชุดโปรช่วงล่าง) is often left at its default blank price
+    // since it's already covered by the set's combined price, and should
+    // still be saved (as ฿0), not silently dropped for lacking a price.
     const validItems = items.filter((item) => {
       const label = item.product_name_snapshot?.toString().trim();
       const qty = Number(item.qty || 0);
-      return (label || item.service_item_id) && qty > 0 && item.price !== '';
+      return (label || item.service_item_id) && qty > 0;
     });
 
     if (validItems.length === 0) {

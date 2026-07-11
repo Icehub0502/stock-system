@@ -64,7 +64,10 @@ function buildValidItems(items) {
     ? items.filter((item) => {
         const name = item.product_name?.toString().trim();
         const quantity = Number(item.quantity || 0);
-        return Boolean(name) && quantity > 0 && item.unit_price !== '' && item.unit_price != null;
+        // A blank unit_price is valid — a set-expanded component row is
+        // often left unpriced since it's covered by the set's combined
+        // price, and should still be saved (as ฿0), not dropped.
+        return Boolean(name) && quantity > 0;
       })
     : [];
 }

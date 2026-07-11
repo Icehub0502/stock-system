@@ -351,9 +351,11 @@ router.post('/', async (req, res) => {
         const hasName = Boolean(productName);
         const hasService = Boolean(item.service_item_id);
         const qty = Number(item.qty || 0);
-        // price can be negative (a discount line) or zero (a free/included
-        // item) — only a missing name/service or a non-positive qty is invalid.
-        return (hasName || hasService) && qty > 0 && item.price !== '' && item.price != null;
+        // price can be negative (a discount line), zero, or blank (a
+        // set-expanded component already covered by the set's combined
+        // price) — only a missing name/service or a non-positive qty is
+        // invalid. A blank price is coerced to 0 below, not dropped.
+        return (hasName || hasService) && qty > 0;
       })
     : [];
 
@@ -489,9 +491,11 @@ router.put('/:id', async (req, res) => {
         const productName = item.product_name_snapshot?.toString().trim();
         const hasService = Boolean(item.service_item_id);
         const qty = Number(item.qty || 0);
-        // price can be negative (a discount line) or zero (a free/included
-        // item) — only a missing name/service or a non-positive qty is invalid.
-        return (productName || hasService) && qty > 0 && item.price !== '' && item.price != null;
+        // price can be negative (a discount line), zero, or blank (a
+        // set-expanded component already covered by the set's combined
+        // price) — only a missing name/service or a non-positive qty is
+        // invalid. A blank price is coerced to 0 below, not dropped.
+        return (productName || hasService) && qty > 0;
       })
     : [];
 

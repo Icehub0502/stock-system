@@ -39,6 +39,7 @@ export default function QuotationPrintModal({ quotation, onClose }) {
       model: detail.model || detail.car_model,
       color: detail.color || detail.car_color,
       license_plate: detail.license_plate,
+      mileage: detail.mileage,
     },
     items: detail.items || [],
     remark: detail.remark,
