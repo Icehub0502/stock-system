@@ -150,8 +150,8 @@ export default function ReceiptListPage() {
                           <td data-label="เลขที่บิล"><strong>{receipt.receipt_no}</strong></td>
                           <td data-label="วันที่">{new Date(receipt.receipt_date).toLocaleDateString('th-TH')}</td>
                           <td data-label="รหัสลูกค้า">{receipt.customer_code || '-'}</td>
-                          <td data-label="ชื่อลูกค้า">{receipt.customer_name}</td>
-                          <td data-label="รถ">{receipt.brand} {receipt.model} / {receipt.license_plate}</td>
+                          <td className="col-customer-name" data-label="ชื่อลูกค้า">{receipt.customer_name}</td>
+                          <td className="car-info" data-label="รถ">{receipt.brand} {receipt.model} / {receipt.license_plate}</td>
                           <td className="amount" data-label="จำนวนเงิน">฿{Number(receipt.total_amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                           <td className="actions" data-label="จัดการ">
                             <button

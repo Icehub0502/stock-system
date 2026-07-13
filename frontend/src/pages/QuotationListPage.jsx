@@ -187,7 +187,7 @@ export default function QuotationListPage() {
                     <strong>{q.quotation_no}</strong>
                   </td>
                   <td data-label="วันที่">{new Date(q.quotation_date).toLocaleDateString('th-TH')}</td>
-                  <td data-label="ชื่อลูกค้า">{q.customer_name}</td>
+                  <td className="col-customer-name" data-label="ชื่อลูกค้า">{q.customer_name}</td>
                   <td className="car-info" data-label="รุ่น/สี/ทะเบียน">
                     {q.brand || q.car_brand} {q.model || q.car_model} / {q.color || q.car_color} /{" "}
                     {q.license_plate}

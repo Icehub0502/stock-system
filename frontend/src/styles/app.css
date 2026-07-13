@@ -1919,6 +1919,11 @@ button:disabled { background: #f3f4f6; color: #9ca3af; cursor: not-allowed; }
 .car-info {
   font-size: 0.85rem;
   color: #6b7280;
+  min-width: 150px;
+}
+
+.col-customer-name {
+  min-width: 110px;
 }
 
 .amount {
@@ -1953,17 +1958,24 @@ button:disabled { background: #f3f4f6; color: #9ca3af; cursor: not-allowed; }
 
 .actions {
   display: flex;
-  gap: 8px;
-  flex-wrap: nowrap;
+  gap: 6px;
+  flex-wrap: wrap;
+  /* Caps how wide this column can grow to fit its buttons in one line —
+     without this, .quotation-table's auto layout gives the actions column
+     however much width its (nowrap) buttons ask for, squeezing every other
+     column down to fit, which forces long unbroken vehicle/model text to
+     wrap character-by-character instead. Wrapping onto 2 lines here keeps
+     the column compact regardless of how many action buttons a row has. */
+  max-width: 210px;
 }
 
 .btn-icon-small {
   background: transparent;
   border: 1px solid #e5e7eb;
-  padding: 6px 12px;
+  padding: 6px 10px;
   border-radius: 4px;
   cursor: pointer;
-  font-size: 0.82rem;
+  font-size: 0.8rem;
   font-weight: 600;
   color: #374151;
   white-space: nowrap;
