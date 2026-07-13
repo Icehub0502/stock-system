@@ -101,6 +101,7 @@ router.get('/', async (req, res) => {
   try {
     const [rows] = await pool.execute(
       `SELECT r.id, r.receipt_no, r.receipt_date, r.total_amount, r.remark, r.printed_at,
+              (r.customer_signature IS NOT NULL) AS has_signature,
               c.customer_name, c.customer_code,
               v.brand, v.model, v.color, v.license_plate
        FROM receipts r
@@ -131,6 +132,30 @@ router.patch('/:id/mark-printed', async (req, res) => {
   } catch (err) {
     console.error('Error marking receipt as printed:', err);
     res.status(500).json({ error: 'บันทึกสถานะการพิมพ์ไม่สำเร็จ' });
+  }
+});
+
+// PATCH - Save the customer's signature (captured on a tablet/phone at the counter)
+router.patch('/:id/signature', async (req, res) => {
+  const { id } = req.params;
+  const { signature } = req.body || {};
+
+  if (!signature || !signature.startsWith('data:image/')) {
+    return res.status(400).json({ error: 'ข้อมูลลายเซ็นไม่ถูกต้อง' });
+  }
+
+  try {
+    const [result] = await pool.execute(
+      'UPDATE receipts SET customer_signature = ? WHERE id = ?',
+      [signature, id]
+    );
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: 'ไม่พบบิลนี้' });
+    }
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Error saving receipt signature:', err);
+    res.status(500).json({ error: 'บันทึกลายเซ็นไม่สำเร็จ' });
   }
 });
 

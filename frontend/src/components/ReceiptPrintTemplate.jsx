@@ -60,7 +60,7 @@ function chunkItems(items, size) {
   return pages;
 }
 
-function SignatureBlock({ sellerName, customerName, docDateText }) {
+function SignatureBlock({ sellerName, customerName, docDateText, signatureDataUrl }) {
   return (
     <div className="doc-sigs">
       <div className="doc-sigs-label">รับรอง</div>
@@ -71,6 +71,11 @@ function SignatureBlock({ sellerName, customerName, docDateText }) {
       <div className="doc-sig-date doc-sig-col-1">วันที่ {docDateText}</div>
 
       <div className="doc-sig-who doc-sig-col-2">ผู้อนุมัติเอกสาร (ลูกค้า)</div>
+      {/* Drawn signature (if the customer signed on a tablet/phone) sits in
+          the same grid cell as the line, sized to clear the line's own
+          64px margin-top so the two don't overlap — this is a digital
+          substitute for the hand-signed line, not an addition to it. */}
+      {signatureDataUrl && <img className="doc-sig-image doc-sig-col-2" src={signatureDataUrl} alt="ลายเซ็นลูกค้า" />}
       <div className="doc-sig-line doc-sig-col-2" />
       <div className="doc-sig-name doc-sig-col-2">{customerName || '-'}</div>
       <div className="doc-sig-date doc-sig-col-2">วันที่ {docDateText}</div>
@@ -209,7 +214,7 @@ export default function ReceiptPrintTemplate({ data }) {
               ))}
             </div>
 
-            <SignatureBlock sellerName={COMPANY.legalName} customerName={customer.customer_name} docDateText={docDateText} />
+            <SignatureBlock sellerName={COMPANY.legalName} customerName={customer.customer_name} docDateText={docDateText} signatureDataUrl={data.customer_signature} />
           </div>
         );
       })}

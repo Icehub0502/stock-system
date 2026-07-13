@@ -1609,6 +1609,10 @@
 }
 .doc-sig-who { grid-row: 1; text-align: center; font-size: 12px; font-weight: 700; color: #17171a; }
 .doc-sig-line { grid-row: 2; margin-top: 64px; border-bottom: 1px solid #a9a29a; height: 32px; }
+/* Shares .doc-sig-line's grid cell rather than adding a row — sized to sit
+   inside the line's own 64px margin-top so the drawn signature reads as
+   sitting "on" the line instead of pushing the layout around. */
+.doc-sig-image { grid-row: 2; align-self: start; justify-self: center; max-height: 54px; max-width: 100%; object-fit: contain; }
 .doc-sig-name { grid-row: 3; text-align: center; font-size: 12px; color: #17171a; }
 .doc-sig-date { grid-row: 4; margin-top: 4px; text-align: center; color: #17171a; font-size: 10.5px; }
 .doc-sig-col-1 { grid-column: 2; }

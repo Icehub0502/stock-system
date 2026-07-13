@@ -43,6 +43,7 @@ export default function QuotationPrintModal({ quotation, onClose }) {
     },
     items: detail.items || [],
     remark: detail.remark,
+    customer_signature: detail.customer_signature,
   };
 
   return (

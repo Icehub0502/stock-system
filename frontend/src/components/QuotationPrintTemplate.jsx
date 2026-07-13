@@ -46,7 +46,7 @@ function chunkItems(items, size) {
   return pages;
 }
 
-function SignatureBlock({ sellerName, customerName, docDateText }) {
+function SignatureBlock({ sellerName, customerName, docDateText, signatureDataUrl }) {
   return (
     <div className="doc-sigs">
       <div className="doc-sigs-label">รับรอง</div>
@@ -57,6 +57,7 @@ function SignatureBlock({ sellerName, customerName, docDateText }) {
       <div className="doc-sig-date doc-sig-col-1">วันที่ {docDateText}</div>
 
       <div className="doc-sig-who doc-sig-col-2">ผู้อนุมัติ (ลูกค้า)</div>
+      {signatureDataUrl && <img className="doc-sig-image doc-sig-col-2" src={signatureDataUrl} alt="ลายเซ็นลูกค้า" />}
       <div className="doc-sig-line doc-sig-col-2" />
       <div className="doc-sig-name doc-sig-col-2">{customerName || '-'}</div>
       <div className="doc-sig-date doc-sig-col-2">วันที่ {docDateText}</div>
@@ -195,7 +196,7 @@ export default function QuotationPrintTemplate({ data }) {
 
             <div className="doc-remark-row"><b>หมายเหตุ :</b> {remark || ''}</div>
 
-            <SignatureBlock sellerName={COMPANY.legalName} customerName={customer.customer_name} docDateText={docDateText} />
+            <SignatureBlock sellerName={COMPANY.legalName} customerName={customer.customer_name} docDateText={docDateText} signatureDataUrl={data.customer_signature} />
           </div>
         );
       })}

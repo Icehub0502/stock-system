@@ -4,6 +4,7 @@ import client from "../api/client";
 import QuotationFormModal from "../components/QuotationFormModal";
 import QuotationPrintModal from "../components/QuotationPrintModal";
 import ScheduleDateDialog from "../components/ScheduleDateDialog";
+import SignatureModal from "../components/SignatureModal";
 import { defaultChecklist } from "../utils/repairChecklist";
 
 function todayStr() {
@@ -37,6 +38,7 @@ export default function QuotationListPage() {
   const [selectedQuotation, setSelectedQuotation] = useState(null);
   const [editingQuotation, setEditingQuotation] = useState(null);
   const [schedulingQuotation, setSchedulingQuotation] = useState(null);
+  const [signingQuotationId, setSigningQuotationId] = useState(null);
 
   // Fetch quotations
   const fetchQuotations = async () => {
@@ -119,6 +121,13 @@ export default function QuotationListPage() {
     } finally {
       setActioningId(null);
     }
+  };
+
+  const handleSaveSignature = async (dataUrl) => {
+    await client.patch(`/quotations/${signingQuotationId}/signature`, { signature: dataUrl });
+    setQuotations((prev) =>
+      prev.map((q) => (q.id === signingQuotationId ? { ...q, customer_signature: dataUrl } : q))
+    );
   };
 
   const handleFormSuccess = () => {
@@ -208,6 +217,12 @@ export default function QuotationListPage() {
                     >
                       พิมพ์
                     </button>
+                    <button
+                      className={`btn-icon-small ${q.customer_signature ? 'btn-printed' : ''}`}
+                      onClick={() => setSigningQuotationId(q.id)}
+                    >
+                      {q.customer_signature ? '✓ เซ็นแล้ว' : 'เซ็นเอกสาร'}
+                    </button>
                     {q.status !== 'approved' && (
                       <>
                         <button
@@ -265,6 +280,15 @@ export default function QuotationListPage() {
           loading={actioningId === schedulingQuotation.id}
           onConfirm={handleScheduleConfirm}
           onCancel={() => setSchedulingQuotation(null)}
+        />
+      )}
+
+      {signingQuotationId && (
+        <SignatureModal
+          title="เซ็นชื่อลูกค้า"
+          subtitle="ให้ลูกค้าเซ็นชื่อยืนยันในกรอบด้านล่าง"
+          onSave={handleSaveSignature}
+          onClose={() => setSigningQuotationId(null)}
         />
       )}
 

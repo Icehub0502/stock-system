@@ -269,6 +269,14 @@ async function initDatabase() {
     ADD COLUMN printed_at TIMESTAMP NULL DEFAULT NULL
   `).catch(() => {});
 
+  // Mirrors quotations.customer_signature — either captured directly on a
+  // walk-in receipt, or copied over automatically when an approved
+  // quotation (which already has one) is converted.
+  await conn.query(`
+    ALTER TABLE receipts
+    ADD COLUMN customer_signature LONGTEXT DEFAULT NULL
+  `).catch(() => {});
+
   // Quotation approval workflow: pending -> approved (auto-converted to a
   // receipt) or scheduled (customer asked to come back on scheduled_date).
   // Added via ALTER (not the CREATE TABLE above) because vehicles/receipts
@@ -294,6 +302,16 @@ async function initDatabase() {
     ALTER TABLE quotations
     ADD COLUMN queue_no VARCHAR(50) DEFAULT NULL,
     ADD COLUMN symptom TEXT DEFAULT NULL
+  `).catch(() => {});
+
+  // customer_signature: a base64 PNG data URI captured on the shop's
+  // tablet/phone — stored as-is (no file-upload pipeline in this app yet,
+  // and a hand-drawn signature is only a few KB). Carried over onto the
+  // receipt created when the quotation is approved, so it doesn't need to
+  // be captured twice.
+  await conn.query(`
+    ALTER TABLE quotations
+    ADD COLUMN customer_signature LONGTEXT DEFAULT NULL
   `).catch(() => {});
 
   await conn.query(`

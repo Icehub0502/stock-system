@@ -412,9 +412,9 @@ router.patch('/:id/approve', async (req, res) => {
     const total_amount = items.reduce((sum, item) => sum + Number(item.quantity) * Number(item.unit_price), 0);
 
     const [receiptResult] = await conn.execute(
-      `INSERT INTO receipts (receipt_no, receipt_date, customer_id, vehicle_id, mileage, remark, total_amount)
-       VALUES (?, CURDATE(), ?, ?, ?, ?, ?)`,
-      [receipt_no, quotation.customer_id, quotation.vehicle_id, quotation.mileage || 0, quotation.remark || null, total_amount]
+      `INSERT INTO receipts (receipt_no, receipt_date, customer_id, vehicle_id, mileage, remark, total_amount, customer_signature)
+       VALUES (?, CURDATE(), ?, ?, ?, ?, ?, ?)`,
+      [receipt_no, quotation.customer_id, quotation.vehicle_id, quotation.mileage || 0, quotation.remark || null, total_amount, quotation.customer_signature || null]
     );
     const receiptId = receiptResult.insertId;
 
@@ -473,6 +473,30 @@ router.patch('/:id/schedule', async (req, res) => {
   } catch (err) {
     console.error('Error scheduling quotation:', err);
     res.status(500).json({ error: 'บันทึกวันนัดหมายไม่สำเร็จ' });
+  }
+});
+
+// PATCH - Save the customer's signature (captured on a tablet/phone at the counter)
+router.patch('/:id/signature', async (req, res) => {
+  const { id } = req.params;
+  const { signature } = req.body || {};
+
+  if (!signature || !signature.startsWith('data:image/')) {
+    return res.status(400).json({ error: 'ข้อมูลลายเซ็นไม่ถูกต้อง' });
+  }
+
+  try {
+    const [result] = await pool.execute(
+      'UPDATE quotations SET customer_signature = ? WHERE id = ?',
+      [signature, id]
+    );
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: 'ไม่พบใบเสนอราคา' });
+    }
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Error saving quotation signature:', err);
+    res.status(500).json({ error: 'บันทึกลายเซ็นไม่สำเร็จ' });
   }
 });
 
