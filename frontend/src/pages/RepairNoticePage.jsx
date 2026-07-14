@@ -364,7 +364,6 @@ export default function RepairNoticePage({ id: idProp, prefill: prefillProp, onC
           </Card>
 
           <Card number="3" title="ลูกปืนล้อ / Wheel Bearing" hero={wheelBearingImg}>
-            <div className="rnf2-hero-row"><img className="rnf2-thumb" style={{ width: 100, height: 78 }} src={wheelBearingImg} alt="" /></div>
             {AxleChips([
               { axle: 'หน้า / Front', cells: [{ label: 'L', path: 'wheel_bearing.front_l' }, { label: 'R', path: 'wheel_bearing.front_r' }] },
               { axle: 'หลัง / Rear', cells: [{ label: 'L', path: 'wheel_bearing.rear_l' }, { label: 'R', path: 'wheel_bearing.rear_r' }] },
@@ -372,7 +371,6 @@ export default function RepairNoticePage({ id: idProp, prefill: prefillProp, onC
           </Card>
 
           <Card number="4" title="เพลาขับ / Drive Shaft" hero={driveShaftImg}>
-            <div className="rnf2-hero-row"><img className="rnf2-thumb" style={{ width: 120, height: 70 }} src={driveShaftImg} alt="" /></div>
             {AxleChips([
               { axle: 'หน้า / Front', cells: [{ label: 'L', path: 'drive_shaft.front_l' }, { label: 'R', path: 'drive_shaft.front_r' }] },
             ])}
@@ -406,7 +404,6 @@ export default function RepairNoticePage({ id: idProp, prefill: prefillProp, onC
           </Card>
 
           <Card number="7" title="ผ้าเบรค / Brake Pad" hero={brakePadImg}>
-            <div className="rnf2-hero-row"><img className="rnf2-thumb" style={{ width: 100, height: 78 }} src={brakePadImg} alt="" /></div>
             {AxleChips([
               { axle: 'หน้า / Front', cells: [{ label: 'ผ้าเบรคหน้า', path: 'brake_pad.front' }] },
               { axle: 'หลัง / Rear', cells: [{ label: 'ผ้าเบรคหลัง', path: 'brake_pad.rear' }] },
@@ -414,7 +411,6 @@ export default function RepairNoticePage({ id: idProp, prefill: prefillProp, onC
           </Card>
 
           <Card number="8" title="เจียจานเบรค / Brake Disc" hero={brakeDiscImg}>
-            <div className="rnf2-hero-row"><img className="rnf2-thumb" style={{ width: 90, height: 78 }} src={brakeDiscImg} alt="" /></div>
             {AxleChips([
               { axle: 'หน้า / Front', cells: [{ label: 'จานหน้า', path: 'brake_disc.front' }] },
               { axle: 'หลัง / Rear', cells: [{ label: 'จานหลัง', path: 'brake_disc.rear' }] },
