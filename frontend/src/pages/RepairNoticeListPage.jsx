@@ -105,7 +105,7 @@ export default function RepairNoticeListPage() {
                 </div>
 
                 <div className="rnl-actions">
-                  <button className="rnl-btn" onClick={() => navigate(`/repair-notices/${n.id}`)}>แก้ไข</button>
+                  <button className="rnl-btn" onClick={() => navigate(`/repair-notices/${n.id}`)}>แจ้งซ่อม</button>
                   <button className="rnl-btn rnl-btn-print" onClick={() => setPrintingId(n.id)}>พิมพ์</button>
                   <button className="rnl-btn rnl-btn-danger" onClick={() => handleDelete(n.id)}>ลบ</button>
                 </div>

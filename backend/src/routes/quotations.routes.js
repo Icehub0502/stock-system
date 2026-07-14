@@ -5,6 +5,32 @@ const { authenticate } = require('../middleware/auth');
 const router = express.Router();
 router.use(authenticate);
 
+// ใบแจ้งซ่อมถือว่า "กรอกแล้ว" ก็ต่อเมื่อมีเนื้อหาจริง (ติ๊กอย่างน้อย 1 ช่อง,
+// กรอกหมายเหตุ/other, หรือกรอกชื่อผู้ตรวจ/ช่างซ่อม) ไม่ใช่แค่เคยกดบันทึกแล้ว —
+// เพราะฟอร์มส่ง checklist แบบเต็มโครงสร้าง (ทุกช่องเป็น false) กลับมาเสมอแม้ไม่ได้
+// ติ๊กอะไรเลย ถ้าเช็คแค่ checklist <> '{}' จะกลายเป็น false positive ทันทีที่กดบันทึก
+function hasCheckedContent(node) {
+  if (node == null) return false;
+  if (typeof node === 'boolean') return node === true;
+  if (typeof node === 'string') return node.trim() !== '';
+  if (typeof node === 'object') {
+    return Object.values(node).some(hasCheckedContent);
+  }
+  return false;
+}
+
+function isRepairNoticeFilled(checklistRaw, checkedBy, repairedBy) {
+  if ((checkedBy && checkedBy.trim()) || (repairedBy && repairedBy.trim())) return true;
+  if (!checklistRaw) return false;
+  let checklist;
+  try {
+    checklist = typeof checklistRaw === 'string' ? JSON.parse(checklistRaw) : checklistRaw;
+  } catch {
+    return false;
+  }
+  return hasCheckedContent(checklist);
+}
+
 // Generate quotation number (IV260630001)
 async function generateQuotationNo() {
   const today = new Date();
@@ -223,8 +249,8 @@ router.get('/', async (req, res) => {
     const [rows] = await pool.execute(
       `SELECT q.*, c.customer_name, c.customer_code, c.phone,
               v.brand, v.model, v.color, v.license_plate,
-              rn.id AS repair_notice_id,
-              (rn.id IS NOT NULL AND rn.checklist IS NOT NULL AND rn.checklist <> '{}') AS repair_notice_filled
+              rn.id AS repair_notice_id, rn.checklist AS repair_notice_checklist,
+              rn.checked_by AS repair_notice_checked_by, rn.repaired_by AS repair_notice_repaired_by
        FROM quotations q
        LEFT JOIN customers c ON q.customer_id = c.id
        LEFT JOIN vehicles v ON q.vehicle_id = v.id
@@ -232,9 +258,21 @@ router.get('/', async (req, res) => {
        ORDER BY q.created_at DESC`
     );
 
+    const data = rows.map((row) => {
+      const { repair_notice_checklist, repair_notice_checked_by, repair_notice_repaired_by, ...rest } = row;
+      return {
+        ...rest,
+        repair_notice_filled: isRepairNoticeFilled(
+          repair_notice_checklist,
+          repair_notice_checked_by,
+          repair_notice_repaired_by
+        ),
+      };
+    });
+
     res.json({
       success: true,
-      data: rows
+      data
     });
   } catch (err) {
     console.error('Error fetching quotations:', err);
