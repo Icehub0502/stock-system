@@ -3,7 +3,6 @@ import { useNavigate } from "react-router-dom";
 import client from "../api/client";
 import ReceiptFormModal from "../components/ReceiptFormModal";
 import ReceiptPrintModal from "../components/ReceiptPrintModal";
-import SignatureModal from "../components/SignatureModal";
 
 export default function ReceiptListPage() {
   const navigate = useNavigate();
@@ -14,7 +13,6 @@ export default function ReceiptListPage() {
   const [showFormModal, setShowFormModal] = useState(false);
   const [editingReceiptId, setEditingReceiptId] = useState(null);
   const [selectedReceiptForPrint, setSelectedReceiptForPrint] = useState(null);
-  const [signingReceiptId, setSigningReceiptId] = useState(null);
 
   const fetchReceipts = async () => {
     try {
@@ -69,13 +67,6 @@ export default function ReceiptListPage() {
         alert('ลบใบเสร็จไม่สำเร็จ: ' + (err.response?.data?.error || err.message));
       }
     }
-  };
-
-  const handleSaveSignature = async (dataUrl) => {
-    await client.patch(`/receipts/${signingReceiptId}/signature`, { signature: dataUrl });
-    setReceipts((prev) =>
-      prev.map((r) => (r.id === signingReceiptId ? { ...r, has_signature: true } : r))
-    );
   };
 
   const handlePrinted = (receiptId, receiptDate) => {
@@ -168,12 +159,6 @@ export default function ReceiptListPage() {
                               {receipt.printed_at ? 'พิมพ์แล้ว' : 'พิมพ์'}
                             </button>
                             <button
-                              className={`btn-icon-small ${receipt.has_signature ? 'btn-printed' : ''}`}
-                              onClick={() => setSigningReceiptId(receipt.id)}
-                            >
-                              {receipt.has_signature ? '✓ เซ็นแล้ว' : 'เซ็นเอกสาร'}
-                            </button>
-                            <button
                               className="btn-icon-small btn-danger"
                               onClick={() => handleDelete(receipt.id)}
                             >
@@ -211,15 +196,6 @@ export default function ReceiptListPage() {
           receiptId={selectedReceiptForPrint}
           onClose={() => setSelectedReceiptForPrint(null)}
           onPrinted={handlePrinted}
-        />
-      )}
-
-      {signingReceiptId && (
-        <SignatureModal
-          title="เซ็นชื่อลูกค้า"
-          subtitle="ให้ลูกค้าเซ็นชื่อยืนยันในกรอบด้านล่าง"
-          onSave={handleSaveSignature}
-          onClose={() => setSigningReceiptId(null)}
         />
       )}
     </div>

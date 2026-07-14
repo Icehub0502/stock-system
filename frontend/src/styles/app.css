@@ -1503,28 +1503,6 @@ button:disabled { background: #f3f4f6; color: #9ca3af; cursor: not-allowed; }
    QUOTATION LIST PAGE
    ════════════════════════════════════════ */
 
-.quotation-page {
-  padding: 20px;
-  max-width: 1400px;
-  margin: 0 auto;
-}
-
-.quotation-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 24px;
-  gap: 16px;
-  flex-wrap: wrap;
-}
-
-.quotation-header h1 {
-  margin: 0;
-  font-size: 1.5rem;
-  font-weight: 600;
-  color: #1f2937;
-}
-
 .quotation-actions {
   display: flex;
   gap: 10px;
@@ -1610,9 +1588,10 @@ button:disabled { background: #f3f4f6; color: #9ca3af; cursor: not-allowed; }
 }
 
 .quotation-page {
-  padding: 24px;
-  max-width: 1400px;
-  margin: 0 auto;
+  /* No max-width: mobile already gets its own card layout below 640px
+     (.quotation-table's own media query), so desktop is free to use the
+     full viewport width instead of being boxed into a fixed column. */
+  padding: 24px 32px;
   background: #f8fafc;
 }
 
@@ -1627,6 +1606,13 @@ button:disabled { background: #f3f4f6; color: #9ca3af; cursor: not-allowed; }
   padding: 24px;
   border-radius: 18px;
   box-shadow: 0 18px 46px rgba(15, 23, 42, 0.08);
+}
+
+.quotation-header h1 {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #1f2937;
 }
 
 .quotation-table-wrap {
