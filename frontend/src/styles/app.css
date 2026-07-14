@@ -1942,6 +1942,11 @@ button:disabled { background: #f3f4f6; color: #9ca3af; cursor: not-allowed; }
   color: #b45309;
 }
 
+.status-badge-danger {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
 .actions {
   display: flex;
   gap: 6px;

@@ -7,6 +7,13 @@
 /* ---------------- Entry / checklist form ---------------- */
 .rnf2-page { min-height: 100vh; background: #f1f5f9; padding-bottom: 96px; }
 
+/* Embedded inside RepairNoticeModal (.modal-card) instead of a routed page:
+   drop the full-viewport sizing and let the save bar stick to the bottom of
+   the modal's own scroll area instead of being fixed to the browser viewport
+   (which would render it as a stray full-width bar outside the modal). */
+.rnf2-page--embedded { min-height: 0; background: transparent; padding-bottom: 0; }
+.rnf2-savebar--embedded { position: sticky; margin-top: 16px; border-radius: 10px; }
+
 /* vehicle search step */
 .rnf2-search { max-width: 620px; margin: 0 auto; padding: 28px 16px; }
 .rnf2-h1 { font-size: 22px; font-weight: 800; color: #0f172a; margin: 4px 0 2px; }

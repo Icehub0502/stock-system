@@ -14,7 +14,7 @@ function StatusBadge({ status, scheduledDate }) {
     const dateText = scheduledDate ? new Date(scheduledDate).toLocaleDateString('th-TH') : '-';
     return <span className="status-badge status-badge-warning">📅 รอทำ {dateText}</span>;
   }
-  return <span className="status-badge status-badge-neutral">⏳ รอดำเนินการ</span>;
+  return <span className="status-badge status-badge-danger">⚠️ ยังไม่ระบุวันนัด</span>;
 }
 
 export default function QuotationListPage() {

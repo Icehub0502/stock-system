@@ -75,12 +75,17 @@ function Card({ number, title, hero, children }) {
   );
 }
 
-export default function RepairNoticePage() {
-  const { id } = useParams();
+// When rendered as a routed page (no props), reads id/prefill from the URL
+// and navigates on save/close as before. When rendered embedded inside
+// RepairNoticeModal, the caller passes id/prefill/onClose/onSaved directly
+// and nothing here touches the router.
+export default function RepairNoticePage({ id: idProp, prefill: prefillProp, onClose, onSaved, embedded = false }) {
+  const params = useParams();
   const navigate = useNavigate();
   const location = useLocation();
+  const id = idProp ?? params.id;
   const isEdit = Boolean(id);
-  const prefill = location.state || {};
+  const prefill = prefillProp || location.state || {};
 
   const [step, setStep] = useState(prefill.vehicleId ? 'checklist' : 'vehicle');
   const [loading, setLoading] = useState(isEdit);
@@ -227,11 +232,19 @@ export default function RepairNoticePage() {
       };
       if (isEdit) {
         await client.put(`/repair-notices/${id}`, payload);
-        navigate('/repair-notices', { state: { toast: 'บันทึกการแก้ไขสำเร็จ' } });
+        if (onSaved) {
+          onSaved(id, false);
+        } else {
+          navigate('/repair-notices', { state: { toast: 'บันทึกการแก้ไขสำเร็จ' } });
+        }
       } else {
         const res = await client.post('/repair-notices', payload);
         setToast('บันทึกใบแจ้งซ่อมสำเร็จ');
-        navigate(`/repair-notices/${res.data.id}`, { replace: true });
+        if (onSaved) {
+          onSaved(res.data.id, true);
+        } else {
+          navigate(`/repair-notices/${res.data.id}`, { replace: true });
+        }
       }
     } catch (err) {
       setError(err.response?.data?.error || 'บันทึกไม่สำเร็จ');
@@ -240,14 +253,16 @@ export default function RepairNoticePage() {
     }
   };
 
+  const pageClass = `rnf2-page${embedded ? ' rnf2-page--embedded' : ''}`;
+
   if (loading) {
-    return <div className="rnf2-page"><div className="rnf2-body">กำลังโหลด...</div></div>;
+    return <div className={pageClass}><div className="rnf2-body">กำลังโหลด...</div></div>;
   }
 
   // ── STEP: pick a vehicle ──
   if (step === 'vehicle') {
     return (
-      <div className="rnf2-page">
+      <div className={pageClass}>
         <div className="rnf2-search">
           <h2 className="rnf2-h1">ใบแจ้งซ่อม / รายการซ่อม</h2>
           <p className="rnf2-hsub">ค้นหารถของลูกค้าเพื่อเริ่มรายการตรวจเช็ค</p>
@@ -298,7 +313,7 @@ export default function RepairNoticePage() {
 
   // ── STEP: checklist ──
   return (
-    <div className="rnf2-page">
+    <div className={pageClass}>
       <div className="rnf2-topbar">
         <div>
           <p className="rnf2-topbar-title">ใบแจ้งซ่อม {code || ''}</p>
@@ -314,6 +329,9 @@ export default function RepairNoticePage() {
           {!prefill.vehicleId && !isEdit && (
             <button type="button" className="rnf2-tbtn rnf2-tbtn-ghost" onClick={() => setStep('vehicle')}>เปลี่ยนรถ</button>
           )}
+          {embedded && onClose && (
+            <button type="button" className="rnf2-tbtn rnf2-tbtn-ghost" onClick={onClose}>✕ ปิด</button>
+          )}
         </div>
       </div>
 
@@ -323,7 +341,6 @@ export default function RepairNoticePage() {
         <div className="rnf2-grid">
           <Card number="1" title="แร็คพวงมาลัย / Rack" hero={rackImg}>
             <CheckItem
-              img={rackImg}
               label="แร็คพวงมาลัย"
               checked={checklist.rack.checked}
               note={checklist.rack.note}
@@ -363,7 +380,6 @@ export default function RepairNoticePage() {
 
           <Card number="5" title="โช๊ค / Shock" hero={shockImg}>
             <CheckItem
-              img={shockImg}
               label="โช๊ค หน้า / Front"
               checked={checklist.shock.front.checked}
               note={checklist.shock.front.note}
@@ -381,7 +397,6 @@ export default function RepairNoticePage() {
 
           <Card number="6" title="อุปกรณ์ / Equipment" hero={equipmentImg}>
             <CheckItem
-              img={equipmentImg}
               label="อุปกรณ์"
               checked={checklist.equipment.checked}
               note={checklist.equipment.note}
@@ -435,7 +450,7 @@ export default function RepairNoticePage() {
         </div>
       </div>
 
-      <div className="rnf2-savebar">
+      <div className={`rnf2-savebar${embedded ? ' rnf2-savebar--embedded' : ''}`}>
         <button type="button" className="rnf2-savebtn" onClick={handleSave} disabled={saving}>
           {saving ? 'กำลังบันทึก...' : isEdit ? 'บันทึกการแก้ไข' : 'บันทึกใบแจ้งซ่อม'}
         </button>

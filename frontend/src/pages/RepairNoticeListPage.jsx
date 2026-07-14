@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import client from '../api/client';
 import RepairNoticePrintModal from '../components/RepairNoticePrintModal';
+import RepairNoticeModal from '../components/RepairNoticeModal';
 import '../styles/repairNotice.css';
 
 export default function RepairNoticeListPage() {
@@ -12,6 +13,7 @@ export default function RepairNoticeListPage() {
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
   const [printingId, setPrintingId] = useState(null);
+  const [editingId, setEditingId] = useState(null);
   // Shown after returning here from a successful save on the edit screen.
   const [toast, setToast] = useState(location.state?.toast || '');
 
@@ -105,7 +107,7 @@ export default function RepairNoticeListPage() {
                 </div>
 
                 <div className="rnl-actions">
-                  <button className="rnl-btn" onClick={() => navigate(`/repair-notices/${n.id}`)}>แจ้งซ่อม</button>
+                  <button className="rnl-btn" onClick={() => setEditingId(n.id)}>แจ้งซ่อม</button>
                   <button className="rnl-btn rnl-btn-print" onClick={() => setPrintingId(n.id)}>พิมพ์</button>
                   <button className="rnl-btn rnl-btn-danger" onClick={() => handleDelete(n.id)}>ลบ</button>
                 </div>
@@ -117,6 +119,19 @@ export default function RepairNoticeListPage() {
 
       {printingId && (
         <RepairNoticePrintModal noticeId={printingId} onClose={() => setPrintingId(null)} />
+      )}
+
+      {editingId && (
+        <RepairNoticeModal
+          id={editingId}
+          onClose={() => setEditingId(null)}
+          onSaved={() => {
+            setEditingId(null);
+            setToast('บันทึกการแก้ไขสำเร็จ');
+            fetchNotices();
+            setTimeout(() => setToast(''), 2500);
+          }}
+        />
       )}
 
       {toast && <div className="rnf2-toast">{toast}</div>}
