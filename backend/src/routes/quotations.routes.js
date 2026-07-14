@@ -49,6 +49,17 @@ async function generateCustomerCode(conn) {
   return `CMM-${String(nextNumber).padStart(4, '0')}`;
 }
 
+// Mirrors generateCode() in repairNotices.routes.js — creating a quotation now
+// auto-creates its repair notice in the same transaction, so it needs the same
+// "RN-####" numbering scheme.
+async function generateRepairNoticeCode(conn) {
+  const [rows] = await conn.execute(
+    "SELECT MAX(CAST(SUBSTRING(code, 4) AS UNSIGNED)) AS maxNo FROM repair_notices WHERE code LIKE 'RN-%'"
+  );
+  const nextNumber = (rows[0]?.maxNo || 0) + 1;
+  return `RN-${String(nextNumber).padStart(4, '0')}`;
+}
+
 router.get('/next-no', async (req, res) => {
   try {
     const quotation_no = await generateQuotationNo();
@@ -172,6 +183,21 @@ router.post('/', async (req, res) => {
       );
     }
 
+    // Auto-create an (empty) repair notice for this quotation right away, so the
+    // vehicle appears on the repair-notice list the moment the quotation is
+    // created — no waiting for approval. An empty '{}' checklist is filled in
+    // later by whoever ticks what needs repair (normalizeChecklist handles the
+    // empty shape on read). repair_notice_filled in the list query flips once
+    // it has real content, which is how the UI shows "already filled".
+    if (selectedVehicleId) {
+      const rnCode = await generateRepairNoticeCode(conn);
+      await conn.execute(
+        `INSERT INTO repair_notices (code, customer_id, vehicle_id, quotation_id, notice_date, checklist)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [rnCode, selectedCustomerId, selectedVehicleId, quotation_id, quotation_date, '{}']
+      );
+    }
+
     await conn.commit();
 
     res.status(201).json({
@@ -196,10 +222,13 @@ router.get('/', async (req, res) => {
   try {
     const [rows] = await pool.execute(
       `SELECT q.*, c.customer_name, c.customer_code, c.phone,
-              v.brand, v.model, v.color, v.license_plate
+              v.brand, v.model, v.color, v.license_plate,
+              rn.id AS repair_notice_id,
+              (rn.id IS NOT NULL AND rn.checklist IS NOT NULL AND rn.checklist <> '{}') AS repair_notice_filled
        FROM quotations q
        LEFT JOIN customers c ON q.customer_id = c.id
        LEFT JOIN vehicles v ON q.vehicle_id = v.id
+       LEFT JOIN repair_notices rn ON rn.quotation_id = q.id
        ORDER BY q.created_at DESC`
     );
 

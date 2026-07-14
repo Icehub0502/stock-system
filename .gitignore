@@ -17,3 +17,8 @@ backend/public/Pictures/
 
 # Local DB dumps — real customer/financial data, never belongs in git
 backend/backups/
+
+# Local SQLite database files — may contain real data, never belongs in git
+backend/data/*.db
+backend/data/*.db-shm
+backend/data/*.db-wal

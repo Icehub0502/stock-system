@@ -18,6 +18,8 @@ export function defaultChecklist() {
       rear: { checked: false, note: '' },
     },
     equipment: { checked: false, note: '' },
+    brake_pad: { front: false, rear: false },
+    brake_disc: { front: false, rear: false },
     other: '',
   };
 }
@@ -42,6 +44,8 @@ export function normalizeChecklist(data) {
       rear: { ...base.shock.rear, ...(data.shock?.rear || {}) },
     },
     equipment: { ...base.equipment, ...(data.equipment || {}) },
+    brake_pad: { ...base.brake_pad, ...(data.brake_pad || {}) },
+    brake_disc: { ...base.brake_disc, ...(data.brake_disc || {}) },
     other: data.other || '',
   };
 }

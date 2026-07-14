@@ -1623,46 +1623,114 @@
   .doc-page { width: 100%; }
 }
 
-/* ── Repair notice ("ใบแจ้งซ่อม") print — digitizes a fixed paper checklist,
-   so it reuses .doc-page/.doc-print-wrap for A4 sizing/print behavior but
-   has its own table layout instead of the item-table used by receipts/
-   quotations. */
-.rn-page { padding: 14mm 15mm; }
-.rn-header { border-bottom: 2px solid #17171a; padding-bottom: 10px; margin-bottom: 12px; }
-.rn-brand { display: flex; justify-content: space-between; align-items: baseline; }
-.rn-brand-name { font-size: 15px; font-weight: 800; color: #17171a; }
-.rn-code { font-size: 13px; color: #6b6155; }
-.rn-code-value { font-weight: 800; color: #b91c1c; font-size: 15px; }
-.rn-title-row { display: flex; justify-content: space-between; align-items: baseline; margin-top: 6px; }
-.rn-title-row h1 { margin: 0; font-size: 18px; font-weight: 800; color: #17171a; }
-.rn-plate { font-size: 13px; color: #17171a; }
-.rn-vehicle-line { font-size: 12.5px; color: #45403a; margin-top: 4px; }
-
-.rn-table { width: 100%; border-collapse: collapse; border: 1px solid #17171a; font-size: 12.5px; }
-.rn-table td { border: 1px solid #a9a29a; padding: 8px 10px; vertical-align: middle; }
-.rn-num {
-  width: 30px; text-align: center; font-weight: 800; font-size: 14px;
-  background: #f1e6d2; color: #17171a;
+/* ── Repair notice ("ใบแจ้งซ่อม") print — a fully re-drawn HTML/CSS form
+   (RepairNoticePrintTemplate) built from the original paper checklist, with
+   the shop's own part illustrations. Reuses .doc-page/.doc-print-wrap for A4
+   sizing/print behavior. Filled data is coloured blue to read like pen. */
+.rnf-page {
+  padding: 12mm 12mm;
+  color: #14181f;
+  font-family: 'Sarabun', 'Noto Sans Thai', Arial, sans-serif;
 }
-.rn-label { font-weight: 700; color: #17171a; width: 200px; }
-.rn-sublabel { color: #45403a; width: 200px; padding-left: 18px; }
-.rn-other { min-height: 40px; white-space: pre-wrap; }
 
-.rn-check-line { display: flex; align-items: center; gap: 10px; }
-.rn-note-line { color: #1d4ed8; font-weight: 600; border-bottom: 1px solid #d8d2c6; flex: 1; min-height: 16px; padding-bottom: 2px; }
-.rn-box {
+/* Header: SPK box (left) · brand + title (center) · queue number (right) */
+.rnf-header {
+  display: grid;
+  grid-template-columns: 160px 1fr 160px;
+  gap: 12px;
+  align-items: stretch;
+  border-bottom: 3px solid #111;
+  padding-bottom: 10px;
+  margin-bottom: 12px;
+}
+.rnf-spk, .rnf-queue {
+  border: 2px solid #111; border-radius: 10px; padding: 6px 12px;
+  display: flex; flex-direction: column;
+}
+.rnf-spk-label, .rnf-queue-label {
+  font-size: 13px; font-weight: 700; color: #6b7280; letter-spacing: 0.02em;
+}
+.rnf-spk-label { font-size: 22px; font-weight: 800; color: #111; text-align: center; }
+.rnf-spk-blank { flex: 1; min-height: 40px; }
+.rnf-queue { text-align: center; }
+.rnf-queue-value {
+  flex: 1; display: flex; align-items: center; justify-content: center;
+  font-size: 40px; font-weight: 800; color: #111; line-height: 1;
+}
+.rnf-title { text-align: center; display: flex; flex-direction: column; justify-content: center; }
+.rnf-brand { font-style: italic; font-weight: 800; font-size: 28px; letter-spacing: -0.02em; }
+.rnf-champ { color: #59606b; }
+.rnf-power { color: #eab308; }
+.rnf-spktext { color: #eab308; }
+.rnf-doctitle { font-size: 16px; font-weight: 700; margin-top: 3px; }
+.rnf-plate { font-size: 14px; margin-top: 3px; }
+
+/* Checklist table */
+.rnf-table { width: 100%; border-collapse: collapse; border: 2px solid #111; }
+.rnf-table td { border: 1px solid #444; padding: 5px 8px; vertical-align: middle; }
+.rnf-num { width: 42px; text-align: center; }
+.rnf-num span {
   display: inline-flex; align-items: center; justify-content: center;
-  width: 16px; height: 16px; border: 1.5px solid #17171a; flex-shrink: 0;
-  font-size: 12px; font-weight: 800; line-height: 1;
+  width: 28px; height: 28px; border-radius: 50%; background: #111; color: #fff;
+  font-weight: 800; font-size: 15px;
 }
-.rn-box-checked { background: #111111; color: #fff; }
-.rn-axle-grid { display: flex; gap: 24px; font-size: 12.5px; }
-.rn-axle-grid span { display: inline-flex; align-items: center; gap: 6px; }
-.rn-label-row { display: inline-flex; align-items: center; gap: 8px; }
-.rn-label-row svg { flex-shrink: 0; color: #6b6155; }
+.rnf-subhead td { font-weight: 700; font-size: 14px; background: #f3f4f6; }
+.rnf-part { width: 320px; }
+.rnf-part-in { display: flex; align-items: center; gap: 10px; }
+.rnf-part-in.rnf-sub { padding-left: 16px; }
+/* margin-left:auto pushes the illustration to the right edge of the cell,
+   so every row reads "label ............ [image]". */
+.rnf-img { height: 46px; width: auto; max-width: 150px; object-fit: contain; margin-left: auto; }
+.rnf-label { font-weight: 600; font-size: 13.5px; }
 
-.rn-footer { display: flex; justify-content: space-between; gap: 16px; margin-top: 20px; font-size: 13px; }
-.rn-footer-fill { font-weight: 700; color: #17171a; border-bottom: 1px solid #a9a29a; padding: 0 6px 2px; }
+.rnf-box {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 18px; height: 18px; border: 2px solid #111; flex-shrink: 0;
+  font-size: 13px; font-weight: 800; line-height: 1; vertical-align: middle;
+  margin: 0 3px;
+}
+.rnf-box-on { background: #111; color: #fff; }
+
+.rnf-answer { display: flex; align-items: center; gap: 8px; }
+.rnf-answer + .rnf-answer { margin-top: 4px; }
+.rnf-note { flex: 1; border-bottom: 1px solid #9aa0a6; min-height: 18px; font-weight: 600; color: #1d4ed8; padding-bottom: 1px; }
+.rnf-lr { display: flex; align-items: center; font-weight: 600; font-size: 13.5px; }
+.rnf-lr + .rnf-lr { margin-top: 4px; }
+.rnf-lr-title { min-width: 78px; color: #374151; }
+/* Ruled writing lines so there is always space to jot notes, like the other
+   rows. The repeating gradient draws a faint line every 24px; text sits on it. */
+.rnf-other {
+  min-height: 72px; color: #1d4ed8; font-weight: 600; line-height: 24px;
+  white-space: pre-wrap; word-break: break-word;
+  background-image: linear-gradient(to bottom, transparent 0 23px, #b0b4ba 23px 24px);
+  background-size: 100% 24px;
+}
+
+.rnf-footer { display: flex; justify-content: space-between; gap: 16px; margin-top: 14px; font-size: 14px; }
+.rnf-fill { border-bottom: 1px solid #9aa0a6; padding: 0 24px 2px; font-weight: 700; color: #1d4ed8; }
+.rnf-code { text-align: right; margin-top: 6px; font-size: 12px; color: #9ca3af; }
+
+/* Print the repair notice at roughly half an A4 sheet (≈ A5), on a LANDSCAPE
+   sheet. A named @page (referenced via `page: repairNotice`) scopes the
+   landscape orientation to just this document, so receipts/quotations stay on
+   the global A4 portrait page. The 1/√2 scale keeps the half-size footprint.
+   Only affects print — the on-screen preview stays full size. */
+/* The sheet stays portrait A4, but the form is rotated 90° so it reads in
+   landscape (turn the printed page sideways). Done with a transform because
+   Chrome won't apply landscape orientation to a single document when the
+   global default page is portrait.
+
+   The scale/rotate/translate combo (with a top-left origin) pins the rotated
+   form flush to the TOP-LEFT corner of the sheet instead of centring it, so
+   it's easy to cut out and wastes no paper. scale keeps the ≈ A5 half size.
+   Order matters: translateY(-100%) then rotate(90deg) lands it at the corner,
+   then scale shrinks it toward that same corner. */
+@media print {
+  .rnf-page {
+    transform-origin: top left;
+    transform: scale(0.707) rotate(90deg) translateY(-100%);
+  }
+}
 
 @media print {
   * {

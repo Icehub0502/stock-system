@@ -11,11 +11,14 @@ router.use(authenticate);
 router.use(requireRole('office', 'technician'));
 
 async function generateCode() {
+  // Document number prefix is "RN-" (repair notice). "SPK" is reserved for the
+  // rack code the office writes on the printed form, so it must NOT be reused
+  // as the document number. SUBSTRING(code, 4) strips the 3-char "RN-" prefix.
   const [rows] = await pool.execute(
-    "SELECT MAX(CAST(SUBSTRING(code, 5) AS UNSIGNED)) AS maxNo FROM repair_notices WHERE code LIKE 'SPK-%'"
+    "SELECT MAX(CAST(SUBSTRING(code, 4) AS UNSIGNED)) AS maxNo FROM repair_notices WHERE code LIKE 'RN-%'"
   );
   const nextNumber = (rows[0]?.maxNo || 0) + 1;
-  return `SPK-${String(nextNumber).padStart(4, '0')}`;
+  return `RN-${String(nextNumber).padStart(4, '0')}`;
 }
 
 // A technician on their phone needs to find a vehicle too, but the
@@ -66,10 +69,12 @@ router.get('/', async (req, res) => {
     const [rows] = await pool.execute(
       `SELECT rn.id, rn.code, rn.notice_date, rn.checked_by, rn.repaired_by, rn.created_at,
               c.customer_name, c.customer_code,
-              v.brand, v.model, v.color, v.license_plate
+              v.brand, v.model, v.color, v.license_plate,
+              q.queue_no
        FROM repair_notices rn
        LEFT JOIN customers c ON rn.customer_id = c.id
        LEFT JOIN vehicles v ON rn.vehicle_id = v.id
+       LEFT JOIN quotations q ON rn.quotation_id = q.id
        ORDER BY rn.created_at DESC
        LIMIT 300`
     );
@@ -84,10 +89,12 @@ router.get('/:id', async (req, res) => {
   try {
     const [[row]] = await pool.execute(
       `SELECT rn.*, c.customer_name, c.customer_code, c.phone,
-              v.brand, v.model, v.color, v.license_plate, v.mileage
+              v.brand, v.model, v.color, v.license_plate, v.mileage,
+              q.queue_no
        FROM repair_notices rn
        LEFT JOIN customers c ON rn.customer_id = c.id
        LEFT JOIN vehicles v ON rn.vehicle_id = v.id
+       LEFT JOIN quotations q ON rn.quotation_id = q.id
        WHERE rn.id = ?`,
       [req.params.id]
     );

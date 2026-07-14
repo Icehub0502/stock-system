@@ -3,8 +3,40 @@
 // the exact same app wiring instead of two versions drifting apart.
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
 const path = require('path');
 const fs = require('fs');
+
+// รายชื่อ origin ที่อนุญาตให้เรียก API ข้ามโดเมนได้ (คั่นด้วย , ใน .env)
+// ปกติ frontend ถูกเสิร์ฟจาก Express ตัวเดียวกัน (same-origin) จึงไม่ต้องพึ่ง CORS
+// ค่านี้ไว้เผื่อกรณีเรียกจากโดเมน/มือถือแยก ค่า default คือโดเมนโปรดักชัน
+const ALLOWED_ORIGINS = (process.env.CORS_ORIGIN ||
+  'https://champ-powerspk.com,https://www.champ-powerspk.com')
+  .split(',')
+  .map((o) => o.trim())
+  .filter(Boolean);
+
+// localhost และ IP วง LAN (มือถือช่างเข้าผ่าน https://<ip>:4443 เพื่อสแกน QR)
+// ถือเป็น origin ที่เชื่อถือได้เสมอ ไม่ต้องใส่ใน .env
+const LOCAL_ORIGIN_REGEX =
+  /^https?:\/\/(localhost|127\.0\.0\.1|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3})(:\d+)?$/;
+
+function isAllowedOrigin(origin) {
+  // ไม่มี Origin = same-origin / curl / แอปมือถือ → อนุญาต
+  if (!origin) return true;
+  if (ALLOWED_ORIGINS.includes(origin)) return true;
+  if (LOCAL_ORIGIN_REGEX.test(origin)) return true;
+  return false;
+}
+
+const corsOptions = {
+  origin(origin, callback) {
+    if (isAllowedOrigin(origin)) return callback(null, true);
+    // origin ที่ไม่อนุญาต: ไม่ส่ง CORS header (เบราว์เซอร์จะบล็อกเอง) แต่ไม่โยน error
+    // เพื่อไม่ให้ request พังทั้งก้อน/ไม่รก log ด้วย stack trace
+    return callback(null, false);
+  }
+};
 
 const authRoutes = require('./routes/auth.routes');
 const rackRoutes = require('./routes/racks.routes');
@@ -72,7 +104,14 @@ function listLandingImages(baseDir = PUBLIC_DIR, folderFilter = '') {
 
 function createApp() {
   const app = express();
-  app.use(cors());
+  // อยู่หลัง nginx reverse proxy: เชื่อ X-Forwarded-For จาก proxy ชั้นแรก
+  // เพื่อให้ rate-limit และ req.ip เห็น IP จริงของผู้ใช้ ไม่ใช่ IP ของ nginx
+  app.set('trust proxy', 1);
+  app.disable('x-powered-by');
+  // helmet: ตั้ง security headers (HSTS, X-Frame-Options, X-Content-Type-Options ฯลฯ)
+  // ปิด CSP/COEP ไว้ก่อน เพราะ SPA + รูปจาก Google Fonts/landing อาจโดนบล็อก — ค่อยเปิดเมื่อ audit ครบ
+  app.use(helmet({ contentSecurityPolicy: false, crossOriginEmbedderPolicy: false }));
+  app.use(cors(corsOptions));
   app.use(express.json());
 
   app.use('/api/auth', authRoutes);

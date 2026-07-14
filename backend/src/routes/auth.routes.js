@@ -1,12 +1,25 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const rateLimit = require('express-rate-limit');
 const pool = require('../db/pool');
 const { authenticate } = require('../middleware/auth');
+const { JWT_SECRET, JWT_EXPIRES_IN } = require('../config');
 
 const router = express.Router();
 
-router.post('/login', async (req, res) => {
+// จำกัดการพยายาม login เพื่อกัน brute-force เดารหัสผ่าน
+// 10 ครั้ง/IP ต่อ 15 นาที (นับเฉพาะครั้งที่ล็อกอินไม่สำเร็จ)
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skipSuccessfulRequests: true,
+  message: { error: 'พยายามเข้าสู่ระบบบ่อยเกินไป กรุณารอสักครู่แล้วลองใหม่' }
+});
+
+router.post('/login', loginLimiter, async (req, res) => {
   const { username, password } = req.body || {};
   if (!username || !password) {
     return res.status(400).json({ error: 'กรุณากรอก username และ password' });
@@ -23,8 +36,8 @@ router.post('/login', async (req, res) => {
       full_name: user.full_name,
       role: user.role
     };
-    const token = jwt.sign(payload, process.env.JWT_SECRET || 'dev_secret_change_me', {
-      expiresIn: process.env.JWT_EXPIRES_IN || '12h'
+    const token = jwt.sign(payload, JWT_SECRET, {
+      expiresIn: JWT_EXPIRES_IN
     });
     res.json({ token, user: payload });
   } catch (err) {
@@ -45,8 +58,8 @@ router.put('/change-password', authenticate, async (req, res) => {
   if (!current_password || !new_password) {
     return res.status(400).json({ error: 'กรุณากรอกรหัสผ่านเดิมและรหัสผ่านใหม่' });
   }
-  if (new_password.length < 4) {
-    return res.status(400).json({ error: 'รหัสผ่านใหม่ต้องมีอย่างน้อย 4 ตัวอักษร' });
+  if (String(new_password).length < 8) {
+    return res.status(400).json({ error: 'รหัสผ่านใหม่ต้องมีอย่างน้อย 8 ตัวอักษร' });
   }
   try {
     const [rows] = await pool.execute('SELECT * FROM users WHERE id = ?', [req.user.id]);

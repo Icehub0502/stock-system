@@ -22,7 +22,7 @@ body {
 }
 
 .container {
-  max-width: 960px;
+  max-width: 1400px;
   margin: 0 auto;
   padding: 16px;
 }
@@ -1950,9 +1950,9 @@ button:disabled { background: #f3f4f6; color: #9ca3af; cursor: not-allowed; }
      without this, .quotation-table's auto layout gives the actions column
      however much width its (nowrap) buttons ask for, squeezing every other
      column down to fit, which forces long unbroken vehicle/model text to
-     wrap character-by-character instead. Wrapping onto 2 lines here keeps
-     the column compact regardless of how many action buttons a row has. */
-  max-width: 210px;
+     wrap character-by-character instead. With the wider .container the table
+     has room for the three small action buttons to sit on a single row. */
+  max-width: 260px;
 }
 
 .btn-icon-small {

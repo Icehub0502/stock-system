@@ -2,17 +2,27 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import client from '../api/client';
 import { defaultChecklist, normalizeChecklist, SUSPENSION_LABELS } from '../utils/repairChecklist';
-import {
-  IconRack, IconWishbone, IconTieRodEnd, IconSwayBarLink, IconSwayBarBushing,
-  IconWheelBearing, IconDriveShaft, IconShock, IconEquipment,
-} from '../components/RepairPartIcons';
 import RepairNoticePrintModal from '../components/RepairNoticePrintModal';
+import '../styles/repairNotice.css';
 
-const SUSPENSION_ICONS = {
-  wing: IconWishbone,
-  tie_rod_end: IconTieRodEnd,
-  sway_bar_link: IconSwayBarLink,
-  sway_bar_bushing: IconSwayBarBushing,
+import rackImg from '../image/repair-parts/rack.png';
+import wishboneImg from '../image/repair-parts/wishbone.png';
+import tieRodEndImg from '../image/repair-parts/tie_rod_end.png';
+import swayBarLinkImg from '../image/repair-parts/sway_bar_link.png';
+import swayBarBushingImg from '../image/repair-parts/sway_bar_bushing.png';
+import wheelBearingImg from '../image/repair-parts/wheel_bearing.png';
+import driveShaftImg from '../image/repair-parts/drive_shaft.png';
+import shockImg from '../image/repair-parts/shock.png';
+import equipmentImg from '../image/repair-parts/equipment.png';
+import brakePadImg from '../image/repair-parts/brake_pad.png';
+import brakeDiscImg from '../image/repair-parts/brake_disc.png';
+import workerImg from '../image/repair-parts/worker.png';
+
+const SUSPENSION_IMG = {
+  wing: wishboneImg,
+  tie_rod_end: tieRodEndImg,
+  sway_bar_link: swayBarLinkImg,
+  sway_bar_bushing: swayBarBushingImg,
 };
 
 function todayStr() {
@@ -20,63 +30,47 @@ function todayStr() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-// ── Checkbox + note row (rack / suspension sub-items / shock / equipment) ──
-function CheckNoteRow({ label, checked, note, onToggle, onNoteChange, Icon }) {
+const getPath = (obj, path) => path.split('.').reduce((o, k) => (o == null ? o : o[k]), obj);
+
+// ── Photo + label + checkbox; a note field slides in once ticked ──
+function CheckItem({ img, label, checked, note, onToggle, onNote }) {
   return (
-    <div style={styles.checkRow}>
-      <button
-        type="button"
-        style={{ ...styles.checkTap, ...(checked ? styles.checkTapOn : {}) }}
-        onClick={onToggle}
-      >
-        {Icon && (
-          <span style={{ ...styles.partIcon, ...(checked ? styles.partIconOn : {}) }}>
-            <Icon size={26} />
-          </span>
-        )}
-        <span style={{ ...styles.checkbox, ...(checked ? styles.checkboxOn : {}) }}>
-          {checked && '✓'}
-        </span>
-        <span style={styles.checkLabel}>{label}</span>
+    <>
+      <button type="button" className={`rnf2-item ${checked ? 'on' : ''}`} onClick={onToggle}>
+        {img && <img className="rnf2-thumb" src={img} alt="" />}
+        <span className="rnf2-item-label">{label}</span>
+        <span className={`rnf2-check ${checked ? 'on' : ''}`}>{checked ? '✓' : ''}</span>
       </button>
-      {checked && (
+      {checked && onNote && (
         <input
-          type="text"
-          value={note}
-          onChange={(e) => onNoteChange(e.target.value)}
+          className="rnf2-note"
+          value={note || ''}
+          onChange={(e) => onNote(e.target.value)}
           placeholder="ระบุยี่ห้อ/รายละเอียด (ถ้ามี)"
-          style={styles.noteInput}
         />
       )}
-    </div>
+    </>
   );
 }
 
-// ── Small checkbox chip used for wheel-bearing / drive-shaft grids ──
-function ChipCheck({ label, checked, onToggle }) {
+function Chip({ label, on, onToggle }) {
   return (
-    <button
-      type="button"
-      style={{ ...styles.chip, ...(checked ? styles.chipOn : {}) }}
-      onClick={onToggle}
-    >
-      <span style={{ ...styles.checkboxSm, ...(checked ? styles.checkboxOn : {}) }}>
-        {checked && '✓'}
-      </span>
+    <button type="button" className={`rnf2-chip ${on ? 'on' : ''}`} onClick={onToggle}>
+      <span className={`rnf2-check-sm ${on ? 'on' : ''}`}>{on ? '✓' : ''}</span>
       {label}
     </button>
   );
 }
 
-function Section({ number, title, Icon, children }) {
+function Card({ number, title, hero, children }) {
   return (
-    <div style={styles.section}>
-      <div style={styles.sectionHeader}>
-        <span style={styles.sectionNum}>{number}</span>
-        <span style={styles.sectionTitle}>{title}</span>
-        {Icon && <span style={styles.sectionIcon}><Icon size={26} /></span>}
+    <div className="rnf2-card">
+      <div className="rnf2-card-head">
+        <span className="rnf2-num">{number}</span>
+        <span className="rnf2-card-title">{title}</span>
+        {hero && <img className="rnf2-card-hero" src={hero} alt="" />}
       </div>
-      <div style={styles.sectionBody}>{children}</div>
+      <div className="rnf2-card-body">{children}</div>
     </div>
   );
 }
@@ -233,12 +227,8 @@ export default function RepairNoticePage() {
       };
       if (isEdit) {
         await client.put(`/repair-notices/${id}`, payload);
-        setToast('บันทึกการแก้ไขสำเร็จ');
+        navigate('/repair-notices', { state: { toast: 'บันทึกการแก้ไขสำเร็จ' } });
       } else {
-        // Land on this new record's own edit page instead of the list —
-        // the print button only shows once a real id exists, and someone
-        // filling this out on their phone likely wants to print right away
-        // without an extra trip back through the list to find it again.
         const res = await client.post('/repair-notices', payload);
         setToast('บันทึกใบแจ้งซ่อมสำเร็จ');
         navigate(`/repair-notices/${res.data.id}`, { replace: true });
@@ -251,38 +241,38 @@ export default function RepairNoticePage() {
   };
 
   if (loading) {
-    return <div style={styles.page}><div style={styles.container}>กำลังโหลด...</div></div>;
+    return <div className="rnf2-page"><div className="rnf2-body">กำลังโหลด...</div></div>;
   }
 
   // ── STEP: pick a vehicle ──
   if (step === 'vehicle') {
     return (
-      <div style={styles.page}>
-        <div style={styles.container}>
-          <h2 style={styles.pageTitle}>ใบแจ้งซ่อม / รายการซ่อม</h2>
-          <p style={styles.pageSub}>ค้นหารถของลูกค้าเพื่อเริ่มรายการตรวจเช็ค</p>
+      <div className="rnf2-page">
+        <div className="rnf2-search">
+          <h2 className="rnf2-h1">ใบแจ้งซ่อม / รายการซ่อม</h2>
+          <p className="rnf2-hsub">ค้นหารถของลูกค้าเพื่อเริ่มรายการตรวจเช็ค</p>
 
           <input
             autoFocus
             type="text"
+            className="rnf2-input"
             value={vehicleQuery}
             onChange={(e) => handleVehicleQueryChange(e.target.value)}
             placeholder="พิมพ์ทะเบียนรถ, ชื่อลูกค้า, หรือเบอร์โทร"
-            style={styles.searchInput}
           />
 
-          {searching && <p style={styles.hint}>กำลังค้นหา...</p>}
+          {searching && <p className="rnf2-hint">กำลังค้นหา...</p>}
 
-          <div style={{ marginTop: 12 }}>
+          <div>
             {vehicleResults.map((v) => (
-              <button key={v.vehicle_id} type="button" style={styles.vehicleCard} onClick={() => pickVehicle(v)}>
-                <div style={styles.vehiclePlate}>{v.license_plate || '-'}</div>
-                <div style={styles.vehicleMeta}>{v.brand} {v.model} {v.color ? `· ${v.color}` : ''}</div>
-                <div style={styles.vehicleCustomer}>{v.customer_name} {v.phone ? `· ${v.phone}` : ''}</div>
+              <button key={v.vehicle_id} type="button" className="rnf2-vcard" onClick={() => pickVehicle(v)}>
+                <div className="rnf2-vplate">{v.license_plate || '-'}</div>
+                <div className="rnf2-vmeta">{v.brand} {v.model} {v.color ? `· ${v.color}` : ''}</div>
+                <div className="rnf2-vcust">{v.customer_name} {v.phone ? `· ${v.phone}` : ''}</div>
               </button>
             ))}
             {!searching && vehicleQuery && vehicleResults.length === 0 && (
-              <p style={styles.hint}>ไม่พบรถที่ตรงกับคำค้นหา</p>
+              <p className="rnf2-hint">ไม่พบรถที่ตรงกับคำค้นหา</p>
             )}
           </div>
         </div>
@@ -290,255 +280,169 @@ export default function RepairNoticePage() {
     );
   }
 
+  // reusable: a front/rear (or L/R) axle chip group
+  const AxleChips = (rows) => (
+    <>
+      {rows.map(({ axle, cells }) => (
+        <div key={axle}>
+          <div className="rnf2-axle">{axle}</div>
+          <div className="rnf2-chips">
+            {cells.map(({ label, path }) => (
+              <Chip key={path} label={label} on={getPath(checklist, path)} onToggle={() => toggleSimple(path)} />
+            ))}
+          </div>
+        </div>
+      ))}
+    </>
+  );
+
   // ── STEP: checklist ──
   return (
-    <div style={styles.page}>
-      <div style={styles.topBar}>
+    <div className="rnf2-page">
+      <div className="rnf2-topbar">
         <div>
-          <p style={styles.topBarTitle}>ใบแจ้งซ่อม {code || ''}</p>
-          <p style={styles.topBarSub}>
+          <p className="rnf2-topbar-title">ใบแจ้งซ่อม {code || ''}</p>
+          <p className="rnf2-topbar-sub">
             {selectedVehicle?.license_plate || '-'} · {selectedVehicle?.brand} {selectedVehicle?.model}
             {selectedVehicle?.customer_name ? ` · ${selectedVehicle.customer_name}` : ''}
           </p>
         </div>
-        <div style={styles.topBarActions}>
+        <div className="rnf2-topbar-actions">
           {isEdit && (
-            <button type="button" style={styles.printTopBtn} onClick={() => setShowPrint(true)}>
-              🖨️ พิมพ์
-            </button>
+            <button type="button" className="rnf2-tbtn rnf2-tbtn-print" onClick={() => setShowPrint(true)}>🖨️ พิมพ์</button>
           )}
           {!prefill.vehicleId && !isEdit && (
-            <button type="button" style={styles.changeVehicleBtn} onClick={() => setStep('vehicle')}>
-              เปลี่ยนรถ
-            </button>
+            <button type="button" className="rnf2-tbtn rnf2-tbtn-ghost" onClick={() => setStep('vehicle')}>เปลี่ยนรถ</button>
           )}
         </div>
       </div>
 
-      <div style={styles.container}>
-        {error && <div style={styles.errorBox}>{error}</div>}
+      <div className="rnf2-body">
+        {error && <div className="rnf2-err">{error}</div>}
 
-        <Section number="1" title="แร็คพวงมาลัย (Rack)" Icon={IconRack}>
-          <CheckNoteRow
-            label="แร็คพวงมาลัย"
-            checked={checklist.rack.checked}
-            note={checklist.rack.note}
-            onToggle={() => toggleChecked('rack')}
-            onNoteChange={(v) => setNote('rack.note', v)}
-          />
-        </Section>
-
-        <Section number="2" title="ช่วงล่าง (Suspension)">
-          {Object.keys(SUSPENSION_LABELS).map((key) => (
-            <CheckNoteRow
-              key={key}
-              label={SUSPENSION_LABELS[key]}
-              checked={checklist.suspension[key].checked}
-              note={checklist.suspension[key].note}
-              onToggle={() => toggleChecked(`suspension.${key}`)}
-              onNoteChange={(v) => setNote(`suspension.${key}.note`, v)}
-              Icon={SUSPENSION_ICONS[key]}
+        <div className="rnf2-grid">
+          <Card number="1" title="แร็คพวงมาลัย / Rack" hero={rackImg}>
+            <CheckItem
+              img={rackImg}
+              label="แร็คพวงมาลัย"
+              checked={checklist.rack.checked}
+              note={checklist.rack.note}
+              onToggle={() => toggleChecked('rack')}
+              onNote={(v) => setNote('rack.note', v)}
             />
-          ))}
-        </Section>
+          </Card>
 
-        <Section number="3" title="ลูกปืนล้อ (Wheel Bearing)" Icon={IconWheelBearing}>
-          <div style={styles.axleLabel}>หน้า / Front</div>
-          <div style={styles.chipRow}>
-            <ChipCheck label="L" checked={checklist.wheel_bearing.front_l} onToggle={() => toggleSimple('wheel_bearing.front_l')} />
-            <ChipCheck label="R" checked={checklist.wheel_bearing.front_r} onToggle={() => toggleSimple('wheel_bearing.front_r')} />
-          </div>
-          <div style={styles.axleLabel}>หลัง / Rear</div>
-          <div style={styles.chipRow}>
-            <ChipCheck label="L" checked={checklist.wheel_bearing.rear_l} onToggle={() => toggleSimple('wheel_bearing.rear_l')} />
-            <ChipCheck label="R" checked={checklist.wheel_bearing.rear_r} onToggle={() => toggleSimple('wheel_bearing.rear_r')} />
-          </div>
-        </Section>
+          <Card number="2" title="ช่วงล่าง / Suspension">
+            {Object.keys(SUSPENSION_LABELS).map((key, i) => (
+              <CheckItem
+                key={key}
+                img={SUSPENSION_IMG[key]}
+                label={`2.${i + 1} ${SUSPENSION_LABELS[key]}`}
+                checked={checklist.suspension[key].checked}
+                note={checklist.suspension[key].note}
+                onToggle={() => toggleChecked(`suspension.${key}`)}
+                onNote={(v) => setNote(`suspension.${key}.note`, v)}
+              />
+            ))}
+          </Card>
 
-        <Section number="4" title="เพลาขับ (Drive Shaft)" Icon={IconDriveShaft}>
-          <div style={styles.axleLabel}>หน้า / Front</div>
-          <div style={styles.chipRow}>
-            <ChipCheck label="L" checked={checklist.drive_shaft.front_l} onToggle={() => toggleSimple('drive_shaft.front_l')} />
-            <ChipCheck label="R" checked={checklist.drive_shaft.front_r} onToggle={() => toggleSimple('drive_shaft.front_r')} />
-          </div>
-        </Section>
+          <Card number="3" title="ลูกปืนล้อ / Wheel Bearing" hero={wheelBearingImg}>
+            <div className="rnf2-hero-row"><img className="rnf2-thumb" style={{ width: 100, height: 78 }} src={wheelBearingImg} alt="" /></div>
+            {AxleChips([
+              { axle: 'หน้า / Front', cells: [{ label: 'L', path: 'wheel_bearing.front_l' }, { label: 'R', path: 'wheel_bearing.front_r' }] },
+              { axle: 'หลัง / Rear', cells: [{ label: 'L', path: 'wheel_bearing.rear_l' }, { label: 'R', path: 'wheel_bearing.rear_r' }] },
+            ])}
+          </Card>
 
-        <Section number="5" title="โช็ค (Shock)" Icon={IconShock}>
-          <div style={styles.axleLabel}>หน้า / Front</div>
-          <CheckNoteRow
-            label="โช็คหน้า"
-            checked={checklist.shock.front.checked}
-            note={checklist.shock.front.note}
-            onToggle={() => toggleChecked('shock.front')}
-            onNoteChange={(v) => setNote('shock.front.note', v)}
-          />
-          <div style={styles.axleLabel}>หลัง / Rear</div>
-          <CheckNoteRow
-            label="โช็คหลัง"
-            checked={checklist.shock.rear.checked}
-            note={checklist.shock.rear.note}
-            onToggle={() => toggleChecked('shock.rear')}
-            onNoteChange={(v) => setNote('shock.rear.note', v)}
-          />
-        </Section>
+          <Card number="4" title="เพลาขับ / Drive Shaft" hero={driveShaftImg}>
+            <div className="rnf2-hero-row"><img className="rnf2-thumb" style={{ width: 120, height: 70 }} src={driveShaftImg} alt="" /></div>
+            {AxleChips([
+              { axle: 'หน้า / Front', cells: [{ label: 'L', path: 'drive_shaft.front_l' }, { label: 'R', path: 'drive_shaft.front_r' }] },
+            ])}
+          </Card>
 
-        <Section number="6" title="อุปกรณ์ (Equipment)" Icon={IconEquipment}>
-          <CheckNoteRow
-            label="อุปกรณ์"
-            checked={checklist.equipment.checked}
-            note={checklist.equipment.note}
-            onToggle={() => toggleChecked('equipment')}
-            onNoteChange={(v) => setNote('equipment.note', v)}
-          />
-        </Section>
+          <Card number="5" title="โช๊ค / Shock" hero={shockImg}>
+            <CheckItem
+              img={shockImg}
+              label="โช๊ค หน้า / Front"
+              checked={checklist.shock.front.checked}
+              note={checklist.shock.front.note}
+              onToggle={() => toggleChecked('shock.front')}
+              onNote={(v) => setNote('shock.front.note', v)}
+            />
+            <CheckItem
+              label="โช๊ค หลัง / Rear"
+              checked={checklist.shock.rear.checked}
+              note={checklist.shock.rear.note}
+              onToggle={() => toggleChecked('shock.rear')}
+              onNote={(v) => setNote('shock.rear.note', v)}
+            />
+          </Card>
 
-        <Section number="7" title="อื่น ๆ (Other)">
-          <textarea
-            value={checklist.other}
-            onChange={(e) => setNote('other', e.target.value)}
-            placeholder="รายละเอียดเพิ่มเติม..."
-            rows={3}
-            style={styles.otherTextarea}
-          />
-        </Section>
+          <Card number="6" title="อุปกรณ์ / Equipment" hero={equipmentImg}>
+            <CheckItem
+              img={equipmentImg}
+              label="อุปกรณ์"
+              checked={checklist.equipment.checked}
+              note={checklist.equipment.note}
+              onToggle={() => toggleChecked('equipment')}
+              onNote={(v) => setNote('equipment.note', v)}
+            />
+          </Card>
 
-        <div style={styles.footerCard}>
-          <label style={styles.fieldLabel}>วันที่</label>
-          <input type="date" value={noticeDate} onChange={(e) => setNoticeDate(e.target.value)} style={styles.footerInput} />
-          <label style={styles.fieldLabel}>ตรวจเช็คโดย</label>
-          <input type="text" value={checkedBy} onChange={(e) => setCheckedBy(e.target.value)} placeholder="ชื่อผู้ตรวจเช็ค" style={styles.footerInput} />
-          <label style={styles.fieldLabel}>ซ่อมโดย</label>
-          <input type="text" value={repairedBy} onChange={(e) => setRepairedBy(e.target.value)} placeholder="ชื่อช่างผู้ซ่อม" style={styles.footerInput} />
+          <Card number="7" title="ผ้าเบรค / Brake Pad" hero={brakePadImg}>
+            <div className="rnf2-hero-row"><img className="rnf2-thumb" style={{ width: 100, height: 78 }} src={brakePadImg} alt="" /></div>
+            {AxleChips([
+              { axle: 'หน้า / Front', cells: [{ label: 'ผ้าเบรคหน้า', path: 'brake_pad.front' }] },
+              { axle: 'หลัง / Rear', cells: [{ label: 'ผ้าเบรคหลัง', path: 'brake_pad.rear' }] },
+            ])}
+          </Card>
+
+          <Card number="8" title="เจียจานเบรค / Brake Disc" hero={brakeDiscImg}>
+            <div className="rnf2-hero-row"><img className="rnf2-thumb" style={{ width: 90, height: 78 }} src={brakeDiscImg} alt="" /></div>
+            {AxleChips([
+              { axle: 'หน้า / Front', cells: [{ label: 'จานหน้า', path: 'brake_disc.front' }] },
+              { axle: 'หลัง / Rear', cells: [{ label: 'จานหลัง', path: 'brake_disc.rear' }] },
+            ])}
+          </Card>
+
+          <Card number="9" title="อื่น ๆ / Other" hero={workerImg}>
+            <textarea
+              className="rnf2-textarea"
+              value={checklist.other}
+              onChange={(e) => setNote('other', e.target.value)}
+              placeholder="รายละเอียดเพิ่มเติม..."
+              rows={3}
+            />
+          </Card>
         </div>
 
-        <div style={{ height: 90 }} />
+        <div className="rnf2-footer">
+          <div className="rnf2-fgrid">
+            <div>
+              <label className="rnf2-flabel">วันที่</label>
+              <input type="date" className="rnf2-input" value={noticeDate} onChange={(e) => setNoticeDate(e.target.value)} />
+            </div>
+            <div>
+              <label className="rnf2-flabel">ตรวจเช็คโดย</label>
+              <input type="text" className="rnf2-input" value={checkedBy} onChange={(e) => setCheckedBy(e.target.value)} placeholder="ชื่อผู้ตรวจเช็ค" />
+            </div>
+            <div>
+              <label className="rnf2-flabel">ซ่อมโดย</label>
+              <input type="text" className="rnf2-input" value={repairedBy} onChange={(e) => setRepairedBy(e.target.value)} placeholder="ชื่อช่างผู้ซ่อม" />
+            </div>
+          </div>
+        </div>
       </div>
 
-      <div style={styles.saveBar}>
-        <button type="button" style={{ ...styles.saveBtn, opacity: saving ? 0.6 : 1 }} onClick={handleSave} disabled={saving}>
+      <div className="rnf2-savebar">
+        <button type="button" className="rnf2-savebtn" onClick={handleSave} disabled={saving}>
           {saving ? 'กำลังบันทึก...' : isEdit ? 'บันทึกการแก้ไข' : 'บันทึกใบแจ้งซ่อม'}
         </button>
       </div>
 
-      {toast && <div style={styles.toast}>{toast}</div>}
-
+      {toast && <div className="rnf2-toast">{toast}</div>}
       {showPrint && <RepairNoticePrintModal noticeId={id} onClose={() => setShowPrint(false)} />}
     </div>
   );
 }
-
-const styles = {
-  page: { minHeight: '100vh', background: '#f5f5f0' },
-  container: { maxWidth: 560, margin: '0 auto', padding: '16px 14px' },
-  pageTitle: { fontSize: 20, fontWeight: 700, color: '#111', margin: '4px 0 2px' },
-  pageSub: { fontSize: 13, color: '#6b7280', marginBottom: 16 },
-  searchInput: {
-    width: '100%', boxSizing: 'border-box', padding: '13px 14px', fontSize: 15,
-    border: '1.5px solid #e5e7eb', borderRadius: 12, outline: 'none', background: '#fff',
-  },
-  hint: { fontSize: 13, color: '#9ca3af', marginTop: 10, textAlign: 'center' },
-  vehicleCard: {
-    display: 'block', width: '100%', textAlign: 'left', background: '#fff',
-    border: '1px solid #e5e7eb', borderRadius: 12, padding: '12px 14px', marginBottom: 8, cursor: 'pointer',
-  },
-  vehiclePlate: { fontSize: 15, fontWeight: 700, color: '#111' },
-  vehicleMeta: { fontSize: 13, color: '#374151', marginTop: 2 },
-  vehicleCustomer: { fontSize: 12, color: '#6b7280', marginTop: 2 },
-
-  topBar: {
-    background: '#111111', color: '#fff', padding: '14px 16px',
-    display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,
-    position: 'sticky', top: 0, zIndex: 10,
-  },
-  topBarTitle: { fontSize: 15, fontWeight: 700, margin: 0 },
-  topBarSub: { fontSize: 12, color: '#d1d5db', margin: '2px 0 0' },
-  topBarActions: { display: 'flex', gap: 8, flexShrink: 0 },
-  changeVehicleBtn: {
-    background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.25)',
-    color: '#fff', borderRadius: 8, padding: '8px 12px', fontSize: 12, fontWeight: 600,
-    cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0,
-  },
-  printTopBtn: {
-    background: '#2563eb', border: '1px solid #2563eb',
-    color: '#fff', borderRadius: 8, padding: '8px 12px', fontSize: 12, fontWeight: 600,
-    cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0,
-  },
-
-  errorBox: {
-    background: '#fee2e2', color: '#991b1b', padding: '10px 12px',
-    borderRadius: 10, fontSize: 13, marginBottom: 12,
-  },
-
-  section: { background: '#fff', borderRadius: 14, border: '1px solid #e5e3de', marginBottom: 12, overflow: 'hidden' },
-  sectionHeader: {
-    display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px',
-    background: '#f3f4f6', borderBottom: '1px solid #e5e3de',
-  },
-  sectionNum: {
-    width: 24, height: 24, borderRadius: '50%', background: '#111', color: '#fff',
-    fontSize: 12, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-  },
-  sectionTitle: { fontSize: 14, fontWeight: 700, color: '#111', flex: 1 },
-  sectionIcon: { color: '#6b7280', flexShrink: 0, display: 'flex' },
-  sectionBody: { padding: '10px 14px 14px' },
-
-  checkRow: { marginBottom: 8 },
-  checkTap: {
-    display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left',
-    background: '#f9fafb', border: '1.5px solid #e5e7eb', borderRadius: 10,
-    padding: '12px 12px', cursor: 'pointer', minHeight: 48,
-  },
-  partIcon: { color: '#9ca3af', flexShrink: 0, display: 'flex' },
-  partIconOn: { color: '#2563eb' },
-  checkTapOn: { background: '#eff6ff', borderColor: '#93c5fd' },
-  checkbox: {
-    width: 24, height: 24, borderRadius: 7, border: '2px solid #d1d5db', flexShrink: 0,
-    display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 14, fontWeight: 700,
-  },
-  checkboxSm: {
-    width: 20, height: 20, borderRadius: 6, border: '2px solid #d1d5db', flexShrink: 0,
-    display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: 12, fontWeight: 700,
-  },
-  checkboxOn: { background: '#2563eb', borderColor: '#2563eb' },
-  checkLabel: { fontSize: 14, fontWeight: 500, color: '#111' },
-  noteInput: {
-    width: '100%', boxSizing: 'border-box', marginTop: 6, padding: '10px 12px',
-    fontSize: 13, border: '1.5px solid #e5e7eb', borderRadius: 9, outline: 'none', background: '#fff',
-  },
-
-  axleLabel: { fontSize: 12, fontWeight: 600, color: '#6b7280', margin: '8px 0 6px' },
-  chipRow: { display: 'flex', gap: 10, marginBottom: 6 },
-  chip: {
-    display: 'flex', alignItems: 'center', gap: 8, padding: '10px 18px',
-    border: '1.5px solid #e5e7eb', borderRadius: 10, background: '#f9fafb', cursor: 'pointer',
-    fontSize: 14, fontWeight: 600, color: '#111',
-  },
-  chipOn: { background: '#eff6ff', borderColor: '#93c5fd' },
-
-  otherTextarea: {
-    width: '100%', boxSizing: 'border-box', padding: '10px 12px', fontSize: 14,
-    border: '1.5px solid #e5e7eb', borderRadius: 10, outline: 'none', fontFamily: 'inherit', resize: 'vertical',
-  },
-
-  footerCard: { background: '#fff', borderRadius: 14, border: '1px solid #e5e3de', padding: '14px' },
-  fieldLabel: { display: 'block', fontSize: 12, fontWeight: 600, color: '#374151', marginBottom: 6, marginTop: 10 },
-  footerInput: {
-    width: '100%', boxSizing: 'border-box', padding: '11px 12px', fontSize: 14,
-    border: '1.5px solid #e5e7eb', borderRadius: 10, outline: 'none',
-  },
-
-  saveBar: {
-    position: 'fixed', bottom: 0, left: 0, right: 0, background: '#fff',
-    borderTop: '1px solid #e5e3de', padding: '12px 16px calc(12px + env(safe-area-inset-bottom, 0px))',
-    zIndex: 20,
-  },
-  saveBtn: {
-    width: '100%', maxWidth: 560, margin: '0 auto', display: 'block',
-    padding: '14px', background: '#2563eb', color: '#fff', border: 'none',
-    borderRadius: 12, fontSize: 15, fontWeight: 700, cursor: 'pointer',
-  },
-  toast: {
-    position: 'fixed', top: 16, left: 16, right: 16, background: '#022c22', color: '#fff',
-    padding: '12px 16px', borderRadius: 12, fontSize: 13, fontWeight: 600, textAlign: 'center', zIndex: 60,
-  },
-};

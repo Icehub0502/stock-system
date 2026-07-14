@@ -23,6 +23,9 @@ router.post('/', async (req, res) => {
   if (!username || !password || !['office', 'technician'].includes(role)) {
     return res.status(400).json({ error: 'ข้อมูลไม่ถูกต้อง (username, password, role จำเป็นต้องกรอก)' });
   }
+  if (String(password).length < 8) {
+    return res.status(400).json({ error: 'รหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร' });
+  }
   try {
     const [result] = await pool.execute(
       'INSERT INTO users (username, password_hash, full_name, role) VALUES (?, ?, ?, ?)',
@@ -49,6 +52,9 @@ router.put('/:id', async (req, res) => {
     if (!existing) return res.status(404).json({ error: 'ไม่พบผู้ใช้' });
 
     const { full_name = existing.full_name, role = existing.role, password } = req.body || {};
+    if (password && String(password).length < 8) {
+      return res.status(400).json({ error: 'รหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร' });
+    }
     const password_hash = password ? bcrypt.hashSync(password, 10) : existing.password_hash;
 
     await pool.execute(

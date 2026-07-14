@@ -5,12 +5,6 @@ import QuotationFormModal from "../components/QuotationFormModal";
 import QuotationPrintModal from "../components/QuotationPrintModal";
 import ScheduleDateDialog from "../components/ScheduleDateDialog";
 import SignatureModal from "../components/SignatureModal";
-import { defaultChecklist } from "../utils/repairChecklist";
-
-function todayStr() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
 
 function StatusBadge({ status, scheduledDate }) {
   if (status === 'approved') {
@@ -87,20 +81,10 @@ export default function QuotationListPage() {
       setQuotations((prev) => prev.map((row) => (row.id === q.id ? { ...row, status: 'approved' } : row)));
       setJustApprovedId(q.id);
 
-      // The repair notice itself is created here immediately in the
-      // background (blank checklist) rather than waiting for someone to
-      // fill it in and press save — the vehicle/customer must land on this
-      // record for certain the moment a quotation is approved, so it
-      // already shows up in the repair notice list even though nobody has
-      // opened it yet. Whoever picks it up next (usually a technician, on
-      // their phone) is the one who actually ticks what needs repair.
-      await client.post('/repair-notices', {
-        customer_id: q.customer_id,
-        vehicle_id: q.vehicle_id,
-        quotation_id: q.id,
-        notice_date: todayStr(),
-        checklist: defaultChecklist(),
-      });
+      // NOTE: the repair notice is no longer created here — it's created up
+      // front the moment the quotation itself is created (see the POST
+      // /quotations transaction in the backend), so every quotation already
+      // has one waiting to be filled in regardless of approval status.
 
       setActioningId(null);
     } catch (err) {
@@ -197,6 +181,11 @@ export default function QuotationListPage() {
                   </td>
                   <td data-label="สถานะ">
                     <StatusBadge status={q.status} scheduledDate={q.scheduled_date} />
+                    {Number(q.repair_notice_filled) === 1 ? (
+                      <span className="status-badge status-badge-success" style={{ marginTop: 4, display: 'inline-block' }}>🔧 แจ้งซ่อมแล้ว</span>
+                    ) : (
+                      <span className="status-badge status-badge-neutral" style={{ marginTop: 4, display: 'inline-block' }}>🔧 ยังไม่กรอกแจ้งซ่อม</span>
+                    )}
                   </td>
                   <td className="actions" data-label="จัดการ">
                     <button
