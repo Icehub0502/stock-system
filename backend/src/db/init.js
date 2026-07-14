@@ -314,6 +314,14 @@ async function initDatabase() {
     ADD COLUMN customer_signature LONGTEXT DEFAULT NULL
   `).catch(() => {});
 
+  // เพิ่มค่า 'no_date' ให้ status — ใช้เมื่อสำนักงานกดยืนยันชัดเจนว่าลูกค้าไม่ระบุวัน
+  // นัดหมาย (ต่างจาก 'pending' เฉยๆ ที่แปลว่ายังไม่ได้ดำเนินการอะไรเลย) MODIFY COLUMN
+  // ปลอดภัยที่จะรันซ้ำทุกครั้งที่บูต ไม่เหมือน ADD COLUMN ที่ error ถ้ามีอยู่แล้ว
+  await conn.query(`
+    ALTER TABLE quotations
+    MODIFY COLUMN status ENUM('pending','approved','scheduled','no_date') NOT NULL DEFAULT 'pending'
+  `).catch(() => {});
+
   await conn.query(`
     CREATE TABLE IF NOT EXISTS receipt_items (
       id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,

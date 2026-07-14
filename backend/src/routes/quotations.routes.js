@@ -543,6 +543,26 @@ router.patch('/:id/schedule', async (req, res) => {
   }
 });
 
+// สำนักงานกดยืนยันชัดเจนว่าลูกค้าไม่ระบุวันนัดหมาย (ต่างจาก pending เฉยๆ ที่แปลว่า
+// ยังไม่ได้ดำเนินการอะไรเลยกับใบเสนอราคานี้)
+router.patch('/:id/no-date', async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const [result] = await pool.execute(
+      "UPDATE quotations SET status = 'no_date', scheduled_date = NULL WHERE id = ?",
+      [id]
+    );
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: 'ไม่พบใบเสนอราคา' });
+    }
+    res.json({ success: true, message: 'บันทึกสถานะไม่ระบุวันนัดหมายสำเร็จ' });
+  } catch (err) {
+    console.error('Error marking quotation as no-date:', err);
+    res.status(500).json({ error: 'บันทึกไม่สำเร็จ' });
+  }
+});
+
 // PATCH - Save the customer's signature (captured on a tablet/phone at the counter)
 router.patch('/:id/signature', async (req, res) => {
   const { id } = req.params;

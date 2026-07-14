@@ -14,7 +14,10 @@ function StatusBadge({ status, scheduledDate }) {
     const dateText = scheduledDate ? new Date(scheduledDate).toLocaleDateString('th-TH') : '-';
     return <span className="status-badge status-badge-warning">📅 รอทำ {dateText}</span>;
   }
-  return <span className="status-badge status-badge-danger">⚠️ ยังไม่ระบุวันนัด</span>;
+  if (status === 'no_date') {
+    return <span className="status-badge status-badge-danger">⚠️ ไม่ระบุวันนัดหมาย</span>;
+  }
+  return <span className="status-badge status-badge-neutral">⏳ รอดำเนินการ</span>;
 }
 
 export default function QuotationListPage() {
@@ -102,6 +105,20 @@ export default function QuotationListPage() {
       fetchQuotations();
     } catch (err) {
       alert(err.response?.data?.error || "บันทึกวันนัดหมายไม่สำเร็จ");
+    } finally {
+      setActioningId(null);
+    }
+  };
+
+  const handleNoDate = async () => {
+    if (!schedulingQuotation) return;
+    setActioningId(schedulingQuotation.id);
+    try {
+      await client.patch(`/quotations/${schedulingQuotation.id}/no-date`);
+      setSchedulingQuotation(null);
+      fetchQuotations();
+    } catch (err) {
+      alert(err.response?.data?.error || "บันทึกไม่สำเร็จ");
     } finally {
       setActioningId(null);
     }
@@ -268,6 +285,7 @@ export default function QuotationListPage() {
           initialDate={schedulingQuotation.scheduled_date}
           loading={actioningId === schedulingQuotation.id}
           onConfirm={handleScheduleConfirm}
+          onNoDate={handleNoDate}
           onCancel={() => setSchedulingQuotation(null)}
         />
       )}

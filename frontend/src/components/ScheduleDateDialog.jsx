@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { todayStr } from '../utils/format';
 
-export default function ScheduleDateDialog({ initialDate, onConfirm, onCancel, loading }) {
+export default function ScheduleDateDialog({ initialDate, onConfirm, onNoDate, onCancel, loading }) {
   const [date, setDate] = useState(initialDate || todayStr());
 
   return (
@@ -22,6 +22,11 @@ export default function ScheduleDateDialog({ initialDate, onConfirm, onCancel, l
           <button type="button" className="btn btn-secondary" onClick={onCancel} disabled={loading}>
             ยกเลิก
           </button>
+          {onNoDate && (
+            <button type="button" className="btn btn-danger" onClick={onNoDate} disabled={loading}>
+              {loading ? 'กำลังบันทึก...' : 'ไม่ระบุวันนัดหมาย'}
+            </button>
+          )}
           <button type="button" className="btn btn-primary" onClick={() => onConfirm(date)} disabled={loading || !date}>
             {loading ? 'กำลังบันทึก...' : 'บันทึกวันนัดหมาย'}
           </button>
