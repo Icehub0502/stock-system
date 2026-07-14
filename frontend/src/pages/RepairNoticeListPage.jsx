@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import client from '../api/client';
 import RepairNoticePrintModal from '../components/RepairNoticePrintModal';
@@ -47,6 +47,25 @@ export default function RepairNoticeListPage() {
     String(n.queue_no || '').toLowerCase().includes(search.toLowerCase())
   );
 
+  // Group by notice_date (newest day first) so the list reads as "N ใบวันนี้,
+  // M ใบเมื่อวาน..." instead of one long scattered grid — sort explicitly by
+  // notice_date rather than relying on the backend's created_at ordering,
+  // since a notice's date can be edited away from when it was created.
+  const groups = useMemo(() => {
+    const sorted = [...filtered].sort((a, b) => new Date(b.notice_date) - new Date(a.notice_date));
+    const out = [];
+    let current = null;
+    for (const n of sorted) {
+      const dateKey = n.notice_date;
+      if (!current || current.dateKey !== dateKey) {
+        current = { dateKey, rows: [] };
+        out.push(current);
+      }
+      current.rows.push(n);
+    }
+    return out;
+  }, [filtered]);
+
   const handleDelete = async (id) => {
     if (!window.confirm('ต้องการลบใบแจ้งซ่อมนี้หรือไม่?')) return;
     try {
@@ -84,36 +103,43 @@ export default function RepairNoticeListPage() {
         ) : filtered.length === 0 ? (
           <div className="rnl-empty">ไม่มีข้อมูลใบแจ้งซ่อม</div>
         ) : (
-          <div className="rnl-grid">
-            {filtered.map((n) => (
-              <div key={n.id} className="rnl-card">
-                <div className="rnl-top">
-                  <div>
-                    <div className="rnl-code">{n.code}</div>
-                    <div className="rnl-date">{new Date(n.notice_date).toLocaleDateString('th-TH')}</div>
-                  </div>
-                  <div className="rnl-queue">
-                    <div className="rnl-queue-label">คิว</div>
-                    <div className="rnl-queue-num">{n.queue_no || '—'}</div>
-                  </div>
-                </div>
-
-                <div className="rnl-lines">
-                  <div>{n.customer_name || '-'}</div>
-                  <div>{n.brand} {n.model} {n.color ? `/ ${n.color}` : ''} · <strong>{n.license_plate || '-'}</strong></div>
-                  <div className="rnl-mut">
-                    ตรวจเช็ค: {n.checked_by || '-'} · ซ่อม: {n.repaired_by || '-'}
-                  </div>
-                </div>
-
-                <div className="rnl-actions">
-                  <button className="rnl-btn" onClick={() => setEditingId(n.id)}>แจ้งซ่อม</button>
-                  <button className="rnl-btn rnl-btn-print" onClick={() => setPrintingId(n.id)}>พิมพ์</button>
-                  <button className="rnl-btn rnl-btn-danger" onClick={() => handleDelete(n.id)}>ลบ</button>
-                </div>
+          groups.map((group) => (
+            <div key={group.dateKey} className="rnl-date-group">
+              <div className="rnl-date-group-header">
+                <span className="rnl-date-group-date">
+                  {new Date(group.dateKey).toLocaleDateString('th-TH', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                </span>
+                <span className="rnl-date-group-count">{group.rows.length} ใบ</span>
               </div>
-            ))}
-          </div>
+              <div className="rnl-grid">
+                {group.rows.map((n) => (
+                  <div key={n.id} className="rnl-card">
+                    <div className="rnl-top">
+                      <div className="rnl-code">{n.code}</div>
+                      <div className="rnl-queue">
+                        <div className="rnl-queue-label">คิว</div>
+                        <div className="rnl-queue-num">{n.queue_no || '—'}</div>
+                      </div>
+                    </div>
+
+                    <div className="rnl-lines">
+                      <div>{n.customer_name || '-'}</div>
+                      <div>{n.brand} {n.model} {n.color ? `/ ${n.color}` : ''} · <strong>{n.license_plate || '-'}</strong></div>
+                      <div className="rnl-mut">
+                        ตรวจเช็ค: {n.checked_by || '-'} · ซ่อม: {n.repaired_by || '-'}
+                      </div>
+                    </div>
+
+                    <div className="rnl-actions">
+                      <button className="rnl-btn" onClick={() => setEditingId(n.id)}>แจ้งซ่อม</button>
+                      <button className="rnl-btn rnl-btn-print" onClick={() => setPrintingId(n.id)}>พิมพ์</button>
+                      <button className="rnl-btn rnl-btn-danger" onClick={() => handleDelete(n.id)}>ลบ</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))
         )}
       </div>
 

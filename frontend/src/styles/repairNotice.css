@@ -145,6 +145,15 @@
 .rnl-search:focus { border-color: #2563eb; }
 .rnl-new { background: #0f172a; color: #fff; border: none; border-radius: 10px; padding: 10px 16px; font-size: 14px; font-weight: 700; cursor: pointer; white-space: nowrap; }
 
+.rnl-date-group { margin-bottom: 24px; }
+.rnl-date-group-header {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 10px 16px; margin-bottom: 12px;
+  background: #eef2ff; border: 1px solid #c7d2fe; border-radius: 12px;
+}
+.rnl-date-group-date { font-size: 14px; font-weight: 800; color: #1e3a8a; }
+.rnl-date-group-count { font-size: 12px; font-weight: 700; color: #4338ca; background: #e0e7ff; border-radius: 999px; padding: 3px 10px; white-space: nowrap; }
+
 .rnl-grid { display: grid; grid-template-columns: 1fr; gap: 14px; }
 @media (min-width: 640px) { .rnl-grid { grid-template-columns: 1fr 1fr; } }
 @media (min-width: 1000px) { .rnl-grid { grid-template-columns: 1fr 1fr 1fr; } }
