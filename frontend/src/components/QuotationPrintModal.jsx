@@ -2,9 +2,13 @@ import React, { useEffect, useState } from "react";
 import client from "../api/client";
 import QuotationPrintTemplate from "./QuotationPrintTemplate";
 import PrintPortal from "./PrintPortal";
+import useFitToWidth from "../hooks/useFitToWidth";
 
 export default function QuotationPrintModal({ quotation, onClose }) {
   const [detail, setDetail] = useState(quotation);
+  // Shrink the A4 preview to fit the modal on phones (see useFitToWidth). Only
+  // the on-screen preview is scaled; the PrintPortal copy prints full A4.
+  const { containerRef: previewRef, scale: previewScale } = useFitToWidth([detail]);
 
   useEffect(() => {
     if (!quotation?.items) {
@@ -59,8 +63,10 @@ export default function QuotationPrintModal({ quotation, onClose }) {
           </div>
         </div>
 
-        <div className="print-content">
-          <QuotationPrintTemplate data={data} />
+        <div className="print-content" ref={previewRef}>
+          <div style={{ zoom: previewScale }}>
+            <QuotationPrintTemplate data={data} />
+          </div>
         </div>
 
         <div className="modal-footer no-print">

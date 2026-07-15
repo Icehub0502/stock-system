@@ -2,10 +2,14 @@ import React, { useEffect, useState } from 'react';
 import client from '../api/client';
 import RepairNoticePrintTemplate from './RepairNoticePrintTemplate';
 import PrintPortal from './PrintPortal';
+import useFitToWidth from '../hooks/useFitToWidth';
 
 export default function RepairNoticePrintModal({ noticeId, onClose }) {
   const [detail, setDetail] = useState(null);
   const [loading, setLoading] = useState(true);
+  // Shrink the A4 preview to fit the modal on phones (see useFitToWidth). Only
+  // the on-screen preview is scaled; the PrintPortal copy prints full A4.
+  const { containerRef: previewRef, scale: previewScale } = useFitToWidth([detail]);
 
   useEffect(() => {
     fetchDetail();
@@ -54,8 +58,10 @@ export default function RepairNoticePrintModal({ noticeId, onClose }) {
           </div>
         </div>
 
-        <div className="print-content">
-          <RepairNoticePrintTemplate data={printData} />
+        <div className="print-content" ref={previewRef}>
+          <div style={{ zoom: previewScale }}>
+            <RepairNoticePrintTemplate data={printData} />
+          </div>
         </div>
 
         <div className="modal-footer no-print">

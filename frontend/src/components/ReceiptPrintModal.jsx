@@ -2,10 +2,14 @@ import React, { useEffect, useState } from "react";
 import client from "../api/client";
 import ReceiptPrintTemplate from "./ReceiptPrintTemplate";
 import PrintPortal from "./PrintPortal";
+import useFitToWidth from "../hooks/useFitToWidth";
 
 export default function ReceiptPrintModal({ receiptId, onClose, onPrinted }) {
   const [receipt, setReceipt] = useState(null);
   const [loading, setLoading] = useState(true);
+  // Shrink the A4 preview to fit the modal on phones (see useFitToWidth). Only
+  // the on-screen preview is scaled; the PrintPortal copy prints full A4.
+  const { containerRef: previewRef, scale: previewScale } = useFitToWidth([receipt]);
 
   useEffect(() => {
     if (receiptId) {
@@ -82,8 +86,10 @@ export default function ReceiptPrintModal({ receiptId, onClose, onPrinted }) {
             <button className="btn btn-primary" onClick={() => window.print()}>พิมพ์ / บันทึก PDF</button>
           </div>
         </div>
-        <div className="receipt-print-surface">
-          <ReceiptPrintTemplate data={previewData} />
+        <div className="receipt-print-surface" ref={previewRef}>
+          <div style={{ zoom: previewScale }}>
+            <ReceiptPrintTemplate data={previewData} />
+          </div>
         </div>
       </div>
       <PrintPortal>
