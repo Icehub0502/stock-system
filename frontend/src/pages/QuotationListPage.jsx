@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useAuth } from "../context/AuthContext";
 import client from "../api/client";
 import QuotationFormModal from "../components/QuotationFormModal";
@@ -59,6 +59,26 @@ export default function QuotationListPage() {
     q.quotation_no.toLowerCase().includes(search.toLowerCase()) ||
     q.customer_name?.toLowerCase().includes(search.toLowerCase())
   );
+
+  // Group by quotation_date (newest day first) so the list reads as one
+  // set per day instead of one long scattered table — sort explicitly by
+  // quotation_date rather than relying on the backend's created_at
+  // ordering, since a quotation's date isn't guaranteed to match when it
+  // was created.
+  const groups = useMemo(() => {
+    const sorted = [...filtered].sort((a, b) => new Date(b.quotation_date) - new Date(a.quotation_date));
+    const out = [];
+    let current = null;
+    for (const q of sorted) {
+      const dateKey = q.quotation_date;
+      if (!current || current.dateKey !== dateKey) {
+        current = { dateKey, rows: [] };
+        out.push(current);
+      }
+      current.rows.push(q);
+    }
+    return out;
+  }, [filtered]);
 
   // Handle delete
   const handleDelete = async (id) => {
@@ -182,79 +202,89 @@ export default function QuotationListPage() {
               </tr>
             </thead>
             <tbody>
-              {filtered.map((q) => (
-                <tr key={q.id} className={justApprovedId === q.id ? 'row-just-approved' : ''}>
-                  <td data-label="เลขที่">
-                    <strong>{q.quotation_no}</strong>
-                  </td>
-                  <td data-label="วันที่">{new Date(q.quotation_date).toLocaleDateString('th-TH')}</td>
-                  <td className="col-customer-name" data-label="ชื่อลูกค้า">{q.customer_name}</td>
-                  <td className="car-info" data-label="รุ่น/สี/ทะเบียน">
-                    {q.brand || q.car_brand} {q.model || q.car_model} / {q.color || q.car_color} /{" "}
-                    {q.license_plate}
-                  </td>
-                  <td className="amount" data-label="จำนวนรวม">
-                    ฿{parseFloat(q.total_amount).toFixed(2)}
-                  </td>
-                  <td data-label="สถานะ">
-                    <StatusBadge status={q.status} scheduledDate={q.scheduled_date} />
-                    {Number(q.repair_notice_filled) === 1 ? (
-                      <span className="status-badge status-badge-success" style={{ marginTop: 4, display: 'inline-block' }}>🔧 แจ้งซ่อมแล้ว</span>
-                    ) : (
-                      <span className="status-badge status-badge-neutral" style={{ marginTop: 4, display: 'inline-block' }}>🔧 ยังไม่กรอกแจ้งซ่อม</span>
-                    )}
-                  </td>
-                  <td className="actions" data-label="จัดการ">
-                    <button
-                      className="btn-icon-small"
-                      onClick={() => {
-                        setEditingQuotation(q);
-                        setShowFormModal(true);
-                      }}
-                    >
-                      แก้ไข
-                    </button>
-                    <button
-                      className="btn-icon-small"
-                      onClick={() => {
-                        setSelectedQuotation(q);
-                        setShowPrintModal(true);
-                      }}
-                    >
-                      พิมพ์
-                    </button>
-                    <button
-                      className={`btn-icon-small ${q.customer_signature ? 'btn-printed' : ''}`}
-                      onClick={() => setSigningQuotationId(q.id)}
-                    >
-                      {q.customer_signature ? '✓ เซ็นแล้ว' : 'เซ็นเอกสาร'}
-                    </button>
-                    {q.status !== 'approved' && (
-                      <>
+              {groups.map((group) => (
+                <React.Fragment key={group.dateKey}>
+                  <tr className="date-group-header-row">
+                    <td colSpan={7}>
+                      {new Date(group.dateKey).toLocaleDateString('th-TH', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                      <span className="date-group-count"> ({group.rows.length} ใบ)</span>
+                    </td>
+                  </tr>
+                  {group.rows.map((q) => (
+                    <tr key={q.id} className={justApprovedId === q.id ? 'row-just-approved' : ''}>
+                      <td data-label="เลขที่">
+                        <strong>{q.quotation_no}</strong>
+                      </td>
+                      <td data-label="วันที่">{new Date(q.quotation_date).toLocaleDateString('th-TH')}</td>
+                      <td className="col-customer-name" data-label="ชื่อลูกค้า">{q.customer_name}</td>
+                      <td className="car-info" data-label="รุ่น/สี/ทะเบียน">
+                        {q.brand || q.car_brand} {q.model || q.car_model} / {q.color || q.car_color} /{" "}
+                        {q.license_plate}
+                      </td>
+                      <td className="amount" data-label="จำนวนรวม">
+                        ฿{parseFloat(q.total_amount).toFixed(2)}
+                      </td>
+                      <td data-label="สถานะ">
+                        <StatusBadge status={q.status} scheduledDate={q.scheduled_date} />
+                        {Number(q.repair_notice_filled) === 1 ? (
+                          <span className="status-badge status-badge-success" style={{ marginTop: 4, display: 'inline-block' }}>🔧 แจ้งซ่อมแล้ว</span>
+                        ) : (
+                          <span className="status-badge status-badge-neutral" style={{ marginTop: 4, display: 'inline-block' }}>🔧 ยังไม่กรอกแจ้งซ่อม</span>
+                        )}
+                      </td>
+                      <td className="actions" data-label="จัดการ">
                         <button
                           className="btn-icon-small"
-                          onClick={() => handleApprove(q)}
-                          disabled={actioningId === q.id}
+                          onClick={() => {
+                            setEditingQuotation(q);
+                            setShowFormModal(true);
+                          }}
                         >
-                          อนุมัติ
+                          แก้ไข
                         </button>
                         <button
                           className="btn-icon-small"
-                          onClick={() => setSchedulingQuotation(q)}
-                          disabled={actioningId === q.id}
+                          onClick={() => {
+                            setSelectedQuotation(q);
+                            setShowPrintModal(true);
+                          }}
                         >
-                          วันที่
+                          พิมพ์
                         </button>
-                      </>
-                    )}
-                    <button
-                      className="btn-icon-small btn-danger"
-                      onClick={() => handleDelete(q.id)}
-                    >
-                      ลบ
-                    </button>
-                  </td>
-                </tr>
+                        <button
+                          className={`btn-icon-small ${q.customer_signature ? 'btn-printed' : ''}`}
+                          onClick={() => setSigningQuotationId(q.id)}
+                        >
+                          {q.customer_signature ? '✓ เซ็นแล้ว' : 'เซ็นเอกสาร'}
+                        </button>
+                        {q.status !== 'approved' && (
+                          <>
+                            <button
+                              className="btn-icon-small"
+                              onClick={() => handleApprove(q)}
+                              disabled={actioningId === q.id}
+                            >
+                              อนุมัติ
+                            </button>
+                            <button
+                              className="btn-icon-small"
+                              onClick={() => setSchedulingQuotation(q)}
+                              disabled={actioningId === q.id}
+                            >
+                              วันที่
+                            </button>
+                          </>
+                        )}
+                        <button
+                          className="btn-icon-small btn-danger"
+                          onClick={() => handleDelete(q.id)}
+                        >
+                          ลบ
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </React.Fragment>
               ))}
             </tbody>
           </table>
