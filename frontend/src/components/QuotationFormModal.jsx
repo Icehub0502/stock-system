@@ -439,17 +439,13 @@ export default function QuotationFormModal({ quotation, onClose, onSuccess }) {
     // (e.g. from ชุดโปรช่วงล่าง) is often left at its default blank price
     // since it's already covered by the set's combined price, and should
     // still be saved (as ฿0), not silently dropped for lacking a price.
+    // ไม่บังคับต้องมีรายการสินค้า — กรอกแค่ข้อมูลลูกค้าก็บันทึกได้เลย
+    // เอาไว้ให้คนหน้างานมาเพิ่มรายการทีหลังตอนเสนอราคาจริง
     const validItems = items.filter((item) => {
       const name = item.product_name?.toString().trim();
       const qty = Number(item.quantity || 0);
       return Boolean(name) && qty > 0;
     });
-
-    if (validItems.length === 0) {
-      setError('กรุณาเพิ่มรายการสินค้า/บริการอย่างน้อยหนึ่งรายการ');
-      setFieldErrors((prev) => ({ ...prev, items: 'เพิ่มรายการสินค้า/บริการ' }));
-      return;
-    }
 
     setLoading(true);
     try {

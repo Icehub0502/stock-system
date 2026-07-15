@@ -125,10 +125,9 @@ router.post('/', async (req, res) => {
     return res.status(400).json({ error: 'กรุณากรอกข้อมูลลูกค้าและวันที่ให้ครบถ้วน' });
   }
 
+  // รายการสินค้าไม่บังคับตอนสร้าง — กรอกแค่ข้อมูลลูกค้า/รถแล้วบันทึกได้เลย
+  // ให้หน้างานมาเพิ่มรายการทีหลังตอนเสนอราคาจริง
   const validItems = buildValidItems(items);
-  if (validItems.length === 0) {
-    return res.status(400).json({ error: 'กรุณาเพิ่มรายการสินค้าอย่างน้อยหนึ่งรายการ' });
-  }
 
   let conn;
   try {
@@ -335,9 +334,6 @@ router.put('/:id', async (req, res) => {
   }
 
   const validItems = buildValidItems(items);
-  if (validItems.length === 0) {
-    return res.status(400).json({ error: 'กรุณาเพิ่มรายการสินค้าอย่างน้อยหนึ่งรายการ' });
-  }
 
   let conn;
   try {
