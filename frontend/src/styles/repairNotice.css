@@ -75,14 +75,15 @@
   border: 2px solid #e2e8f0; border-radius: 14px; padding: 9px 12px; cursor: pointer;
   transition: border-color .15s, background .15s; min-height: 58px;
 }
-.rnf2-item.on { border-color: #2563eb; background: #eff6ff; }
+.rnf2-item.on { border-color: #2563eb; border-width: 2.5px; background: #dbeafe; box-shadow: 0 0 0 1px #2563eb inset; }
 .rnf2-thumb { width: 62px; height: 46px; object-fit: contain; flex-shrink: 0; }
 .rnf2-item-label { flex: 1; font-weight: 600; color: #0f172a; font-size: 14px; }
 .rnf2-check {
-  width: 26px; height: 26px; border-radius: 8px; border: 2px solid #cbd5e1; flex-shrink: 0;
-  display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 800; font-size: 14px;
+  width: 28px; height: 28px; border-radius: 7px; border: 2.5px solid #cbd5e1; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center; background: #fff; color: #2563eb; font-weight: 900; font-size: 20px;
+  line-height: 1;
 }
-.rnf2-check.on { background: #2563eb; border-color: #2563eb; }
+.rnf2-check.on { background: #fff; border-color: #2563eb; color: #2563eb; }
 .rnf2-note {
   width: 100%; box-sizing: border-box; padding: 10px 12px; border: 1.5px solid #e2e8f0;
   border-radius: 10px; font-size: 14px; outline: none;
@@ -97,12 +98,13 @@
   display: inline-flex; align-items: center; gap: 8px; padding: 9px 16px; border: 2px solid #e2e8f0;
   border-radius: 12px; background: #fff; cursor: pointer; font-size: 14px; font-weight: 700; color: #0f172a;
 }
-.rnf2-chip.on { border-color: #2563eb; background: #eff6ff; }
+.rnf2-chip.on { border-color: #2563eb; border-width: 2.5px; background: #dbeafe; box-shadow: 0 0 0 1px #2563eb inset; }
 .rnf2-check-sm {
-  width: 20px; height: 20px; border-radius: 6px; border: 2px solid #cbd5e1; flex-shrink: 0;
-  display: inline-flex; align-items: center; justify-content: center; color: #fff; font-weight: 800; font-size: 12px;
+  width: 20px; height: 20px; border-radius: 6px; border: 2.5px solid #cbd5e1; flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center; background: #fff; color: #2563eb; font-weight: 900; font-size: 14px;
+  line-height: 1;
 }
-.rnf2-check-sm.on { background: #2563eb; border-color: #2563eb; }
+.rnf2-check-sm.on { background: #fff; border-color: #2563eb; color: #2563eb; }
 
 .rnf2-textarea {
   width: 100%; box-sizing: border-box; padding: 11px 12px; font-size: 14px;
