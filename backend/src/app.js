@@ -53,6 +53,7 @@ const serviceItemsRoutes = require('./routes/service-items.routes');
 const warrantiesRoutes = require('./routes/warranties.routes');
 const productsRoutes = require('./routes/products.routes');
 const repairNoticesRoutes = require('./routes/repairNotices.routes');
+const lineWebhookRoutes = require('./routes/lineWebhook.routes');
 
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 const FRONTEND_DIST = path.join(__dirname, '..', '..', 'frontend', 'dist');
@@ -112,7 +113,11 @@ function createApp() {
   // ปิด CSP/COEP ไว้ก่อน เพราะ SPA + รูปจาก Google Fonts/landing อาจโดนบล็อก — ค่อยเปิดเมื่อ audit ครบ
   app.use(helmet({ contentSecurityPolicy: false, crossOriginEmbedderPolicy: false }));
   app.use(cors(corsOptions));
-  app.use(express.json());
+  // เก็บ raw body ไว้ด้วย — LINE webhook ต้องใช้ตรวจลายเซ็น HMAC (X-Line-Signature)
+  // ซึ่งคำนวณจาก body ดิบก่อน parse (ดู routes/lineWebhook.routes.js)
+  app.use(express.json({
+    verify: (req, res, buf) => { req.rawBody = buf; }
+  }));
 
   app.use('/api/auth', authRoutes);
   app.use('/api/racks', rackRoutes);
@@ -129,6 +134,7 @@ function createApp() {
   app.use('/api/warranties', warrantiesRoutes);
   app.use('/api/products', productsRoutes);
   app.use('/api/repair-notices', repairNoticesRoutes);
+  app.use('/api/line', lineWebhookRoutes);
 
   app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
   app.get('/api/landing-images', (req, res) => {
