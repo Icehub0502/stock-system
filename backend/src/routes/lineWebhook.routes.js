@@ -96,10 +96,33 @@ function todayStr() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+// เลือกใช้เฉพาะตอนชื่อที่พิมพ์มาตรงกับสินค้าในแคตาล็อกแบบไม่มีข้อโต้แย้ง (ตัดช่องว่าง
+// แล้วตรงกันเป๊ะ 1 รายการ) — ตั้งใจไม่ใช้ LIKE คลุมเครือ (เช่น "แร็ค" ตรงกับ "แร็ค OEM"/
+// "แร็คบิ้ว"/"แร็คมือสอง" หลายรายการพร้อมกัน) เพราะเดาผิดจะได้ชื่อ/ประกันผิดในใบเสนอราคา
+// ไม่ match ก็ยังเป็นรายการได้ปกติ แค่ไม่ได้ผูกหมวดหมู่/ประกันให้เท่านั้น รวม "ชุด"
+// (is_set=1 เช่น ชุดโปรช่วงล่างเก๋ง/กระบะ) ไว้ด้วย — บรรทัดในเซคชัน "รายการ:" ถือว่า
+// ตั้งใจคิดราคาจริงแล้ว จึงดึง set_price ของแคตาล็อกมาใช้ได้เมื่อข้อความไม่ได้ระบุราคาเอง
+async function matchServiceItem(conn, name) {
+  const normalized = name.replace(/\s+/g, '');
+  const [rows] = await conn.execute(
+    `SELECT si.product_name, si.category, si.is_set, si.set_price,
+            w.warranty_name, w.warranty_year, w.warranty_month, w.warranty_km
+     FROM service_items si
+     LEFT JOIN warranties w ON si.warranty_id = w.id
+     WHERE si.is_active = 1 AND REPLACE(si.product_name, ' ', '') = ?
+     LIMIT 2`,
+    [normalized]
+  );
+  return rows.length === 1 ? rows[0] : null;
+}
+
 // สร้าง ลูกค้า → รถ → ใบเสนอราคา → ใบแจ้งซ่อม ในทรานแซกชันเดียว ตาม flow
 // เดียวกับ POST /quotations ทุกประการ ต่างแค่:
 //   - จับคู่ลูกค้าเดิมด้วยเบอร์โทรก่อน (คนเดิมโทรมาซ้ำ ไม่สร้างลูกค้าใหม่ซ้อน)
 //   - จับคู่รถเดิมด้วยทะเบียนใต้ลูกค้าคนนั้น
+//   - รายการสินค้าที่พาร์สได้ (ชื่อ+ราคาบรรทัดเดียวกัน) จะพยายามจับคู่กับแคตาล็อก
+//     รายการสินค้า/บริการ เพื่อดึงชื่อมาตรฐาน+ประกันมาใส่ให้ ถ้าจับคู่ไม่ได้ก็ยัง
+//     ใส่เป็นรายการด้วยชื่อที่พิมพ์มาตามเดิม
 async function createQuotationFromQueue(parsed) {
   let conn;
   try {
@@ -143,14 +166,43 @@ async function createQuotationFromQueue(parsed) {
       vehicleId = result.insertId;
     }
 
-    const quotationDate = todayStr();
+    // จับคู่แต่ละรายการกับแคตาล็อกก่อน insert quotation หลัก เพราะต้องใช้ผลรวม
+    // ราคามาเป็น total_amount และชื่อสินค้ามาเป็น product_summary
+    const resolvedItems = [];
+    for (const item of parsed.items) {
+      const match = await matchServiceItem(conn, item.name);
+      // item.price === null คือไม่มีราคาในข้อความ (เช่น "ชุดโปรช่วงล่าง เก๋ง") —
+      // ใช้ set_price ของแคตาล็อกถ้า match เป็นชุด ไม่งั้น 0 ให้หน้างานกรอกเอง
+      const unit_price = item.price != null ? item.price : Number(match?.set_price || 0);
+      resolvedItems.push({
+        product_name: match ? match.product_name : item.name,
+        quantity: 1,
+        unit_price,
+        warranty_name: match?.warranty_name || null,
+        warranty_year: match?.warranty_year || 0,
+        warranty_month: match?.warranty_month || 0,
+        warranty_km: match?.warranty_km || 0,
+      });
+    }
+    const total_amount = resolvedItems.reduce((sum, it) => sum + it.quantity * it.unit_price, 0);
+    const product_summary = resolvedItems.map((it) => it.product_name).join(', ');
+
+    const quotationDate = parsed.quotation_date || todayStr();
     const quotation_no = await generateQuotationNo(conn);
     const [quotationResult] = await conn.execute(
       `INSERT INTO quotations (quotation_no, quotation_date, customer_id, vehicle_id, mileage, remark, product_summary, total_amount, queue_no, symptom)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [quotation_no, quotationDate, customerId, vehicleId, 0, null, '', 0, parsed.queue_no || null, parsed.symptom || null]
+      [quotation_no, quotationDate, customerId, vehicleId, 0, parsed.remark || null, product_summary, total_amount, parsed.queue_no || null, parsed.symptom || null]
     );
     const quotationId = quotationResult.insertId;
+
+    for (const item of resolvedItems) {
+      await conn.execute(
+        `INSERT INTO quotation_items (quotation_id, product_id, product_name, quantity, unit_price, warranty_name, warranty_year, warranty_month, warranty_km)
+         VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?)`,
+        [quotationId, item.product_name, item.quantity, item.unit_price, item.warranty_name, item.warranty_year, item.warranty_month, item.warranty_km]
+      );
+    }
 
     // ใบแจ้งซ่อมเปล่าคู่กัน — เหมือน POST /quotations ที่สร้างให้ทันทีเพื่อให้รถ
     // โผล่ในหน้าใบแจ้งซ่อมโดยไม่ต้องรออนุมัติ
@@ -164,7 +216,7 @@ async function createQuotationFromQueue(parsed) {
     }
 
     await conn.commit();
-    return { quotation_no };
+    return { quotation_no, itemCount: resolvedItems.length, totalAmount: total_amount, hasNote: Boolean(parsed.remark) };
   } catch (err) {
     if (conn) {
       try { await conn.rollback(); } catch (rollbackErr) { console.error('Rollback error:', rollbackErr); }
@@ -200,11 +252,15 @@ router.post('/webhook', async (req, res) => {
     if (messageId) markProcessed(messageId);
 
     try {
-      const { quotation_no } = await createQuotationFromQueue(parsed);
+      const { quotation_no, itemCount, totalAmount, hasNote } = await createQuotationFromQueue(parsed);
       created.push(quotation_no);
+      const itemLine = itemCount > 0
+        ? `รายการ ${itemCount} ชิ้น รวม ${totalAmount.toLocaleString()} บาท`
+        : 'ยังไม่มีรายการสินค้า (เพิ่มในแอปได้)';
+      const noteLine = hasNote ? '\n📝 มีข้อความเพิ่มเติมที่ไม่ได้แยกเป็นรายการ ดูในหมายเหตุของใบเสนอราคา' : '';
       await replyToLine(
         event.replyToken,
-        `✅ สร้างใบเสนอราคา ${quotation_no} แล้ว\nคิว ${parsed.queue_no || '-'} · ${parsed.customer_name}${parsed.license_plate ? ` · ${parsed.license_plate}` : ''}`
+        `✅ สร้างใบเสนอราคา ${quotation_no} แล้ว\nคิว ${parsed.queue_no || '-'} · ${parsed.customer_name}${parsed.license_plate ? ` · ${parsed.license_plate}` : ''}\n${itemLine}${noteLine}`
       );
     } catch (err) {
       console.error('Error creating quotation from LINE message:', err);
