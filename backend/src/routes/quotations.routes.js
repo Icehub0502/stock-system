@@ -496,6 +496,22 @@ router.patch('/:id/approve', async (req, res) => {
       [receiptId, id]
     );
 
+    // ใบเสนอราคาปกติที่สร้างจากหน้าเว็บมีใบแจ้งซ่อมคู่กันมาตั้งแต่ตอนสร้างแล้ว
+    // (ดู POST / ด้านบน) แต่ใบที่บอทไลน์สร้างตั้งใจไม่สร้างใบแจ้งซ่อมให้ทันที —
+    // รอถึงตอนอนุมัติแบบนี้ค่อยสร้าง (หน้างานได้ตรวจสอบร่างจากไลน์ก่อนแล้ว)
+    const [existingNotice] = await conn.execute(
+      'SELECT id FROM repair_notices WHERE quotation_id = ? LIMIT 1',
+      [id]
+    );
+    if (existingNotice.length === 0) {
+      const rnCode = await generateRepairNoticeCode(conn);
+      await conn.execute(
+        `INSERT INTO repair_notices (code, customer_id, vehicle_id, quotation_id, notice_date, checklist)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [rnCode, quotation.customer_id, quotation.vehicle_id, id, quotation.quotation_date, '{}']
+      );
+    }
+
     await conn.commit();
 
     res.json({
