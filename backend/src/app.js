@@ -158,9 +158,21 @@ function createApp() {
   app.use('/landing-assets', express.static(PUBLIC_DIR));
 
   // เสิร์ฟไฟล์ frontend ที่ build แล้ว (รัน `npm run build` ใน /frontend ก่อน)
+  // ไฟล์ใน /assets มีชื่อ hash ต่อท้ายจาก Vite (เปลี่ยนทุกครั้งที่ build ใหม่) จึง
+  // cache ยาวได้ปลอดภัย ส่วน index.html ต้องห้าม cache เพื่อให้ผู้ใช้ได้เวอร์ชันใหม่
+  // เสมอตอน deploy ใหม่ (ไม่งั้นเบราว์เซอร์จะยังชี้ไปที่ asset hash เดิมที่ไม่มีแล้ว)
   if (fs.existsSync(FRONTEND_DIST)) {
-    app.use(express.static(FRONTEND_DIST));
+    app.use(
+      express.static(FRONTEND_DIST, {
+        setHeaders: (res, filePath) => {
+          if (filePath.includes(`${path.sep}assets${path.sep}`)) {
+            res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+          }
+        },
+      })
+    );
     app.get(/^\/(?!api).*/, (req, res) => {
+      res.setHeader('Cache-Control', 'no-cache');
       res.sendFile(path.join(FRONTEND_DIST, 'index.html'));
     });
   }
