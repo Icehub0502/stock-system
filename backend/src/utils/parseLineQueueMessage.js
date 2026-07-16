@@ -1,19 +1,24 @@
 // แยกข้อความ "คิวรถเข้า" จากไลน์กลุ่มของร้าน ให้กลายเป็นข้อมูลใบเสนอราคา
 //
 // รูปแบบข้อความ (label:ค่า — ลำดับ label สลับกันได้ หลาย label ในบรรทัดเดียวกันได้):
-//   คิว:1
-//   วันที่:17/07/26
-//   ชื่อลูกค้า:คุณB
-//   เบอร์โทร:081-555-9999
-//   ยี่ห้อรถ:Honda รุ่นรถ:Civic
-//   ทะเบียนรถ:3กอ5222
-//   อาการ:เช็คช่วงล่าง
-//   รายการ:
-//   แร็ค OEM 5000
-//   ค่าแรง 2000
-//   ชุดโปรช่วงล่าง เก๋ง
-//   หมายเหตุ:
-//   ลูกค้ามัดจำ 2000 บาท
+//
+//   Pattern 1 — ตอนรับรถ (ไม่มีรายการ):
+//     คิว:4
+//     วันที่:15/07/26
+//     ชื่อลูกค้า:คุณแอน
+//     เบอโทร:084-140-0684
+//     ยี่ห้อรถ:Honda รุ่นรถ:CRV G2
+//     ทะเบียนรถ:6ขย1994
+//     อาการ:ช่วงล่างดัง
+//
+//   Pattern 2 — ตอนเสนอราคา (คัดลอก Pattern 1 มาแล้วเติม รายการ:):
+//     ...หัวข้อมูลเดิมชุดเดียวกัน...
+//     รายการ:
+//      - แร็ค OEM  5000
+//      - ค่าแรง 2000
+//      - ชุดโปรช่วงล่าง เก๋ง 6000
+//      - โช๊ค 4 ต้น รวมอุปกรณ์ 10000
+//     รวม 23000
 //
 // วิธีอ่าน: ตัดข้อความทั้งก้อนด้วยตำแหน่งของ "label:" แต่ละตัว (ไม่สนใจการขึ้น
 // บรรทัดใหม่) — ค่าของ label หนึ่ง ๆ คือข้อความตั้งแต่หลัง ":" จนถึงจุดเริ่มของ
@@ -21,10 +26,18 @@
 // ตัดถูกจุดโดยอัตโนมัติ (ไม่ต้องขึ้นบรรทัดใหม่ต่อ label) และ "อาการ::เช็คช่วงล่าง"
 // (โคลอนซ้ำ) ก็อ่านค่าได้ถูกต้องเช่นกัน (":+" กินโคลอนติดกันทั้งหมด)
 //
-// "รายการ:" และ "หมายเหตุ:" เป็น section (ค่าอาจมีหลายบรรทัด) — ทุกบรรทัดใต้
-// "รายการ:" ถือว่าเป็นรายการสินค้าเจตนาจริง (ไม่ใช่แค่คำอธิบายลอย ๆ เหมือน
-// pattern แบบเดิมที่ต้องเดาจากหน้าตาบรรทัด) แต่ละบรรทัดจับคู่กับแคตาล็อกสินค้า/
-// บริการในระบบเพื่อดึงชื่อ/ราคามาตรฐาน+ประกันมาใส่ให้ (ดู lineWebhook.routes.js)
+// "วันที่:" ที่ร้านพิมพ์มาไม่ได้ใช้ — ใบเสนอราคาใช้วันที่สร้างจริงของระบบเสมอ
+// (กันความสับสนเรื่องคิว/วันที่ที่พิมพ์มือผิดพลาด)
+//
+// "รายการ:" เป็น section (หลายบรรทัด) — ทุกบรรทัดถือว่าเป็นรายการสินค้าเจตนาจริง
+// บรรทัดขึ้นต้นด้วย "-"/"•" (ตามที่ร้านพิมพ์) ตัดเครื่องหมายทิ้งก่อนอ่านชื่อ ทุก
+// รายการจะถูกจับคู่กับแคตาล็อกสินค้า/บริการในระบบเสมอ (ดู lineWebhook.routes.js)
+// เพื่อดึงชื่อ/ประกันมาตรฐานมาใส่ — ราคาใช้ตัวที่พิมพ์มาถ้ามี ถ้าไม่มีค่อยใช้ราคา
+// ของแคตาล็อก (เช่น ราคาชุดของ "ชุดโปรช่วงล่างเก๋ง")
+//
+// บรรทัด "รวม xxxxx" ในเซคชัน "รายการ:" ไม่ใช่รายการ — เก็บเป็นยอดรวมที่ร้าน
+// แจ้งมาเอง (stated_total) ให้ webhook เทียบกับผลรวมที่คำนวณจริงแล้วเตือนถ้าไม่
+// ตรงกัน ไม่มีบรรทัดนี้ก็ไม่เป็นไร ระบบคำนวณผลรวมเองอยู่แล้ว
 //
 // คืน null ถ้าข้อความไม่มี label "คิว" เลย (ไม่ใช่ข้อความคิว) หรือไม่มีชื่อลูกค้า —
 // ผู้เรียก (LINE webhook) จะข้ามข้อความนั้นเงียบ ๆ เพราะในกลุ่มมีแชตเรื่องอื่นปนอยู่
@@ -57,35 +70,65 @@ function tokenize(text) {
   return fields;
 }
 
-// แปลงวันที่ dd/mm/yy(yy) → ISO — ตีความปีย่อ 2 หลักเป็น ค.ศ. 20xx (ตรงกับที่ร้าน
-// พิมพ์จริง เช่น "26" หมายถึง 2026) ไม่ใช่ปี พ.ศ. แปลงผิดรูปแบบ/วันที่ไม่จริง → null
-function parseThaiDate(value) {
-  const m = /^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/.exec(value.trim());
-  if (!m) return null;
-  const day = Number(m[1]);
-  const month = Number(m[2]);
-  const year = m[3].length === 2 ? 2000 + Number(m[3]) : Number(m[3]);
-  const d = new Date(year, month - 1, day);
-  if (d.getFullYear() !== year || d.getMonth() !== month - 1 || d.getDate() !== day) return null;
-  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-}
-
-// บรรทัดในเซคชัน "รายการ:" — ลงท้ายด้วยตัวเลขก็ถือเป็นราคา ไม่มีเลขก็ยังเป็น
-// รายการอยู่ (price: null) ให้ตอนแมตช์แคตาล็อกไปหาราคามาตรฐานมาใส่แทน (เช่น
-// "ชุดโปรช่วงล่าง เก๋ง" ไม่มีราคาในข้อความ แต่มี set price อยู่ในระบบแล้ว)
-function parseSectionItemLine(line) {
-  const trimmed = line.trim();
-  if (!trimmed) return null;
-  const m = /^(.*?)[\s]*([\d,]+)\s*(?:บาท)?$/.exec(trimmed);
-  if (m && m[1].trim()) {
-    return { name: m[1].trim(), price: Number(m[2].replace(/,/g, '')) };
-  }
-  return { name: trimmed, price: null };
-}
-
 function todayStr() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+// บรรทัดในเซคชัน "รายการ:" — ตัดเครื่องหมายหัวข้อ (-, •, ·) และคำ "เพิ่มเติม"
+// นำหน้าทิ้งก่อน แล้วลงท้ายด้วยตัวเลขก็ถือเป็นราคาในบรรทัดเดียวกัน ไม่มีเลขก็ยัง
+// เป็นชื่อรายการอยู่ — รอราคาจากบรรทัดถัดไปถ้าเป็นตัวเลขล้วน (ร้านบางทีพิมพ์ชื่อ
+// รายการกับราคาคนละบรรทัด เช่น "เพิ่มเติม รายการโช็ค 4ต้น" ตามด้วย "15500")
+// ถ้าจบเซคชันแล้วยังไม่มีราคา ก็ยังเป็นรายการอยู่ (price: null) ให้ตอนแมตช์
+// แคตาล็อกไปหาราคามาตรฐานมาใส่แทน (เช่น ชุดที่ไม่ได้ระบุราคาในข้อความ)
+function cleanItemName(raw) {
+  return raw.trim().replace(/^[-•·]\s*/, '').replace(/^เพิ่มเติม\s*/, '').trim();
+}
+
+function parseItemSection(sectionText) {
+  const items = [];
+  let statedTotal = null;
+  let pendingName = null; // ชื่อรายการที่ยังไม่มีราคา รอดูบรรทัดถัดไป
+
+  const flushPending = () => {
+    if (pendingName) {
+      items.push({ name: pendingName, price: null });
+      pendingName = null;
+    }
+  };
+
+  for (const rawLine of sectionText.split(/\r?\n/)) {
+    const line = cleanItemName(rawLine);
+    if (!line) continue;
+
+    const totalMatch = /^รวม\s*:?\s*([\d,]+)\s*(?:บาท)?\s*$/.exec(line);
+    if (totalMatch) {
+      flushPending();
+      statedTotal = Number(totalMatch[1].replace(/,/g, '')); // ตัวสุดท้ายชนะ = ยอดรวมทั้งบิล
+      continue;
+    }
+
+    // บรรทัดตัวเลขล้วน = ราคาของรายการชื่อบรรทัดก่อนหน้าที่ยังไม่มีราคา
+    if (/^[\d,]+\s*(?:บาท)?$/.test(line)) {
+      if (pendingName) {
+        items.push({ name: pendingName, price: Number(line.replace(/[^\d]/g, '')) });
+        pendingName = null;
+      }
+      // ไม่มีรายการค้างรอราคาอยู่ก่อนหน้า = ตัวเลขลอย ๆ ไม่รู้ของอะไร ไม่เดา ข้ามไป
+      continue;
+    }
+
+    flushPending();
+    const m = /^(.*?)[\s]*([\d,]+)\s*(?:บาท)?$/.exec(line);
+    if (m && m[1].trim()) {
+      items.push({ name: m[1].trim(), price: Number(m[2].replace(/,/g, '')) });
+    } else {
+      pendingName = line;
+    }
+  }
+  flushPending();
+
+  return { items, statedTotal };
 }
 
 function parseLineQueueMessage(text) {
@@ -98,14 +141,11 @@ function parseLineQueueMessage(text) {
   if (!customerName) return null; // ไม่มีชื่อ = ข้อมูลไม่พอสร้างใบเสนอราคา
 
   const phoneRaw = (fields['เบอร์โทร'] ?? fields['เบอโทร'] ?? '').trim();
-  const items = (fields['รายการ'] || '')
-    .split(/\r?\n/)
-    .map(parseSectionItemLine)
-    .filter(Boolean);
+  const { items, statedTotal } = parseItemSection(fields['รายการ'] || '');
 
   return {
     queue_no: fields['คิว']?.trim() || null,
-    quotation_date: (fields['วันที่'] && parseThaiDate(fields['วันที่'])) || todayStr(),
+    quotation_date: todayStr(), // ไม่ใช้วันที่ที่พิมพ์มาในข้อความ — ระบบตั้งวันที่สร้างจริงเสมอ
     customer_name: customerName,
     phone: phoneRaw ? phoneRaw.replace(/\D/g, '') : null,
     brand: fields['ยี่ห้อรถ']?.trim() || null,
@@ -114,6 +154,7 @@ function parseLineQueueMessage(text) {
     symptom: fields['อาการ']?.trim() || null,
     remark: fields['หมายเหตุ']?.trim() || null,
     items,
+    stated_total: statedTotal,
   };
 }
 

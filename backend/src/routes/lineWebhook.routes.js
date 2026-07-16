@@ -17,16 +17,30 @@ const parseLineQueueMessage = require('../utils/parseLineQueueMessage');
 const router = express.Router();
 
 // LINE ส่ง webhook ซ้ำได้ (retry เมื่อคิดว่า timeout) — จำ message id ที่ประมวลผล
-// แล้วไว้กันสร้างใบเสนอราคาซ้ำ เก็บในหน่วยความจำพอ เพราะแอปรันโปรเซสเดียวใน PM2
-// และ retry มาภายในไม่กี่นาที
+// แล้วไว้กันสร้างใบเสนอราคาซ้ำ และจำว่าข้อความไหนสร้างอะไรไว้บ้าง (customer id/
+// vehicle id/repair notice id) ไว้ใช้ตอนพิมพ์ผิดแล้วลบ/เรียกคืนข้อความ (unsend) —
+// ลบใบเสนอราคานั้นให้อัตโนมัติ (ดู handleUnsend) เก็บในหน่วยความจำพอ เพราะแอปรัน
+// โปรเซสเดียวใน PM2 และเรื่องพวกนี้มักเกิดใกล้ ๆ เวลาที่พิมพ์ผิดเท่านั้น
+const MAX_TRACKED = 1000;
 const processedIds = new Set();
 const processedOrder = [];
-const MAX_PROCESSED = 1000;
+const messageQuotations = new Map(); // messageId -> { quotationId, quotationNo, customerId, vehicleId, repairNoticeId, wasNewCustomer, wasNewVehicle }
+const trackedOrder = [];
+
 function markProcessed(id) {
   processedIds.add(id);
   processedOrder.push(id);
-  if (processedOrder.length > MAX_PROCESSED) {
+  if (processedOrder.length > MAX_TRACKED) {
     processedIds.delete(processedOrder.shift());
+  }
+}
+
+function trackMessageQuotation(messageId, info) {
+  if (!messageId) return;
+  messageQuotations.set(messageId, info);
+  trackedOrder.push(messageId);
+  if (trackedOrder.length > MAX_TRACKED) {
+    messageQuotations.delete(trackedOrder.shift());
   }
 }
 
@@ -120,9 +134,11 @@ async function matchServiceItem(conn, name) {
 // เดียวกับ POST /quotations ทุกประการ ต่างแค่:
 //   - จับคู่ลูกค้าเดิมด้วยเบอร์โทรก่อน (คนเดิมโทรมาซ้ำ ไม่สร้างลูกค้าใหม่ซ้อน)
 //   - จับคู่รถเดิมด้วยทะเบียนใต้ลูกค้าคนนั้น
-//   - รายการสินค้าที่พาร์สได้ (ชื่อ+ราคาบรรทัดเดียวกัน) จะพยายามจับคู่กับแคตาล็อก
-//     รายการสินค้า/บริการ เพื่อดึงชื่อมาตรฐาน+ประกันมาใส่ให้ ถ้าจับคู่ไม่ได้ก็ยัง
-//     ใส่เป็นรายการด้วยชื่อที่พิมพ์มาตามเดิม
+//   - ทุกรายการที่พาร์สได้จะพยายามจับคู่กับแคตาล็อกรายการสินค้า/บริการเสมอ เพื่อ
+//     ดึงชื่อมาตรฐาน+ประกันมาใส่ให้ ถ้าจับคู่ไม่ได้ก็ยังใส่เป็นรายการด้วยชื่อที่
+//     พิมพ์มาตามเดิม (ราคาใช้ตัวที่พิมพ์มาก่อนเสมอ ไม่มีค่อยใช้ราคาแคตาล็อก)
+//   - คืนค่า wasNewCustomer/wasNewVehicle/repairNoticeId ไว้ให้ผู้เรียกใช้ตอน
+//     ต้องล้างข้อมูลถ้าข้อความต้นทางถูกลบ/เรียกคืนทีหลัง (ดู handleUnsend)
 async function createQuotationFromQueue(parsed) {
   let conn;
   try {
@@ -131,6 +147,7 @@ async function createQuotationFromQueue(parsed) {
 
     // ลูกค้า: เทียบเบอร์แบบตัดขีด/ช่องว่าง เพราะในฐานข้อมูลพิมพ์มาหลายรูปแบบ
     let customerId = null;
+    let wasNewCustomer = false;
     if (parsed.phone) {
       const [rows] = await conn.execute(
         "SELECT id FROM customers WHERE REPLACE(REPLACE(COALESCE(phone,''), '-', ''), ' ', '') = ? LIMIT 1",
@@ -145,10 +162,12 @@ async function createQuotationFromQueue(parsed) {
         [customerCode, parsed.customer_name, parsed.phone || null]
       );
       customerId = result.insertId;
+      wasNewCustomer = true;
     }
 
     // รถ: มีทะเบียนตรงกันใต้ลูกค้าคนนี้ → ใช้คันเดิม, ไม่งั้นสร้างใหม่ถ้ามีข้อมูลพอ
     let vehicleId = null;
+    let wasNewVehicle = false;
     if (parsed.license_plate) {
       const [rows] = await conn.execute(
         'SELECT id FROM vehicles WHERE customer_id = ? AND license_plate = ? LIMIT 1',
@@ -164,6 +183,7 @@ async function createQuotationFromQueue(parsed) {
         [customerId, parsed.brand || '-', parsed.model || '-', null, parsed.license_plate || null, 0]
       );
       vehicleId = result.insertId;
+      wasNewVehicle = true;
     }
 
     // จับคู่แต่ละรายการกับแคตาล็อกก่อน insert quotation หลัก เพราะต้องใช้ผลรวม
@@ -206,17 +226,30 @@ async function createQuotationFromQueue(parsed) {
 
     // ใบแจ้งซ่อมเปล่าคู่กัน — เหมือน POST /quotations ที่สร้างให้ทันทีเพื่อให้รถ
     // โผล่ในหน้าใบแจ้งซ่อมโดยไม่ต้องรออนุมัติ
+    let repairNoticeId = null;
     if (vehicleId) {
       const rnCode = await generateRepairNoticeCode(conn);
-      await conn.execute(
+      const [rnResult] = await conn.execute(
         `INSERT INTO repair_notices (code, customer_id, vehicle_id, quotation_id, notice_date, checklist)
          VALUES (?, ?, ?, ?, ?, ?)`,
         [rnCode, customerId, vehicleId, quotationId, quotationDate, '{}']
       );
+      repairNoticeId = rnResult.insertId;
     }
 
     await conn.commit();
-    return { quotation_no, itemCount: resolvedItems.length, totalAmount: total_amount, hasNote: Boolean(parsed.remark) };
+    return {
+      quotation_no,
+      quotationId,
+      itemCount: resolvedItems.length,
+      totalAmount: total_amount,
+      hasNote: Boolean(parsed.remark),
+      customerId,
+      vehicleId,
+      repairNoticeId,
+      wasNewCustomer,
+      wasNewVehicle,
+    };
   } catch (err) {
     if (conn) {
       try { await conn.rollback(); } catch (rollbackErr) { console.error('Rollback error:', rollbackErr); }
@@ -225,6 +258,60 @@ async function createQuotationFromQueue(parsed) {
   } finally {
     if (conn) conn.release();
   }
+}
+
+// ข้อความที่สร้างใบเสนอราคาแล้วถูกลบ/เรียกคืนทีหลัง (พิมพ์ผิด) → ลบใบเสนอราคา
+// (cascade ลบ quotation_items ให้เองจาก FK) + ใบแจ้งซ่อมที่คู่กันไปด้วย แล้วลอง
+// ลบลูกค้า/รถที่เพิ่งสร้างใหม่จากข้อความนี้ — ลบแบบ "ลองแล้วปล่อยผ่านถ้าติด FK"
+// เพราะถ้ามีอย่างอื่นมาอ้างอิงลูกค้า/รถนี้ไปแล้ว (เช่นพิมพ์ข้อความใหม่ถูกก่อนลบ
+// อันเก่า) แปลว่าไม่ใช่ของทิ้งเปล่าอีกต่อไป ต้องเก็บไว้
+async function deleteQuotationForMessage(info) {
+  const conn = await pool.getConnection();
+  try {
+    await conn.beginTransaction();
+    if (info.repairNoticeId) {
+      await conn.execute('DELETE FROM repair_notices WHERE id = ?', [info.repairNoticeId]);
+    }
+    await conn.execute('DELETE FROM quotations WHERE id = ?', [info.quotationId]);
+    await conn.commit();
+  } catch (err) {
+    await conn.rollback();
+    throw err;
+  } finally {
+    conn.release();
+  }
+
+  if (info.wasNewVehicle) {
+    try {
+      await pool.execute('DELETE FROM vehicles WHERE id = ?', [info.vehicleId]);
+    } catch (err) {
+      console.log('Vehicle still referenced elsewhere, keeping it:', info.vehicleId);
+    }
+  }
+  if (info.wasNewCustomer) {
+    try {
+      await pool.execute('DELETE FROM customers WHERE id = ?', [info.customerId]);
+    } catch (err) {
+      console.log('Customer still referenced elsewhere, keeping it:', info.customerId);
+    }
+  }
+}
+
+// แยกเป็นฟังก์ชันล้วน (pure) ทดสอบได้โดยไม่ต้องยิง LINE API จริง — โดยเฉพาะ
+// ส่วนเตือนยอดไม่ตรง (mismatchLine) ที่ไม่มีทางสังเกตได้จากเทสต์ end-to-end เลย
+// เพราะ replyToLine คุยกับ LINE API ตรง ๆ ไม่มี side effect อื่นให้ตรวจสอบ
+function buildSuccessReplyText(parsed, info) {
+  const { quotation_no, itemCount, totalAmount, hasNote } = info;
+  const itemLine = itemCount > 0
+    ? `รายการ ${itemCount} ชิ้น รวม ${totalAmount.toLocaleString()} บาท`
+    : 'ยังไม่มีรายการสินค้า (เพิ่มในแอปได้)';
+  const noteLine = hasNote ? '\n📝 มีข้อความเพิ่มเติมที่ไม่ได้แยกเป็นรายการ ดูในหมายเหตุของใบเสนอราคา' : '';
+  // ร้านบางทีก็แจ้งยอดรวมมาเองในข้อความ ("รวม 23000") — เทียบกับที่คำนวณจริง
+  // แล้วเตือนถ้าไม่ตรง กันบิลผิดหลุดไปถึงลูกค้าโดยไม่มีใครสังเกต
+  const mismatchLine = parsed.stated_total != null && parsed.stated_total !== totalAmount
+    ? `\n⚠️ ยอดที่แจ้งในไลน์ (${parsed.stated_total.toLocaleString()} บาท) ไม่ตรงกับผลรวมรายการ (${totalAmount.toLocaleString()} บาท) กรุณาตรวจสอบ`
+    : '';
+  return `✅ สร้างใบเสนอราคา ${quotation_no} แล้ว\nคิว ${parsed.queue_no || '-'} · ${parsed.customer_name}${parsed.license_plate ? ` · ${parsed.license_plate}` : ''}\n${itemLine}${noteLine}${mismatchLine}`;
 }
 
 router.post('/webhook', async (req, res) => {
@@ -239,8 +326,26 @@ router.post('/webhook', async (req, res) => {
 
   const events = Array.isArray(req.body?.events) ? req.body.events : [];
   const created = [];
+  const deleted = [];
 
   for (const event of events) {
+    // ผู้ใช้พิมพ์ผิดแล้วกด "เรียกคืน" ข้อความใน LINE — ถ้าข้อความนั้นเคยสร้าง
+    // ใบเสนอราคาไว้ ให้ลบใบนั้นตาม (ไม่มี replyToken ในอีเวนต์นี้ ตอบกลับไม่ได้)
+    if (event.type === 'unsend') {
+      const messageId = event.unsend?.messageId;
+      const info = messageId && messageQuotations.get(messageId);
+      if (info) {
+        messageQuotations.delete(messageId);
+        try {
+          await deleteQuotationForMessage(info);
+          deleted.push(info.quotation_no);
+        } catch (err) {
+          console.error('Error deleting quotation after LINE unsend:', err);
+        }
+      }
+      continue;
+    }
+
     if (event.type !== 'message' || event.message?.type !== 'text') continue;
 
     const messageId = event.message.id;
@@ -252,16 +357,10 @@ router.post('/webhook', async (req, res) => {
     if (messageId) markProcessed(messageId);
 
     try {
-      const { quotation_no, itemCount, totalAmount, hasNote } = await createQuotationFromQueue(parsed);
-      created.push(quotation_no);
-      const itemLine = itemCount > 0
-        ? `รายการ ${itemCount} ชิ้น รวม ${totalAmount.toLocaleString()} บาท`
-        : 'ยังไม่มีรายการสินค้า (เพิ่มในแอปได้)';
-      const noteLine = hasNote ? '\n📝 มีข้อความเพิ่มเติมที่ไม่ได้แยกเป็นรายการ ดูในหมายเหตุของใบเสนอราคา' : '';
-      await replyToLine(
-        event.replyToken,
-        `✅ สร้างใบเสนอราคา ${quotation_no} แล้ว\nคิว ${parsed.queue_no || '-'} · ${parsed.customer_name}${parsed.license_plate ? ` · ${parsed.license_plate}` : ''}\n${itemLine}${noteLine}`
-      );
+      const info = await createQuotationFromQueue(parsed);
+      created.push(info.quotation_no);
+      trackMessageQuotation(messageId, { ...info, quotation_no: info.quotation_no });
+      await replyToLine(event.replyToken, buildSuccessReplyText(parsed, info));
     } catch (err) {
       console.error('Error creating quotation from LINE message:', err);
       await replyToLine(
@@ -271,7 +370,8 @@ router.post('/webhook', async (req, res) => {
     }
   }
 
-  res.json({ success: true, created });
+  res.json({ success: true, created, deleted });
 });
 
 module.exports = router;
+module.exports.buildSuccessReplyText = buildSuccessReplyText; // ให้เทสต์เรียกตรง ๆ ได้โดยไม่ต้องยิง LINE API จริง

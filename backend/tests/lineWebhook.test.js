@@ -8,6 +8,7 @@ process.env.LINE_CHANNEL_SECRET = TEST_SECRET;
 
 const { createApp } = require('../src/app');
 const pool = require('../src/db/pool');
+const lineWebhookRouter = require('../src/routes/lineWebhook.routes');
 
 const app = createApp();
 
@@ -15,20 +16,29 @@ function sign(rawBody) {
   return crypto.createHmac('sha256', TEST_SECRET).update(rawBody).digest('base64');
 }
 
-function lineBody(text, messageId) {
-  return JSON.stringify({
-    destination: 'Utest',
-    events: [
-      {
-        type: 'message',
-        mode: 'active',
-        timestamp: Date.now(),
-        replyToken: 'test-reply-token',
-        source: { type: 'group', groupId: 'Gtest' },
-        message: { type: 'text', id: messageId, text },
-      },
-    ],
-  });
+function messageEvent(text, messageId) {
+  return {
+    type: 'message',
+    mode: 'active',
+    timestamp: Date.now(),
+    replyToken: 'test-reply-token',
+    source: { type: 'group', groupId: 'Gtest' },
+    message: { type: 'text', id: messageId, text },
+  };
+}
+
+function unsendEvent(messageId) {
+  return {
+    type: 'unsend',
+    mode: 'active',
+    timestamp: Date.now(),
+    source: { type: 'group', groupId: 'Gtest' },
+    unsend: { messageId },
+  };
+}
+
+function eventsBody(events) {
+  return JSON.stringify({ destination: 'Utest', events });
 }
 
 function postWebhook(rawBody, signature = sign(rawBody)) {
@@ -81,12 +91,12 @@ describe('POST /api/line/webhook', () => {
     await pool.end();
   });
 
-  test('ข้อความ label:ค่า ครบทุกช่อง → สร้างลูกค้า+รถ+ใบเสนอราคา(วันที่ตามข้อความ)+ใบแจ้งซ่อม', async () => {
+  test('Pattern 1 (รับรถ) → สร้างลูกค้า+รถ+ใบเสนอราคา(วันนี้ ไม่มีรายการ)+ใบแจ้งซ่อม', async () => {
     const uniq = Date.now().toString().slice(-7);
     const phone = `089${uniq}`; // 10 หลัก ไม่ซ้ำกับข้อมูลเดิมในฐานทดสอบ
     const text = [
       'คิว:9',
-      'วันที่:17/07/26',
+      'วันที่:17/07/26', // ไม่ถูกใช้ — quotation_date ต้องเป็นวันนี้เสมอ
       'ชื่อลูกค้า:คุณเทสไลน์',
       `เบอร์โทร:${phone}`,
       'ยี่ห้อรถ:Toyota รุ่นรถ:Vios',
@@ -94,7 +104,7 @@ describe('POST /api/line/webhook', () => {
       'อาการ:เช็คช่วงล่าง',
     ].join('\n');
 
-    const res = await postWebhook(lineBody(text, `msg-a-${uniq}`));
+    const res = await postWebhook(eventsBody([messageEvent(text, `msg-a-${uniq}`)]));
     expect(res.status).toBe(200);
     expect(res.body.created).toHaveLength(1);
 
@@ -106,7 +116,9 @@ describe('POST /api/line/webhook', () => {
     createdCustomerIds.push(quotation.customer_id);
 
     expect(quotation.queue_no).toBe('9');
-    expect(quotation.quotation_date).toBe('2026-07-17'); // pool ตั้ง dateStrings: true
+    const today = new Date();
+    const expectedDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    expect(quotation.quotation_date).toBe(expectedDate); // pool ตั้ง dateStrings: true
     expect(quotation.symptom).toBe('เช็คช่วงล่าง');
     expect(quotation.status).toBe('pending');
     expect(Number(quotation.total_amount)).toBe(0);
@@ -124,7 +136,7 @@ describe('POST /api/line/webhook', () => {
     expect(notices).toHaveLength(1);
   });
 
-  test('รายการที่พิมพ์มาตรงกับแคตาล็อกเป๊ะ → ผูกชื่อ/ประกันจากแคตาล็อก, ไม่ตรง → คงชื่อที่พิมพ์มา', async () => {
+  test('Pattern 2 (เสนอราคา) — รายการขึ้นต้นด้วย "-" ผูกแคตาล็อกได้, ไม่ตรง → คงชื่อที่พิมพ์มา', async () => {
     const uniq = Date.now().toString().slice(-7);
     const phone = `081${uniq}`;
     // "ค่าแรง" ตรงกับ service_items ในหมวด "ค่าใช้จ่าย" แบบเป๊ะ (ไม่มีประกัน)
@@ -136,11 +148,11 @@ describe('POST /api/line/webhook', () => {
       'ยี่ห้อรถ:Toyota รุ่นรถ:Vellfire',
       'ทะเบียนรถ:5กฒ63',
       'รายการ:',
-      'ค่าแรง 2000',
-      'ซ่อมคอ 3000',
+      ' - ค่าแรง 2000',
+      ' - ซ่อมคอ 3000',
     ].join('\n');
 
-    const res = await postWebhook(lineBody(text, `msg-f-${uniq}`));
+    const res = await postWebhook(eventsBody([messageEvent(text, `msg-f-${uniq}`)]));
     expect(res.status).toBe(200);
     expect(res.body.created).toHaveLength(1);
 
@@ -168,20 +180,17 @@ describe('POST /api/line/webhook', () => {
       `เบอร์โทร:${phone}`,
       'ทะเบียนรถ:5กฒ64',
       'รายการ:',
-      'แร็ค 5500',
-      'ชุดโปรช่วงล่าง เก๋ง',
-      'หมายเหตุ:',
-      'ลูกค้ามัดจำ 2000 บาท',
+      ' - แร็ค 5500',
+      ' - ชุดโปรช่วงล่าง เก๋ง',
     ].join('\n');
 
-    const res = await postWebhook(lineBody(text, `msg-g-${uniq}`));
+    const res = await postWebhook(eventsBody([messageEvent(text, `msg-g-${uniq}`)]));
     expect(res.body.created).toHaveLength(1);
 
     const [[quotation]] = await pool.query('SELECT * FROM quotations WHERE quotation_no = ?', [res.body.created[0]]);
     createdCustomerIds.push(quotation.customer_id);
     // 5500 (แร็ค) + 6500 (ชุดโปรช่วงล่างเก๋ง set_price ในแคตาล็อกทดสอบ)
     expect(Number(quotation.total_amount)).toBe(12000);
-    expect(quotation.remark).toBe('ลูกค้ามัดจำ 2000 บาท');
 
     const [items] = await pool.query(
       'SELECT product_name, unit_price, warranty_name FROM quotation_items WHERE quotation_id = ? ORDER BY id ASC',
@@ -193,19 +202,100 @@ describe('POST /api/line/webhook', () => {
     expect(items[1].warranty_name).toBe('ทดสอบ ลูกหมาก 1 ปี');
   });
 
+  test('ยอดที่ร้านแจ้งมาเอง ("รวม") ตรงกับผลรวมจริง → ข้อความตอบไม่มีคำเตือน', () => {
+    const parsed = { queue_no: '1', customer_name: 'คุณเอ', license_plate: null, stated_total: 5000 };
+    const info = { quotation_no: 'IV000001', itemCount: 1, totalAmount: 5000, hasNote: false };
+    expect(lineWebhookRouter.buildSuccessReplyText(parsed, info)).not.toMatch(/ไม่ตรงกับผลรวม/);
+  });
+
+  test('ยอดที่ร้านแจ้งมาเอง ("รวม") ไม่ตรงกับผลรวมจริง → ข้อความตอบมีคำเตือน', () => {
+    const parsed = { queue_no: '1', customer_name: 'คุณเอ', license_plate: null, stated_total: 34000 };
+    const info = { quotation_no: 'IV000001', itemCount: 2, totalAmount: 33500, hasNote: false };
+    const text = lineWebhookRouter.buildSuccessReplyText(parsed, info);
+    expect(text).toMatch(/ไม่ตรงกับผลรวม/);
+    expect(text).toContain('34,000');
+    expect(text).toContain('33,500');
+  });
+
+  test('ไม่ได้แจ้งยอดรวมมาเลย → ข้อความตอบไม่มีคำเตือน (ใช้ผลรวมที่ระบบคำนวณ)', () => {
+    const parsed = { queue_no: '1', customer_name: 'คุณเอ', license_plate: null, stated_total: null };
+    const info = { quotation_no: 'IV000001', itemCount: 2, totalAmount: 33500, hasNote: false };
+    expect(lineWebhookRouter.buildSuccessReplyText(parsed, info)).not.toMatch(/ไม่ตรงกับผลรวม/);
+  });
+
+  test('พิมพ์ผิดแล้วเรียกคืนข้อความ (unsend) → ลบใบเสนอราคา+ใบแจ้งซ่อม+ลูกค้า/รถที่เพิ่งสร้างใหม่', async () => {
+    const uniq = Date.now().toString().slice(-7);
+    const phone = `083${uniq}`;
+    const messageId = `msg-h-${uniq}`;
+    const text = `คิว:11\nชื่อลูกค้า:คุณพิมพ์ผิด\nเบอร์โทร:${phone}\nทะเบียนรถ:5กฒ65`;
+
+    const createRes = await postWebhook(eventsBody([messageEvent(text, messageId)]));
+    expect(createRes.body.created).toHaveLength(1);
+    const quotationNo = createRes.body.created[0];
+
+    const [[quotation]] = await pool.query('SELECT * FROM quotations WHERE quotation_no = ?', [quotationNo]);
+    const { customer_id: customerId, vehicle_id: vehicleId } = quotation;
+
+    const unsendRes = await postWebhook(eventsBody([unsendEvent(messageId)]));
+    expect(unsendRes.status).toBe(200);
+    expect(unsendRes.body.deleted).toEqual([quotationNo]);
+
+    const [[gone]] = await pool.query('SELECT id FROM quotations WHERE quotation_no = ?', [quotationNo]);
+    expect(gone).toBeUndefined();
+    const [[noticeGone]] = await pool.query('SELECT id FROM repair_notices WHERE vehicle_id = ?', [vehicleId]);
+    expect(noticeGone).toBeUndefined();
+    const [[vehicleGone]] = await pool.query('SELECT id FROM vehicles WHERE id = ?', [vehicleId]);
+    expect(vehicleGone).toBeUndefined();
+    const [[customerGone]] = await pool.query('SELECT id FROM customers WHERE id = ?', [customerId]);
+    expect(customerGone).toBeUndefined();
+  });
+
+  test('unsend ของลูกค้าที่มีอยู่แล้ว → ลบเฉพาะใบเสนอราคา ไม่แตะลูกค้าเดิม', async () => {
+    const uniq = Date.now().toString().slice(-7);
+    const phone = `084${uniq}`;
+    const messageId1 = `msg-i1-${uniq}`;
+    const messageId2 = `msg-i2-${uniq}`;
+
+    const first = await postWebhook(
+      eventsBody([messageEvent(`คิว:12\nชื่อลูกค้า:คุณลูกค้าเดิม\nเบอร์โทร:${phone}`, messageId1)])
+    );
+    createdCustomerIds.push((await pool.query('SELECT customer_id FROM quotations WHERE quotation_no=?', [first.body.created[0]]))[0][0].customer_id);
+    const customerId = createdCustomerIds[createdCustomerIds.length - 1];
+
+    const second = await postWebhook(
+      eventsBody([messageEvent(`คิว:13\nชื่อลูกค้า:คุณลูกค้าเดิม\nเบอร์โทร:${phone}`, messageId2)])
+    );
+    const secondQuotationNo = second.body.created[0];
+
+    // เรียกคืนข้อความที่สอง — ลูกค้าคนนี้ยังมีใบแรกอ้างอิงอยู่ ต้องไม่ถูกลบ
+    const unsendRes = await postWebhook(eventsBody([unsendEvent(messageId2)]));
+    expect(unsendRes.body.deleted).toEqual([secondQuotationNo]);
+
+    const [[stillThere]] = await pool.query('SELECT id FROM customers WHERE id = ?', [customerId]);
+    expect(stillThere).toBeTruthy();
+    const [[secondGone]] = await pool.query('SELECT id FROM quotations WHERE quotation_no = ?', [secondQuotationNo]);
+    expect(secondGone).toBeUndefined();
+  });
+
+  test('unsend ข้อความที่ไม่เคยสร้างใบเสนอราคา (แชตทั่วไป) → เงียบ ไม่มีอะไรเกิดขึ้น', async () => {
+    const res = await postWebhook(eventsBody([unsendEvent(`msg-never-existed-${Date.now()}`)]));
+    expect(res.status).toBe(200);
+    expect(res.body.deleted).toHaveLength(0);
+  });
+
   test('เบอร์โทรเดิมส่งคิวมาอีกครั้ง → ใช้ลูกค้าคนเดิม ไม่สร้างซ้ำ', async () => {
     const uniq = Date.now().toString().slice(-7);
     const phone = `088${uniq}`;
 
     const first = await postWebhook(
-      lineBody(`คิว:1\nชื่อลูกค้า:คุณลูกค้าประจำ\nเบอร์โทร:${phone}\nอาการ:เช็คเบรก`, `msg-b1-${uniq}`)
+      eventsBody([messageEvent(`คิว:1\nชื่อลูกค้า:คุณลูกค้าประจำ\nเบอร์โทร:${phone}\nอาการ:เช็คเบรก`, `msg-b1-${uniq}`)])
     );
     expect(first.body.created).toHaveLength(1);
     const [[q1]] = await pool.query('SELECT customer_id FROM quotations WHERE quotation_no = ?', [first.body.created[0]]);
     createdCustomerIds.push(q1.customer_id);
 
     const second = await postWebhook(
-      lineBody(`คิว:2\nชื่อลูกค้า:คุณลูกค้าประจำ\nเบอร์โทร:${phone}\nอาการ:เปลี่ยนโช้ค`, `msg-b2-${uniq}`)
+      eventsBody([messageEvent(`คิว:2\nชื่อลูกค้า:คุณลูกค้าประจำ\nเบอร์โทร:${phone}\nอาการ:เปลี่ยนโช้ค`, `msg-b2-${uniq}`)])
     );
     expect(second.body.created).toHaveLength(1);
     const [[q2]] = await pool.query('SELECT customer_id FROM quotations WHERE quotation_no = ?', [second.body.created[0]]);
@@ -215,7 +305,7 @@ describe('POST /api/line/webhook', () => {
 
   test('LINE ส่งข้อความเดิมซ้ำ (retry, message id เดิม) → ไม่สร้างใบเสนอราคาซ้ำ', async () => {
     const uniq = Date.now().toString().slice(-7);
-    const body = lineBody(`คิว:4\nชื่อลูกค้า:คุณกันซ้ำ\nเบอร์โทร:087${uniq}`, `msg-c-${uniq}`);
+    const body = eventsBody([messageEvent(`คิว:4\nชื่อลูกค้า:คุณกันซ้ำ\nเบอร์โทร:087${uniq}`, `msg-c-${uniq}`)]);
 
     const first = await postWebhook(body);
     expect(first.body.created).toHaveLength(1);
@@ -228,13 +318,13 @@ describe('POST /api/line/webhook', () => {
   });
 
   test('แชตทั่วไปที่ไม่มี label "คิว" → 200 แต่ไม่สร้างอะไร', async () => {
-    const res = await postWebhook(lineBody('พรุ่งนี้ร้านเปิดกี่โมงครับ', `msg-d-${Date.now()}`));
+    const res = await postWebhook(eventsBody([messageEvent('พรุ่งนี้ร้านเปิดกี่โมงครับ', `msg-d-${Date.now()}`)]));
     expect(res.status).toBe(200);
     expect(res.body.created).toHaveLength(0);
   });
 
   test('ลายเซ็นไม่ถูกต้อง → 401 ไม่ประมวลผลอะไรเลย', async () => {
-    const body = lineBody('คิว:5\nชื่อลูกค้า:คุณปลอมลายเซ็น', `msg-e-${Date.now()}`);
+    const body = eventsBody([messageEvent('คิว:5\nชื่อลูกค้า:คุณปลอมลายเซ็น', `msg-e-${Date.now()}`)]);
     const res = await postWebhook(body, 'forged-signature');
     expect(res.status).toBe(401);
   });
