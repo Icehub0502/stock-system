@@ -1,94 +1,87 @@
 // แยกข้อความ "คิวรถเข้า" จากไลน์กลุ่มของร้าน ให้กลายเป็นข้อมูลใบเสนอราคา
 //
-// รูปแบบข้อความ (label:ค่า — ลำดับ label สลับกันได้ หลาย label ในบรรทัดเดียวกันได้):
+// รูปแบบหลักที่ร้านพิมพ์จริง (ไม่มี label/โคลอนเลย — จำแนกจาก "หน้าตา" แต่ละ
+// บรรทัด ไม่ใช่ตำแหน่ง):
+//   คิว 2
+//   คุณนอก
+//   085-111-9565
+//   Honda Accord G8
+//   9กก4444
+//   เช็คช่วงล่าง
 //
-//   Pattern 1 — ตอนรับรถ (ไม่มีรายการ):
-//     คิว:4
-//     วันที่:15/07/26
-//     ชื่อลูกค้า:คุณแอน
-//     เบอโทร:084-140-0684
-//     ยี่ห้อรถ:Honda รุ่นรถ:CRV G2
-//     ทะเบียนรถ:6ขย1994
-//     อาการ:ช่วงล่างดัง
+//   คิว 1 17/07/26          ← มีวันที่ต่อท้ายก็ได้ (ไม่ถูกใช้ ดูด้านล่าง)
+//   คุณศิริลักษณ์
+//   092-241-9198
+//   Honda civic FC
+//   1ขพ2886
+//   ที่งเปลี่ยนโช้คหลังมา มีอาการเสียงดังข้างหลัง
 //
-//   Pattern 2 — ตอนเสนอราคา (คัดลอก Pattern 1 มาแล้วเติม รายการ:):
-//     ...หัวข้อมูลเดิมชุดเดียวกัน...
-//     รายการ:
-//      - แร็ค OEM  5000
-//      - ค่าแรง 2000
-//      - ชุดโปรช่วงล่าง เก๋ง 6000
-//      - โช๊ค 4 ต้น รวมอุปกรณ์ 10000
-//     รวม 23000
+// การจำแนกหัวข้อมูล: "คิว..." ต้นบรรทัดแรกเสมอ (ตัวเลขต่อจาก "คิว" คือเลขคิว
+// ส่วนวันที่ต่อท้ายถ้ามีไม่ถูกใช้ — ใบเสนอราคาใช้วันที่สร้างจริงของระบบเสมอ),
+// เบอร์โทร/ทะเบียนจากรูปแบบตัวเลข, ขึ้นต้น "คุณ" → ชื่อลูกค้า, มีอักษรละตินไม่ลง
+// ท้ายด้วยราคา → ยี่ห้อ+รุ่นรถ (คำแรก=ยี่ห้อ ที่เหลือ=รุ่น), ที่เหลือทั้งหมดรวม
+// เป็น "อาการ"
 //
-// วิธีอ่าน: ตัดข้อความทั้งก้อนด้วยตำแหน่งของ "label:" แต่ละตัว (ไม่สนใจการขึ้น
-// บรรทัดใหม่) — ค่าของ label หนึ่ง ๆ คือข้อความตั้งแต่หลัง ":" จนถึงจุดเริ่มของ
-// label ถัดไปที่เจอ (หรือจบข้อความ) วิธีนี้ทำให้ "ยี่ห้อรถ:Honda รุ่นรถ:Civic" ถูก
-// ตัดถูกจุดโดยอัตโนมัติ (ไม่ต้องขึ้นบรรทัดใหม่ต่อ label) และ "อาการ::เช็คช่วงล่าง"
-// (โคลอนซ้ำ) ก็อ่านค่าได้ถูกต้องเช่นกัน (":+" กินโคลอนติดกันทั้งหมด)
+// ยังรองรับ label ชัดเจนแบบมีโคลอนด้วย (เผื่อร้านพิมพ์แบบนี้บางครั้ง) — บรรทัดที่
+// ขึ้นต้นด้วย "ยี่ห้อรถ"/"รุ่นรถ"/"ทะเบียนรถ"/"อาการ"/"หมายเหตุ" (โคลอนมีหรือไม่มีก็
+// ได้) จะใช้ label นั้นแทนการเดาจากหน้าตา — "ยี่ห้อรถ:Honda รุ่นรถ:Civic" บรรทัด
+// เดียวกันก็ตัดถูกจุด
 //
-// "วันที่:" ที่ร้านพิมพ์มาไม่ได้ใช้ — ใบเสนอราคาใช้วันที่สร้างจริงของระบบเสมอ
-// (กันความสับสนเรื่องคิว/วันที่ที่พิมพ์มือผิดพลาด)
+// "รายการ" (มีโคลอนหรือไม่มีก็ได้ ไม่ต้องมีเนื้อหาต่อท้ายบรรทัดเดียวกัน) เป็นจุด
+// เริ่ม section รายการสินค้า — ทุกบรรทัดหลังจากนี้ถือว่าเป็นรายการเจตนาจริง จนจบ
+// ข้อความ:
+//   รายการ:
+//    - แร็ค OEM  5000
+//    - ค่าแรง 2000
+//    - ชุดโปรช่วงล่าง เก๋ง 6000
+//   เพิ่มเติม รายการโช็ค 4ต้น
+//   15500
+//   รวม 23000
+// บรรทัดขึ้นต้นด้วย "-"/"•" ตัดเครื่องหมายทิ้งก่อนอ่านชื่อ, ชื่อกับราคาคนละบรรทัด
+// (ชื่อไม่มีเลขท้ายบรรทัด แล้วบรรทัดถัดไปเป็นตัวเลขล้วน) จะรวมเป็นรายการเดียวกัน
+// ทุกรายการจะถูกจับคู่กับแคตาล็อกสินค้า/บริการในระบบเสมอ (ดู lineWebhook.routes.js)
+// เพื่อดึงชื่อ/ประกันมาตรฐานมาใส่ — ราคาใช้ตัวที่พิมพ์มาถ้ามี ไม่มีค่อยใช้ราคา
+// ของแคตาล็อก (เช่น ราคาชุดของ "ชุดโปรช่วงล่างเก๋ง") บรรทัด "รวม xxxxx" ไม่ใช่
+// รายการ — เก็บเป็นยอดรวมที่ร้านแจ้งมาเอง (stated_total) ให้ webhook เทียบกับ
+// ผลรวมที่คำนวณจริงแล้วเตือนถ้าไม่ตรง ไม่มีบรรทัดนี้ก็ไม่เป็นไร ระบบคำนวณเองอยู่แล้ว
 //
-// "รายการ:" เป็น section (หลายบรรทัด) — ทุกบรรทัดถือว่าเป็นรายการสินค้าเจตนาจริง
-// บรรทัดขึ้นต้นด้วย "-"/"•" (ตามที่ร้านพิมพ์) ตัดเครื่องหมายทิ้งก่อนอ่านชื่อ ทุก
-// รายการจะถูกจับคู่กับแคตาล็อกสินค้า/บริการในระบบเสมอ (ดู lineWebhook.routes.js)
-// เพื่อดึงชื่อ/ประกันมาตรฐานมาใส่ — ราคาใช้ตัวที่พิมพ์มาถ้ามี ถ้าไม่มีค่อยใช้ราคา
-// ของแคตาล็อก (เช่น ราคาชุดของ "ชุดโปรช่วงล่างเก๋ง")
-//
-// บรรทัด "รวม xxxxx" ในเซคชัน "รายการ:" ไม่ใช่รายการ — เก็บเป็นยอดรวมที่ร้าน
-// แจ้งมาเอง (stated_total) ให้ webhook เทียบกับผลรวมที่คำนวณจริงแล้วเตือนถ้าไม่
-// ตรงกัน ไม่มีบรรทัดนี้ก็ไม่เป็นไร ระบบคำนวณผลรวมเองอยู่แล้ว
-//
-// คืน null ถ้าข้อความไม่มี label "คิว" เลย (ไม่ใช่ข้อความคิว) หรือไม่มีชื่อลูกค้า —
-// ผู้เรียก (LINE webhook) จะข้ามข้อความนั้นเงียบ ๆ เพราะในกลุ่มมีแชตเรื่องอื่นปนอยู่
-const LABELS = [
-  'คิว',
-  'วันที่',
-  'ชื่อลูกค้า',
-  'เบอร์โทร',
-  'เบอโทร',
-  'ยี่ห้อรถ',
-  'รุ่นรถ',
-  'ทะเบียนรถ',
-  'อาการ',
-  'รายการ',
-  'หมายเหตุ',
-];
-const LABEL_RE = new RegExp(`(${LABELS.join('|')})\\s*:+\\s*`, 'g');
+// คืน null ถ้าบรรทัดแรกไม่ขึ้นต้นด้วย "คิว" หรือไม่มีชื่อลูกค้า — ผู้เรียก (LINE
+// webhook) จะข้ามข้อความนั้นเงียบ ๆ เพราะในกลุ่มมีแชตเรื่องอื่นปนอยู่
 
-// แยกข้อความดิบเป็น { label: valueText } — ค่าอาจมีหลายบรรทัดถ้าเป็น section
-function tokenize(text) {
-  const matches = [...text.matchAll(LABEL_RE)];
-  const fields = {};
-  for (let i = 0; i < matches.length; i += 1) {
-    const label = matches[i][1];
-    const valueStart = matches[i].index + matches[i][0].length;
-    const valueEnd = i + 1 < matches.length ? matches[i + 1].index : text.length;
-    const value = text.slice(valueStart, valueEnd).trim();
-    if (!(label in fields)) fields[label] = value; // label แรกที่เจอชนะ กันบรรทัดซ้ำโดยไม่ตั้งใจ
-  }
-  return fields;
-}
+const PLATE_RE = /^\d?[ก-ฮ]{1,3}\s?\d{1,4}$/;
+const ITEM_SECTION_TRIGGER_RE = /^รายการ\s*:*\s*$/;
+const IGNORED_LINE_RE = /^วันที่\b/; // ร้านบางทีพิมพ์วันที่มาด้วย ไม่ใช้ ไม่งั้นหลุดไปปนกับอาการ
+const OPTIONAL_LABELS = {
+  ชื่อลูกค้า: 'customer_name',
+  เบอร์โทร: 'phone',
+  เบอโทร: 'phone',
+  ยี่ห้อรถ: 'brand',
+  รุ่นรถ: 'model',
+  ทะเบียนรถ: 'license_plate',
+  อาการ: 'symptom',
+  หมายเหตุ: 'remark',
+};
+const OPTIONAL_LABEL_RE = new RegExp(`^(${Object.keys(OPTIONAL_LABELS).join('|')})\\s*:*\\s*(.*)$`);
 
 function todayStr() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-// บรรทัดในเซคชัน "รายการ:" — ตัดเครื่องหมายหัวข้อ (-, •, ·) และคำ "เพิ่มเติม"
-// นำหน้าทิ้งก่อน แล้วลงท้ายด้วยตัวเลขก็ถือเป็นราคาในบรรทัดเดียวกัน ไม่มีเลขก็ยัง
-// เป็นชื่อรายการอยู่ — รอราคาจากบรรทัดถัดไปถ้าเป็นตัวเลขล้วน (ร้านบางทีพิมพ์ชื่อ
-// รายการกับราคาคนละบรรทัด เช่น "เพิ่มเติม รายการโช็ค 4ต้น" ตามด้วย "15500")
-// ถ้าจบเซคชันแล้วยังไม่มีราคา ก็ยังเป็นรายการอยู่ (price: null) ให้ตอนแมตช์
-// แคตาล็อกไปหาราคามาตรฐานมาใส่แทน (เช่น ชุดที่ไม่ได้ระบุราคาในข้อความ)
+// บรรทัดในเซคชัน "รายการ" — ตัดเครื่องหมายหัวข้อ (-, •, ·) และคำ "เพิ่มเติม"
+// นำหน้าทิ้งก่อน
 function cleanItemName(raw) {
   return raw.trim().replace(/^[-•·]\s*/, '').replace(/^เพิ่มเติม\s*/, '').trim();
 }
 
-function parseItemSection(sectionText) {
+// แยกเซคชันรายการ: ชื่อ+ราคาบรรทัดเดียวกันก็ได้ หรือชื่อบรรทัดหนึ่งแล้วราคา
+// (ตัวเลขล้วน) บรรทัดถัดไปก็ได้ (ร้านบางทีพิมพ์ "เพิ่มเติม ชื่อ..." แล้วราคาคนละ
+// บรรทัด) ไม่มีราคาเลยจนจบ section ก็ยังเป็นรายการอยู่ (price: null) ให้ตอนแมตช์
+// แคตาล็อกไปหาราคามาตรฐานมาใส่แทน (เช่น ชุดที่ไม่ได้ระบุราคาในข้อความ)
+function parseItemSectionLines(lines) {
   const items = [];
   let statedTotal = null;
-  let pendingName = null; // ชื่อรายการที่ยังไม่มีราคา รอดูบรรทัดถัดไป
+  let pendingName = null;
 
   const flushPending = () => {
     if (pendingName) {
@@ -97,11 +90,11 @@ function parseItemSection(sectionText) {
     }
   };
 
-  for (const rawLine of sectionText.split(/\r?\n/)) {
+  for (const rawLine of lines) {
     const line = cleanItemName(rawLine);
     if (!line) continue;
 
-    const totalMatch = /^รวม\s*:?\s*([\d,]+)\s*(?:บาท)?\s*$/.exec(line);
+    const totalMatch = /^รวม\s*:*\s*([\d,]+)\s*(?:บาท)?\s*$/.exec(line);
     if (totalMatch) {
       flushPending();
       statedTotal = Number(totalMatch[1].replace(/,/g, '')); // ตัวสุดท้ายชนะ = ยอดรวมทั้งบิล
@@ -134,28 +127,101 @@ function parseItemSection(sectionText) {
 function parseLineQueueMessage(text) {
   if (!text || typeof text !== 'string') return null;
 
-  const fields = tokenize(text);
-  if (!('คิว' in fields)) return null; // ไม่มี label คิว = ไม่ใช่ข้อความคิว (แชตทั่วไปในกลุ่ม)
+  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  if (lines.length === 0 || !/^คิว/.test(lines[0])) return null;
 
-  const customerName = fields['ชื่อลูกค้า']?.trim();
-  if (!customerName) return null; // ไม่มีชื่อ = ข้อมูลไม่พอสร้างใบเสนอราคา
+  // "คิว 2", "คิว2", "คิว:2", "คิว 1 17/07/26" (วันที่ต่อท้ายไม่ถูกใช้) ล้วนอ่านได้
+  const queueMatch = /^คิว\s*:*\s*(\S+)/.exec(lines[0]);
+  const queue_no = queueMatch ? queueMatch[1] : null;
 
-  const phoneRaw = (fields['เบอร์โทร'] ?? fields['เบอโทร'] ?? '').trim();
-  const { items, statedTotal } = parseItemSection(fields['รายการ'] || '');
-
-  return {
-    queue_no: fields['คิว']?.trim() || null,
+  const result = {
+    queue_no,
     quotation_date: todayStr(), // ไม่ใช้วันที่ที่พิมพ์มาในข้อความ — ระบบตั้งวันที่สร้างจริงเสมอ
-    customer_name: customerName,
-    phone: phoneRaw ? phoneRaw.replace(/\D/g, '') : null,
-    brand: fields['ยี่ห้อรถ']?.trim() || null,
-    model: fields['รุ่นรถ']?.trim() || null,
-    license_plate: fields['ทะเบียนรถ'] ? fields['ทะเบียนรถ'].replace(/\s+/g, '') : null,
-    symptom: fields['อาการ']?.trim() || null,
-    remark: fields['หมายเหตุ']?.trim() || null,
-    items,
-    stated_total: statedTotal,
+    customer_name: null,
+    phone: null,
+    brand: null,
+    model: null,
+    license_plate: null,
+    symptom: null,
+    remark: null,
+    items: [],
+    stated_total: null,
   };
+
+  const leftovers = [];
+  let itemSectionStartIndex = -1;
+
+  for (let i = 1; i < lines.length; i += 1) {
+    const line = lines[i];
+
+    if (ITEM_SECTION_TRIGGER_RE.test(line)) {
+      itemSectionStartIndex = i + 1;
+      break; // ทุกอย่างหลังจากนี้เป็นรายการสินค้าล้วน ๆ ไม่จำแนกฟิลด์อื่นต่อ
+    }
+
+    if (IGNORED_LINE_RE.test(line)) continue; // "วันที่:..." — ไม่ใช้ ไม่งั้นหลุดไปปนกับอาการ
+
+    // label ชัดเจนแบบมีโคลอนหรือไม่มีก็ได้ — "ยี่ห้อรถ:Honda รุ่นรถ:Civic" บรรทัด
+    // เดียวกันก็ตัดถูกจุด (แมตช์ "ยี่ห้อรถ" ก่อน แล้วเช็ค "รุ่นรถ" ในเนื้อความที่เหลือ)
+    const labelMatch = OPTIONAL_LABEL_RE.exec(line);
+    if (labelMatch) {
+      const [, label, rest] = labelMatch;
+      if (label === 'ยี่ห้อรถ') {
+        const modelSplit = /^(.*?)\s*รุ่นรถ\s*:*\s*(.*)$/.exec(rest);
+        if (modelSplit) {
+          result.brand = modelSplit[1].trim() || null;
+          result.model = modelSplit[2].trim() || null;
+        } else {
+          result.brand = rest.trim() || null;
+        }
+      } else {
+        const field = OPTIONAL_LABELS[label];
+        let value = rest.trim();
+        if (field === 'phone') value = value.replace(/\D/g, '');
+        if (field === 'license_plate') value = value.replace(/\s+/g, '');
+        result[field] = value || null;
+      }
+      continue;
+    }
+
+    const digitsOnly = line.replace(/[-\s]/g, '');
+    if (!result.phone && /^0\d{8,9}$/.test(digitsOnly)) {
+      result.phone = digitsOnly;
+      continue;
+    }
+    if (!result.license_plate && PLATE_RE.test(line)) {
+      result.license_plate = line.replace(/\s+/g, '');
+      continue;
+    }
+    if (!result.customer_name && /^คุณ/.test(line)) {
+      result.customer_name = line;
+      continue;
+    }
+    if (!result.brand && /[A-Za-z]/.test(line) && !/[\d,]{3,}\s*(?:บาท)?\s*$/.test(line)) {
+      const parts = line.split(/\s+/);
+      result.brand = parts[0];
+      result.model = parts.slice(1).join(' ') || null;
+      continue;
+    }
+    leftovers.push(line);
+  }
+
+  // ไม่มีบรรทัด "คุณ..." → ถือว่าบรรทัดแรกที่เหลือคือชื่อ (เช่น "พี่ต้น")
+  if (!result.customer_name && leftovers.length > 0) {
+    result.customer_name = leftovers.shift();
+  }
+  if (!result.symptom && leftovers.length > 0) {
+    result.symptom = leftovers.join(' ');
+  }
+
+  if (itemSectionStartIndex >= 0) {
+    const { items, statedTotal } = parseItemSectionLines(lines.slice(itemSectionStartIndex));
+    result.items = items;
+    result.stated_total = statedTotal;
+  }
+
+  if (!result.customer_name) return null;
+  return result;
 }
 
 module.exports = parseLineQueueMessage;
