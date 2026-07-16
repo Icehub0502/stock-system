@@ -46,6 +46,10 @@
 //
 // คืน null ถ้าบรรทัดแรกไม่ขึ้นต้นด้วย "คิว" หรือไม่มีชื่อลูกค้า — ผู้เรียก (LINE
 // webhook) จะข้ามข้อความนั้นเงียบ ๆ เพราะในกลุ่มมีแชตเรื่องอื่นปนอยู่
+//
+// ข้อความที่มีคำว่า "ชำระเงินเรียบร้อย"/"ชำระเงินแล้ว" ก็คืน null เช่นกัน — ร้านมัก
+// ส่งข้อมูลคิวเดิมซ้ำพร้อมสรุปยอด/มัดจำ/ยอดค้างตอนลูกค้าจ่ายเงินเสร็จ ไม่ใช่คิวใหม่
+// หรือรายการแก้ไขที่ควรสร้าง/อัปเดตใบเสนอราคา
 
 const PLATE_RE = /^\d?[ก-ฮ]{1,3}\s?\d{1,4}$/;
 const BARE_DATE_RE = /^\d{1,2}\/\d{1,2}\/\d{2,4}$/;
@@ -66,15 +70,32 @@ const OPTIONAL_LABELS = {
   หมายเหตุ: 'remark',
 };
 const OPTIONAL_LABEL_RE = new RegExp(`^(${Object.keys(OPTIONAL_LABELS).join('|')})\\s*:*\\s*(.*)$`);
+// ข้อความแจ้งว่าชำระเงินแล้ว (ส่งซ้ำข้อมูลคิวเดิมพร้อมสรุปยอด/มัดจำ) — ไม่ใช่คิวใหม่
+// หรือรายการแก้ไข บอทต้องไม่จับข้อความนี้เลย ปล่อยผ่านเงียบ ๆ
+const PAID_MESSAGE_RE = /ชำระเงิน\s*(เรียบร้อย|แล้ว)/;
+// คำปิดท้ายในรายการที่เป็นแค่ข้อความแจ้งคนในกลุ่ม ("ลูกค้าอนุมัติ") ไม่ใช่ชื่อสินค้า
+const APPROVAL_LINE_RE = /อนุมัติ/;
 
 function todayStr() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-// บรรทัดในรายการ — ตัดเครื่องหมายหัวข้อ (-, •, ·) และคำ "เพิ่มเติม" นำหน้าทิ้งก่อน
+// บรรทัดในรายการ — ตัดเครื่องหมายหัวข้อ (-, •, ·), เลขลำดับนำหน้า ("1.", "2)")
+// และคำ "เพิ่มเติม" นำหน้าทิ้งก่อน
 function cleanItemName(raw) {
-  return raw.trim().replace(/^[-•·]\s*/, '').replace(/^เพิ่มเติม\s*/, '').trim();
+  return raw
+    .trim()
+    .replace(/^[-•·]\s*/, '')
+    .replace(/^\d+[.)]\s*/, '')
+    .replace(/^เพิ่มเติม\s*/, '')
+    .trim();
+}
+
+// ตัดส่วนคำนวณ "จำนวนxราคาต่อหน่วย =" ท้ายชื่อรายการทิ้ง (เช่น "น้ำยาหล่อเย็น
+// 700x2 =1,400" → ชื่อ "น้ำยาหล่อเย็น" ราคาใช้ยอดรวมท้ายบรรทัดอยู่แล้ว 1,400)
+function stripQtyCalc(name) {
+  return name.replace(/\s*[\d,]+\s*[xX×]\s*\d+\s*=\s*$/, '').trim();
 }
 
 // แยกรายการสินค้า: ชื่อ+ราคาบรรทัดเดียวกันก็ได้ หรือชื่อบรรทัดหนึ่งแล้วราคา
@@ -107,7 +128,13 @@ function parseItemSectionLines(lines) {
     const line = cleanItemName(trimmedRaw);
     if (!line) continue;
 
-    const totalMatch = /^รวม\s*:*\s*([\d,]+)\s*(?:บาท)?\s*$/.exec(line);
+    // คำแจ้งในกลุ่ม ไม่ใช่รายการสินค้า ("ลูกค้าอนุมัติ" ปิดท้ายหลังแจ้งราคา)
+    if (APPROVAL_LINE_RE.test(line)) {
+      flushPending();
+      continue;
+    }
+
+    const totalMatch = /^รวม\s*:*\s*([\d,]+)\s*(?:บาท|฿)?\s*$/.exec(line);
     if (totalMatch) {
       flushPending();
       statedTotal = Number(totalMatch[1].replace(/,/g, '')); // ตัวสุดท้ายชนะ = ยอดรวมทั้งบิล
@@ -127,7 +154,7 @@ function parseItemSectionLines(lines) {
     flushPending();
     const m = /^(.*?)[\s]*([\d,]+)\s*(?:บาท)?$/.exec(line);
     if (m && m[1].trim()) {
-      items.push({ name: m[1].trim(), price: Number(m[2].replace(/,/g, '')) });
+      items.push({ name: stripQtyCalc(m[1].trim()), price: Number(m[2].replace(/,/g, '')) });
     } else {
       pendingName = line;
     }
@@ -139,6 +166,7 @@ function parseItemSectionLines(lines) {
 
 function parseLineQueueMessage(text) {
   if (!text || typeof text !== 'string') return null;
+  if (PAID_MESSAGE_RE.test(text)) return null;
 
   const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
   if (lines.length === 0 || !/^คิว/.test(lines[0])) return null;
