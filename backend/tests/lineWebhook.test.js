@@ -68,10 +68,19 @@ describe('POST /api/line/webhook', () => {
     );
     regularItemId = regular.insertId;
     const [set] = await pool.execute(
-      'INSERT INTO service_items (category, product_name, warranty_id, is_set, set_price) VALUES (?, ?, ?, 1, ?)',
-      ['ช่วงล่าง', 'ชุดโปรช่วงล่างเก๋ง', warranty.insertId, 6500]
+      'INSERT INTO service_items (category, product_name, warranty_id, is_set) VALUES (?, ?, ?, 1)',
+      ['ช่วงล่าง', 'ชุดโปรช่วงล่างเก๋ง', warranty.insertId]
     );
     setItemId = set.insertId;
+    // ตรงกับโครงสร้างจริง: แถวแรก sort_order 0 เป็น "หัวข้อชุด" ราคาจะไปลงตรงนี้
+    // แถวถัดไปเป็นรายการย่อย (อุปกรณ์ในชุด) ราคา 0 เสมอ
+    await pool.execute(
+      `INSERT INTO service_item_components (service_item_id, component_name, default_qty, sort_order) VALUES
+       (?, 'ชุดโปรช่วงล่าง', 1, 0),
+       (?, '- ปีกนกล่าง L+R', 1, 1),
+       (?, '- ลูกหมากปีกนกล่าง L+R', 1, 2)`,
+      [setItemId, setItemId, setItemId]
+    );
   });
 
   afterAll(async () => {
@@ -86,6 +95,7 @@ describe('POST /api/line/webhook', () => {
       await pool.execute('DELETE FROM vehicles WHERE customer_id = ?', [customerId]);
       await pool.execute('DELETE FROM customers WHERE id = ?', [customerId]);
     }
+    await pool.execute('DELETE FROM service_item_components WHERE service_item_id = ?', [setItemId]);
     await pool.execute('DELETE FROM service_items WHERE id IN (?, ?)', [regularItemId, setItemId]);
     await pool.execute("DELETE FROM warranties WHERE warranty_name = 'ทดสอบ ลูกหมาก 1 ปี'");
     await pool.end();
@@ -172,7 +182,7 @@ describe('POST /api/line/webhook', () => {
     ]);
   });
 
-  test('รายการ "ชุด" มีราคาในข้อความ → ผูกชื่อ/ประกันจากแคตาล็อก และตัดคำเก๋ง/กระบะออกตอนแสดงผล', async () => {
+  test('รายการ "ชุด" มีราคาในข้อความ → ขยายเป็นหลายแถวตาม service_item_components เหมือนเลือกในแอปเอง', async () => {
     const uniq = Date.now().toString().slice(-7);
     const phone = `082${uniq}`;
     const text = [
@@ -190,20 +200,22 @@ describe('POST /api/line/webhook', () => {
 
     const [[quotation]] = await pool.query('SELECT * FROM quotations WHERE quotation_no = ?', [res.body.created[0]]);
     createdCustomerIds.push(quotation.customer_id);
-    expect(Number(quotation.total_amount)).toBe(13000);
+    expect(Number(quotation.total_amount)).toBe(13000); // 5500 + 7500 (แถวย่อยของชุดราคา 0 ทุกแถว)
 
     const [items] = await pool.query(
       'SELECT product_name, unit_price, warranty_name FROM quotation_items WHERE quotation_id = ? ORDER BY id ASC',
       [quotation.id]
     );
+    expect(items).toHaveLength(4); // แร็ค 1 แถว + ชุดขยายเป็น 3 แถว (หัวข้อ + อุปกรณ์ย่อย 2 ชิ้น)
     expect(items[0]).toEqual({ product_name: 'แร็ค', unit_price: '5500.00', warranty_name: null });
-    // ชื่อที่โชว์ตัดคำ "เก๋ง" ทิ้ง แม้แคตาล็อกจริงชื่อ "ชุดโปรช่วงล่างเก๋ง" — ราคาใช้ตัวที่พิมพ์มา ไม่ใช่ราคาแคตาล็อก
-    expect(items[1].product_name).toBe('ชุดโปรช่วงล่าง');
-    expect(Number(items[1].unit_price)).toBe(7500);
-    expect(items[1].warranty_name).toBe('ทดสอบ ลูกหมาก 1 ปี');
+    // แถวแรกของชุด (หัวข้อ) ราคาที่พิมพ์มาอยู่ตรงนี้ ชื่อมาจาก service_item_components ตรง ๆ (ไม่มีคำเก๋ง/กระบะ)
+    expect(items[1]).toEqual({ product_name: 'ชุดโปรช่วงล่าง', unit_price: '7500.00', warranty_name: 'ทดสอบ ลูกหมาก 1 ปี' });
+    // แถวย่อย (อุปกรณ์ในชุด) ราคา 0 ทุกแถว แต่ได้ประกันเดียวกันทุกแถว
+    expect(items[2]).toEqual({ product_name: '- ปีกนกล่าง L+R', unit_price: '0.00', warranty_name: 'ทดสอบ ลูกหมาก 1 ปี' });
+    expect(items[3]).toEqual({ product_name: '- ลูกหมากปีกนกล่าง L+R', unit_price: '0.00', warranty_name: 'ทดสอบ ลูกหมาก 1 ปี' });
   });
 
-  test('รายการ "ชุด" ไม่มีราคาในข้อความ → ราคา 0 เสมอ (ไม่ดึงราคาจากแคตาล็อกมาเดา)', async () => {
+  test('รายการ "ชุด" ไม่มีราคาในข้อความ → ทุกแถวราคา 0 เสมอ (ไม่ดึงราคาจากแคตาล็อกมาเดา)', async () => {
     const uniq = Date.now().toString().slice(-7);
     const phone = `092${uniq}`;
     const text = [
@@ -219,8 +231,9 @@ describe('POST /api/line/webhook', () => {
     createdCustomerIds.push(quotation.customer_id);
     expect(Number(quotation.total_amount)).toBe(0);
 
-    const [[item]] = await pool.query('SELECT unit_price FROM quotation_items WHERE quotation_id = ?', [quotation.id]);
-    expect(Number(item.unit_price)).toBe(0);
+    const [items] = await pool.query('SELECT unit_price FROM quotation_items WHERE quotation_id = ?', [quotation.id]);
+    expect(items).toHaveLength(3);
+    expect(items.every((it) => Number(it.unit_price) === 0)).toBe(true);
   });
 
   test('พิมพ์ข้อความคิว+ลูกค้าเดิมซ้ำ (วันเดียวกัน ยังไม่อนุมัติ) → แก้ไขใบเดิม ไม่เปิดใบใหม่', async () => {

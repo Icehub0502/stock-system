@@ -109,14 +109,11 @@ function todayStr() {
 // เลือกใช้เฉพาะตอนชื่อที่พิมพ์มาตรงกับสินค้าในแคตาล็อกแบบไม่มีข้อโต้แย้ง (ตัดช่องว่าง
 // แล้วตรงกันเป๊ะ 1 รายการ) — ตั้งใจไม่ใช้ LIKE คลุมเครือ (เช่น "แร็ค" ตรงกับ "แร็ค OEM"/
 // "แร็คบิ้ว"/"แร็คมือสอง" หลายรายการพร้อมกัน) เพราะเดาผิดจะได้ชื่อ/ประกันผิดในใบเสนอราคา
-// ไม่ match ก็ยังเป็นรายการได้ปกติ แค่ไม่ได้ผูกหมวดหมู่/ประกันให้เท่านั้น รวม "ชุด"
-// (is_set=1 เช่น ชุดโปรช่วงล่างเก๋ง/กระบะ) ไว้ด้วย — ใช้แค่ดึงชื่อมาตรฐาน/ประกันมาใส่
-// ให้เท่านั้น ราคาไม่เอามาจากแคตาล็อกเลย (ดู createQuotationFromQueue) เพราะราคา
-// อาจเปลี่ยนบ่อยกว่าที่จะพึ่งค่าที่ตั้งไว้ในระบบได้ ให้หน้างานเป็นคนกรอกราคาเองเสมอ
+// ไม่ match ก็ยังเป็นรายการได้ปกติ แค่ไม่ได้ผูกหมวดหมู่/ประกันให้เท่านั้น
 async function matchServiceItem(conn, name) {
   const normalized = name.replace(/\s+/g, '');
   const [rows] = await conn.execute(
-    `SELECT si.product_name, si.category, si.is_set,
+    `SELECT si.id, si.product_name, si.category, si.is_set,
             w.warranty_name, w.warranty_year, w.warranty_month, w.warranty_km
      FROM service_items si
      LEFT JOIN warranties w ON si.warranty_id = w.id
@@ -127,14 +124,45 @@ async function matchServiceItem(conn, name) {
   return rows.length === 1 ? rows[0] : null;
 }
 
-// ชุด (is_set) ในแคตาล็อกแยกชื่อตามประเภทรถ ("ชุดโปรช่วงล่างเก๋ง"/"...กระบะ") เพื่อ
-// ผูกราคา/ประกันให้ถูกรุ่น แต่ในใบเสนอราคาที่ลูกค้าเห็น ร้านอยากให้ขึ้นแค่ชื่อชุด
-// เฉย ๆ ("ชุดโปรช่วงล่าง") — ตัดคำบอกประเภทรถท้ายชื่อทิ้งเฉพาะตอนแสดงผล ราคา/
-// ประกันที่ผูกมาจากรุ่นที่ตรงยังถูกต้องเหมือนเดิม แค่ไม่โชว์คำว่าเก๋ง/กระบะ
-function displayProductName(match, rawName) {
-  if (!match) return rawName;
-  if (!match.is_set) return match.product_name;
-  return match.product_name.replace(/\s*(เก๋ง|กระบะ)\s*$/, '').trim() || match.product_name;
+// รายการที่พิมพ์มา → แถวใบเสนอราคา 1 แถวขึ้นไป จับคู่แคตาล็อกไม่ได้ก็ยังใส่เป็น
+// รายการเดี่ยวด้วยชื่อที่พิมพ์มาตามเดิม (ราคาใช้ตัวที่พิมพ์มา ไม่มีค่อยเป็น 0 —
+// ไม่เดาราคาจากแคตาล็อก เพราะราคาจริงอาจเปลี่ยนบ่อยกว่าที่ระบบตั้งไว้)
+//
+// จับคู่ได้แต่เป็น "ชุด" (is_set=1 เช่น ชุดโปรช่วงล่างเก๋ง/กระบะ/March/Almera) จะ
+// ขยายเป็นหลายแถวตามรายการย่อยใน service_item_components — พฤติกรรมเดียวกับตอน
+// หน้างานเลือกชุดเองในแอป (ดู expandSetIntoItems ใน QuotationFormModal.jsx/
+// ReceiptFormModal.jsx): แถวแรก (สรุปหัวข้อชุด) ใส่ราคาที่พิมพ์มาไว้ แถวย่อยที่
+// เหลือ (รายการอุปกรณ์ในชุด) ราคา 0 ทุกแถว — ทุกแถวได้ประกันของชุดเหมือนกันหมด
+async function resolveQuotationItemRows(conn, item) {
+  const match = await matchServiceItem(conn, item.name);
+  const price = item.price != null ? item.price : 0;
+
+  if (!match) {
+    return [{ product_name: item.name, quantity: 1, unit_price: price, warranty_name: null, warranty_year: 0, warranty_month: 0, warranty_km: 0 }];
+  }
+
+  const warranty = {
+    warranty_name: match.warranty_name || null,
+    warranty_year: match.warranty_year || 0,
+    warranty_month: match.warranty_month || 0,
+    warranty_km: match.warranty_km || 0,
+  };
+
+  if (!match.is_set) {
+    return [{ product_name: match.product_name, quantity: 1, unit_price: price, ...warranty }];
+  }
+
+  const [components] = await conn.execute(
+    'SELECT component_name, default_qty FROM service_item_components WHERE service_item_id = ? ORDER BY sort_order ASC, id ASC',
+    [match.id]
+  );
+  const parts = components.length > 0 ? components : [{ component_name: match.product_name, default_qty: 1 }];
+  return parts.map((part, index) => ({
+    product_name: part.component_name,
+    quantity: Number(part.default_qty) > 0 ? Number(part.default_qty) : 1,
+    unit_price: index === 0 ? price : 0, // ราคาที่พิมพ์มาอยู่แถวบนสุด (หัวข้อชุด) แถวย่อยที่เหลือเป็น 0
+    ...warranty,
+  }));
 }
 
 // สร้าง (หรือแก้ไข) ลูกค้า → รถ → ใบเสนอราคา ในทรานแซกชันเดียว ตาม flow เดียวกับ
@@ -201,22 +229,12 @@ async function createQuotationFromQueue(parsed) {
     }
 
     // จับคู่แต่ละรายการกับแคตาล็อกก่อน insert/update quotation หลัก เพราะต้องใช้
-    // ผลรวมราคามาเป็น total_amount และชื่อสินค้ามาเป็น product_summary
+    // ผลรวมราคามาเป็น total_amount และชื่อสินค้ามาเป็น product_summary — รายการที่
+    // เป็น "ชุด" ขยายเป็นหลายแถว (ดู resolveQuotationItemRows) จึงต้อง flatten
     const resolvedItems = [];
     for (const item of parsed.items) {
-      const match = await matchServiceItem(conn, item.name);
-      // item.price === null คือไม่มีราคาในข้อความ — ไม่เดาราคาจากแคตาล็อก ใส่ 0
-      // ให้หน้างานกรอกเองเสมอ (ราคาจริงอาจเปลี่ยนบ่อยกว่าที่ระบบตั้งไว้)
-      const unit_price = item.price != null ? item.price : 0;
-      resolvedItems.push({
-        product_name: displayProductName(match, item.name),
-        quantity: 1,
-        unit_price,
-        warranty_name: match?.warranty_name || null,
-        warranty_year: match?.warranty_year || 0,
-        warranty_month: match?.warranty_month || 0,
-        warranty_km: match?.warranty_km || 0,
-      });
+      const rows = await resolveQuotationItemRows(conn, item);
+      resolvedItems.push(...rows);
     }
     const total_amount = resolvedItems.reduce((sum, it) => sum + it.quantity * it.unit_price, 0);
     const product_summary = resolvedItems.map((it) => it.product_name).join(', ');
