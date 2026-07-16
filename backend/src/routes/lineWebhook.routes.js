@@ -110,12 +110,13 @@ function todayStr() {
 // แล้วตรงกันเป๊ะ 1 รายการ) — ตั้งใจไม่ใช้ LIKE คลุมเครือ (เช่น "แร็ค" ตรงกับ "แร็ค OEM"/
 // "แร็คบิ้ว"/"แร็คมือสอง" หลายรายการพร้อมกัน) เพราะเดาผิดจะได้ชื่อ/ประกันผิดในใบเสนอราคา
 // ไม่ match ก็ยังเป็นรายการได้ปกติ แค่ไม่ได้ผูกหมวดหมู่/ประกันให้เท่านั้น รวม "ชุด"
-// (is_set=1 เช่น ชุดโปรช่วงล่างเก๋ง/กระบะ) ไว้ด้วย — บรรทัดในเซคชัน "รายการ:" ถือว่า
-// ตั้งใจคิดราคาจริงแล้ว จึงดึง set_price ของแคตาล็อกมาใช้ได้เมื่อข้อความไม่ได้ระบุราคาเอง
+// (is_set=1 เช่น ชุดโปรช่วงล่างเก๋ง/กระบะ) ไว้ด้วย — ใช้แค่ดึงชื่อมาตรฐาน/ประกันมาใส่
+// ให้เท่านั้น ราคาไม่เอามาจากแคตาล็อกเลย (ดู createQuotationFromQueue) เพราะราคา
+// อาจเปลี่ยนบ่อยกว่าที่จะพึ่งค่าที่ตั้งไว้ในระบบได้ ให้หน้างานเป็นคนกรอกราคาเองเสมอ
 async function matchServiceItem(conn, name) {
   const normalized = name.replace(/\s+/g, '');
   const [rows] = await conn.execute(
-    `SELECT si.product_name, si.category, si.is_set, si.set_price,
+    `SELECT si.product_name, si.category, si.is_set,
             w.warranty_name, w.warranty_year, w.warranty_month, w.warranty_km
      FROM service_items si
      LEFT JOIN warranties w ON si.warranty_id = w.id
@@ -204,9 +205,9 @@ async function createQuotationFromQueue(parsed) {
     const resolvedItems = [];
     for (const item of parsed.items) {
       const match = await matchServiceItem(conn, item.name);
-      // item.price === null คือไม่มีราคาในข้อความ (เช่น "ชุดโปรช่วงล่าง เก๋ง") —
-      // ใช้ set_price ของแคตาล็อกถ้า match เป็นชุด ไม่งั้น 0 ให้หน้างานกรอกเอง
-      const unit_price = item.price != null ? item.price : Number(match?.set_price || 0);
+      // item.price === null คือไม่มีราคาในข้อความ — ไม่เดาราคาจากแคตาล็อก ใส่ 0
+      // ให้หน้างานกรอกเองเสมอ (ราคาจริงอาจเปลี่ยนบ่อยกว่าที่ระบบตั้งไว้)
+      const unit_price = item.price != null ? item.price : 0;
       resolvedItems.push({
         product_name: displayProductName(match, item.name),
         quantity: 1,

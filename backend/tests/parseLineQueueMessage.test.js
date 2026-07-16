@@ -15,14 +15,32 @@ describe('parseLineQueueMessage', () => {
     expect(parsed.items).toEqual([]);
   });
 
+  test('"คิวที่10" (คำว่า "ที่" แปะติดเลขคิว ไม่มีช่องว่าง) → อ่านเลขคิวได้ถูกต้อง', () => {
+    const parsed = parseLineQueueMessage('คิวที่10\nคุณ เอกชัย\n081-827-5255');
+    expect(parsed.queue_no).toBe('10');
+  });
+
+  test('บรรทัดวันที่เดี่ยว ๆ (dd/m/yy) ไม่ถูกใช้และไม่หลุดไปปนกับอาการ', () => {
+    const parsed = parseLineQueueMessage(
+      'คิวที่10\n16/7/69\nคุณ เอกชัย\n081-827-5255\nToyota Harrier\nกว 6066\nอาการ เลี้ยวติดตัวถัง'
+    );
+    const today = new Date();
+    const expected = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    expect(parsed.quotation_date).toBe(expected);
+    expect(parsed.symptom).toBe('เลี้ยวติดตัวถัง');
+    expect(parsed.symptom).not.toMatch(/69/);
+  });
+
+  test('ทะเบียนมีช่องว่างคั่นระหว่างตัวอักษรกับเลข ("กว 6066") ก็อ่านได้', () => {
+    const parsed = parseLineQueueMessage('คิว 10\nคุณเอกชัย\nกว 6066');
+    expect(parsed.license_plate).toBe('กว6066');
+  });
+
   test('"คิว 1 17/07/26" (มีวันที่ต่อท้ายเลขคิว) → queue_no ตัดแค่เลขคิว, วันที่ไม่ถูกใช้', () => {
     const parsed = parseLineQueueMessage(
       'คิว 1 17/07/26\nคุณศิริลักษณ์\n092-241-9198\nHonda civic FC\n1ขพ2886\nที่งเปลี่ยนโช้คหลังมา มีอาการเสียงดังข้างหลัง'
     );
     expect(parsed.queue_no).toBe('1');
-    const today = new Date();
-    const expected = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-    expect(parsed.quotation_date).toBe(expected);
     expect(parsed.customer_name).toBe('คุณศิริลักษณ์');
     expect(parsed.brand).toBe('Honda');
     expect(parsed.model).toBe('civic FC');
@@ -58,7 +76,42 @@ describe('parseLineQueueMessage', () => {
     expect(parsed.symptom).toBe('เช็คช่วงล่าง');
   });
 
-  test('"รายการ" (ไม่มีโคลอนก็ได้) เริ่ม section รายการ — บรรทัดขึ้นต้น "-" ตัดเครื่องหมายออก', () => {
+  test('รายการต่อท้ายข้อมูลหัวบิลได้เลย ไม่ต้องมี "รายการ:" นำหน้า (ของจริงที่ร้านพิมพ์)', () => {
+    const parsed = parseLineQueueMessage(
+      [
+        'คิวที่10',
+        '16/7/69',
+        'คุณ เอกชัย',
+        '081-827-5255',
+        'Toyota Harrier',
+        'กว 6066',
+        'อาการ เลี้ยวติดตัวถัง',
+        'แร็ค OEM 5000',
+        'ชุดโปรช่วงล่างเก๋ง 7500',
+        'ซ่อมคอ 2000',
+      ].join('\n')
+    );
+    expect(parsed.symptom).toBe('เลี้ยวติดตัวถัง');
+    expect(parsed.items).toEqual([
+      { name: 'แร็ค OEM', price: 5000 },
+      { name: 'ชุดโปรช่วงล่างเก๋ง', price: 7500 },
+      { name: 'ซ่อมคอ', price: 2000 },
+    ]);
+  });
+
+  test('บรรทัดโปรโมทที่คัดลอกมาทั้งย่อหน้า (ยาว/ช่องว่างรัว/อิโมจิ) ไม่ถูกตีเป็นรายการ ไปอยู่ในหมายเหตุแทน', () => {
+    const blob = 'ชุดโปร ช่วงล่าง                                   👍สินค้าประกัน 1 ปี 10000กิโล                             รายการสินค้าที่จะได้🛠️                              -ปีกนกล่าง -ลูกหมากปีกนก -ลูกหมากปลาย-ลูกหมากกันโครงหน้า -ยางรัดกันโครงหน้า -                                 ราคารวม🔧ค่าแรงติดตั้ง รวมตั้งศูนย์7500';
+    const parsed = parseLineQueueMessage(
+      ['คิวที่10', 'คุณ เอกชัย', '081-827-5255', 'อาการ เลี้ยวติดตัวถัง', 'แร็ค OEM 5000', blob, 'ซ่อมคอ 2000'].join('\n')
+    );
+    expect(parsed.items).toEqual([
+      { name: 'แร็ค OEM', price: 5000 },
+      { name: 'ซ่อมคอ', price: 2000 },
+    ]);
+    expect(parsed.remark).toBe(blob);
+  });
+
+  test('"รายการ" (ไม่มีโคลอนก็ได้) เริ่ม section รายการแบบระบุชัดเจน — บรรทัดขึ้นต้น "-" ตัดเครื่องหมายออก', () => {
     const parsed = parseLineQueueMessage(
       [
         'คิว 4',

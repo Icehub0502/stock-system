@@ -172,7 +172,7 @@ describe('POST /api/line/webhook', () => {
     ]);
   });
 
-  test('รายการ "ชุด" ไม่มีราคาในข้อความ → ดึง set_price+ประกันจากแคตาล็อก และตัดคำเก๋ง/กระบะออกตอนแสดงผล', async () => {
+  test('รายการ "ชุด" มีราคาในข้อความ → ผูกชื่อ/ประกันจากแคตาล็อก และตัดคำเก๋ง/กระบะออกตอนแสดงผล', async () => {
     const uniq = Date.now().toString().slice(-7);
     const phone = `082${uniq}`;
     const text = [
@@ -182,7 +182,7 @@ describe('POST /api/line/webhook', () => {
       'ทะเบียนรถ:5กฒ64',
       'รายการ:',
       ' - แร็ค 5500',
-      ' - ชุดโปรช่วงล่าง เก๋ง',
+      ' - ชุดโปรช่วงล่าง เก๋ง 7500',
     ].join('\n');
 
     const res = await postWebhook(eventsBody([messageEvent(text, `msg-g-${uniq}`)]));
@@ -190,18 +190,37 @@ describe('POST /api/line/webhook', () => {
 
     const [[quotation]] = await pool.query('SELECT * FROM quotations WHERE quotation_no = ?', [res.body.created[0]]);
     createdCustomerIds.push(quotation.customer_id);
-    // 5500 (แร็ค) + 6500 (ชุดโปรช่วงล่างเก๋ง set_price ในแคตาล็อกทดสอบ)
-    expect(Number(quotation.total_amount)).toBe(12000);
+    expect(Number(quotation.total_amount)).toBe(13000);
 
     const [items] = await pool.query(
       'SELECT product_name, unit_price, warranty_name FROM quotation_items WHERE quotation_id = ? ORDER BY id ASC',
       [quotation.id]
     );
     expect(items[0]).toEqual({ product_name: 'แร็ค', unit_price: '5500.00', warranty_name: null });
-    // ชื่อที่โชว์ตัดคำ "เก๋ง" ทิ้ง แม้แคตาล็อกจริงชื่อ "ชุดโปรช่วงล่างเก๋ง" — ราคา/ประกันยังถูกต้อง
+    // ชื่อที่โชว์ตัดคำ "เก๋ง" ทิ้ง แม้แคตาล็อกจริงชื่อ "ชุดโปรช่วงล่างเก๋ง" — ราคาใช้ตัวที่พิมพ์มา ไม่ใช่ราคาแคตาล็อก
     expect(items[1].product_name).toBe('ชุดโปรช่วงล่าง');
-    expect(Number(items[1].unit_price)).toBe(6500);
+    expect(Number(items[1].unit_price)).toBe(7500);
     expect(items[1].warranty_name).toBe('ทดสอบ ลูกหมาก 1 ปี');
+  });
+
+  test('รายการ "ชุด" ไม่มีราคาในข้อความ → ราคา 0 เสมอ (ไม่ดึงราคาจากแคตาล็อกมาเดา)', async () => {
+    const uniq = Date.now().toString().slice(-7);
+    const phone = `092${uniq}`;
+    const text = [
+      'คิว:14',
+      'ชื่อลูกค้า:คุณไม่ใส่ราคา',
+      `เบอร์โทร:${phone}`,
+      'รายการ:',
+      ' - ชุดโปรช่วงล่าง เก๋ง',
+    ].join('\n');
+
+    const res = await postWebhook(eventsBody([messageEvent(text, `msg-noprice-${uniq}`)]));
+    const [[quotation]] = await pool.query('SELECT * FROM quotations WHERE quotation_no = ?', [res.body.created[0]]);
+    createdCustomerIds.push(quotation.customer_id);
+    expect(Number(quotation.total_amount)).toBe(0);
+
+    const [[item]] = await pool.query('SELECT unit_price FROM quotation_items WHERE quotation_id = ?', [quotation.id]);
+    expect(Number(item.unit_price)).toBe(0);
   });
 
   test('พิมพ์ข้อความคิว+ลูกค้าเดิมซ้ำ (วันเดียวกัน ยังไม่อนุมัติ) → แก้ไขใบเดิม ไม่เปิดใบใหม่', async () => {
