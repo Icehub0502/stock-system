@@ -90,11 +90,12 @@ function todayStr() {
 }
 
 // บรรทัดในรายการ — ตัดเครื่องหมายหัวข้อ (-, •, ·), เลขลำดับนำหน้า ("1.", "2)")
-// และคำ "เพิ่มเติม" นำหน้าทิ้งก่อน
+// และคำ "เพิ่มเติม" นำหน้าทิ้งก่อน — "-" ที่ตามด้วยตัวเลขติดกันเลย (เช่น "-1000")
+// ไม่ตัด เพราะเป็นเครื่องหมายลบของราคาส่วนลด ไม่ใช่หัวข้อ
 function cleanItemName(raw) {
   return raw
     .trim()
-    .replace(/^[-•·]\s*/, '')
+    .replace(/^[-•·](?!\d)\s*/, '')
     .replace(/^\d+[.)]\s*/, '')
     .replace(/^เพิ่มเติม\s*/, '')
     .trim();
@@ -150,10 +151,11 @@ function parseItemSectionLines(lines) {
       continue;
     }
 
-    // บรรทัดตัวเลขล้วน = ราคาของรายการชื่อบรรทัดก่อนหน้าที่ยังไม่มีราคา
-    if (/^[\d,]+\s*(?:บาท)?$/.test(line)) {
+    // บรรทัดตัวเลขล้วน = ราคาของรายการชื่อบรรทัดก่อนหน้าที่ยังไม่มีราคา ("-" นำหน้า
+    // ก็ได้ = ราคาติดลบ/ส่วนลด
+    if (/^-?[\d,]+\s*(?:บาท)?$/.test(line)) {
       if (pendingName) {
-        items.push({ name: pendingName, price: Number(line.replace(/[^\d]/g, '')) });
+        items.push({ name: pendingName, price: Number(line.replace(/,/g, '').replace(/บาท/g, '').trim()) });
         pendingName = null;
       }
       // ไม่มีรายการค้างรอราคาอยู่ก่อนหน้า = ตัวเลขลอย ๆ ไม่รู้ของอะไร ไม่เดา ข้ามไป
@@ -161,7 +163,8 @@ function parseItemSectionLines(lines) {
     }
 
     flushPending();
-    const m = /^(.*?)[\s]*([\d,]+)\s*(?:บาท)?$/.exec(line);
+    // ราคาขึ้นต้นด้วย "-" ก็จับได้ (ส่วนลด เช่น "ส่วนลด -1000" → ราคาติดลบ)
+    const m = /^(.*?)[\s]*(-?[\d,]+)\s*(?:บาท)?$/.exec(line);
     if (m && m[1].trim()) {
       items.push({ name: stripQtyCalc(m[1].trim()), price: Number(m[2].replace(/,/g, '')) });
     } else {
