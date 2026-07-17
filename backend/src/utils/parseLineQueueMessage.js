@@ -75,6 +75,14 @@ const OPTIONAL_LABEL_RE = new RegExp(`^(${Object.keys(OPTIONAL_LABELS).join('|')
 const PAID_MESSAGE_RE = /ชำระเงิน\s*(เรียบร้อย|แล้ว)/;
 // คำปิดท้ายในรายการที่เป็นแค่ข้อความแจ้งคนในกลุ่ม ("ลูกค้าอนุมัติ") ไม่ใช่ชื่อสินค้า
 const APPROVAL_LINE_RE = /อนุมัติ/;
+// เช่นเดียวกับ PAID_MESSAGE_RE แต่ใช้ในรายการ (ไม่ต้องมีคำว่า "เงิน" ก็ได้ เช่น
+// "ชำระเรียบร้อยครับ") — เจอตรงไหนในรายการก็ข้ามบรรทัดนั้นไปเฉย ๆ ไม่ใช่ชื่อสินค้า
+// (ต่างจาก PAID_MESSAGE_RE ที่เจอแล้วทิ้งทั้งข้อความ เพราะบรรทัดนี้อาจมากับรายการ
+// จริงในข้อความเดียวกัน เช่น ร้านเพิ่มรายการใหม่พร้อมแจ้งว่าลูกค้าจ่ายแล้วในข้อความเดียว)
+const PAID_REMARK_LINE_RE = /ชำระ\s*(เงิน)?\s*(เรียบร้อย|แล้ว)/;
+// หัวข้อบอกว่ามีรายการเพิ่มต่อจากที่แจ้งไปแล้ว ("เพิ่มรายการ") ไม่ใช่ชื่อสินค้า
+// (ต่างจาก "เพิ่มเติม" ที่เป็นคำนำหน้าชื่อสินค้าใน cleanItemName)
+const SECTION_NOTE_LINE_RE = /^เพิ่มรายการ\s*:*\s*$/;
 
 function todayStr() {
   const d = new Date();
@@ -128,8 +136,9 @@ function parseItemSectionLines(lines) {
     const line = cleanItemName(trimmedRaw);
     if (!line) continue;
 
-    // คำแจ้งในกลุ่ม ไม่ใช่รายการสินค้า ("ลูกค้าอนุมัติ" ปิดท้ายหลังแจ้งราคา)
-    if (APPROVAL_LINE_RE.test(line)) {
+    // คำแจ้งในกลุ่ม ไม่ใช่รายการสินค้า ("ลูกค้าอนุมัติ"/"ชำระเรียบร้อยครับ" ปิดท้าย,
+    // "เพิ่มรายการ" คั่นก่อนรายการที่เพิ่มมาทีหลัง)
+    if (APPROVAL_LINE_RE.test(line) || PAID_REMARK_LINE_RE.test(line) || SECTION_NOTE_LINE_RE.test(line)) {
       flushPending();
       continue;
     }
