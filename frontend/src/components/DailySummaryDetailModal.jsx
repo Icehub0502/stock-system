@@ -127,6 +127,22 @@ export default function DailySummaryDetailModal({ date, onClose, onReceiptsMoved
     setSelectedIds((prev) => (prev.size === receipts.length ? new Set() : new Set(receipts.map((r) => r.id))));
   };
 
+  const handleDelete = async (receiptId, receiptNo) => {
+    if (!window.confirm(`ยืนยันการลบบิล ${receiptNo}? การกระทำนี้ไม่สามารถย้อนกลับได้`)) return;
+    try {
+      await client.delete(`/receipts/${receiptId}`);
+      setReceipts((prev) => prev.filter((r) => r.id !== receiptId));
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        next.delete(receiptId);
+        return next;
+      });
+      if (onReceiptsMoved) onReceiptsMoved();
+    } catch (err) {
+      alert('ลบบิลไม่สำเร็จ: ' + (err.response?.data?.error || err.message));
+    }
+  };
+
   const handleMoveByDays = async (amount) => {
     if (selectedIds.size === 0) return;
     const targetDate = addDays(date, amount);
@@ -237,9 +253,9 @@ export default function DailySummaryDetailModal({ date, onClose, onReceiptsMoved
             span.style.cssText = 'display:block;padding:2px 0;color:#1f2937;font-size:0.9rem;white-space:pre-wrap;';
             ta.replaceWith(span);
           });
-          // The selection checkboxes are a UI-only affordance — leave them
-          // out of the exported record entirely.
-          clonedDoc.querySelectorAll('.daily-summary-capture-area .daily-summary-checkbox-cell').forEach((cell) => {
+          // The selection checkboxes and the delete button are UI-only
+          // affordances — leave them out of the exported record entirely.
+          clonedDoc.querySelectorAll('.daily-summary-capture-area .daily-summary-checkbox-cell, .daily-summary-capture-area .daily-summary-actions-cell').forEach((cell) => {
             cell.remove();
           });
         },
@@ -334,6 +350,7 @@ export default function DailySummaryDetailModal({ date, onClose, onReceiptsMoved
                     <th className="col-amount">จำนวนเงิน</th>
                     <th>ช่างซ่อม</th>
                     <th>หมายเหตุ</th>
+                    <th className="daily-summary-actions-cell">จัดการ</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -402,6 +419,15 @@ export default function DailySummaryDetailModal({ date, onClose, onReceiptsMoved
                           onChange={(e) => handleRemarkChange(r.id, e.target.value)}
                           onBlur={(e) => handleRemarkBlur(r.id, e.target.value)}
                         />
+                      </td>
+                      <td className="daily-summary-actions-cell" data-label="จัดการ">
+                        <button
+                          type="button"
+                          className="btn-icon-small btn-danger"
+                          onClick={() => handleDelete(r.id, r.receipt_no)}
+                        >
+                          ลบ
+                        </button>
                       </td>
                     </tr>
                   ))}
