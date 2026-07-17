@@ -359,11 +359,12 @@ router.put('/:id', async (req, res) => {
     conn = await pool.getConnection();
     await conn.beginTransaction();
 
-    const [existingRows] = await conn.execute('SELECT id FROM quotations WHERE id = ?', [id]);
+    const [existingRows] = await conn.execute('SELECT id, status, converted_receipt_id FROM quotations WHERE id = ?', [id]);
     if (existingRows.length === 0) {
       await conn.rollback();
       return res.status(404).json({ error: 'ไม่พบใบเสนอราคา' });
     }
+    const existingQuotation = existingRows[0];
 
     if (!selectedCustomerId) {
       const { customer_name, phone } = newCustomer;
@@ -439,11 +440,36 @@ router.put('/:id', async (req, res) => {
       );
     }
 
+    // ใบเสนอราคานี้อนุมัติไปแล้วและมีใบเสร็จที่แปลงไว้แล้ว — แก้ไขที่นี่ให้ไหลไป
+    // อัปเดตใบเสร็จนั้นด้วยเลย กันไม่ให้ต้องแก้ 2 ที่/พิมพ์ 2 รอบ (ใบเสร็จเก็บแค่
+    // ข้อมูลที่มาจากใบเสนอราคาโดยตรง — payment_method/technician_name/
+    // printed_at/receipt_date เป็นของใบเสร็จเองไม่แตะ)
+    let syncedReceipt = false;
+    if (existingQuotation.status === 'approved' && existingQuotation.converted_receipt_id) {
+      const receiptId = existingQuotation.converted_receipt_id;
+      await conn.execute(
+        `UPDATE receipts SET customer_id = ?, vehicle_id = ?, mileage = ?, remark = ?, total_amount = ? WHERE id = ?`,
+        [selectedCustomerId, selectedVehicleId, Number(mileage) || 0, remark || null, total_amount, receiptId]
+      );
+      await conn.execute('DELETE FROM receipt_items WHERE receipt_id = ?', [receiptId]);
+      for (const item of validItems) {
+        const qty = parseInt(item.quantity || 1);
+        const price = parseFloat(item.unit_price || 0);
+        await conn.execute(
+          `INSERT INTO receipt_items (receipt_id, service_item_id, product_name_snapshot, qty, price, amount, warranty_name, warranty_year, warranty_month, warranty_km)
+           VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [receiptId, item.product_name, qty, price, qty * price, item.warranty_name || null, Number(item.warranty_year || 0), Number(item.warranty_month || 0), Number(item.warranty_km || 0)]
+        );
+      }
+      syncedReceipt = true;
+    }
+
     await conn.commit();
 
     res.json({
       success: true,
-      message: 'อัปเดตใบเสนอราคาสำเร็จ'
+      message: syncedReceipt ? 'อัปเดตใบเสนอราคาและใบเสร็จที่อนุมัติแล้วสำเร็จ' : 'อัปเดตใบเสนอราคาสำเร็จ',
+      synced_receipt: syncedReceipt
     });
   } catch (err) {
     if (conn) {
