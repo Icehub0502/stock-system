@@ -193,7 +193,7 @@ async function createQuotationFromQueue(parsed) {
     if (parsed.phone) {
       const [rows] = await conn.execute(
         "SELECT id FROM customers WHERE REPLACE(REPLACE(COALESCE(phone,''), '-', ''), ' ', '') = ? LIMIT 1",
-        [parsed.phone]
+        [parsed.phone.replace(/[-\s]/g, '')]
       );
       if (rows.length > 0) customerId = rows[0].id;
     }

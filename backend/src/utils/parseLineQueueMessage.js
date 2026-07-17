@@ -84,6 +84,18 @@ const PAID_REMARK_LINE_RE = /ชำระ\s*(เงิน)?\s*(เรียบ�
 // (ต่างจาก "เพิ่มเติม" ที่เป็นคำนำหน้าชื่อสินค้าใน cleanItemName)
 const SECTION_NOTE_LINE_RE = /^เพิ่มรายการ\s*:*\s*$/;
 
+// ใส่ขีดในเบอร์โทรให้อ่านง่าย ("0814567544" → "081-456-7544") — มือถือ 10 หลัก
+// ใช้รูปแบบ 3-3-4, เบอร์บ้าน 9 หลัก (เช่น 02 นำหน้า) ใช้ 2-3-4 นอกนั้นคืนค่าเดิม
+function formatPhone(digitsOnly) {
+  if (/^0\d{9}$/.test(digitsOnly)) {
+    return `${digitsOnly.slice(0, 3)}-${digitsOnly.slice(3, 6)}-${digitsOnly.slice(6)}`;
+  }
+  if (/^0\d{8}$/.test(digitsOnly)) {
+    return `${digitsOnly.slice(0, 2)}-${digitsOnly.slice(2, 5)}-${digitsOnly.slice(5)}`;
+  }
+  return digitsOnly;
+}
+
 function todayStr() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -230,7 +242,7 @@ function parseLineQueueMessage(text) {
       } else {
         const field = OPTIONAL_LABELS[label];
         let value = rest.trim();
-        if (field === 'phone') value = value.replace(/\D/g, '');
+        if (field === 'phone') value = formatPhone(value.replace(/\D/g, ''));
         if (field === 'license_plate') value = value.replace(/\s+/g, '');
         result[field] = value || null;
       }
@@ -239,7 +251,7 @@ function parseLineQueueMessage(text) {
 
     const digitsOnly = line.replace(/[-\s]/g, '');
     if (!result.phone && /^0\d{8,9}$/.test(digitsOnly)) {
-      result.phone = digitsOnly;
+      result.phone = formatPhone(digitsOnly);
       continue;
     }
     if (!result.license_plate && PLATE_RE.test(line)) {

@@ -142,7 +142,7 @@ describe('POST /api/line/webhook', () => {
 
     const [[customer]] = await pool.query('SELECT * FROM customers WHERE id = ?', [quotation.customer_id]);
     expect(customer.customer_name).toBe('คุณเทสไลน์');
-    expect(customer.phone).toBe(phone);
+    expect(customer.phone).toBe(`${phone.slice(0, 3)}-${phone.slice(3, 6)}-${phone.slice(6)}`);
 
     const [[vehicle]] = await pool.query('SELECT * FROM vehicles WHERE id = ?', [quotation.vehicle_id]);
     expect(vehicle.brand).toBe('Toyota');

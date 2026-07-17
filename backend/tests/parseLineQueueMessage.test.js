@@ -7,7 +7,7 @@ describe('parseLineQueueMessage', () => {
     );
     expect(parsed.queue_no).toBe('2');
     expect(parsed.customer_name).toBe('คุณนอก');
-    expect(parsed.phone).toBe('0851119565');
+    expect(parsed.phone).toBe('085-111-9565');
     expect(parsed.brand).toBe('Honda');
     expect(parsed.model).toBe('Accord G8');
     expect(parsed.license_plate).toBe('9กก4444');
