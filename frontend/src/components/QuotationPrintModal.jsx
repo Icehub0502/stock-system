@@ -9,12 +9,19 @@ export default function QuotationPrintModal({ quotation, onClose }) {
   // Shrink the A4 preview to fit the modal on phones (see useFitToWidth). Only
   // the on-screen preview is scaled; the PrintPortal copy prints full A4.
   const { containerRef: previewRef, scale: previewScale } = useFitToWidth([detail]);
+  const [justPrinted, setJustPrinted] = useState(false);
 
   useEffect(() => {
     if (!quotation?.items) {
       fetchDetail();
     }
   }, []);
+
+  useEffect(() => {
+    if (!justPrinted) return undefined;
+    const timer = setTimeout(() => setJustPrinted(false), 2500);
+    return () => clearTimeout(timer);
+  }, [justPrinted]);
 
   const fetchDetail = async () => {
     try {
@@ -27,6 +34,7 @@ export default function QuotationPrintModal({ quotation, onClose }) {
 
   const handlePrint = () => {
     window.print();
+    setJustPrinted(true);
   };
 
   const data = {
@@ -57,7 +65,7 @@ export default function QuotationPrintModal({ quotation, onClose }) {
           <h2>ตัวอย่างการพิมพ์</h2>
           <div className="print-actions">
             <button className="btn btn-primary" onClick={handlePrint}>
-              🖨️ พิมพ์
+              {justPrinted ? '✅ พิมพ์แล้วครับ' : '🖨️ พิมพ์'}
             </button>
             <button className="btn-close" onClick={onClose}>✕</button>
           </div>
@@ -71,7 +79,7 @@ export default function QuotationPrintModal({ quotation, onClose }) {
 
         <div className="modal-footer no-print">
           <button className="btn btn-primary" onClick={handlePrint}>
-            🖨️ พิมพ์
+            {justPrinted ? '✅ พิมพ์แล้วครับ' : '🖨️ พิมพ์'}
           </button>
           <button className="btn btn-secondary" onClick={onClose}>
             ปิด

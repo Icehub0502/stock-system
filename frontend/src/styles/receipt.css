@@ -1685,14 +1685,18 @@
 
 .rnf-box {
   display: inline-flex; align-items: center; justify-content: center;
-  width: 18px; height: 18px; border: 2px solid #111; flex-shrink: 0;
+  width: 20px; height: 20px; border: 2px solid #111; flex-shrink: 0;
   font-size: 13px; font-weight: 800; line-height: 1; vertical-align: middle;
   margin: 0 3px;
 }
-.rnf-box-on { background: #111; color: #fff; }
+.rnf-box-on { font-size: 22px; color: #111; }
 
 .rnf-answer { display: flex; align-items: center; gap: 8px; }
 .rnf-answer + .rnf-answer { margin-top: 4px; }
+
+/* Highlight the whole row when its checkbox is ticked, so a technician can
+   scan the printed sheet and see which parts need work at a glance. */
+.rnf-table tr.rnf-row-checked td { background: #fef3c7; }
 .rnf-note { flex: 1; border-bottom: 1px solid #9aa0a6; min-height: 18px; font-weight: 600; color: #1d4ed8; padding-bottom: 1px; }
 .rnf-lr { display: flex; align-items: center; font-weight: 600; font-size: 13.5px; }
 .rnf-lr + .rnf-lr { margin-top: 4px; }

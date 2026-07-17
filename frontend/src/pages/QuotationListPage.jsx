@@ -158,7 +158,7 @@ export default function QuotationListPage() {
   };
 
   return (
-    <div className="quotation-page quotation-page--blue">
+    <div className="quotation-page">
       <div className="quotation-header">
         <h1>ใบเสนอราคา</h1>
         <div className="quotation-actions">

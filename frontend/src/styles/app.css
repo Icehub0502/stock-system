@@ -1736,47 +1736,6 @@ button:disabled { background: #f3f4f6; color: #9ca3af; cursor: not-allowed; }
   cursor: pointer;
 }
 
-/* ── Quotation page — blue theme (scoped so it doesn't leak into the
-   receipt list / daily summary pages, which reuse the same .quotation-*
-   classes) ── */
-.quotation-page--blue .quotation-header {
-  border-top: 4px solid #2563eb;
-}
-.quotation-page--blue .quotation-header h1 {
-  color: #1e3a8a;
-}
-.quotation-page--blue .quotation-header h1::before {
-  content: "🔷 ";
-}
-.quotation-page--blue .quotation-table-wrap {
-  border-color: #bfdbfe;
-}
-.quotation-page--blue .quotation-table th {
-  background: #1e40af;
-  color: #fff;
-  border-color: #1e3a8a;
-}
-.quotation-page--blue .quotation-table tbody tr:nth-child(even) td {
-  background: #f5f8ff;
-}
-.quotation-page--blue .quotation-table tr:hover td {
-  background: #dbeafe;
-}
-.quotation-page--blue .btn-primary {
-  background: #2563eb;
-}
-.quotation-page--blue .btn-primary:hover {
-  background: #1d4ed8;
-}
-.quotation-page--blue .search-input:focus {
-  border-color: #2563eb;
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
-}
-.quotation-page--blue .btn-icon-small:hover {
-  background: #eff6ff;
-  border-color: #2563eb;
-}
-
 .quotation-table select,
 .daily-summary-tech-input {
   min-height: unset;

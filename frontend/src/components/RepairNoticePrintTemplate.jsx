@@ -101,7 +101,7 @@ export default function RepairNoticePrintTemplate({ data }) {
         {/* ── Checklist ── */}
         <table className="rnf-table">
           <tbody>
-            <tr>
+            <tr className={c.rack.checked ? 'rnf-row-checked' : ''}>
               <td className="rnf-num"><span>1</span></td>
               <td className="rnf-part"><PartLabel img={rackImg}>แร็คพวงมาลัย / Rack</PartLabel></td>
               <td className="rnf-ans"><NoteAnswer on={c.rack.checked} note={c.rack.note} /></td>
@@ -112,7 +112,7 @@ export default function RepairNoticePrintTemplate({ data }) {
               <td colSpan={2}>ช่วงล่าง / Suspension</td>
             </tr>
             {Object.keys(SUSPENSION_LABELS).map((key, i) => (
-              <tr key={key}>
+              <tr key={key} className={c.suspension[key].checked ? 'rnf-row-checked' : ''}>
                 <td className="rnf-part">
                   <PartLabel img={SUSPENSION_IMG[key]} sub>{`2.${i + 1} ${SUSPENSION_LABELS[key]}`}</PartLabel>
                 </td>
@@ -122,7 +122,7 @@ export default function RepairNoticePrintTemplate({ data }) {
               </tr>
             ))}
 
-            <tr>
+            <tr className={c.wheel_bearing.front_l || c.wheel_bearing.front_r || c.wheel_bearing.rear_l || c.wheel_bearing.rear_r ? 'rnf-row-checked' : ''}>
               <td className="rnf-num"><span>3</span></td>
               <td className="rnf-part"><PartLabel img={wheelBearingImg}>ลูกปืนล้อ / Wheel Bearing</PartLabel></td>
               <td className="rnf-ans">
@@ -131,7 +131,7 @@ export default function RepairNoticePrintTemplate({ data }) {
               </td>
             </tr>
 
-            <tr>
+            <tr className={c.drive_shaft.front_l || c.drive_shaft.front_r ? 'rnf-row-checked' : ''}>
               <td className="rnf-num"><span>4</span></td>
               <td className="rnf-part"><PartLabel img={driveShaftImg}>เพลาขับ / Drive Shaft</PartLabel></td>
               <td className="rnf-ans">
@@ -139,7 +139,7 @@ export default function RepairNoticePrintTemplate({ data }) {
               </td>
             </tr>
 
-            <tr>
+            <tr className={c.shock.front.checked || c.shock.rear.checked ? 'rnf-row-checked' : ''}>
               <td className="rnf-num"><span>5</span></td>
               <td className="rnf-part"><PartLabel img={shockImg}>โช๊ค / Shock</PartLabel></td>
               <td className="rnf-ans">
@@ -148,13 +148,13 @@ export default function RepairNoticePrintTemplate({ data }) {
               </td>
             </tr>
 
-            <tr>
+            <tr className={c.equipment.checked ? 'rnf-row-checked' : ''}>
               <td className="rnf-num"><span>6</span></td>
               <td className="rnf-part"><PartLabel img={equipmentImg}>อุปกรณ์ / Equipment</PartLabel></td>
               <td className="rnf-ans"><NoteAnswer on={c.equipment.checked} note={c.equipment.note} /></td>
             </tr>
 
-            <tr>
+            <tr className={c.brake_pad.front || c.brake_pad.rear ? 'rnf-row-checked' : ''}>
               <td className="rnf-num"><span>7</span></td>
               <td className="rnf-part"><PartLabel img={brakePadImg}>ผ้าเบรค / Brake Pad</PartLabel></td>
               <td className="rnf-ans">
@@ -163,7 +163,7 @@ export default function RepairNoticePrintTemplate({ data }) {
               </td>
             </tr>
 
-            <tr>
+            <tr className={c.brake_disc.front || c.brake_disc.rear ? 'rnf-row-checked' : ''}>
               <td className="rnf-num"><span>8</span></td>
               <td className="rnf-part"><PartLabel img={brakeDiscImg}>เจียจานเบรค / Brake Disc</PartLabel></td>
               <td className="rnf-ans">
