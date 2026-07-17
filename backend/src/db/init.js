@@ -322,6 +322,13 @@ async function initDatabase() {
     MODIFY COLUMN status ENUM('pending','approved','scheduled','no_date') NOT NULL DEFAULT 'pending'
   `).catch(() => {});
 
+  // Mirrors receipts.printed_at — lets the list show a persisted "พิมพ์แล้ว"
+  // state per quotation instead of forgetting as soon as the modal closes.
+  await conn.query(`
+    ALTER TABLE quotations
+    ADD COLUMN printed_at TIMESTAMP NULL DEFAULT NULL
+  `).catch(() => {});
+
   await conn.query(`
     CREATE TABLE IF NOT EXISTS receipt_items (
       id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,

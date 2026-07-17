@@ -4,7 +4,7 @@ import QuotationPrintTemplate from "./QuotationPrintTemplate";
 import PrintPortal from "./PrintPortal";
 import useFitToWidth from "../hooks/useFitToWidth";
 
-export default function QuotationPrintModal({ quotation, onClose }) {
+export default function QuotationPrintModal({ quotation, onClose, onPrinted }) {
   const [detail, setDetail] = useState(quotation);
   // Shrink the A4 preview to fit the modal on phones (see useFitToWidth). Only
   // the on-screen preview is scaled; the PrintPortal copy prints full A4.
@@ -22,6 +22,24 @@ export default function QuotationPrintModal({ quotation, onClose }) {
     const timer = setTimeout(() => setJustPrinted(false), 2500);
     return () => clearTimeout(timer);
   }, [justPrinted]);
+
+  // `window.print()` doesn't return a promise — 'afterprint' is the standard
+  // browser signal that the print dialog closed (whether printed or
+  // cancelled; the web platform has no way to tell those apart). Mirrors
+  // ReceiptPrintModal.jsx so the list row also remembers "พิมพ์แล้ว" after
+  // this modal closes, not just the button flash while it's still open.
+  useEffect(() => {
+    const handleAfterPrint = async () => {
+      try {
+        await client.patch(`/quotations/${quotation.id}/mark-printed`);
+      } catch (err) {
+        console.error('Error marking quotation as printed:', err);
+      }
+      if (onPrinted) onPrinted(quotation.id);
+    };
+    window.addEventListener('afterprint', handleAfterPrint);
+    return () => window.removeEventListener('afterprint', handleAfterPrint);
+  }, [quotation.id, onPrinted]);
 
   const fetchDetail = async () => {
     try {

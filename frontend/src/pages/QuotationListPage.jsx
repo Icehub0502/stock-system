@@ -157,6 +157,12 @@ export default function QuotationListPage() {
     fetchQuotations();
   };
 
+  const handlePrinted = (quotationId) => {
+    setQuotations((prev) =>
+      prev.map((q) => (q.id === quotationId ? { ...q, printed_at: new Date().toISOString() } : q))
+    );
+  };
+
   return (
     <div className="quotation-page">
       <div className="quotation-header">
@@ -243,13 +249,14 @@ export default function QuotationListPage() {
                           แก้ไข
                         </button>
                         <button
-                          className="btn-icon-small"
+                          className={`btn-icon-small ${q.printed_at ? 'btn-printed' : ''}`}
                           onClick={() => {
                             setSelectedQuotation(q);
                             setShowPrintModal(true);
                           }}
+                          title={q.printed_at ? `พิมพ์แล้วเมื่อ ${new Date(q.printed_at).toLocaleString('th-TH')}` : 'ยังไม่ได้พิมพ์'}
                         >
-                          พิมพ์
+                          {q.printed_at ? 'พิมพ์แล้ว' : 'พิมพ์'}
                         </button>
                         <button
                           className={`btn-icon-small ${q.customer_signature ? 'btn-printed' : ''}`}
@@ -307,6 +314,7 @@ export default function QuotationListPage() {
         <QuotationPrintModal
           quotation={selectedQuotation}
           onClose={() => setShowPrintModal(false)}
+          onPrinted={handlePrinted}
         />
       )}
 

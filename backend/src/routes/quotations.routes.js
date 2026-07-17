@@ -316,6 +316,25 @@ router.get('/:id', async (req, res) => {
   }
 });
 
+// PATCH - Mark quotation as printed (mirrors receipts' /:id/mark-printed)
+router.patch('/:id/mark-printed', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const [result] = await pool.execute(
+      'UPDATE quotations SET printed_at = NOW() WHERE id = ?',
+      [id]
+    );
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: 'ไม่พบใบเสนอราคานี้' });
+    }
+    const [[row]] = await pool.execute('SELECT printed_at FROM quotations WHERE id = ?', [id]);
+    res.json({ success: true, printed_at: row.printed_at });
+  } catch (err) {
+    console.error('Error marking quotation as printed:', err);
+    res.status(500).json({ error: 'บันทึกสถานะการพิมพ์ไม่สำเร็จ' });
+  }
+});
+
 // PUT - Update quotation
 router.put('/:id', async (req, res) => {
   const { id } = req.params;
