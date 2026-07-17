@@ -91,6 +91,13 @@ describe('POST /api/line/webhook', () => {
         await pool.execute('DELETE FROM quotation_items WHERE quotation_id = ?', [q.id]);
         await pool.execute('DELETE FROM quotations WHERE id = ?', [q.id]);
       }
+      // ใบเสร็จที่ approve-sync ทดสอบสร้างไว้ (receipts.vehicle_id เป็น RESTRICT
+      // ต้องลบก่อนลบ vehicles ด้านล่าง)
+      const [receipts] = await pool.query('SELECT id FROM receipts WHERE customer_id = ?', [customerId]);
+      for (const r of receipts) {
+        await pool.execute('DELETE FROM receipt_items WHERE receipt_id = ?', [r.id]);
+        await pool.execute('DELETE FROM receipts WHERE id = ?', [r.id]);
+      }
       await pool.execute('DELETE FROM repair_notices WHERE customer_id = ?', [customerId]);
       await pool.execute('DELETE FROM vehicles WHERE customer_id = ?', [customerId]);
       await pool.execute('DELETE FROM customers WHERE id = ?', [customerId]);
@@ -264,6 +271,55 @@ describe('POST /api/line/webhook', () => {
 
     const [items] = await pool.query('SELECT product_name FROM quotation_items WHERE quotation_id = ?', [q1.id]);
     expect(items).toEqual([{ product_name: 'ค่าแรง' }]);
+  });
+
+  test('พิมพ์ข้อความคิว+ลูกค้าเดิมซ้ำ หลังใบเสนอราคาอนุมัติไปแล้ว → แก้ไขใบเดิม (ไม่เปิดใบใหม่) และ sync ใบเสร็จที่ผูกอยู่ด้วย', async () => {
+    const uniq = Date.now().toString().slice(-7);
+    const phone = `085${uniq}`;
+
+    const first = await postWebhook(
+      eventsBody([messageEvent(`คิว:21\nชื่อลูกค้า:คุณอนุมัติแล้ว\nเบอร์โทร:${phone}\nทะเบียนรถ:5กฒ71\nรายการ:\nค่าแรง 2000`, `msg-appr1-${uniq}`)])
+    );
+    expect(first.body.created).toHaveLength(1);
+    const firstNo = first.body.created[0];
+    const [[q1]] = await pool.query('SELECT id, customer_id, vehicle_id, total_amount FROM quotations WHERE quotation_no=?', [firstNo]);
+    createdCustomerIds.push(q1.customer_id);
+
+    // จำลองการกด "อนุมัติ" บนเว็บ — สร้างใบเสร็จผูกไว้ แล้วตั้งสถานะเป็นอนุมัติแล้ว
+    const [receiptResult] = await pool.query(
+      `INSERT INTO receipts (receipt_no, receipt_date, customer_id, vehicle_id, mileage, remark, total_amount)
+       VALUES (?, CURDATE(), ?, ?, 0, NULL, ?)`,
+      [`RC-TEST-${uniq}`, q1.customer_id, q1.vehicle_id, q1.total_amount]
+    );
+    const receiptId = receiptResult.insertId;
+    await pool.query(
+      `INSERT INTO receipt_items (receipt_id, service_item_id, product_name_snapshot, qty, price, amount)
+       VALUES (?, NULL, 'ค่าแรง', 1, 2000, 2000)`,
+      [receiptId]
+    );
+    await pool.query("UPDATE quotations SET status = 'approved', converted_receipt_id = ? WHERE id = ?", [receiptId, q1.id]);
+
+    // ข้อความที่สอง — คิว/ลูกค้าเดิมเป๊ะ แต่เปลี่ยนราคา (จำลองพนักงานพิมพ์แก้ไขรายการ
+    // หลังอนุมัติไปแล้ว โดยไม่มีคำว่า "ชำระเงินเรียบร้อย/แล้ว")
+    const second = await postWebhook(
+      eventsBody([messageEvent(
+        `คิว:21\nชื่อลูกค้า:คุณอนุมัติแล้ว\nเบอร์โทร:${phone}\nทะเบียนรถ:5กฒ71\nรายการ:\nค่าแรง 3500`,
+        `msg-appr2-${uniq}`
+      )])
+    );
+    expect(second.body.created).toHaveLength(1);
+    expect(second.body.created[0]).toBe(firstNo); // ใบเลขเดิม ไม่ใช่ใบใหม่ แม้อนุมัติไปแล้ว
+
+    const [quotations] = await pool.query('SELECT id, status, total_amount FROM quotations WHERE customer_id = ?', [q1.customer_id]);
+    expect(quotations).toHaveLength(1); // ยังมีใบเดียว ไม่ซ้อน
+    expect(quotations[0].status).toBe('approved'); // สถานะอนุมัติยังคงอยู่
+    expect(Number(quotations[0].total_amount)).toBe(3500);
+
+    const [[receiptAfter]] = await pool.query('SELECT total_amount FROM receipts WHERE id = ?', [receiptId]);
+    expect(Number(receiptAfter.total_amount)).toBe(3500); // ใบเสร็จที่ผูกไว้ถูกแก้ตามด้วย
+
+    const [receiptItemsAfter] = await pool.query('SELECT product_name_snapshot, price FROM receipt_items WHERE receipt_id = ?', [receiptId]);
+    expect(receiptItemsAfter).toEqual([{ product_name_snapshot: 'ค่าแรง', price: '3500.00' }]);
   });
 
   test('ยอดที่ร้านแจ้งมาเอง ("รวม") ตรงกับผลรวมจริง → ข้อความตอบไม่มีคำเตือน', () => {

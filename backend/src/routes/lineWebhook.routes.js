@@ -240,12 +240,16 @@ async function createQuotationFromQueue(parsed) {
     const product_summary = resolvedItems.map((it) => it.product_name).join(', ');
     const quotationDate = parsed.quotation_date || todayStr();
 
-    // ใบเสนอราคาเดิมของลูกค้า+คิวเดียวกัน สร้างวันนี้ ยังไม่อนุมัติ → แก้ไขใบนั้น
+    // ใบเสนอราคาเดิมของลูกค้า+คิวเดียวกัน สร้างวันนี้ → แก้ไขใบนั้นแทนสร้างซ้ำ ไม่ว่า
+    // จะยัง pending หรืออนุมัติไปแล้วก็ตาม (อนุมัติแล้วไม่ได้แปลว่าบิลจบ — พนักงานพิมพ์
+    // แก้ไขรายการทางไลน์ได้เรื่อย ๆ จนกว่าจะมีคำว่า "ชำระเงินเรียบร้อย/แล้ว" ซึ่งกรอง
+    // ข้อความทั้งข้อความทิ้งไปแล้วตั้งแต่ parseLineQueueMessage — ถ้าอนุมัติแล้วและมี
+    // ใบเสร็จผูกอยู่ ด้านล่างจะ sync ใบเสร็จนั้นให้ตรงกันด้วย)
     let existing = null;
     if (parsed.queue_no) {
       const [rows] = await conn.execute(
-        `SELECT id, quotation_no FROM quotations
-         WHERE customer_id = ? AND queue_no = ? AND quotation_date = ? AND status = 'pending'
+        `SELECT id, quotation_no, status, converted_receipt_id FROM quotations
+         WHERE customer_id = ? AND queue_no = ? AND quotation_date = ? AND status IN ('pending', 'approved')
          ORDER BY id DESC LIMIT 1`,
         [customerId, parsed.queue_no, quotationDate]
       );
@@ -282,6 +286,26 @@ async function createQuotationFromQueue(parsed) {
       );
     }
 
+    // แก้ไขใบที่อนุมัติไปแล้ว (มีใบเสร็จผูกอยู่) → sync ใบเสร็จให้ตรงกันด้วยเลย
+    // (เหมือน PUT /quotations/:id ฝั่งเว็บ) กันไม่ให้ต้องแก้ 2 ที่
+    let syncedReceipt = false;
+    if (isUpdate && existing.status === 'approved' && existing.converted_receipt_id) {
+      const receiptId = existing.converted_receipt_id;
+      await conn.execute(
+        `UPDATE receipts SET customer_id = ?, vehicle_id = ?, remark = ?, total_amount = ? WHERE id = ?`,
+        [customerId, vehicleId, parsed.remark || null, total_amount, receiptId]
+      );
+      await conn.execute('DELETE FROM receipt_items WHERE receipt_id = ?', [receiptId]);
+      for (const item of resolvedItems) {
+        await conn.execute(
+          `INSERT INTO receipt_items (receipt_id, service_item_id, product_name_snapshot, qty, price, amount, warranty_name, warranty_year, warranty_month, warranty_km)
+           VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [receiptId, item.product_name, item.quantity, item.unit_price, item.quantity * item.unit_price, item.warranty_name, item.warranty_year, item.warranty_month, item.warranty_km]
+        );
+      }
+      syncedReceipt = true;
+    }
+
     await conn.commit();
     return {
       quotation_no,
@@ -294,6 +318,7 @@ async function createQuotationFromQueue(parsed) {
       wasNewCustomer,
       wasNewVehicle,
       isUpdate,
+      syncedReceipt,
     };
   } catch (err) {
     if (conn) {
@@ -349,7 +374,7 @@ async function deleteQuotationForMessage(info) {
 // ส่วนเตือนยอดไม่ตรง (mismatchLine) ที่ไม่มีทางสังเกตได้จากเทสต์ end-to-end เลย
 // เพราะ replyToLine คุยกับ LINE API ตรง ๆ ไม่มี side effect อื่นให้ตรวจสอบ
 function buildSuccessReplyText(parsed, info) {
-  const { quotation_no, itemCount, totalAmount, hasNote, isUpdate } = info;
+  const { quotation_no, itemCount, totalAmount, hasNote, isUpdate, syncedReceipt } = info;
   const itemLine = itemCount > 0
     ? `รายการ ${itemCount} ชิ้น รวม ${totalAmount.toLocaleString()} บาท`
     : 'ยังไม่มีรายการสินค้า (เพิ่มในแอปได้)';
@@ -359,8 +384,11 @@ function buildSuccessReplyText(parsed, info) {
   const mismatchLine = parsed.stated_total != null && parsed.stated_total !== totalAmount
     ? `\n⚠️ ยอดที่แจ้งในไลน์ (${parsed.stated_total.toLocaleString()} บาท) ไม่ตรงกับผลรวมรายการ (${totalAmount.toLocaleString()} บาท) กรุณาตรวจสอบ`
     : '';
+  // แก้ไขใบที่อนุมัติไปแล้ว → ใบเสร็จที่สร้างไว้ก่อนหน้าก็ถูกแก้ตามด้วย ต้องเตือน
+  // ให้พิมพ์ใหม่ ไม่งั้นใบที่พิมพ์ไปแล้วจะไม่ตรงกับข้อมูลในระบบ
+  const syncedLine = syncedReceipt ? '\n🧾 ใบเสร็จที่อนุมัติไว้แล้วถูกแก้ตามด้วย กรุณาพิมพ์ใหม่' : '';
   const verb = isUpdate ? 'แก้ไขใบเสนอราคา' : 'สร้างใบเสนอราคา';
-  return `✅ ${verb} ${quotation_no} แล้ว\nคิว ${parsed.queue_no || '-'} · ${parsed.customer_name}${parsed.license_plate ? ` · ${parsed.license_plate}` : ''}\n${itemLine}${noteLine}${mismatchLine}`;
+  return `✅ ${verb} ${quotation_no} แล้ว\nคิว ${parsed.queue_no || '-'} · ${parsed.customer_name}${parsed.license_plate ? ` · ${parsed.license_plate}` : ''}\n${itemLine}${noteLine}${mismatchLine}${syncedLine}`;
 }
 
 router.post('/webhook', async (req, res) => {
