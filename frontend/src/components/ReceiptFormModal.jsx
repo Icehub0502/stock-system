@@ -242,6 +242,13 @@ export default function ReceiptFormModal({ onClose, onSuccess, receiptId }) {
     } else {
       setVehicleMode('existing');
       setVehicleId(value);
+      // บิลใหม่ (ยังไม่ได้แก้ไขบิลเดิม) → เอาเลขไมล์ล่าสุดของรถคันนี้มาตั้งเป็นค่า
+      // เริ่มต้นให้เลย ไม่งั้นจะค้างที่ 0 ทั้งที่แก้เลขไมล์รถไว้แล้วในหน้ารถลูกค้า —
+      // บิลที่แก้ไขอยู่มีเลขไมล์ของตัวเองอยู่แล้ว จึงไม่แตะตรงนี้ กันค่าที่โหลดมาถูกทับ
+      if (!receiptId) {
+        const selected = vehicles.find((v) => v.id.toString() === value);
+        if (selected) setMileage(String(selected.mileage ?? 0));
+      }
     }
   };
 
@@ -268,6 +275,11 @@ export default function ReceiptFormModal({ onClose, onSuccess, receiptId }) {
         } else {
           setVehicleMode('existing');
           setVehicleId(vehicleList[0].id.toString());
+        }
+        // เหมือน handleVehicleSelect ด้านล่าง — ตั้งเลขไมล์เริ่มต้นจากรถที่เลือก
+        // เฉพาะตอนสร้างบิลใหม่เท่านั้น
+        if (!receiptId) {
+          setMileage(String((selected || vehicleList[0]).mileage ?? 0));
         }
       } else {
         setVehicleMode('new');

@@ -164,6 +164,13 @@ export default function QuotationFormModal({ quotation, onClose, onSuccess }) {
           : vehicleList[0];
         setVehicleMode('existing');
         setVehicleId((selected || vehicleList[0]).id.toString());
+        // ใบเสนอราคาใหม่ (ยังไม่ได้แก้ไขใบเดิม) → เอาเลขไมล์ล่าสุดของรถคันนี้มาตั้ง
+        // เป็นค่าเริ่มต้นให้เลย ไม่งั้นจะค้างที่ 0 ทั้งที่แก้เลขไมล์รถไว้แล้วในหน้ารถ
+        // ลูกค้า — ใบเสนอราคาที่แก้ไขอยู่มีเลขไมล์ของตัวเองอยู่แล้วจาก loadQuotation
+        // จึงไม่แตะตรงนี้ กันค่าที่โหลดมาถูกทับ
+        if (!quotation?.id) {
+          setMileage(String((selected || vehicleList[0]).mileage ?? 0));
+        }
       } else {
         setVehicleMode('new');
         setVehicleId('');
@@ -256,6 +263,12 @@ export default function QuotationFormModal({ quotation, onClose, onSuccess }) {
     } else {
       setVehicleMode('existing');
       setVehicleId(value);
+      // เหมือน loadVehicles ด้านบน — ตั้งเลขไมล์เริ่มต้นจากรถที่เลือกเฉพาะตอนสร้าง
+      // ใบใหม่ ไม่แตะเลขไมล์ที่โหลดมาจากใบเสนอราคาเดิมตอนแก้ไข
+      if (!quotation?.id) {
+        const selected = vehicles.find((v) => v.id.toString() === value);
+        if (selected) setMileage(String(selected.mileage ?? 0));
+      }
     }
   };
 
