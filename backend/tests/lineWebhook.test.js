@@ -455,6 +455,99 @@ describe('POST /api/line/webhook', () => {
     expect(quotationsForB[0].queue_no).toBe(q2.queue_no); // queue_no จริงยังเป็นเลขที่ถูกเปลี่ยนไว้ ไม่เปลี่ยนกลับ
   });
 
+  test('งานค้างข้ามวัน: ลูกค้าเดิมพิมพ์เลขคิวเดิมซ้ำในวันถัดไป (ใบเดิมยัง pending) → แก้ไขใบเดิม ไม่เปิดใบใหม่/ไม่ชนคิว', async () => {
+    const uniq = Date.now().toString().slice(-7);
+    const phone = `076${uniq}`;
+    const queueNo = `8${uniq}`; // เลขคิวเฉพาะเทสต์นี้ ไม่ชนกับเทสต์อื่น
+
+    const first = await postWebhook(
+      eventsBody([messageEvent(`คิว:${queueNo}\nชื่อลูกค้า:คุณข้ามวัน\nเบอร์โทร:${phone}\nทะเบียนรถ:5กฒ80`, `msg-crossday1-${uniq}`)])
+    );
+    expect(first.body.created).toHaveLength(1);
+    const firstNo = first.body.created[0];
+    const [[q1]] = await pool.query('SELECT id, customer_id FROM quotations WHERE quotation_no=?', [firstNo]);
+    createdCustomerIds.push(q1.customer_id);
+
+    // จำลองใบนี้ถูกสร้างไว้ตั้งแต่เมื่อวาน (งานซ่อมยังไม่เสร็จข้ามวัน) — เว็บ/แอปไม่มีทาง
+    // แก้ quotation_date ได้ตรง ๆ ผ่าน webhook จึง UPDATE ตรงในฐานข้อมูลจำลองสถานการณ์นี้
+    await pool.execute('UPDATE quotations SET quotation_date = DATE_SUB(CURDATE(), INTERVAL 1 DAY) WHERE id = ?', [q1.id]);
+
+    // วันนี้ พนักงานพิมพ์เลขคิวเดิมซ้ำเพื่อเติมรายการเข้าใบเดิม
+    const second = await postWebhook(
+      eventsBody([messageEvent(
+        `คิว:${queueNo}\nชื่อลูกค้า:คุณข้ามวัน\nเบอร์โทร:${phone}\nทะเบียนรถ:5กฒ80\nรายการ:\nค่าแรง 2000`,
+        `msg-crossday2-${uniq}`
+      )])
+    );
+    expect(second.body.created).toHaveLength(1);
+    expect(second.body.created[0]).toBe(firstNo); // ใบเลขเดิม ไม่ใช่ใบใหม่
+
+    const [quotations] = await pool.query('SELECT id, queue_no, requested_queue_no FROM quotations WHERE customer_id = ?', [q1.customer_id]);
+    expect(quotations).toHaveLength(1); // ยังมีใบเดียว ไม่ซ้อน
+    expect(quotations[0].queue_no).toBe(queueNo); // ไม่ถูกเปลี่ยนคิว (ไม่ใช่การชนคิว)
+    expect(quotations[0].requested_queue_no).toBeNull(); // ไม่มีการ reassign เกิดขึ้น
+
+    const [items] = await pool.query('SELECT product_name FROM quotation_items WHERE quotation_id = ?', [q1.id]);
+    expect(items).toEqual([{ product_name: 'ค่าแรง' }]); // รายการถูกใส่ในใบเดิม
+  });
+
+  test('เลขคิวชนกับของลูกค้าคนอื่นในวันเดียวกัน (คนละลูกค้าโดยสิ้นเชิง คนละคิวของตัวเองไม่ค้าง) → ยังคงเปลี่ยนอัตโนมัติเป็นเลขถัดไปเหมือนเดิม ไม่ regress จากการแก้ query ด้านบน', async () => {
+    const uniq = Date.now().toString().slice(-7);
+    const phoneA = `077${uniq}`;
+    const phoneB = `078${uniq}`;
+    const queueNo = `9${uniq}`;
+
+    // ลูกค้า A เปิดใบวันนี้ ยังไม่เสร็จ (pending)
+    const firstRes = await postWebhook(
+      eventsBody([messageEvent(`คิว:${queueNo}\nชื่อลูกค้า:คุณเจ้าของคิว\nเบอร์โทร:${phoneA}`, `msg-crossclash1-${uniq}`)])
+    );
+    expect(firstRes.body.created).toHaveLength(1);
+    const [[qA]] = await pool.query('SELECT id, customer_id, queue_no FROM quotations WHERE quotation_no=?', [firstRes.body.created[0]]);
+    createdCustomerIds.push(qA.customer_id);
+
+    // ลูกค้า B (คนละคนโดยสิ้นเชิง ไม่เคยมีใบเดิม) พิมพ์เลขคิวเดียวกันวันนี้ — การแก้ lookup
+    // ให้มองย้อนหลัง 14 วันสำหรับ customer_id เดียวกัน ต้องไม่กระทบ path การชนคิวของ
+    // ลูกค้าคนอื่นเลย ยังต้องเปลี่ยนอัตโนมัติเป็นเลขถัดไปเหมือนเดิมทุกประการ
+    const secondRes = await postWebhook(
+      eventsBody([messageEvent(`คิว:${queueNo}\nชื่อลูกค้า:คุณคนใหม่\nเบอร์โทร:${phoneB}`, `msg-crossclash2-${uniq}`)])
+    );
+    expect(secondRes.body.created).toHaveLength(1);
+    const [[qB]] = await pool.query(
+      'SELECT id, customer_id, queue_no, requested_queue_no FROM quotations WHERE quotation_no=?',
+      [secondRes.body.created[0]]
+    );
+    createdCustomerIds.push(qB.customer_id);
+
+    expect(qB.queue_no).not.toBe(queueNo); // เปลี่ยนไปแล้ว ไม่ใช่เลขที่พิมพ์มา
+    expect(qB.requested_queue_no).toBe(queueNo); // เก็บเลขที่พิมพ์มาจริงไว้
+  });
+
+  test('ใบเดิมเลยกำหนด 14 วัน (pending ค้างนาน) → ไม่ถือว่าเป็นการแก้ไข เปิดใบใหม่แทน', async () => {
+    const uniq = Date.now().toString().slice(-7);
+    const phone = `079${uniq}`;
+    const queueNo = `6${uniq}`;
+
+    const first = await postWebhook(
+      eventsBody([messageEvent(`คิว:${queueNo}\nชื่อลูกค้า:คุณลืมไปนาน\nเบอร์โทร:${phone}`, `msg-stale1-${uniq}`)])
+    );
+    expect(first.body.created).toHaveLength(1);
+    const firstNo = first.body.created[0];
+    const [[q1]] = await pool.query('SELECT id, customer_id FROM quotations WHERE quotation_no=?', [firstNo]);
+    createdCustomerIds.push(q1.customer_id);
+
+    // ใบนี้ถูกลืมไว้เกิน 14 วัน (ยัง pending ค้างอยู่จริง แต่เก่าเกินกว่าจะถือว่าเป็นงานเดิม)
+    await pool.execute('UPDATE quotations SET quotation_date = DATE_SUB(CURDATE(), INTERVAL 15 DAY) WHERE id = ?', [q1.id]);
+
+    const second = await postWebhook(
+      eventsBody([messageEvent(`คิว:${queueNo}\nชื่อลูกค้า:คุณลืมไปนาน\nเบอร์โทร:${phone}`, `msg-stale2-${uniq}`)])
+    );
+    expect(second.body.created).toHaveLength(1);
+    expect(second.body.created[0]).not.toBe(firstNo); // ใบใหม่ ไม่ใช่ใบเดิมที่ค้างเกิน 14 วัน
+
+    const [quotations] = await pool.query('SELECT id FROM quotations WHERE customer_id = ?', [q1.customer_id]);
+    expect(quotations).toHaveLength(2); // สองใบแยกกัน
+  });
+
   test('ยอดที่ร้านแจ้งมาเอง ("รวม") ตรงกับผลรวมจริง → ข้อความตอบไม่มีคำเตือน', () => {
     const parsed = { queue_no: '1', customer_name: 'คุณเอ', license_plate: null, stated_total: 5000 };
     const info = { quotation_no: 'IV000001', itemCount: 1, totalAmount: 5000, hasNote: false, isUpdate: false };

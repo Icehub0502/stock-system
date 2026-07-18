@@ -269,11 +269,16 @@ async function createQuotationFromQueue(parsed) {
     // คนอื่นในวันเดียวกัน (ดูด้านล่าง) ใบเสนอราคานั้นจะเก็บเลขที่พิมพ์มาครั้งแรกไว้ใน
     // requested_queue_no ควบคู่กับ queue_no จริงที่ใช้อยู่ — ลูกค้าคนเดิมพิมพ์เลขคิวเดิม
     // ซ้ำอีกครั้ง (หมายถึงแก้ไขใบเดิม) จึงต้องจับคู่ด้วยทั้งสองคอลัมน์ ไม่ใช่แค่ queue_no
+    // หมายเหตุ: งานบางคันค้างข้ามวัน (รถซ่อมไม่เสร็จวันเดียว) พนักงานพิมพ์เลขคิวเดิมซ้ำ
+    // ในวันถัดไปเพื่อเพิ่ม/แก้รายการในใบเดิม จึงห้ามล็อก quotation_date = วันนี้ตรง ๆ
+    // ต้องมองย้อนหลังไปด้วย (14 วัน) เพื่อยังเจอใบเดิมของลูกค้าคนนี้ที่ยัง pending/approved
+    // อยู่ — จำกัดด้วย customer_id อยู่แล้วจึงไม่มีทางไปรวมกับใบของลูกค้าคนอื่น ส่วนใบเก่า
+    // เกิน 14 วันที่ถูกลืมไปแล้วจะไม่ถูกดึงกลับมาโดยไม่ตั้งใจ
     let existing = null;
     if (parsed.queue_no) {
       const [rows] = await conn.execute(
         `SELECT id, quotation_no, status, converted_receipt_id FROM quotations
-         WHERE customer_id = ? AND quotation_date = ? AND status IN ('pending', 'approved')
+         WHERE customer_id = ? AND quotation_date >= DATE_SUB(?, INTERVAL 14 DAY) AND status IN ('pending', 'approved')
          AND (queue_no = ? OR requested_queue_no = ?)
          ORDER BY id DESC LIMIT 1`,
         [customerId, quotationDate, parsed.queue_no, parsed.queue_no]
