@@ -96,7 +96,7 @@ export default function ReceiptDetailModal({ receiptId, onClose }) {
                 </div>
                 <div className="detail-row">
                   <span className="label">เลขไมล์</span>
-                  <span className="value">{receipt.mileage || 0} กม.</span>
+                  <span className="value">{receipt.mileage || receipt.vehicle_mileage || 0} กม.</span>
                 </div>
               </section>
             </div>

@@ -105,7 +105,8 @@ export default function ReceiptFormModal({ onClose, onSuccess, receiptId }) {
       setCustomerMode('existing');
       setCustomerQuery(receiptData.customer_name || '');
       setNewCustomer({ customer_name: '', phone: '' });
-      setMileage(receiptData.mileage?.toString() || '0');
+      // ใบเสร็จที่ไม่เคยบันทึกเลขไมล์ของตัวเอง (0/ว่าง) → เติมเลขไมล์ล่าสุดของรถให้แทน
+      setMileage(String(receiptData.mileage || receiptData.vehicle_mileage || 0));
       setRemark(receiptData.remark || '');
       setVehicleMode('existing');
       setVehicleId(receiptData.vehicle_id?.toString() || '');

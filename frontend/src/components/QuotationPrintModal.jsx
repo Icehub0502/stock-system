@@ -69,7 +69,9 @@ export default function QuotationPrintModal({ quotation, onClose, onPrinted }) {
       model: detail.model || detail.car_model,
       color: detail.color || detail.car_color,
       license_plate: detail.license_plate,
-      mileage: detail.mileage,
+      // ใบที่ไม่เคยบันทึกเลขไมล์ของตัวเอง (0/ว่าง เช่นใบจากไลน์รุ่นเก่า) →
+      // ใช้เลขไมล์ล่าสุดของรถแทน จะได้ตรงกับที่แก้ในหน้าข้อมูลรถ
+      mileage: detail.mileage || detail.vehicle_mileage,
     },
     items: detail.items || [],
     remark: detail.remark,

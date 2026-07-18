@@ -98,7 +98,8 @@ export default function QuotationFormModal({ quotation, onClose, onSuccess }) {
       setCustomerMode('existing');
       setCustomerQuery(detail.customer_name || '');
       setNewCustomer({ customer_name: '', phone: '' });
-      setMileage(detail.mileage?.toString() || '0');
+      // ใบที่ไม่เคยบันทึกเลขไมล์ของตัวเอง (0/ว่าง) → เติมเลขไมล์ล่าสุดของรถให้แทน
+      setMileage(String(detail.mileage || detail.vehicle_mileage || 0));
       setRemark(detail.remark || '');
       setQueueNo(detail.queue_no || '');
       setSymptom(detail.symptom || '');

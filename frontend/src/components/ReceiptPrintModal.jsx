@@ -63,7 +63,8 @@ export default function ReceiptPrintModal({ receiptId, onClose, onPrinted }) {
       model: receipt.model,
       color: receipt.color,
       license_plate: receipt.license_plate,
-      mileage: receipt.mileage,
+      // ใบเสร็จที่ไม่เคยบันทึกเลขไมล์ของตัวเอง (0/ว่าง) → ใช้เลขไมล์ล่าสุดของรถแทน
+      mileage: receipt.mileage || receipt.vehicle_mileage,
     },
     items: receipt.items || [],
     remark: receipt.remark || '',
