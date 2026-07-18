@@ -64,6 +64,7 @@ export default function DashboardPage() {
   const [recentReceipts, setRecentReceipts] = useState([]);
   const [revenueTrend, setRevenueTrend] = useState([]);
   const [pendingQuotations, setPendingQuotations] = useState([]);
+  const [todayAppointments, setTodayAppointments] = useState([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -101,11 +102,18 @@ export default function DashboardPage() {
       setTopVehicleModels(topVehicleModelsRes.data.data || []);
       setTopCustomers(topCustomersRes.data.data || []);
       setRecentReceipts((receiptsRes.data.data || []).slice(0, 5));
+      const allQuotations = quotationsRes.data.data || [];
       setPendingQuotations(
-        (quotationsRes.data.data || [])
+        allQuotations
           .filter((q) => q.status !== 'approved')
           .sort((a, b) => new Date(a.quotation_date) - new Date(b.quotation_date))
           .slice(0, 10)
+      );
+      // Appointments scheduled for today should "pop up" automatically so
+      // staff can't miss a customer who's due in — surfaced in its own
+      // panel above the general pending list.
+      setTodayAppointments(
+        allQuotations.filter((q) => q.status === 'scheduled' && q.scheduled_date === today)
       );
     }).finally(() => {
       if (!cancelled) setLoading(false);
@@ -146,6 +154,28 @@ export default function DashboardPage() {
               <div className="dash-stat-value">{lowStockCount.toLocaleString('en-US')}</div>
             </div>
           </div>
+
+          {/* ── Today's scheduled appointments — surfaced prominently so staff
+              can't miss a customer who's due in today ── */}
+          {todayAppointments.length > 0 && (
+            <div className="dash-panel dash-panel-alert">
+              <div className="dash-panel-title">🔔 นัดหมายวันนี้ ({todayAppointments.length})</div>
+              <div className="dash-list">
+                {todayAppointments.map((q) => (
+                  <Link key={q.id} to="/quotations" className="dash-list-row dash-list-row-link">
+                    <div>
+                      <span className="dash-list-code">{q.quotation_no}</span>
+                      <span className="dash-list-name">
+                        {q.customer_name}
+                        {q.queue_no ? ` · คิว ${q.queue_no}` : ''}
+                      </span>
+                    </div>
+                    <span className="dash-amount">฿{formatBaht(q.total_amount)}</span>
+                  </Link>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* ── Revenue trend (last 14 days) ── */}
           <div className="dash-panel">

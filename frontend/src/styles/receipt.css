@@ -1570,6 +1570,18 @@
   page-break-inside: avoid;
 }
 
+/* Highlights "มัดจำ <amount>" wherever remark text is rendered read-only
+   (print templates, detail views) — a warm badge-like pill so a deposit note
+   can't be missed. print-color-adjust:exact (set globally under @media print
+   above) keeps this background visible on the printed page. */
+.deposit-highlight {
+  background: #fef3c7;
+  color: #92400e;
+  font-weight: 700;
+  padding: 0 4px;
+  border-radius: 3px;
+}
+
 .doc-warranty-row {
   display: flex;
   gap: 28px;

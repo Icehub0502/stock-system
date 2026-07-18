@@ -2,6 +2,7 @@ import React from 'react';
 import champpowerLogo from '../image/champpower-logo.jpg';
 import { COMPANY, amountToWords } from '../utils/printDoc';
 import { formatMoney } from '../utils/format';
+import { highlightDeposit } from '../utils/highlightDeposit';
 
 // Mirrors ReceiptPrintTemplate.jsx's layout/pagination approach, so a
 // quotation and a receipt look like the same physical document family —
@@ -194,7 +195,7 @@ export default function QuotationPrintTemplate({ data }) {
               })}
             </div>
 
-            <div className="doc-remark-row"><b>หมายเหตุ :</b> {remark || ''}</div>
+            <div className="doc-remark-row"><b>หมายเหตุ :</b> {highlightDeposit(remark) || ''}</div>
 
             <SignatureBlock sellerName={COMPANY.legalName} customerName={customer.customer_name} docDateText={docDateText} signatureDataUrl={data.customer_signature} />
           </div>

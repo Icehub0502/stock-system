@@ -5,6 +5,7 @@ import QuotationFormModal from "../components/QuotationFormModal";
 import QuotationPrintModal from "../components/QuotationPrintModal";
 import ScheduleDateDialog from "../components/ScheduleDateDialog";
 import SignatureModal from "../components/SignatureModal";
+import { todayStr } from "../utils/format";
 
 function StatusBadge({ status, scheduledDate }) {
   if (status === 'approved') {
@@ -12,6 +13,11 @@ function StatusBadge({ status, scheduledDate }) {
   }
   if (status === 'scheduled') {
     const dateText = scheduledDate ? new Date(scheduledDate).toLocaleDateString('th-TH') : '-';
+    // Today's due appointment needs to look distinctly more urgent than a
+    // future-dated one, not just show the same "รอทำ" badge.
+    if (scheduledDate === todayStr()) {
+      return <span className="status-badge status-badge-today">🔔 นัดวันนี้ {dateText}</span>;
+    }
     return <span className="status-badge status-badge-warning">📅 รอทำ {dateText}</span>;
   }
   if (status === 'no_date') {
@@ -79,6 +85,15 @@ export default function QuotationListPage() {
     }
     return out;
   }, [filtered]);
+
+  // Quotations scheduled for today, regardless of which day-group they fall
+  // under above (a quotation could've been created days ago but scheduled
+  // for today) — surfaced as a banner so they can't be missed even if their
+  // row is buried further down the list.
+  const todayAppointments = useMemo(
+    () => quotations.filter((q) => q.status === 'scheduled' && q.scheduled_date === todayStr()),
+    [quotations]
+  );
 
   // Handle delete
   const handleDelete = async (id) => {
@@ -189,6 +204,13 @@ export default function QuotationListPage() {
 
       {error && <div className="error-message">{error}</div>}
 
+      {!loading && todayAppointments.length > 0 && (
+        <div className="today-appointment-banner">
+          🔔 นัดหมายวันนี้ {todayAppointments.length} รายการ:{' '}
+          {todayAppointments.map((q) => `${q.customer_name} (${q.quotation_no})`).join(', ')}
+        </div>
+      )}
+
       {loading ? (
         <div className="loading">กำลังโหลด...</div>
       ) : filtered.length === 0 ? (
@@ -217,7 +239,16 @@ export default function QuotationListPage() {
                     </td>
                   </tr>
                   {group.rows.map((q) => (
-                    <tr key={q.id} className={justApprovedId === q.id ? 'row-just-approved' : ''}>
+                    <tr
+                      key={q.id}
+                      className={
+                        justApprovedId === q.id
+                          ? 'row-just-approved'
+                          : q.status === 'scheduled' && q.scheduled_date === todayStr()
+                            ? 'row-scheduled-today'
+                            : ''
+                      }
+                    >
                       <td data-label="เลขที่">
                         <strong>{q.quotation_no}</strong>
                       </td>

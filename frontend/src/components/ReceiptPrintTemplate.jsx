@@ -2,6 +2,7 @@ import React from 'react';
 import champpowerLogo from '../image/champpower-logo.jpg';
 import { COMPANY, amountToWords } from '../utils/printDoc';
 import { formatMoney } from '../utils/format';
+import { highlightDeposit } from '../utils/highlightDeposit';
 
 // Fixed warranty-tag slots printed on every receipt (matches the physical form).
 // Matched against the item name itself — `category` isn't persisted on saved
@@ -203,7 +204,7 @@ export default function ReceiptPrintTemplate({ data }) {
               })}
             </div>
 
-            <div className="doc-remark-row"><b>หมายเหตุ :</b> {remark || ''}</div>
+            <div className="doc-remark-row"><b>หมายเหตุ :</b> {highlightDeposit(remark) || ''}</div>
 
             <div className="doc-payment-methods">
               <span className="doc-payment-label">ชำระโดย :</span>

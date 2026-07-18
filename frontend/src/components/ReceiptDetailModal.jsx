@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import client from "../api/client";
 import champpowerLogo from "../image/champpower-logo.jpg";
+import { highlightDeposit } from "../utils/highlightDeposit";
 
 const formatMoney = (value) => {
   if (Number.isNaN(Number(value))) return '0.00';
@@ -147,7 +148,7 @@ export default function ReceiptDetailModal({ receiptId, onClose }) {
               {receipt.remark && (
                 <div className="detail-row remark-row">
                   <span className="label">หมายเหตุ</span>
-                  <span className="value">{receipt.remark}</span>
+                  <span className="value">{highlightDeposit(receipt.remark)}</span>
                 </div>
               )}
               <div className="summary-grid">
