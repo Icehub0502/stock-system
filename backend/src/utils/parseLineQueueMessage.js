@@ -168,6 +168,21 @@ function parseItemSectionLines(lines) {
       continue;
     }
 
+    // "หมายเหตุ ..." ในรายการ (โคลอนมีหรือไม่มีก็ได้ เหมือน OPTIONAL_LABEL_RE) และ
+    // บรรทัดที่มีคำว่า "มัดจำ" (แม้ไม่มี label "หมายเหตุ" นำหน้า) ไม่ใช่รายการสินค้า
+    // — เก็บเข้าหมายเหตุแทน (caller เอา notes ไปต่อเป็น result.remark)
+    const noteLabelMatch = /^หมายเหตุ\s*:*\s*(.*)$/.exec(line);
+    if (noteLabelMatch) {
+      flushPending();
+      notes.push(noteLabelMatch[1].trim() || line);
+      continue;
+    }
+    if (/มัดจำ/.test(line)) {
+      flushPending();
+      notes.push(line);
+      continue;
+    }
+
     const totalMatch = /^รวม\s*:*\s*([\d,]+)\s*(?:บาท|฿)?\s*$/.exec(line);
     if (totalMatch) {
       flushPending();
@@ -187,6 +202,32 @@ function parseItemSectionLines(lines) {
     }
 
     flushPending();
+
+    // "ลูกปืนล้อหน้า L+R 1700*2 3,400" / "2*1700" / "700x2 =1,400" — จำนวนกับ
+    // ราคาต่อหน่วยคูณกัน (พิมพ์สลับข้างได้ ตัวเลขน้อยกว่า = จำนวน) ยอดรวมต่อท้าย
+    // มีหรือไม่มีก็ได้ — ถ้ามีและหารด้วยจำนวนลงตัว ใช้ยอดรวมเป็นตัวตั้ง (กันพิมพ์
+    // ราคาต่อหน่วยผิดแต่ยอดรวมถูก)
+    const qtyCalc = /^(.*?)\s+([\d,]+)\s*[xX×*]\s*([\d,]+)(?:\s*=?\s*([\d,]+))?\s*(?:บาท)?$/.exec(line);
+    if (qtyCalc && qtyCalc[1].trim()) {
+      const a = Number(qtyCalc[2].replace(/,/g, ''));
+      const b = Number(qtyCalc[3].replace(/,/g, ''));
+      const printedTotal = qtyCalc[4] != null ? Number(qtyCalc[4].replace(/,/g, '')) : null;
+      let quantity = Math.min(a, b);
+      let unitPrice = Math.max(a, b);
+      if (printedTotal != null && quantity > 0 && printedTotal % quantity === 0) {
+        unitPrice = printedTotal / quantity;
+      }
+      if (quantity >= 1) {
+        items.push({
+          name: qtyCalc[1].trim(),
+          price: printedTotal != null ? printedTotal : quantity * unitPrice,
+          quantity,
+          unit_price: unitPrice,
+        });
+        continue;
+      }
+    }
+
     // ราคาขึ้นต้นด้วย "-" ก็จับได้ (ส่วนลด เช่น "ส่วนลด -1000" → ราคาติดลบ)
     const m = /^(.*?)[\s]*(-?[\d,]+)\s*(?:บาท)?$/.exec(line);
     if (m && m[1].trim()) {

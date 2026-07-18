@@ -329,6 +329,17 @@ async function initDatabase() {
     ADD COLUMN printed_at TIMESTAMP NULL DEFAULT NULL
   `).catch(() => {});
 
+  // requested_queue_no: เลขคิวที่พนักงาน "พิมพ์มาจริง" ก่อนถูกเปลี่ยนอัตโนมัติ (ดู
+  // createQuotationFromQueue ใน lineWebhook.routes.js) — เกิดเมื่อเลขคิวชนกับของ
+  // ลูกค้าคนอื่นในวันเดียวกัน ระบบจะเปลี่ยน queue_no จริงให้เป็นเลขถัดไปที่ว่าง แต่
+  // เก็บเลขเดิมที่พิมพ์มาไว้ที่นี่ด้วย เพื่อให้ลูกค้าคนเดิมพิมพ์เลขคิวเดิมซ้ำอีกครั้ง
+  // (หมายถึง "แก้ไขใบเดิม") ยังจับคู่กับใบที่ถูกเปลี่ยนเลขไปแล้วได้ถูกต้อง แทนที่จะ
+  // เปิดใบใหม่ซ้อน
+  await conn.query(`
+    ALTER TABLE quotations
+    ADD COLUMN requested_queue_no VARCHAR(50) DEFAULT NULL
+  `).catch(() => {});
+
   await conn.query(`
     CREATE TABLE IF NOT EXISTS receipt_items (
       id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,

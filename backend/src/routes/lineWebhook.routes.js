@@ -136,9 +136,13 @@ async function matchServiceItem(conn, name) {
 async function resolveQuotationItemRows(conn, item) {
   const match = await matchServiceItem(conn, item.name);
   const price = item.price != null ? item.price : 0;
+  // รายการแบบ "1700*2" พาร์สจำนวน+ราคาต่อหน่วยมาให้แล้ว — ไม่มีก็ถือเป็น 1 ชิ้น
+  // ราคาที่พิมพ์มาคือราคาต่อหน่วยไปเลย
+  const quantity = Number(item.quantity) >= 1 ? Number(item.quantity) : 1;
+  const unitPrice = item.unit_price != null ? item.unit_price : price;
 
   if (!match) {
-    return [{ product_name: item.name, quantity: 1, unit_price: price, warranty_name: null, warranty_year: 0, warranty_month: 0, warranty_km: 0 }];
+    return [{ product_name: item.name, quantity, unit_price: unitPrice, warranty_name: null, warranty_year: 0, warranty_month: 0, warranty_km: 0 }];
   }
 
   const warranty = {
@@ -149,7 +153,7 @@ async function resolveQuotationItemRows(conn, item) {
   };
 
   if (!match.is_set) {
-    return [{ product_name: match.product_name, quantity: 1, unit_price: price, ...warranty }];
+    return [{ product_name: match.product_name, quantity, unit_price: unitPrice, ...warranty }];
   }
 
   const [components] = await conn.execute(
@@ -261,15 +265,49 @@ async function createQuotationFromQueue(parsed) {
     // แก้ไขรายการทางไลน์ได้เรื่อย ๆ จนกว่าจะมีคำว่า "ชำระเงินเรียบร้อย/แล้ว" ซึ่งกรอง
     // ข้อความทั้งข้อความทิ้งไปแล้วตั้งแต่ parseLineQueueMessage — ถ้าอนุมัติแล้วและมี
     // ใบเสร็จผูกอยู่ ด้านล่างจะ sync ใบเสร็จนั้นให้ตรงกันด้วย)
+    // เพิ่มเติม: ถ้าเลขคิวที่พิมพ์มาเคย "ถูกเปลี่ยนอัตโนมัติ" ไปแล้วจากการชนกับลูกค้า
+    // คนอื่นในวันเดียวกัน (ดูด้านล่าง) ใบเสนอราคานั้นจะเก็บเลขที่พิมพ์มาครั้งแรกไว้ใน
+    // requested_queue_no ควบคู่กับ queue_no จริงที่ใช้อยู่ — ลูกค้าคนเดิมพิมพ์เลขคิวเดิม
+    // ซ้ำอีกครั้ง (หมายถึงแก้ไขใบเดิม) จึงต้องจับคู่ด้วยทั้งสองคอลัมน์ ไม่ใช่แค่ queue_no
     let existing = null;
     if (parsed.queue_no) {
       const [rows] = await conn.execute(
         `SELECT id, quotation_no, status, converted_receipt_id FROM quotations
-         WHERE customer_id = ? AND queue_no = ? AND quotation_date = ? AND status IN ('pending', 'approved')
+         WHERE customer_id = ? AND quotation_date = ? AND status IN ('pending', 'approved')
+         AND (queue_no = ? OR requested_queue_no = ?)
          ORDER BY id DESC LIMIT 1`,
-        [customerId, parsed.queue_no, quotationDate]
+        [customerId, quotationDate, parsed.queue_no, parsed.queue_no]
       );
       if (rows.length > 0) existing = rows[0];
+    }
+
+    // กำลังจะเปิดใบใหม่ (ไม่เจอใบเดิมของลูกค้าคนนี้) แต่เลขคิวที่พิมพ์มาซ้ำกับของ
+    // ลูกค้าคนอื่นที่ยังไม่เสร็จงานในวันเดียวกัน → เปลี่ยนเลขคิวให้อัตโนมัติเป็นเลข
+    // ถัดไปที่ว่าง (กันหน้างานสับสนว่าใบไหนของใคร) เฉพาะกรณีเลขคิวเป็นตัวเลขล้วน
+    // เท่านั้น (ร้านพิมพ์เป็นตัวเลขเสมอในทางปฏิบัติ — ไม่ใช่ตัวเลขก็ข้ามไป ไม่พยายาม
+    // ตีความ/เรียงลำดับแทน)
+    let actualQueueNo = parsed.queue_no;
+    let requestedQueueNo = null;
+    let reassignedFrom = null;
+    if (!existing && parsed.queue_no && /^\d+$/.test(parsed.queue_no)) {
+      // FOR UPDATE ล็อกแถวคิววันนี้ทั้งหมดไว้จนกว่า transaction นี้จะ commit —
+      // กันสองข้อความที่ชนคิวเดียวกันมาถึงพร้อมกัน (เช่นพนักงานพิมพ์ต่อกันเร็ว ๆ)
+      // อ่าน MAX เดียวกันแล้วเลื่อนไปชนเลขเดียวกันซ้ำ ต้องรอให้อีกฝั่ง insert เสร็จ
+      // ก่อนถึงจะอ่านเห็นเลขล่าสุดจริง ๆ
+      const [todayQueueRows] = await conn.execute(
+        `SELECT queue_no FROM quotations WHERE quotation_date = ? AND queue_no REGEXP '^[0-9]+$' FOR UPDATE`,
+        [quotationDate]
+      );
+      const [takenByOther] = await conn.execute(
+        `SELECT id FROM quotations WHERE quotation_date = ? AND queue_no = ? AND customer_id != ? AND status IN ('pending', 'approved') LIMIT 1`,
+        [quotationDate, parsed.queue_no, customerId]
+      );
+      if (takenByOther.length > 0) {
+        const maxQueue = todayQueueRows.reduce((max, r) => Math.max(max, Number(r.queue_no)), 0);
+        reassignedFrom = parsed.queue_no;
+        actualQueueNo = String(maxQueue + 1);
+        requestedQueueNo = parsed.queue_no;
+      }
     }
 
     let quotationId;
@@ -287,9 +325,9 @@ async function createQuotationFromQueue(parsed) {
     } else {
       quotation_no = await generateQuotationNo(conn);
       const [quotationResult] = await conn.execute(
-        `INSERT INTO quotations (quotation_no, quotation_date, customer_id, vehicle_id, mileage, remark, product_summary, total_amount, queue_no, symptom)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [quotation_no, quotationDate, customerId, vehicleId, parsed.mileage ?? 0, parsed.remark || null, product_summary, total_amount, parsed.queue_no || null, parsed.symptom || null]
+        `INSERT INTO quotations (quotation_no, quotation_date, customer_id, vehicle_id, mileage, remark, product_summary, total_amount, queue_no, requested_queue_no, symptom)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [quotation_no, quotationDate, customerId, vehicleId, parsed.mileage ?? 0, parsed.remark || null, product_summary, total_amount, actualQueueNo || null, requestedQueueNo, parsed.symptom || null]
       );
       quotationId = quotationResult.insertId;
     }
@@ -335,6 +373,8 @@ async function createQuotationFromQueue(parsed) {
       wasNewVehicle,
       isUpdate,
       syncedReceipt,
+      reassignedFrom, // เลขคิวเดิมที่พิมพ์มา (มีค่าเฉพาะตอนถูกเปลี่ยนอัตโนมัติ)
+      reassignedTo: reassignedFrom ? actualQueueNo : null,
     };
   } catch (err) {
     if (conn) {
@@ -390,7 +430,7 @@ async function deleteQuotationForMessage(info) {
 // ส่วนเตือนยอดไม่ตรง (mismatchLine) ที่ไม่มีทางสังเกตได้จากเทสต์ end-to-end เลย
 // เพราะ replyToLine คุยกับ LINE API ตรง ๆ ไม่มี side effect อื่นให้ตรวจสอบ
 function buildSuccessReplyText(parsed, info) {
-  const { quotation_no, itemCount, totalAmount, hasNote, isUpdate, syncedReceipt } = info;
+  const { quotation_no, itemCount, totalAmount, hasNote, isUpdate, syncedReceipt, reassignedFrom, reassignedTo } = info;
   const itemLine = itemCount > 0
     ? `รายการ ${itemCount} ชิ้น รวม ${totalAmount.toLocaleString()} บาท`
     : 'ยังไม่มีรายการสินค้า (เพิ่มในแอปได้)';
@@ -400,11 +440,17 @@ function buildSuccessReplyText(parsed, info) {
   const mismatchLine = parsed.stated_total != null && parsed.stated_total !== totalAmount
     ? `\n⚠️ ยอดที่แจ้งในไลน์ (${parsed.stated_total.toLocaleString()} บาท) ไม่ตรงกับผลรวมรายการ (${totalAmount.toLocaleString()} บาท) กรุณาตรวจสอบ`
     : '';
+  // เลขคิวที่พิมพ์มาชนกับของลูกค้าคนอื่นวันนี้ → ถูกเปลี่ยนอัตโนมัติ ต้องแจ้งให้รู้
+  // ชัด ๆ ไม่งั้นหน้างานเรียกคิวผิดคน
+  const reassignLine = reassignedFrom
+    ? `\n⚠️ คิวที่ ${reassignedFrom} มีแล้ววันนี้ เปลี่ยนเป็นคิว ${reassignedTo} ให้อัตโนมัติ`
+    : '';
   // แก้ไขใบที่อนุมัติไปแล้ว → ใบเสร็จที่สร้างไว้ก่อนหน้าก็ถูกแก้ตามด้วย ต้องเตือน
   // ให้พิมพ์ใหม่ ไม่งั้นใบที่พิมพ์ไปแล้วจะไม่ตรงกับข้อมูลในระบบ
   const syncedLine = syncedReceipt ? '\n🧾 ใบเสร็จที่อนุมัติไว้แล้วถูกแก้ตามด้วย กรุณาพิมพ์ใหม่' : '';
   const verb = isUpdate ? 'แก้ไขใบเสนอราคา' : 'สร้างใบเสนอราคา';
-  return `✅ ${verb} ${quotation_no} แล้ว\nคิว ${parsed.queue_no || '-'} · ${parsed.customer_name}${parsed.license_plate ? ` · ${parsed.license_plate}` : ''}\n${itemLine}${noteLine}${mismatchLine}${syncedLine}`;
+  const displayQueueNo = reassignedTo || parsed.queue_no || '-';
+  return `✅ ${verb} ${quotation_no} แล้ว\nคิว ${displayQueueNo} · ${parsed.customer_name}${parsed.license_plate ? ` · ${parsed.license_plate}` : ''}\n${itemLine}${noteLine}${mismatchLine}${reassignLine}${syncedLine}`;
 }
 
 router.post('/webhook', async (req, res) => {

@@ -241,11 +241,54 @@ describe('parseLineQueueMessage', () => {
       { name: 'กรองอากาศแท้', price: 800 },
       { name: 'กรองแอร์', price: 300 },
       { name: 'กรองโซล่าแท้', price: 700 },
-      { name: 'น้ำยาหล่อเย็น', price: 1400 },
-      { name: 'น้ำมันเฟืองท้าย', price: 900 },
+      { name: 'น้ำยาหล่อเย็น', price: 1400, quantity: 2, unit_price: 700 },
+      { name: 'น้ำมันเฟืองท้าย', price: 900, quantity: 3, unit_price: 300 },
       { name: 'ไล่น้ำมันเบรคทั้งระบบ', price: 1000 },
     ]);
     expect(parsed.stated_total).toBe(14100);
+  });
+
+  test('รายการ "ราคา*จำนวน" ("1700*2 3,400") → แยกราคาต่อหน่วย+จำนวน, สลับข้าง "2*1700" ก็ได้', () => {
+    const parsed = parseLineQueueMessage(
+      [
+        'คิว4',
+        '18/07/26',
+        'คุณ ทดสอบสิบเอ็ด',
+        '099-000-0011',
+        'Toyota Altis 09',
+        'ทอง',
+        '215170',
+        'แร็คใหม่ 4000',
+        'ค่าแรง2000',
+        'ชุดโปรช่วงล่างเก๋ง 6500',
+        'ลูกปืนล้อหน้า L+R 1700*2 3,400',
+      ].join('\n')
+    );
+    expect(parsed.color).toBe('ทอง');
+    expect(parsed.mileage).toBe(215170);
+    expect(parsed.items).toEqual([
+      { name: 'แร็คใหม่', price: 4000 },
+      { name: 'ค่าแรง', price: 2000 },
+      { name: 'ชุดโปรช่วงล่างเก๋ง', price: 6500 },
+      { name: 'ลูกปืนล้อหน้า L+R', price: 3400, quantity: 2, unit_price: 1700 },
+    ]);
+  });
+
+  test('"จำนวน*ราคา" สลับข้าง / ไม่มียอดรวมต่อท้าย / ยอดรวมไม่ตรงแต่หารลงตัว → ใช้ยอดรวมเป็นหลัก', () => {
+    const parsed = parseLineQueueMessage(
+      [
+        'คิว 5',
+        'คุณทดสอบสิบสอง',
+        'โช้คหน้า 2*1700',
+        'ผ้าเบรค 2*950 1,900',
+        'หัวเทียน 4*250 1,200', // 4*250=1000 แต่ยอดรวมพิมพ์ 1,200 → เชื่อยอดรวม (1200/4=300)
+      ].join('\n')
+    );
+    expect(parsed.items).toEqual([
+      { name: 'โช้คหน้า', price: 3400, quantity: 2, unit_price: 1700 },
+      { name: 'ผ้าเบรค', price: 1900, quantity: 2, unit_price: 950 },
+      { name: 'หัวเทียน', price: 1200, quantity: 4, unit_price: 300 },
+    ]);
   });
 
   test('"ลูกค้าอนุมัติ" ท้ายรายการ (ไม่มียอดรวม) → ไม่ถูกเอาไปอยู่ในรายการ', () => {
@@ -310,6 +353,67 @@ describe('parseLineQueueMessage', () => {
       { name: 'ถ่ายน้ำมันเกียร์ทั้งระบบ', price: 1450 },
     ]);
     expect(parsed.stated_total).toBe(8600);
+  });
+
+  test('ข้อความจริงของร้าน: "หมายเหตุ มัดจำ ..." ท้ายรายการ (หลัง "รวม xxxx") → ไม่ใช่รายการสินค้า (ไม่ใช่ item ที่ 6) ไปอยู่ในหมายเหตุแทน', () => {
+    const parsed = parseLineQueueMessage(
+      [
+        'คิว 11 18/07',
+        'คุณทดสอบสิบเอ็ด',
+        '085-109-5665',
+        'Honda HRV',
+        '6กช1394',
+        'ขาว',
+        'แร๊ค โช๊ค ช่วงล่างรอเช็ค',
+        'แร็ค 4500',
+        'ค่าแรง 2000',
+        'ชุดโปรช่วงล่างเก๋ง 7500',
+        'แท่นเครื่องแท้ 3 ตัว 7500',
+        'โช๊ค SHOWA 4 ตัว รวมอุปกรณ์ 16500',
+        'รวม 38,000',
+        'หมายเหตุ มัดจำ 2000',
+      ].join('\n')
+    );
+    expect(parsed.queue_no).toBe('11');
+    expect(parsed.phone).toBe('085-109-5665');
+    expect(parsed.brand).toBe('Honda');
+    expect(parsed.model).toBe('HRV');
+    expect(parsed.license_plate).toBe('6กช1394');
+    expect(parsed.color).toBe('ขาว');
+    expect(parsed.symptom).toBe('แร๊ค โช๊ค ช่วงล่างรอเช็ค');
+    expect(parsed.items).toEqual([
+      { name: 'แร็ค', price: 4500 },
+      { name: 'ค่าแรง', price: 2000 },
+      { name: 'ชุดโปรช่วงล่างเก๋ง', price: 7500 },
+      { name: 'แท่นเครื่องแท้ 3 ตัว', price: 7500 },
+      { name: 'โช๊ค SHOWA 4 ตัว รวมอุปกรณ์', price: 16500 },
+    ]);
+    expect(parsed.stated_total).toBe(38000);
+    expect(parsed.remark).toBe('มัดจำ 2000');
+  });
+
+  test('"หมายเหตุ ..." ในรายการโดยไม่มีคำว่า "มัดจำ" → ยังไปอยู่ในหมายเหตุ ไม่ใช่รายการสินค้า', () => {
+    const parsed = parseLineQueueMessage(
+      ['คิว 13', 'คุณทดสอบสิบสาม', 'รายการ', 'ค่าแรง 1000', 'หมายเหตุ นัดมาซ่อมอีกครั้งพรุ่งนี้'].join('\n')
+    );
+    expect(parsed.items).toEqual([{ name: 'ค่าแรง', price: 1000 }]);
+    expect(parsed.remark).toBe('นัดมาซ่อมอีกครั้งพรุ่งนี้');
+  });
+
+  test('บรรทัด "มัดจำ ..." ในรายการโดยไม่มี label "หมายเหตุ" นำหน้า → ยังไปอยู่ในหมายเหตุ ไม่ใช่รายการสินค้า', () => {
+    const parsed = parseLineQueueMessage(
+      ['คิว 14', 'คุณทดสอบสิบสี่', 'รายการ', 'ค่าแรง 1000', 'มัดจำ 1000'].join('\n')
+    );
+    expect(parsed.items).toEqual([{ name: 'ค่าแรง', price: 1000 }]);
+    expect(parsed.remark).toBe('มัดจำ 1000');
+  });
+
+  test('"หมายเหตุ" ก่อนเริ่มรายการสินค้า (ผ่าน OPTIONAL_LABELS เดิม) ยังทำงานเหมือนเดิม ไม่ถูกกระทบ', () => {
+    const parsed = parseLineQueueMessage(
+      ['คิว 15', 'คุณทดสอบสิบห้า', 'หมายเหตุ:ลูกค้าขอเก็บชิ้นส่วนเก่าคืน', 'รายการ', 'ค่าแรง 1000'].join('\n')
+    );
+    expect(parsed.remark).toBe('ลูกค้าขอเก็บชิ้นส่วนเก่าคืน');
+    expect(parsed.items).toEqual([{ name: 'ค่าแรง', price: 1000 }]);
   });
 
   test('รายการมีเครื่องหมาย "-" นำหน้าราคา (ส่วนลด) → ราคาติดลบ, บรรทัดหัวข้อขึ้นต้น "-" ปกติยังตัดหัวข้อได้เหมือนเดิม', () => {

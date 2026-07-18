@@ -186,6 +186,29 @@ describe('POST /api/line/webhook', () => {
     expect(vehicles[0].mileage).toBe(215500);
   });
 
+  test('รายการ "1700*2 3,400" → quantity 2 + unit_price 1700 ลงใบเสนอราคา ยอดรวมถูก', async () => {
+    const uniq = Date.now().toString().slice(-7);
+    const phone = `090${uniq}`;
+    const text = `คิว15\nคุณ ทดสอบสิบสาม\n${phone}\nรายการ:\nลูกปืนล้อหน้า L+R 1700*2 3,400\nซ่อมคอ 2000`;
+
+    const res = await postWebhook(eventsBody([messageEvent(text, `msg-qty1-${uniq}`)]));
+    expect(res.status).toBe(200);
+    expect(res.body.created).toHaveLength(1);
+
+    const [[quotation]] = await pool.query('SELECT * FROM quotations WHERE quotation_no = ?', [res.body.created[0]]);
+    createdCustomerIds.push(quotation.customer_id);
+    expect(Number(quotation.total_amount)).toBe(5400);
+
+    const [items] = await pool.query(
+      'SELECT product_name, quantity, unit_price FROM quotation_items WHERE quotation_id = ? ORDER BY id ASC',
+      [quotation.id]
+    );
+    expect(items).toEqual([
+      { product_name: 'ลูกปืนล้อหน้า L+R', quantity: 2, unit_price: '1700.00' },
+      { product_name: 'ซ่อมคอ', quantity: 1, unit_price: '2000.00' },
+    ]);
+  });
+
   test('Pattern 2 (เสนอราคา) — รายการขึ้นต้นด้วย "-" ผูกแคตาล็อกได้, ไม่ตรง → คงชื่อที่พิมพ์มา', async () => {
     const uniq = Date.now().toString().slice(-7);
     const phone = `081${uniq}`;
@@ -352,6 +375,84 @@ describe('POST /api/line/webhook', () => {
 
     const [receiptItemsAfter] = await pool.query('SELECT product_name_snapshot, price FROM receipt_items WHERE receipt_id = ?', [receiptId]);
     expect(receiptItemsAfter).toEqual([{ product_name_snapshot: 'ค่าแรง', price: '3500.00' }]);
+  });
+
+  test('เลขคิวไม่ชนกับใคร → ไม่มีการเปลี่ยนเลขคิว (requested_queue_no ว่าง) เหมือนเดิมทุกประการ', async () => {
+    const uniq = Date.now().toString().slice(-7);
+    const phone = `073${uniq}`;
+    const queueNo = `6${uniq}`; // เลขคิวเฉพาะเทสต์นี้ ไม่ชนกับใคร
+
+    const res = await postWebhook(
+      eventsBody([messageEvent(`คิว:${queueNo}\nชื่อลูกค้า:คุณทดสอบห้า\nเบอร์โทร:${phone}`, `msg-noclash-${uniq}`)])
+    );
+    expect(res.body.created).toHaveLength(1);
+
+    const [[q]] = await pool.query('SELECT customer_id, queue_no, requested_queue_no FROM quotations WHERE quotation_no=?', [res.body.created[0]]);
+    createdCustomerIds.push(q.customer_id);
+    expect(q.queue_no).toBe(queueNo); // ไม่ถูกเปลี่ยน
+    expect(q.requested_queue_no).toBeNull();
+  });
+
+  test('เลขคิวชนกับของลูกค้าคนอื่นในวันเดียวกัน → เปลี่ยนอัตโนมัติเป็นเลขถัดไปที่ว่าง และลูกค้าคนเดิมพิมพ์เลขคิวเดิมซ้ำ → แก้ไขใบที่ถูกเปลี่ยนเลขแล้ว ไม่เปิดใบใหม่ซ้อน', async () => {
+    const uniq = Date.now().toString().slice(-7);
+    const sharedQueue = `7${uniq}`; // เลขคิวใหญ่พอที่จะเป็นค่ามากสุดของวันนี้เสมอ กันชนกับเทสต์อื่นที่ใช้เลขคิวหลักเดียว/สองหลัก
+    const phoneA = `074${uniq}`;
+    const phoneB = `075${uniq}`;
+
+    // ลูกค้า A พิมพ์คิวนี้ก่อน — ได้เลขคิวตามที่พิมพ์มาปกติ (ยังไม่มีใครชน)
+    const firstRes = await postWebhook(
+      eventsBody([messageEvent(`คิว:${sharedQueue}\nชื่อลูกค้า:คุณทดสอบหก\nเบอร์โทร:${phoneA}`, `msg-clash1-${uniq}`)])
+    );
+    expect(firstRes.body.created).toHaveLength(1);
+    const [[q1]] = await pool.query('SELECT id, customer_id, queue_no FROM quotations WHERE quotation_no=?', [firstRes.body.created[0]]);
+    createdCustomerIds.push(q1.customer_id);
+    expect(q1.queue_no).toBe(sharedQueue);
+
+    // ลูกค้า B พิมพ์เลขคิวเดียวกัน (คนละเบอร์/ชื่อ) วันเดียวกัน → ต้องชนแล้วเปลี่ยนให้อัตโนมัติ
+    const secondRes = await postWebhook(
+      eventsBody([messageEvent(`คิว:${sharedQueue}\nชื่อลูกค้า:คุณทดสอบเจ็ด\nเบอร์โทร:${phoneB}`, `msg-clash2-${uniq}`)])
+    );
+    expect(secondRes.body.created).toHaveLength(1);
+    const [[q2]] = await pool.query(
+      'SELECT id, customer_id, queue_no, requested_queue_no FROM quotations WHERE quotation_no=?',
+      [secondRes.body.created[0]]
+    );
+    createdCustomerIds.push(q2.customer_id);
+
+    expect(q2.queue_no).not.toBe(sharedQueue); // เปลี่ยนไปแล้ว ไม่ใช่เลขที่พิมพ์มา
+    expect(Number(q2.queue_no)).toBe(Number(sharedQueue) + 1); // เลขคิวถัดไปที่ว่าง (sharedQueue เป็นค่ามากสุดของวันนี้ก่อนหน้านี้)
+    expect(q2.requested_queue_no).toBe(sharedQueue); // เก็บเลขที่พิมพ์มาจริงไว้ด้วย
+
+    // ข้อความตอบต้องมีคำเตือนเรื่องเปลี่ยนคิวอัตโนมัติ
+    const replyText = lineWebhookRouter.buildSuccessReplyText(
+      { queue_no: sharedQueue, customer_name: 'คุณทดสอบเจ็ด', license_plate: null, stated_total: null },
+      {
+        quotation_no: secondRes.body.created[0],
+        itemCount: 0,
+        totalAmount: 0,
+        hasNote: false,
+        isUpdate: false,
+        reassignedFrom: sharedQueue,
+        reassignedTo: q2.queue_no,
+      }
+    );
+    expect(replyText).toContain(`คิวที่ ${sharedQueue} มีแล้ววันนี้ เปลี่ยนเป็นคิว ${q2.queue_no} ให้อัตโนมัติ`);
+
+    // ลูกค้า B พิมพ์เลขคิว "เดิมที่เคยพิมพ์" (sharedQueue) ซ้ำอีกครั้ง — ต้องหมายถึง
+    // แก้ไขใบที่ถูกเปลี่ยนเลขไปแล้ว ไม่ใช่เปิดใบใหม่ซ้อน (แม้ queue_no จริงจะไม่ตรงกับ
+    // ที่พิมพ์มาแล้วก็ตาม เพราะจับคู่ผ่าน requested_queue_no ได้)
+    const thirdRes = await postWebhook(
+      eventsBody([messageEvent(
+        `คิว:${sharedQueue}\nชื่อลูกค้า:คุณทดสอบเจ็ด\nเบอร์โทร:${phoneB}\nรายการ:\nค่าแรง 2000`,
+        `msg-clash3-${uniq}`
+      )])
+    );
+    expect(thirdRes.body.created).toHaveLength(1);
+    expect(thirdRes.body.created[0]).toBe(secondRes.body.created[0]); // ใบเลขเดิม (ที่ถูกเปลี่ยนคิวไปแล้ว) ไม่ใช่ใบใหม่
+
+    const [quotationsForB] = await pool.query('SELECT id, queue_no FROM quotations WHERE customer_id = ?', [q2.customer_id]);
+    expect(quotationsForB).toHaveLength(1); // ยังมีใบเดียว ไม่ซ้อน
+    expect(quotationsForB[0].queue_no).toBe(q2.queue_no); // queue_no จริงยังเป็นเลขที่ถูกเปลี่ยนไว้ ไม่เปลี่ยนกลับ
   });
 
   test('ยอดที่ร้านแจ้งมาเอง ("รวม") ตรงกับผลรวมจริง → ข้อความตอบไม่มีคำเตือน', () => {
