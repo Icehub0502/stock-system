@@ -154,6 +154,38 @@ describe('POST /api/line/webhook', () => {
     expect(notices).toHaveLength(0);
   });
 
+  test('pattern มีสี+เลขไมล์ (ไม่มีทะเบียน) → เก็บลงรถ+ใบเสนอราคา, ส่งซ้ำไม่สร้างรถซ้ำ', async () => {
+    const uniq = Date.now().toString().slice(-7);
+    const phone = `087${uniq}`;
+    const text = `คิว14\nคุณ ทดสอบสิบ\n${phone}\nToyota Altis 09\nทอง\n215170\nอาการ ขับมีเสียงดัง ก๊อกๆ`;
+
+    const res = await postWebhook(eventsBody([messageEvent(text, `msg-cm1-${uniq}`)]));
+    expect(res.status).toBe(200);
+    expect(res.body.created).toHaveLength(1);
+
+    const [[quotation]] = await pool.query('SELECT * FROM quotations WHERE quotation_no = ?', [res.body.created[0]]);
+    createdCustomerIds.push(quotation.customer_id);
+    expect(quotation.mileage).toBe(215170);
+    expect(quotation.symptom).toBe('ขับมีเสียงดัง ก๊อกๆ');
+
+    const [[vehicle]] = await pool.query('SELECT * FROM vehicles WHERE id = ?', [quotation.vehicle_id]);
+    expect(vehicle.brand).toBe('Toyota');
+    expect(vehicle.model).toBe('Altis 09');
+    expect(vehicle.color).toBe('ทอง');
+    expect(vehicle.mileage).toBe(215170);
+
+    // ส่งซ้ำ (แก้เลขไมล์) — ต้องอัปเดตรถคันเดิม (เทียบยี่ห้อ+รุ่น เพราะไม่มีทะเบียน)
+    // ไม่สร้างรถใหม่ และเลขไมล์ต้องเป็นค่าล่าสุด
+    const res2 = await postWebhook(
+      eventsBody([messageEvent(`คิว14\nคุณ ทดสอบสิบ\n${phone}\nToyota Altis 09\nทอง\n215500\nอาการ ขับมีเสียงดัง ก๊อกๆ`, `msg-cm2-${uniq}`)])
+    );
+    expect(res2.status).toBe(200);
+
+    const [vehicles] = await pool.query('SELECT id, mileage FROM vehicles WHERE customer_id = ?', [quotation.customer_id]);
+    expect(vehicles).toHaveLength(1);
+    expect(vehicles[0].mileage).toBe(215500);
+  });
+
   test('Pattern 2 (เสนอราคา) — รายการขึ้นต้นด้วย "-" ผูกแคตาล็อกได้, ไม่ตรง → คงชื่อที่พิมพ์มา', async () => {
     const uniq = Date.now().toString().slice(-7);
     const phone = `081${uniq}`;

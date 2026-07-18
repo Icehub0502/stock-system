@@ -8,6 +8,8 @@
 //   081-827-5255
 //   Toyota Harrier
 //   กว 6066
+//   ทอง                    ← สีรถ (มีหรือไม่มีก็ได้ จำจากคำสี "สี" นำหน้าได้)
+//   215170                 ← เลขไมล์ (ตัวเลขล้วน 4-7 หลัก ก่อนเริ่มรายการสินค้า)
 //   อาการ เลี้ยวติดตัวถัง
 //   แร็ค OEM 5000
 //   ชุดโปรช่วงล่างเก๋ง 7500
@@ -52,6 +54,13 @@
 // หรือรายการแก้ไขที่ควรสร้าง/อัปเดตใบเสนอราคา
 
 const PLATE_RE = /^\d?[ก-ฮ]{1,3}\s?\d{1,4}$/;
+// บรรทัดสีรถเดี่ยว ๆ ("ทอง", "สีขาว", "ขาวมุก", "บรอนซ์เงิน") — จำจากคำสีที่ใช้กัน
+// จริงเท่านั้น กันไปกินบรรทัดอาการ/ชื่อ ("สี" นำหน้ามีหรือไม่มีก็ได้)
+const COLOR_LINE_RE = /^(?:สี\s*)?(?:ขาว|ดำ|แดง|เทา|เงิน|ทอง|น้ำเงิน|ฟ้า|เขียว|เหลือง|ส้ม|น้ำตาล|ม่วง|ชมพู|บรอนซ์|ครีม|กรม|มุก)+$/;
+// บรรทัดเลขไมล์เดี่ยว ๆ ("215170") — ตัวเลขล้วน 4-7 หลัก (มี , คั่นได้) ที่โผล่ก่อน
+// เริ่มรายการสินค้า ไม่ใช่เบอร์โทร (เช็คเบอร์ก่อนหน้าแล้ว) ไม่ใช่ราคา (ราคาลอย ๆ
+// ไม่มีชื่อรายการนำหน้าไม่เคยถูกตีความอยู่แล้ว)
+const MILEAGE_LINE_RE = /^[\d,]{4,9}$/;
 const BARE_DATE_RE = /^\d{1,2}\/\d{1,2}\/\d{2,4}$/;
 const PRICED_LINE_RE = /[\d,]{3,}\s*(?:บาท)?\s*$/;
 const ITEM_SECTION_TRIGGER_RE = /^รายการ\s*:*\s*$/;
@@ -66,6 +75,9 @@ const OPTIONAL_LABELS = {
   ยี่ห้อรถ: 'brand',
   รุ่นรถ: 'model',
   ทะเบียนรถ: 'license_plate',
+  สีรถ: 'color',
+  เลขไมล์: 'mileage',
+  เลขไมค์: 'mileage', // สะกดแบบที่ร้านพิมพ์จริง
   อาการ: 'symptom',
   หมายเหตุ: 'remark',
 };
@@ -207,6 +219,8 @@ function parseLineQueueMessage(text) {
     brand: null,
     model: null,
     license_plate: null,
+    color: null,
+    mileage: null,
     symptom: null,
     remark: null,
     items: [],
@@ -244,6 +258,11 @@ function parseLineQueueMessage(text) {
         let value = rest.trim();
         if (field === 'phone') value = formatPhone(value.replace(/\D/g, ''));
         if (field === 'license_plate') value = value.replace(/\s+/g, '');
+        if (field === 'mileage') {
+          const digits = value.replace(/\D/g, '');
+          result.mileage = digits ? Number(digits) : null;
+          continue;
+        }
         result[field] = value || null;
       }
       continue;
@@ -267,6 +286,19 @@ function parseLineQueueMessage(text) {
       result.brand = parts[0];
       result.model = parts.slice(1).join(' ') || null;
       continue;
+    }
+    if (!result.color && COLOR_LINE_RE.test(line)) {
+      result.color = line.replace(/^สี\s*/, '');
+      continue;
+    }
+    // เลขไมล์เดี่ยว ๆ ("215170") ต้องเช็คก่อนตัวเปิดรายการสินค้าด้านล่าง ไม่งั้น
+    // ตัวเลขล้วนจะถูกตีเป็นจุดเริ่มรายการ แล้วบรรทัดอาการที่ตามมาหลุดไปเป็นรายการ
+    if (result.mileage == null && MILEAGE_LINE_RE.test(line)) {
+      const digits = line.replace(/,/g, '');
+      if (/^\d{4,7}$/.test(digits)) {
+        result.mileage = Number(digits);
+        continue;
+      }
     }
 
     // ไม่เข้าพวกหัวข้อมูลด้านบนเลย แล้วลงท้ายด้วยราคา + มีชื่อลูกค้าแล้ว = เริ่ม

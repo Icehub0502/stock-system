@@ -207,7 +207,9 @@ async function createQuotationFromQueue(parsed) {
       wasNewCustomer = true;
     }
 
-    // รถ: มีทะเบียนตรงกันใต้ลูกค้าคนนี้ → ใช้คันเดิม, ไม่งั้นสร้างใหม่ถ้ามีข้อมูลพอ
+    // รถ: มีทะเบียนตรงกันใต้ลูกค้าคนนี้ → ใช้คันเดิม, ไม่มีทะเบียนในข้อความ →
+    // ลองเทียบยี่ห้อ+รุ่นแทน (ร้านบางทีไม่พิมพ์ทะเบียน กันสร้างรถซ้ำทุกครั้งที่ส่ง
+    // ข้อความแก้ไข), ไม่เจอเลยค่อยสร้างใหม่ถ้ามีข้อมูลพอ
     let vehicleId = null;
     let wasNewVehicle = false;
     if (parsed.license_plate) {
@@ -216,13 +218,27 @@ async function createQuotationFromQueue(parsed) {
         [customerId, parsed.license_plate]
       );
       if (rows.length > 0) vehicleId = rows[0].id;
+    } else if (parsed.brand) {
+      const [rows] = await conn.execute(
+        'SELECT id FROM vehicles WHERE customer_id = ? AND brand = ? AND model = ? ORDER BY id DESC LIMIT 1',
+        [customerId, parsed.brand, parsed.model || '-']
+      );
+      if (rows.length > 0) vehicleId = rows[0].id;
+    }
+    if (vehicleId && (parsed.color || parsed.mileage != null)) {
+      // รถคันเดิมแต่ข้อความบอกสี/เลขไมล์มาใหม่ → อัปเดตให้เป็นค่าล่าสุด (เลขไมล์
+      // เปลี่ยนทุกครั้งที่รถเข้า, สีเติมให้ถ้าเพิ่งบอกมา) ค่าที่ไม่ได้บอกไม่แตะ
+      await conn.execute(
+        'UPDATE vehicles SET color = COALESCE(?, color), mileage = COALESCE(?, mileage) WHERE id = ?',
+        [parsed.color || null, parsed.mileage ?? null, vehicleId]
+      );
     }
     if (!vehicleId && (parsed.brand || parsed.license_plate)) {
       // brand/model เป็น NOT NULL ใน schema — ข้อความไลน์อาจไม่บอกยี่ห้อ ใช้ '-' คั่นไว้
       const [result] = await conn.execute(
         `INSERT INTO vehicles (customer_id, brand, model, color, license_plate, mileage)
          VALUES (?, ?, ?, ?, ?, ?)`,
-        [customerId, parsed.brand || '-', parsed.model || '-', null, parsed.license_plate || null, 0]
+        [customerId, parsed.brand || '-', parsed.model || '-', parsed.color || null, parsed.license_plate || null, parsed.mileage ?? 0]
       );
       vehicleId = result.insertId;
       wasNewVehicle = true;
@@ -263,9 +279,9 @@ async function createQuotationFromQueue(parsed) {
       quotationId = existing.id;
       quotation_no = existing.quotation_no;
       await conn.execute(
-        `UPDATE quotations SET vehicle_id = ?, remark = ?, product_summary = ?, total_amount = ?, symptom = ?
+        `UPDATE quotations SET vehicle_id = ?, mileage = COALESCE(?, mileage), remark = ?, product_summary = ?, total_amount = ?, symptom = ?
          WHERE id = ?`,
-        [vehicleId, parsed.remark || null, product_summary, total_amount, parsed.symptom || null, quotationId]
+        [vehicleId, parsed.mileage ?? null, parsed.remark || null, product_summary, total_amount, parsed.symptom || null, quotationId]
       );
       await conn.execute('DELETE FROM quotation_items WHERE quotation_id = ?', [quotationId]);
     } else {
@@ -273,7 +289,7 @@ async function createQuotationFromQueue(parsed) {
       const [quotationResult] = await conn.execute(
         `INSERT INTO quotations (quotation_no, quotation_date, customer_id, vehicle_id, mileage, remark, product_summary, total_amount, queue_no, symptom)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [quotation_no, quotationDate, customerId, vehicleId, 0, parsed.remark || null, product_summary, total_amount, parsed.queue_no || null, parsed.symptom || null]
+        [quotation_no, quotationDate, customerId, vehicleId, parsed.mileage ?? 0, parsed.remark || null, product_summary, total_amount, parsed.queue_no || null, parsed.symptom || null]
       );
       quotationId = quotationResult.insertId;
     }
@@ -292,8 +308,8 @@ async function createQuotationFromQueue(parsed) {
     if (isUpdate && existing.status === 'approved' && existing.converted_receipt_id) {
       const receiptId = existing.converted_receipt_id;
       await conn.execute(
-        `UPDATE receipts SET customer_id = ?, vehicle_id = ?, remark = ?, total_amount = ? WHERE id = ?`,
-        [customerId, vehicleId, parsed.remark || null, total_amount, receiptId]
+        `UPDATE receipts SET customer_id = ?, vehicle_id = ?, mileage = COALESCE(?, mileage), remark = ?, total_amount = ? WHERE id = ?`,
+        [customerId, vehicleId, parsed.mileage ?? null, parsed.remark || null, total_amount, receiptId]
       );
       await conn.execute('DELETE FROM receipt_items WHERE receipt_id = ?', [receiptId]);
       for (const item of resolvedItems) {

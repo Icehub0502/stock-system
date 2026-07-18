@@ -15,6 +15,44 @@ describe('parseLineQueueMessage', () => {
     expect(parsed.items).toEqual([]);
   });
 
+  test('pattern มีสีรถ + เลขไมล์ (บรรทัดเดี่ยว ไม่มี label) → แยกถูกช่อง อาการไม่หลุดไปเป็นรายการ', () => {
+    const parsed = parseLineQueueMessage(
+      'คิว4\n18/07/26\nคุณ ทดสอบหก\n099-000-0006\nToyota Altis 09\nทอง\n215170\nอาการ ขับมีเสียงดัง ก๊อกๆ'
+    );
+    expect(parsed.queue_no).toBe('4');
+    expect(parsed.customer_name).toBe('คุณ ทดสอบหก');
+    expect(parsed.phone).toBe('099-000-0006');
+    expect(parsed.brand).toBe('Toyota');
+    expect(parsed.model).toBe('Altis 09');
+    expect(parsed.color).toBe('ทอง');
+    expect(parsed.mileage).toBe(215170);
+    expect(parsed.symptom).toBe('ขับมีเสียงดัง ก๊อกๆ');
+    expect(parsed.items).toEqual([]);
+  });
+
+  test('สีแบบมีคำ "สี" นำหน้า / สีผสม ("สีขาวมุก") → ตัดคำว่า สี ออก', () => {
+    const parsed = parseLineQueueMessage('คิว 5\nคุณทดสอบเจ็ด\nสีขาวมุก\n98,500');
+    expect(parsed.color).toBe('ขาวมุก');
+    expect(parsed.mileage).toBe(98500);
+  });
+
+  test('label ชัดเจน "เลขไมค์:" (สะกดแบบร้าน) และ "สีรถ:" ก็ใช้ได้', () => {
+    const parsed = parseLineQueueMessage('คิว:6\nชื่อลูกค้า:คุณทดสอบแปด\nสีรถ:ดำ\nเลขไมค์:120000');
+    expect(parsed.color).toBe('ดำ');
+    expect(parsed.mileage).toBe(120000);
+  });
+
+  test('เลขไมล์ไม่กินราคาสินค้า — รายการยังแยกได้ปกติเมื่อมีทั้งไมล์และรายการ', () => {
+    const parsed = parseLineQueueMessage(
+      'คิว 7\nคุณทดสอบเก้า\n215170\nแร็ค OEM 5000\nซ่อมคอ 2000'
+    );
+    expect(parsed.mileage).toBe(215170);
+    expect(parsed.items).toEqual([
+      { name: 'แร็ค OEM', price: 5000 },
+      { name: 'ซ่อมคอ', price: 2000 },
+    ]);
+  });
+
   test('"คิวที่10" (คำว่า "ที่" แปะติดเลขคิว ไม่มีช่องว่าง) → อ่านเลขคิวได้ถูกต้อง', () => {
     const parsed = parseLineQueueMessage('คิวที่10\nคุณ เอกชัย\n081-827-5255');
     expect(parsed.queue_no).toBe('10');
