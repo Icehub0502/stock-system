@@ -89,6 +89,7 @@ export default function CustomerSection({
             value={customerMode === 'existing' ? customer?.phone || '' : newCustomer.phone}
             onChange={(e) => customerMode === 'new' && onNewCustomerInput('phone', e.target.value)}
             placeholder="081-234-5678"
+            readOnly={customerMode === 'existing'}
           />
           {fieldErrors.phone && <div className="field-error">{fieldErrors.phone}</div>}
         </div>

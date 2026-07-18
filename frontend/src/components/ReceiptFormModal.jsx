@@ -41,6 +41,11 @@ export default function ReceiptFormModal({ onClose, onSuccess, receiptId }) {
   const itemQtyRefs = useRef([]);
   const itemPriceRefs = useRef([]);
   const itemSearchTimers = useRef({});
+  // Guards against an older/slower search response overwriting a newer one —
+  // one AbortController per in-flight request, aborted when a fresher call starts.
+  const customerSearchAbortRef = useRef(null);
+  const itemSearchAbortRef = useRef({});
+  const vehicleLoadAbortRef = useRef(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [fieldErrors, setFieldErrors] = useState({});
@@ -156,6 +161,9 @@ export default function ReceiptFormModal({ onClose, onSuccess, receiptId }) {
 
   useEffect(() => () => {
     Object.values(itemSearchTimers.current).forEach(clearTimeout);
+    customerSearchAbortRef.current?.abort();
+    Object.values(itemSearchAbortRef.current).forEach((c) => c?.abort());
+    vehicleLoadAbortRef.current?.abort();
   }, []);
 
   useEffect(() => {
@@ -182,10 +190,14 @@ export default function ReceiptFormModal({ onClose, onSuccess, receiptId }) {
       setCustomerResults([]);
       return;
     }
+    customerSearchAbortRef.current?.abort();
+    const controller = new AbortController();
+    customerSearchAbortRef.current = controller;
     try {
-      const response = await client.get('/receipts/customers', { params: { search: query } });
+      const response = await client.get('/receipts/customers', { params: { search: query }, signal: controller.signal });
       setCustomerResults(response.data.data || []);
     } catch (err) {
+      if (err.code === 'ERR_CANCELED') return;
       console.error('Error searching customers:', err);
     }
   };
@@ -262,8 +274,11 @@ export default function ReceiptFormModal({ onClose, onSuccess, receiptId }) {
   };
 
   const loadVehicles = async (customerId, selectedVehicleId = '') => {
+    vehicleLoadAbortRef.current?.abort();
+    const controller = new AbortController();
+    vehicleLoadAbortRef.current = controller;
     try {
-      const response = await client.get(`/receipts/customers/${customerId}/vehicles`);
+      const response = await client.get(`/receipts/customers/${customerId}/vehicles`, { signal: controller.signal });
       const vehicleList = response.data.data || [];
       setVehicles(vehicleList);
       if (vehicleList.length > 0) {
@@ -287,6 +302,7 @@ export default function ReceiptFormModal({ onClose, onSuccess, receiptId }) {
         setVehicleId('');
       }
     } catch (err) {
+      if (err.code === 'ERR_CANCELED') return;
       console.error('Error loading vehicles:', err);
       setVehicles([]);
       setVehicleMode('new');
@@ -299,11 +315,15 @@ export default function ReceiptFormModal({ onClose, onSuccess, receiptId }) {
       setItemSuggestions((prev) => ({ ...prev, [index]: null }));
       return;
     }
+    itemSearchAbortRef.current[index]?.abort();
+    const controller = new AbortController();
+    itemSearchAbortRef.current[index] = controller;
     try {
-      const response = await client.get('/service-items', { params: { search: query } });
+      const response = await client.get('/service-items', { params: { search: query }, signal: controller.signal });
       setItemSuggestions((prev) => ({ ...prev, [index]: response.data.data || [] }));
       setSuggestionIndex((prev) => ({ ...prev, [index]: 0 }));
     } catch (err) {
+      if (err.code === 'ERR_CANCELED') return;
       console.error('Error searching service items:', err);
     }
   };

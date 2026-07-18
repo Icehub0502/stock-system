@@ -1,25 +1,31 @@
-import React from "react";
+import React, { Suspense, lazy } from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import ProtectedRoute from "./components/ProtectedRoute";
 import NavBar from "./components/NavBar";
+// LoginPage stays a static import — every visitor needs it before we know
+// their role, so lazy-loading it would only add a network round trip.
 import LoginPage from "./pages/LoginPage";
-import DashboardPage from "./pages/DashboardPage";
-import StockRackPage from "./pages/StockRackPage";
-import TechnicianScanPage from "./pages/TechnicianScanPage";
-import TransactionHistoryPage from "./pages/TransactionHistoryPage";
-import ReceiptSessionPage from "./pages/ReceiptSessionPage";
-import ReceiptListPage from "./pages/ReceiptListPage";
-import QuotationListPage from "./pages/QuotationListPage";
-import CustomerManagementPage from "./pages/CustomerManagementPage";
-import VehicleManagementPage from "./pages/VehicleManagementPage";
-import ServiceItemManagementPage from "./pages/ServiceItemManagementPage";
-import WarrantyManagementPage from "./pages/WarrantyManagementPage";
-import ProductCostPage from "./pages/ProductCostPage";
-import WingArmDashboard from "./pages/WingArmDashboard";
-import DailySalesSummaryPage from "./pages/DailySalesSummaryPage";
-import RepairNoticeListPage from "./pages/RepairNoticeListPage";
-import RepairNoticePage from "./pages/RepairNoticePage";
+
+// Route-level code splitting: each page ships in its own chunk and is only
+// downloaded when a user actually navigates to it — e.g. technician-only
+// accounts never pull in the office-only pages below.
+const DashboardPage = lazy(() => import("./pages/DashboardPage"));
+const StockRackPage = lazy(() => import("./pages/StockRackPage"));
+const TechnicianScanPage = lazy(() => import("./pages/TechnicianScanPage"));
+const TransactionHistoryPage = lazy(() => import("./pages/TransactionHistoryPage"));
+const ReceiptSessionPage = lazy(() => import("./pages/ReceiptSessionPage"));
+const ReceiptListPage = lazy(() => import("./pages/ReceiptListPage"));
+const QuotationListPage = lazy(() => import("./pages/QuotationListPage"));
+const CustomerManagementPage = lazy(() => import("./pages/CustomerManagementPage"));
+const VehicleManagementPage = lazy(() => import("./pages/VehicleManagementPage"));
+const ServiceItemManagementPage = lazy(() => import("./pages/ServiceItemManagementPage"));
+const WarrantyManagementPage = lazy(() => import("./pages/WarrantyManagementPage"));
+const ProductCostPage = lazy(() => import("./pages/ProductCostPage"));
+const WingArmDashboard = lazy(() => import("./pages/WingArmDashboard"));
+const DailySalesSummaryPage = lazy(() => import("./pages/DailySalesSummaryPage"));
+const RepairNoticeListPage = lazy(() => import("./pages/RepairNoticeListPage"));
+const RepairNoticePage = lazy(() => import("./pages/RepairNoticePage"));
 
 function Home() {
   const { user } = useAuth();
@@ -36,6 +42,7 @@ function AppRoutes() {
     <>
       <NavBar />
       <div className="container">
+        <Suspense fallback={<div className="loading">กำลังโหลด...</div>}>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/" element={<Home />} />
@@ -176,6 +183,7 @@ function AppRoutes() {
             }
           />
         </Routes>
+        </Suspense>
       </div>
     </>
   );

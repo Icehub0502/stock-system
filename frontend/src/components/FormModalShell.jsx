@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import ConfirmDialog from './ConfirmDialog';
 import Toast from './Toast';
 
@@ -12,12 +12,37 @@ export default function FormModalShell({
   children,
 }) {
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const cardRef = useRef(null);
 
   const requestClose = () => setConfirmOpen(true);
 
+  // Move focus into the modal on open so keyboard/screen-reader users land
+  // inside it instead of it silently appearing over the page.
+  useEffect(() => {
+    cardRef.current?.focus();
+  }, []);
+
+  // Escape mirrors the close button — it opens the confirm-discard dialog
+  // rather than closing immediately, same as clicking the backdrop.
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && !confirmOpen) requestClose();
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [confirmOpen]);
+
   return (
     <div className="modal-backdrop" onClick={requestClose}>
-      <div className="modal-card large receipt-modal-card" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="modal-card large receipt-modal-card"
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        tabIndex={-1}
+        ref={cardRef}
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="modal-header">
           <div>
             <h2>{title}</h2>

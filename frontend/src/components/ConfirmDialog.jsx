@@ -1,9 +1,33 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 
 export default function ConfirmDialog({ title, message, confirmLabel = 'ยืนยัน', cancelLabel = 'ยกเลิก', onConfirm, onCancel, loading }) {
+  const cardRef = useRef(null);
+
+  // Move focus into the dialog on open.
+  useEffect(() => {
+    cardRef.current?.focus();
+  }, []);
+
+  // Escape mirrors the close button (unless a confirm action is in flight).
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && !loading) onCancel();
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [loading, onCancel]);
+
   return (
     <div className="modal-backdrop">
-      <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="modal-card"
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        tabIndex={-1}
+        ref={cardRef}
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="modal-header">
           <h3>{title}</h3>
           <button className="btn-close" type="button" onClick={onCancel} disabled={loading}>✕</button>

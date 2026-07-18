@@ -159,10 +159,6 @@ export default function ReceiptDetailModal({ receiptId, onClose }) {
                 <div className="summary-label">ส่วนลด</div>
                 <div className="summary-value">฿{formatMoney(receipt.discount || 0)}</div>
               </div>
-              <div className="summary-grid">
-                <div className="summary-label">VAT</div>
-                <div className="summary-value">฿{formatMoney(receipt.vat || 0)}</div>
-              </div>
               <div className="signature-block">
                 <div className="signature-box">
                   <div className="signature-line" />

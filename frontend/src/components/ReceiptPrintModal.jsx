@@ -69,7 +69,6 @@ export default function ReceiptPrintModal({ receiptId, onClose, onPrinted }) {
     items: receipt.items || [],
     remark: receipt.remark || '',
     discount: receipt.discount || 0,
-    vat: receipt.vat || 0,
     total_amount: receipt.total_amount,
     customer_signature: receipt.customer_signature,
   };

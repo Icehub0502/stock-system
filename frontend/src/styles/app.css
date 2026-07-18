@@ -1211,7 +1211,6 @@ button:disabled { background: #f3f4f6; color: #9ca3af; cursor: not-allowed; }
   min-width: 30px;
 }
 
-.vat-cell,
 .total-cell {
   text-align: right;
   font-weight: 500;
@@ -2177,7 +2176,6 @@ button:disabled { background: #f3f4f6; color: #9ca3af; cursor: not-allowed; }
   }
 }
 
-.vat-cell,
 .total-cell {
   text-align: right;
   background: #f9fafb;
@@ -2465,7 +2463,6 @@ button:disabled { background: #f3f4f6; color: #9ca3af; cursor: not-allowed; }
 }
 
 .col-price,
-.col-vat,
 .col-total {
   width: 100px;
   text-align: right;

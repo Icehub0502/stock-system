@@ -295,7 +295,12 @@ export default function ProductCostPage() {
     } catch {}
   }, []);
 
-  useEffect(() => { fetchProducts(); }, [fetchProducts]);
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      fetchProducts();
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [fetchProducts]);
   useEffect(() => { fetchCategories(); }, [fetchCategories]);
   useEffect(() => { setPage(1); }, [search, filterCategory, filterCarBrand]);
 

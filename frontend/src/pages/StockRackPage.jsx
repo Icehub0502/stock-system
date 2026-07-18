@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import client from '../api/client';
 
 const emptyForm = { model_code: '', name: '', stock_qty: 0, min_stock: 1 };
@@ -44,6 +44,9 @@ export default function StockRackPage() {
   const [qrPreview, setQrPreview] = useState(null);
   const [showFormModal, setShowFormModal] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
+  const formModalRef = useRef(null);
+  const deleteModalRef = useRef(null);
+  const qrModalRef = useRef(null);
   const [searchTerm, setSearchTerm] = useState('');
 
   // ── เลือกหลายรายการเพื่อพิมพ์ QR ──
@@ -98,6 +101,26 @@ export default function StockRackPage() {
     setErrorMsg('');
     setShowFormModal(true);
   };
+
+  // Move focus into whichever modal just opened (deleteConfirm can stack on
+  // top of the form modal, so it takes priority).
+  useEffect(() => {
+    if (deleteConfirmId) deleteModalRef.current?.focus();
+    else if (showFormModal) formModalRef.current?.focus();
+    else if (qrPreview) qrModalRef.current?.focus();
+  }, [deleteConfirmId, showFormModal, qrPreview]);
+
+  // Escape closes the topmost modal, mirroring its own close button/backdrop.
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key !== 'Escape') return;
+      if (deleteConfirmId) setDeleteConfirmId(null);
+      else if (showFormModal) closeFormModal();
+      else if (qrPreview) setQrPreview(null);
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [deleteConfirmId, showFormModal, qrPreview]);
 
   const closeFormModal = () => {
     setShowFormModal(false);
@@ -278,7 +301,15 @@ export default function StockRackPage() {
       {/* ── Modal: เพิ่ม / แก้ไข ── */}
       {showFormModal && (
         <div className="modal-backdrop" onClick={closeFormModal}>
-          <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+          <div
+            className="modal-card"
+            role="dialog"
+            aria-modal="true"
+            aria-label={editingId ? 'แก้ไขรายการ' : 'เพิ่มรายการใหม่'}
+            tabIndex={-1}
+            ref={formModalRef}
+            onClick={(e) => e.stopPropagation()}
+          >
             <h3 className="modal-title">
               {editingId ? '✏️ แก้ไขรายการ' : '➕ เพิ่มรายการใหม่'}
             </h3>
@@ -344,7 +375,15 @@ export default function StockRackPage() {
       {/* ── Modal: ยืนยันลบ ── */}
       {deleteConfirmId && (
         <div className="modal-backdrop" onClick={() => setDeleteConfirmId(null)}>
-          <div className="modal-card modal-warning" onClick={(e) => e.stopPropagation()}>
+          <div
+            className="modal-card modal-warning"
+            role="dialog"
+            aria-modal="true"
+            aria-label="ยืนยันการลบ"
+            tabIndex={-1}
+            ref={deleteModalRef}
+            onClick={(e) => e.stopPropagation()}
+          >
             <h3>⚠️ ยืนยันการลบ</h3>
             <p>คุณต้องการลบรายการนี้ใช่หรือไม่? การกระทำนี้ไม่สามารถย้อนกลับได้</p>
             <div className="modal-actions">
@@ -358,7 +397,15 @@ export default function StockRackPage() {
       {/* ── Modal: QR Code (พรีวิวรายการเดียว) ── */}
       {qrPreview && (
         <div className="modal-backdrop" onClick={() => setQrPreview(null)}>
-          <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+          <div
+            className="modal-card"
+            role="dialog"
+            aria-modal="true"
+            aria-label={qrPreview.name}
+            tabIndex={-1}
+            ref={qrModalRef}
+            onClick={(e) => e.stopPropagation()}
+          >
             <h3>{qrPreview.name}</h3>
             <p>{qrPreview.model_code}</p>
             <img src={qrPreview.qrcode} alt="QR Code" style={{ width: '100%' }} />
