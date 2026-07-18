@@ -36,7 +36,8 @@ router.get('/lookup/:code', async (req, res) => {
 
     res.json(rows[0]);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ error: 'ค้นหาปีกนกไม่สำเร็จ' });
   }
 });
 
@@ -58,7 +59,8 @@ router.get('/', requireRole('office'), async (req, res) => {
     const [rows] = await pool.query(sql, params);
     res.json(rows);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ error: 'โหลดรายการปีกนกไม่สำเร็จ' });
   }
 });
 
@@ -89,7 +91,8 @@ router.post('/', requireRole('office'), async (req, res) => {
     if (err.code === 'ER_DUP_ENTRY') {
       return res.status(409).json({ error: 'รหัส SKU นี้มีอยู่แล้ว' });
     }
-    res.status(500).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ error: 'เพิ่มรายการปีกนกไม่สำเร็จ' });
   }
 });
 
@@ -114,7 +117,8 @@ router.put('/:id', requireRole('office'), async (req, res) => {
     if (err.code === 'ER_DUP_ENTRY') {
       return res.status(409).json({ error: 'รหัส SKU นี้มีอยู่แล้ว' });
     }
-    res.status(500).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ error: 'แก้ไขรายการปีกนกไม่สำเร็จ' });
   }
 });
 
@@ -125,7 +129,8 @@ router.delete('/:id', requireRole('office'), async (req, res) => {
     if (!result.affectedRows) return res.status(404).json({ error: 'ไม่พบรายการ' });
     res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ error: 'ลบรายการปีกนกไม่สำเร็จ' });
   }
 });
 
@@ -142,32 +147,45 @@ router.get('/:id/qrcode', requireRole('office'), async (req, res) => {
 
     res.json({ id: item.id, sku: item.sku, name: item.name, qrcode });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ error: 'สร้าง QR code ไม่สำเร็จ' });
   }
 });
 
 // PATCH /wing-arms/:id/stock
 // เปิดให้ทุก role ที่ login แล้ว (technician ใช้ตอนยืนยันสแกน)
 router.patch('/:id/stock', async (req, res) => {
+  const { delta, note = '' } = req.body;
+  if (!delta || delta === 0) {
+    return res.status(400).json({ error: 'ระบุ delta ที่ไม่เป็น 0' });
+  }
+
+  // ใช้ transaction + FOR UPDATE ล็อคแถวกันเหตุการณ์ lost update
+  // เมื่อมีการอัปเดตสต็อกชิ้นเดียวกันพร้อมกันหลาย request
+  let conn;
   try {
-    const { delta, note = '' } = req.body;
-    if (!delta || delta === 0) {
-      return res.status(400).json({ error: 'ระบุ delta ที่ไม่เป็น 0' });
+    conn = await pool.getConnection();
+    await conn.beginTransaction();
+
+    const [rows] = await conn.query('SELECT * FROM wing_arms WHERE id = ? FOR UPDATE', [req.params.id]);
+    if (!rows.length) {
+      await conn.rollback();
+      return res.status(404).json({ error: 'ไม่พบรายการ' });
     }
 
-    const [rows] = await pool.query('SELECT * FROM wing_arms WHERE id = ?', [req.params.id]);
-    if (!rows.length) return res.status(404).json({ error: 'ไม่พบรายการ' });
-
     const newQty = rows[0].stock_qty + delta;
-    if (newQty < 0) return res.status(400).json({ error: 'สต็อกไม่พอ' });
+    if (newQty < 0) {
+      await conn.rollback();
+      return res.status(400).json({ error: 'สต็อกไม่พอ' });
+    }
 
-    await pool.query('UPDATE wing_arms SET stock_qty = ? WHERE id = ?', [newQty, req.params.id]);
+    await conn.query('UPDATE wing_arms SET stock_qty = ? WHERE id = ?', [newQty, req.params.id]);
 
     const userId = req.user?.id || req.body.user_id || 1;
     // ใช้ wing_arm_id แยกจาก rack_id เพื่อไม่ให้ FK constraint fail
     // ถ้า column ยังไม่มีให้รัน migration SQL ด้านล่างก่อน
     try {
-      await pool.query(
+      await conn.query(
         'INSERT INTO transactions (wing_arm_id, type, qty, user_id, note) VALUES (?,?,?,?,?)',
         [req.params.id, delta > 0 ? 'IN' : 'OUT', Math.abs(delta), userId, note]
       );
@@ -176,10 +194,16 @@ router.patch('/:id/stock', async (req, res) => {
       console.warn('[wing-arm stock] tx log skipped:', txErr.message);
     }
 
+    await conn.commit();
+
     const [updated] = await pool.query('SELECT * FROM wing_arms WHERE id = ?', [req.params.id]);
     res.json(updated[0]);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    if (conn) await conn.rollback();
+    console.error(err);
+    res.status(500).json({ error: 'อัปเดตสต็อกไม่สำเร็จ' });
+  } finally {
+    if (conn) conn.release();
   }
 });
 

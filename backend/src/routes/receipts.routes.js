@@ -1,6 +1,15 @@
 const express = require('express');
 const pool = require('../db/pool');
 const { authenticate, requireRole } = require('../middleware/auth');
+const { formatPhone } = require('../utils/parseLineQueueMessage');
+
+// ทำให้ตรงรูปแบบเดียวกับที่ customers.routes.js ใช้ กันเบอร์ที่พิมพ์ไม่มีขีดตรงนี้
+// ไปหลุดจากการค้นหาของบอทไลน์ (lineWebhook.routes.js เทียบแบบ phone = ? ตรง ๆ)
+function normalizePhone(phone) {
+  if (!phone) return phone;
+  const digitsOnly = phone.replace(/\D/g, '');
+  return digitsOnly ? formatPhone(digitsOnly) : phone;
+}
 
 const router = express.Router();
 router.use(authenticate);
@@ -14,20 +23,25 @@ function formatDate(date) {
   return `${yy}${mm}${dd}`;
 }
 
-async function generateReceiptNo() {
+// conn: รับ connection ของ transaction ที่กำลังสร้าง/แก้ไขบิลอยู่ (ถ้ามี) — ใช้
+// FOR UPDATE ล็อกแถวที่อ่านไว้จนกว่า transaction นั้นจะ commit กัน 2 คำขอพร้อมกัน
+// อ่าน MAX เดิมแล้วได้เลขบิลซ้ำกัน ไม่มี conn ส่งมา (route /next-no ที่แค่พรีวิว
+// เลขไว้ดู ไม่ได้ insert จริง) ใช้ pool เฉย ๆ ไม่ต้องล็อกอะไร
+async function generateReceiptNo(conn = pool) {
   const today = new Date();
   const dateStr = formatDate(today);
-  const [rows] = await pool.execute(
-    'SELECT MAX(CAST(SUBSTRING(receipt_no, -3) AS UNSIGNED)) AS maxNo FROM receipts WHERE receipt_no LIKE ?',
+  const [rows] = await conn.execute(
+    'SELECT MAX(CAST(SUBSTRING(receipt_no, -3) AS UNSIGNED)) AS maxNo FROM receipts WHERE receipt_no LIKE ? FOR UPDATE',
     [`RC${dateStr}%`]
   );
   const nextNumber = (rows[0]?.maxNo || 0) + 1;
   return `RC${dateStr}${String(nextNumber).padStart(3, '0')}`;
 }
 
-async function generateCustomerCode() {
-  const [rows] = await pool.execute(
-    "SELECT MAX(CAST(SUBSTRING(customer_code, 5) AS UNSIGNED)) AS maxCode FROM customers WHERE customer_code LIKE 'CMM-%'"
+// เหตุผลเดียวกับ generateReceiptNo ด้านบน
+async function generateCustomerCode(conn = pool) {
+  const [rows] = await conn.execute(
+    "SELECT MAX(CAST(SUBSTRING(customer_code, 5) AS UNSIGNED)) AS maxCode FROM customers WHERE customer_code LIKE 'CMM-%' FOR UPDATE"
   );
   const nextNumber = (rows[0]?.maxCode || 0) + 1;
   return `CMM-${String(nextNumber).padStart(4, '0')}`;
@@ -140,6 +154,8 @@ router.get('/by-date', async (req, res) => {
     if (!date) {
       return res.status(400).json({ error: 'กรุณาระบุวันที่' });
     }
+    // receipt_date เป็นคอลัมน์ DATE อยู่แล้ว (ไม่ใช่ DATETIME) เทียบตรง ๆ ได้เลย ไม่ต้อง
+    // ครอบด้วย DATE() — การครอบฟังก์ชันบนคอลัมน์ทำให้ index บน receipt_date ใช้ไม่ได้
     const [rows] = await pool.execute(
       `SELECT r.id, r.receipt_no, r.receipt_date, r.total_amount, r.payment_method, r.technician_name, r.remark,
               c.customer_name, c.customer_code,
@@ -149,7 +165,7 @@ router.get('/by-date', async (req, res) => {
        FROM receipts r
        JOIN customers c ON r.customer_id = c.id
        LEFT JOIN vehicles v ON r.vehicle_id = v.id
-       WHERE DATE(r.receipt_date) = ?
+       WHERE r.receipt_date = ?
        ORDER BY r.created_at DESC`,
       [date]
     );
@@ -385,10 +401,10 @@ router.post('/', async (req, res) => {
 
     if (!selectedCustomerId) {
       const { customer_name, phone } = newCustomer;
-      const customerCode = await generateCustomerCode();
+      const customerCode = await generateCustomerCode(conn);
       const [customerResult] = await conn.execute(
         `INSERT INTO customers (customer_code, customer_name, phone) VALUES (?, ?, ?)`,
-        [customerCode, customer_name, phone || null]
+        [customerCode, customer_name, normalizePhone(phone)]
       );
       selectedCustomerId = customerResult.insertId;
     } else {
@@ -422,7 +438,7 @@ router.post('/', async (req, res) => {
       }
     }
 
-    const receipt_no = await generateReceiptNo();
+    const receipt_no = await generateReceiptNo(conn);
     const total_amount = normalizedItems.reduce((sum, item) => sum + item.qty * item.price, 0);
 
     const [receiptResult] = await conn.execute(
@@ -531,10 +547,10 @@ router.put('/:id', async (req, res) => {
 
     if (!selectedCustomerId) {
       const { customer_name, phone } = newCustomer;
-      const customerCode = await generateCustomerCode();
+      const customerCode = await generateCustomerCode(conn);
       const [customerResult] = await conn.execute(
         `INSERT INTO customers (customer_code, customer_name, phone) VALUES (?, ?, ?)`,
-        [customerCode, customer_name, phone || null]
+        [customerCode, customer_name, normalizePhone(phone)]
       );
       selectedCustomerId = customerResult.insertId;
     } else {
@@ -609,15 +625,35 @@ router.put('/:id', async (req, res) => {
 });
 
 router.delete('/:id', async (req, res) => {
+  let conn;
   try {
-    const [result] = await pool.execute('DELETE FROM receipts WHERE id = ?', [req.params.id]);
+    conn = await pool.getConnection();
+    await conn.beginTransaction();
+
+    // ถ้าใบเสร็จนี้ถูกแปลงมาจากใบเสนอราคา ต้องคืนสถานะใบเสนอราคากลับเป็น pending
+    // ก่อนลบใบเสร็จ ไม่งั้น FK จะแค่ set converted_receipt_id เป็น NULL แต่ status
+    // ยังเป็น 'approved' ค้างอยู่ ทำให้ดูเหมือนอนุมัติแล้วแต่ไม่มีใบเสร็จจริง
+    await conn.execute(
+      "UPDATE quotations SET status = 'pending', converted_receipt_id = NULL WHERE converted_receipt_id = ?",
+      [req.params.id]
+    );
+
+    const [result] = await conn.execute('DELETE FROM receipts WHERE id = ?', [req.params.id]);
     if (result.affectedRows === 0) {
+      await conn.rollback();
       return res.status(404).json({ error: 'ไม่พบใบเสร็จ' });
     }
+
+    await conn.commit();
     res.json({ success: true, message: 'ลบใบเสร็จสำเร็จ' });
   } catch (err) {
+    if (conn) {
+      try { await conn.rollback(); } catch (rollbackErr) { console.error('Rollback error:', rollbackErr); }
+    }
     console.error('Error deleting receipt:', err);
     res.status(500).json({ error: 'ลบใบเสร็จไม่สำเร็จ' });
+  } finally {
+    if (conn) conn.release();
   }
 });
 

@@ -20,6 +20,24 @@ const pool = mysql.createPool({
   queueLimit: 0
 });
 
+// error code ที่หมายถึง "คอลัมน์/ดัชนี/FK นี้มีอยู่แล้ว" — เกิดขึ้นได้ปกติเมื่อรัน
+// migration ซ้ำทุกครั้งที่บูต (ตารางถูกสร้างไปแล้วจากการบูตครั้งก่อน) ปลอดภัยที่จะข้าม
+// error code อื่น (เช่น สิทธิ์ไม่พอ, disk เต็ม, lock timeout) ต้องโยนต่อ ไม่ให้เงียบหาย
+const IGNORABLE_ALTER_ERROR_CODES = new Set([
+  'ER_DUP_FIELDNAME',          // ADD COLUMN ที่มีอยู่แล้ว
+  'ER_DUP_KEYNAME',            // ADD INDEX/KEY ที่มีอยู่แล้ว
+  'ER_DUP_KEY',                // ADD INDEX/UNIQUE ที่ชนกับ index เดิม
+  'ER_FK_DUP_NAME',            // ADD CONSTRAINT (FOREIGN KEY) ที่มีอยู่แล้ว
+  'ER_CANT_DROP_FIELD_OR_KEY', // DROP COLUMN ที่ถูกลบไปแล้ว (รันซ้ำทุกครั้งที่บูต)
+]);
+
+function ignoreIfAlreadyApplied(err) {
+  if (IGNORABLE_ALTER_ERROR_CODES.has(err.code)) return;
+  // error จริง (ไม่ใช่แค่ "มีอยู่แล้ว") — log แล้วโยนต่อให้บูตล้มเหลว แทนที่จะเงียบไป
+  console.error('[init-db] Migration ALTER failed:', err.message);
+  throw err;
+}
+
 async function initDatabase() {
   const rootConn = await mysql.createConnection({
     host: DB_HOST,
@@ -50,7 +68,7 @@ async function initDatabase() {
       full_name VARCHAR(255),
       role ENUM('office','technician') NOT NULL,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
 
   await conn.query(`
@@ -62,7 +80,7 @@ async function initDatabase() {
       min_stock INT NOT NULL DEFAULT 1,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
 
   await conn.query(`
@@ -72,7 +90,7 @@ async function initDatabase() {
       user_id INT NOT NULL,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       CONSTRAINT fk_receipt_session_user FOREIGN KEY (user_id) REFERENCES users(id)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
 
   await conn.query(`
@@ -87,7 +105,7 @@ async function initDatabase() {
       min_stock INT NOT NULL DEFAULT 1,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
 
   await conn.query(`
@@ -105,7 +123,7 @@ async function initDatabase() {
       CONSTRAINT fk_tx_wing_arm FOREIGN KEY (wing_arm_id) REFERENCES wing_arms(id) ON DELETE CASCADE,
       CONSTRAINT fk_tx_user FOREIGN KEY (user_id) REFERENCES users(id),
       CONSTRAINT fk_tx_receipt_session FOREIGN KEY (receipt_session_id) REFERENCES receipt_sessions(id) ON DELETE SET NULL
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
 
   await conn.query(`
@@ -117,7 +135,7 @@ async function initDatabase() {
       line_id VARCHAR(100) DEFAULT NULL,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
 
   await conn.query(`
@@ -135,7 +153,7 @@ async function initDatabase() {
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       CONSTRAINT fk_quotation_customer FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE RESTRICT
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
 
   await conn.query(`
@@ -146,13 +164,13 @@ async function initDatabase() {
       description TEXT NOT NULL,
       brand VARCHAR(100) DEFAULT NULL,
       price DECIMAL(10,2) DEFAULT NULL
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
 
   await conn.query(`
     ALTER TABLE products
     MODIFY COLUMN id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT
-  `).catch(() => {});
+  `).catch(ignoreIfAlreadyApplied);
 
   await conn.query(`
     CREATE TABLE IF NOT EXISTS quotation_items (
@@ -162,11 +180,20 @@ async function initDatabase() {
       product_name VARCHAR(255) NOT NULL,
       quantity INT NOT NULL DEFAULT 1,
       unit_price DECIMAL(12, 2) NOT NULL,
-      vat DECIMAL(12, 2) GENERATED ALWAYS AS (quantity * unit_price * 0.07) STORED,
       CONSTRAINT fk_quotation_item FOREIGN KEY (quotation_id) REFERENCES quotations(id) ON DELETE CASCADE,
       CONSTRAINT fk_product_item FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE SET NULL
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
+
+  // เจ้าของร้านยืนยันว่าบิลที่ออกจริงไม่มี Vat 7% เลย — ลบคอลัมน์ที่คำนวณอัตโนมัติ
+  // (GENERATED ALWAYS AS quantity * unit_price * 0.07) ออก เพราะไม่เคยถูกใช้แสดงผล
+  // หรือรวมเป็นยอดใด ๆ ที่ลูกค้าเห็นอยู่แล้ว (ตรวจสอบแล้วว่าไม่มี route/หน้าไหนอ่านค่านี้
+  // ไปคำนวณยอดรวม) ใช้ DROP COLUMN แบบ idempotent — ถ้าคอลัมน์ถูกลบไปแล้วจากการบูต
+  // ครั้งก่อน MySQL จะโยน ER_CANT_DROP_FIELD_OR_KEY ซึ่งถูกดักไว้ใน ignoreIfAlreadyApplied
+  await conn.query(`
+    ALTER TABLE quotation_items
+    DROP COLUMN vat
+  `).catch(ignoreIfAlreadyApplied);
 
   // Mirrors receipt_items' warranty columns so a quotation can carry the
   // same warranty info as a receipt (picked from the same service_items
@@ -178,7 +205,7 @@ async function initDatabase() {
     ADD COLUMN warranty_year INT DEFAULT 0,
     ADD COLUMN warranty_month INT DEFAULT 0,
     ADD COLUMN warranty_km INT DEFAULT 0
-  `).catch(() => {});
+  `).catch(ignoreIfAlreadyApplied);
 
   await conn.query(`
     CREATE TABLE IF NOT EXISTS vehicles (
@@ -192,7 +219,7 @@ async function initDatabase() {
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       CONSTRAINT fk_vehicle_customer FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE CASCADE
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
 
   await conn.query(`
@@ -203,7 +230,7 @@ async function initDatabase() {
       warranty_month INT DEFAULT 0,
       warranty_km INT DEFAULT 0,
       is_active TINYINT(1) DEFAULT 1
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
 
   await conn.query(`
@@ -215,7 +242,7 @@ async function initDatabase() {
       is_active TINYINT(1) DEFAULT 1,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       CONSTRAINT fk_service_warranty FOREIGN KEY (warranty_id) REFERENCES warranties(id) ON DELETE SET NULL
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
 
   // Product "sets" (e.g. "ชุดโปรช่วงล่าง"): a service_items row flagged
@@ -226,7 +253,7 @@ async function initDatabase() {
     ALTER TABLE service_items
     ADD COLUMN is_set TINYINT(1) NOT NULL DEFAULT 0,
     ADD COLUMN set_price DECIMAL(10,2) DEFAULT NULL
-  `).catch(() => {});
+  `).catch(ignoreIfAlreadyApplied);
 
   await conn.query(`
     CREATE TABLE IF NOT EXISTS service_item_components (
@@ -236,7 +263,7 @@ async function initDatabase() {
       default_qty INT NOT NULL DEFAULT 1,
       sort_order INT NOT NULL DEFAULT 0,
       CONSTRAINT fk_set_component_item FOREIGN KEY (service_item_id) REFERENCES service_items(id) ON DELETE CASCADE
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
 
   await conn.query(`
@@ -255,19 +282,19 @@ async function initDatabase() {
       updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       CONSTRAINT fk_receipt_customer FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE RESTRICT,
       CONSTRAINT fk_receipt_vehicle FOREIGN KEY (vehicle_id) REFERENCES vehicles(id) ON DELETE RESTRICT
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
 
   await conn.query(`
     ALTER TABLE receipts
     ADD COLUMN payment_method VARCHAR(50) DEFAULT NULL,
     ADD COLUMN technician_name VARCHAR(100) DEFAULT NULL
-  `).catch(() => {});
+  `).catch(ignoreIfAlreadyApplied);
 
   await conn.query(`
     ALTER TABLE receipts
     ADD COLUMN printed_at TIMESTAMP NULL DEFAULT NULL
-  `).catch(() => {});
+  `).catch(ignoreIfAlreadyApplied);
 
   // Mirrors quotations.customer_signature — either captured directly on a
   // walk-in receipt, or copied over automatically when an approved
@@ -275,7 +302,7 @@ async function initDatabase() {
   await conn.query(`
     ALTER TABLE receipts
     ADD COLUMN customer_signature LONGTEXT DEFAULT NULL
-  `).catch(() => {});
+  `).catch(ignoreIfAlreadyApplied);
 
   // Quotation approval workflow: pending -> approved (auto-converted to a
   // receipt) or scheduled (customer asked to come back on scheduled_date).
@@ -292,7 +319,7 @@ async function initDatabase() {
     ADD COLUMN converted_receipt_id BIGINT UNSIGNED DEFAULT NULL,
     ADD CONSTRAINT fk_quotation_vehicle FOREIGN KEY (vehicle_id) REFERENCES vehicles(id) ON DELETE SET NULL,
     ADD CONSTRAINT fk_quotation_receipt FOREIGN KEY (converted_receipt_id) REFERENCES receipts(id) ON DELETE SET NULL
-  `).catch(() => {});
+  `).catch(ignoreIfAlreadyApplied);
 
   // queue_no: a hand-entered job/queue number (replaces showing the auto
   // customer_code in the printed header — staff track their own numbering).
@@ -302,7 +329,7 @@ async function initDatabase() {
     ALTER TABLE quotations
     ADD COLUMN queue_no VARCHAR(50) DEFAULT NULL,
     ADD COLUMN symptom TEXT DEFAULT NULL
-  `).catch(() => {});
+  `).catch(ignoreIfAlreadyApplied);
 
   // customer_signature: a base64 PNG data URI captured on the shop's
   // tablet/phone — stored as-is (no file-upload pipeline in this app yet,
@@ -312,7 +339,7 @@ async function initDatabase() {
   await conn.query(`
     ALTER TABLE quotations
     ADD COLUMN customer_signature LONGTEXT DEFAULT NULL
-  `).catch(() => {});
+  `).catch(ignoreIfAlreadyApplied);
 
   // เพิ่มค่า 'no_date' ให้ status — ใช้เมื่อสำนักงานกดยืนยันชัดเจนว่าลูกค้าไม่ระบุวัน
   // นัดหมาย (ต่างจาก 'pending' เฉยๆ ที่แปลว่ายังไม่ได้ดำเนินการอะไรเลย) MODIFY COLUMN
@@ -320,14 +347,14 @@ async function initDatabase() {
   await conn.query(`
     ALTER TABLE quotations
     MODIFY COLUMN status ENUM('pending','approved','scheduled','no_date') NOT NULL DEFAULT 'pending'
-  `).catch(() => {});
+  `).catch(ignoreIfAlreadyApplied);
 
   // Mirrors receipts.printed_at — lets the list show a persisted "พิมพ์แล้ว"
   // state per quotation instead of forgetting as soon as the modal closes.
   await conn.query(`
     ALTER TABLE quotations
     ADD COLUMN printed_at TIMESTAMP NULL DEFAULT NULL
-  `).catch(() => {});
+  `).catch(ignoreIfAlreadyApplied);
 
   // requested_queue_no: เลขคิวที่พนักงาน "พิมพ์มาจริง" ก่อนถูกเปลี่ยนอัตโนมัติ (ดู
   // createQuotationFromQueue ใน lineWebhook.routes.js) — เกิดเมื่อเลขคิวชนกับของ
@@ -338,7 +365,7 @@ async function initDatabase() {
   await conn.query(`
     ALTER TABLE quotations
     ADD COLUMN requested_queue_no VARCHAR(50) DEFAULT NULL
-  `).catch(() => {});
+  `).catch(ignoreIfAlreadyApplied);
 
   await conn.query(`
     CREATE TABLE IF NOT EXISTS receipt_items (
@@ -355,7 +382,7 @@ async function initDatabase() {
       warranty_km INT DEFAULT 0,
       CONSTRAINT fk_receipt_item_receipt FOREIGN KEY (receipt_id) REFERENCES receipts(id) ON DELETE CASCADE,
       CONSTRAINT fk_receipt_item_service FOREIGN KEY (service_item_id) REFERENCES service_items(id) ON DELETE SET NULL
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
 
   // The physical "ใบแจ้งซ่อม" checklist form (fixed sections/sub-items, not
@@ -378,7 +405,58 @@ async function initDatabase() {
       CONSTRAINT fk_repair_notice_customer FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE SET NULL,
       CONSTRAINT fk_repair_notice_vehicle FOREIGN KEY (vehicle_id) REFERENCES vehicles(id) ON DELETE SET NULL,
       CONSTRAINT fk_repair_notice_quotation FOREIGN KEY (quotation_id) REFERENCES quotations(id) ON DELETE SET NULL
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  // repair_notices.code (RN-####) ไม่มี UNIQUE constraint มาตั้งแต่แรก ต่างจาก
+  // quotation_no/receipt_no/customer_code ที่มี — เพิ่มไว้เป็นตัวกันสำรองระดับ DB
+  // ถ้า generateRepairNoticeCode/generateCode (ที่ล็อกด้วย FOR UPDATE ในทรานแซกชัน
+  // อยู่แล้ว) มีช่องโหว่หลุดออกมาได้บ้าง จะได้ error ที่ ER_DUP_ENTRY ชัดเจนแทนที่จะ
+  // ปล่อยให้เอกสาร 2 ใบใช้เลขเดียวกันเงียบ ๆ
+  await conn.query(`
+    ALTER TABLE repair_notices
+    ADD UNIQUE KEY uk_repair_notices_code (code)
+  `).catch(ignoreIfAlreadyApplied);
+
+  // ดัชนีเสริมประสิทธิภาพ query ที่ใช้บ่อย — ไม่ใช่ constraint ใหม่ ไม่กระทบข้อมูลเดิม
+  // customers.phone: ใช้กับ WHERE phone = ? ใน LINE webhook (ดู lineWebhook.routes.js)
+  await conn.query(`
+    ALTER TABLE customers
+    ADD INDEX idx_customers_phone (phone)
+  `).catch(ignoreIfAlreadyApplied);
+
+  // receipts.receipt_date: ใช้กับ WHERE r.receipt_date = ? (ดู receipts.routes.js)
+  await conn.query(`
+    ALTER TABLE receipts
+    ADD INDEX idx_receipts_receipt_date (receipt_date)
+  `).catch(ignoreIfAlreadyApplied);
+
+  // quotations(customer_id, queue_no, quotation_date): รองรับการค้นหาใบเสนอราคา
+  // เดิมของลูกค้าคนเดียวกัน+เลขคิวเดียวกันใน createQuotationFromQueue (LINE bot)
+  await conn.query(`
+    ALTER TABLE quotations
+    ADD INDEX idx_quotations_customer_queue_date (customer_id, queue_no, quotation_date)
+  `).catch(ignoreIfAlreadyApplied);
+
+  // เก็บ message id ของ LINE ที่ประมวลผลแล้ว (กันสร้างใบเสนอราคาซ้ำตอน LINE ส่ง
+  // webhook ซ้ำ/retry) ลงฐานข้อมูลแทนหน่วยความจำล้วน (Set/Map เดิมใน
+  // lineWebhook.routes.js) — เดิมข้อมูลนี้หายทุกครั้งที่ PM2 restart/deploy ทำให้
+  // ข้อความที่เคยประมวลผลไปแล้วกลับถูกสร้างใบเสนอราคาซ้ำได้ถ้า LINE retry มาหลัง
+  // restart พอดี quotation_id/quotation_no/customer_id/vehicle_id/was_new_* ถูก
+  // เติมทีหลังเฉพาะข้อความที่ "เปิดใบใหม่" เท่านั้น (ดู trackMessageQuotation) ใช้
+  // ตอนจัดการ unsend — ข้อความอื่นแถวนี้จะมีแค่ message_id เก็บไว้เฉย ๆ
+  await conn.query(`
+    CREATE TABLE IF NOT EXISTS processed_line_messages (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      message_id VARCHAR(64) NOT NULL UNIQUE,
+      quotation_id BIGINT UNSIGNED NULL,
+      quotation_no VARCHAR(20) NULL,
+      customer_id BIGINT UNSIGNED NULL,
+      vehicle_id BIGINT UNSIGNED NULL,
+      was_new_customer TINYINT(1) DEFAULT 0,
+      was_new_vehicle TINYINT(1) DEFAULT 0,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
 
   const [userRows] = await conn.query(

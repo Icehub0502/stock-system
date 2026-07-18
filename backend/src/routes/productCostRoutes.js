@@ -89,6 +89,12 @@ router.get("/", async (req, res) => {
     }
 
     sql += " ORDER BY id ASC";
+    // ProductCostPage ทำ pagination/นับจำนวนรวมฝั่ง client จากผลลัพธ์ชุดเต็ม (ดู
+    // pagedProducts/fetchTotalCount) ตัด LIMIT ต่ำ ๆ ตรงนี้จะทำให้หน้าถัดไป/ยอดรวม
+    // ผิดทันที — ใส่เพดานสูง (5000) กันดึงทั้งตารางไม่จำกัดแทน (แคตาล็อกสินค้าร้านนี้
+    // ยังห่างไกลจากจำนวนนี้มาก) ถ้าโตเกินนี้จริงต้องทำ pagination จริงจังฝั่ง backend
+    // (limit/offset) แทน ไม่ใช่ตัด LIMIT ต่ำ ๆ ที่นี่
+    sql += " LIMIT 5000";
 
     const [rows] = await pool.query(sql, params);
 
@@ -114,7 +120,7 @@ router.get("/", async (req, res) => {
     console.error(err);
     res.status(500).json({
       success: false,
-      message: err.message
+      message: "โหลดรายการต้นทุนสินค้าไม่สำเร็จ"
     });
   }
 });
@@ -154,7 +160,7 @@ router.get("/categories", async (req, res) => {
     console.error(err);
     res.status(500).json({
       success: false,
-      message: err.message
+      message: "โหลดข้อมูลหมวดหมู่ไม่สำเร็จ"
     });
   }
 });
@@ -172,9 +178,10 @@ router.post("/", async (req, res) => {
     });
   }
 
-  const conn = await pool.getConnection();
+  let conn;
 
   try {
+    conn = await pool.getConnection();
     await conn.beginTransaction();
 
     const inserted = [];
@@ -207,14 +214,15 @@ router.post("/", async (req, res) => {
       ids: inserted
     });
   } catch (err) {
-    await conn.rollback();
+    if (conn) await conn.rollback();
+    console.error(err);
 
     res.status(500).json({
       success: false,
-      message: err.message
+      message: "เพิ่มรายการต้นทุนสินค้าไม่สำเร็จ"
     });
   } finally {
-    conn.release();
+    if (conn) conn.release();
   }
 });
 
@@ -248,7 +256,7 @@ router.put("/:id", async (req, res) => {
 
     res.status(500).json({
       success: false,
-      message: err.message
+      message: "แก้ไขรายการต้นทุนสินค้าไม่สำเร็จ"
     });
   }
 });
@@ -272,7 +280,7 @@ router.delete("/:id", async (req, res) => {
 
     res.status(500).json({
       success: false,
-      message: err.message
+      message: "ลบรายการต้นทุนสินค้าไม่สำเร็จ"
     });
   }
 });
@@ -305,7 +313,7 @@ router.delete("/", async (req, res) => {
 
     res.status(500).json({
       success: false,
-      message: err.message
+      message: "ลบรายการต้นทุนสินค้าไม่สำเร็จ"
     });
   }
 });

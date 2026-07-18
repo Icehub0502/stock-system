@@ -13,8 +13,9 @@ router.post('/in', async (req, res) => {
     return res.status(400).json({ error: 'ข้อมูลไม่ถูกต้อง' });
   }
 
-  const conn = await pool.getConnection();
+  let conn;
   try {
+    conn = await pool.getConnection();
     await conn.beginTransaction();
     const [rows] = await conn.execute('SELECT * FROM racks WHERE model_code = ? FOR UPDATE', [model_code]);
     const rack = rows[0];
@@ -33,11 +34,11 @@ router.post('/in', async (req, res) => {
     const [updatedRows] = await pool.execute('SELECT * FROM racks WHERE id = ?', [rack.id]);
     res.json({ success: true, rack: updatedRows[0] });
   } catch (err) {
-    await conn.rollback();
+    if (conn) await conn.rollback();
     console.error(err);
     res.status(500).json({ error: 'ทำรายการไม่สำเร็จ' });
   } finally {
-    conn.release();
+    if (conn) conn.release();
   }
 });
 
@@ -49,8 +50,9 @@ router.post('/out', async (req, res) => {
     return res.status(400).json({ error: 'ข้อมูลไม่ถูกต้อง' });
   }
 
-  const conn = await pool.getConnection();
+  let conn;
   try {
+    conn = await pool.getConnection();
     await conn.beginTransaction();
     const [rows] = await conn.execute('SELECT * FROM racks WHERE model_code = ? FOR UPDATE', [model_code]);
     const rack = rows[0];
@@ -73,11 +75,11 @@ router.post('/out', async (req, res) => {
     const [updatedRows] = await pool.execute('SELECT * FROM racks WHERE id = ?', [rack.id]);
     res.json({ success: true, rack: updatedRows[0] });
   } catch (err) {
-    await conn.rollback();
+    if (conn) await conn.rollback();
     console.error(err);
     res.status(500).json({ error: 'ทำรายการไม่สำเร็จ' });
   } finally {
-    conn.release();
+    if (conn) conn.release();
   }
 });
 
