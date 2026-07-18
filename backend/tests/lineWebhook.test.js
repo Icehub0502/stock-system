@@ -9,6 +9,7 @@ process.env.LINE_CHANNEL_SECRET = TEST_SECRET;
 const { createApp } = require('../src/app');
 const pool = require('../src/db/pool');
 const lineWebhookRouter = require('../src/routes/lineWebhook.routes');
+const helpers = require('./helpers'); // require ไว้ก่อน jest.resetModules() ใน describe ด้านล่าง กันดึงโมดูลใหม่ (pool ใหม่) มาซ้ำโดยไม่ตั้งใจ
 
 const app = createApp();
 
@@ -703,5 +704,97 @@ describe('POST /api/line/webhook', () => {
     const body = eventsBody([messageEvent('คิว:5\nชื่อลูกค้า:คุณปลอมลายเซ็น', `msg-e-${Date.now()}`)]);
     const res = await postWebhook(body, 'forged-signature');
     expect(res.status).toBe(401);
+  });
+
+  // Fix 3: LINE dedup state ต้องรอดจาก "restart" — เดิมเก็บแค่ใน Set/Map หน่วยความจำ
+  // ล้วน ๆ ตอนนี้เขียนลงตาราง processed_line_messages ด้วย (ดู markProcessed/
+  // trackMessageQuotation/getTrackedQuotation ใน lineWebhook.routes.js) เทสต์นี้เช็ค
+  // ตรงจากฐานข้อมูล ไม่ใช่ตัวแปรในหน่วยความจำของโมดูล เพื่อพิสูจน์ว่าความถูกต้องไม่ได้
+  // พึ่งพา process เดิมที่ยังไม่ restart
+  test('message id ที่ประมวลผลแล้วถูกบันทึกลงตาราง processed_line_messages จริง (รอดจาก restart)', async () => {
+    const uniq = Date.now().toString().slice(-7);
+    const messageId = `msg-persist-${uniq}`;
+    const text = `คิว:16\nชื่อลูกค้า:คุณทนต่อรีสตาร์ท\nเบอร์โทร:091${uniq}`;
+
+    const res = await postWebhook(eventsBody([messageEvent(text, messageId)]));
+    expect(res.body.created).toHaveLength(1);
+    const quotationNo = res.body.created[0];
+    const [[quotation]] = await pool.query('SELECT customer_id FROM quotations WHERE quotation_no = ?', [quotationNo]);
+    createdCustomerIds.push(quotation.customer_id);
+
+    // เช็คตรงจากฐานข้อมูล (ไม่ใช่ Set ในหน่วยความจำ) — แถวต้องถูกสร้างไว้แล้ว พร้อม
+    // ผูกกับใบเสนอราคาที่เพิ่งสร้าง (ข้อความนี้ "เปิดใบใหม่")
+    const [[row]] = await pool.query(
+      'SELECT message_id, quotation_no FROM processed_line_messages WHERE message_id = ?',
+      [messageId]
+    );
+    expect(row).toBeTruthy();
+    expect(row.quotation_no).toBe(quotationNo);
+
+    // จำลอง "restart": require โมดูลเราท์เตอร์ใหม่แบบสด ๆ (ล้าง Set ในหน่วยความจำ
+    // ของโมดูลเดิมทิ้งไปโดยสิ้นเชิง เพราะ isProcessed/markProcessed เป็น closure
+    // ภายในโมดูลนั้น) แล้วยิง event เดิม (message id เดิม) ผ่าน route ใหม่นี้ตรง ๆ —
+    // ต้องยังถูกจำได้ว่าประมวลผลไปแล้วจากแถวใน DB ไม่ใช่สร้างใบเสนอราคาซ้ำ
+    jest.resetModules();
+    const freshRouter = require('../src/routes/lineWebhook.routes');
+    const freshPool = require('../src/db/pool'); // instance ใหม่ (module cache ถูกล้าง) — ต้อง end() เองแยกจาก pool เดิมที่ปิดใน afterAll
+    const express = require('express');
+    const freshApp = express();
+    freshApp.use(express.json({ verify: (req, res, buf) => { req.rawBody = buf; } }));
+    freshApp.use('/api/line', freshRouter);
+
+    try {
+      const retryBody = eventsBody([messageEvent(text, messageId)]);
+      const retryRes = await request(freshApp)
+        .post('/api/line/webhook')
+        .set('Content-Type', 'application/json')
+        .set('X-Line-Signature', sign(retryBody))
+        .send(retryBody);
+
+      expect(retryRes.status).toBe(200);
+      expect(retryRes.body.created).toHaveLength(0); // ยังจำได้ว่าประมวลผลไปแล้ว แม้ Set ในหน่วยความจำของ process ใหม่จะว่างเปล่า
+
+      const [quotationsAfter] = await pool.query('SELECT id FROM quotations WHERE customer_id = ?', [quotation.customer_id]);
+      expect(quotationsAfter).toHaveLength(1); // ยังมีใบเดียว ไม่ซ้อน
+    } finally {
+      await freshPool.end();
+    }
+  });
+
+  // Fix 4: ลูกค้าที่สร้างผ่านหน้าเว็บ (POST /customers) ด้วยเบอร์แบบไม่มีขีด ต้องถูก
+  // normalize เป็นรูปแบบเดียวกับที่บอทไลน์ใช้ (formatPhone) ก่อนบันทึก ไม่งั้น
+  // WHERE phone = ? แบบตรง ๆ ใน createQuotationFromQueue จะหาไม่เจอ กลายเป็นสร้าง
+  // ลูกค้าซ้ำซ้อนทุกครั้งที่ลูกค้าคนนี้พิมพ์คิวเข้ามาทางไลน์
+  test('ลูกค้าที่สร้างผ่านเว็บด้วยเบอร์ไม่มีขีด → บอทไลน์ (เบอร์แบบมีขีด) จับคู่เจอ ไม่สร้างซ้ำ', async () => {
+    const officeToken = await helpers.getOfficeToken();
+    const uniq = Date.now().toString().slice(-7);
+    const rawPhone = `095${uniq}`; // ไม่มีขีดเลย เหมือนพนักงานพิมพ์ในฟอร์มเว็บตรง ๆ
+
+    const createRes = await request(app)
+      .post('/api/customers')
+      .set('Authorization', `Bearer ${officeToken}`)
+      .send({ customer_name: 'คุณเว็บไม่มีขีด', phone: rawPhone });
+    expect(createRes.status).toBe(201);
+    const webCustomerId = createRes.body.data.id;
+    createdCustomerIds.push(webCustomerId);
+
+    const [[storedCustomer]] = await pool.query('SELECT phone FROM customers WHERE id = ?', [webCustomerId]);
+    expect(storedCustomer.phone).toBe(`${rawPhone.slice(0, 3)}-${rawPhone.slice(3, 6)}-${rawPhone.slice(6)}`); // เก็บแบบมีขีดแล้ว
+
+    // บอทไลน์ได้รับเบอร์แบบมีขีดเสมอ (formatPhone ใน parseLineQueueMessage.js) —
+    // ต้องจับคู่กับลูกค้าคนนี้ (customer_id เดิม) ไม่ใช่สร้างลูกค้าใหม่ซ้อน
+    const uniqLine = Date.now().toString().slice(-7);
+    const text = `คิว:${uniqLine}\nชื่อลูกค้า:คุณเว็บไม่มีขีด\nเบอร์โทร:${rawPhone}`;
+    const res = await postWebhook(eventsBody([messageEvent(text, `msg-phonematch-${uniqLine}`)]));
+    expect(res.body.created).toHaveLength(1);
+
+    const [[quotation]] = await pool.query('SELECT customer_id FROM quotations WHERE quotation_no = ?', [res.body.created[0]]);
+    expect(quotation.customer_id).toBe(webCustomerId); // ลูกค้าคนเดิม ไม่สร้างซ้ำ
+
+    const [allCustomersWithPhone] = await pool.query(
+      'SELECT id FROM customers WHERE phone = ?',
+      [`${rawPhone.slice(0, 3)}-${rawPhone.slice(3, 6)}-${rawPhone.slice(6)}`]
+    );
+    expect(allCustomersWithPhone).toHaveLength(1); // มีแค่รายการเดียว ไม่ซ้ำซ้อน
   });
 });

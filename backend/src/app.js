@@ -4,6 +4,7 @@
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
+const compression = require('compression');
 const path = require('path');
 const fs = require('fs');
 
@@ -51,7 +52,6 @@ const customersRoutes = require('./routes/customers.routes');
 const vehiclesRoutes = require('./routes/vehicles.routes');
 const serviceItemsRoutes = require('./routes/service-items.routes');
 const warrantiesRoutes = require('./routes/warranties.routes');
-const productsRoutes = require('./routes/products.routes');
 const repairNoticesRoutes = require('./routes/repairNotices.routes');
 const lineWebhookRoutes = require('./routes/lineWebhook.routes');
 
@@ -118,6 +118,10 @@ function createApp() {
   app.use(express.json({
     verify: (req, res, buf) => { req.rawBody = buf; }
   }));
+  // บีบอัด response ด้วย gzip/deflate (JSON API + frontend bundle) — วางไว้หลัง
+  // การเก็บ req.rawBody ด้านบน เพราะ compression ทำงานกับฝั่ง response ไม่ยุ่งกับ
+  // การ parse/เก็บ raw body ของ request เลย จึงไม่กระทบการตรวจลายเซ็น LINE webhook
+  app.use(compression());
 
   app.use('/api/auth', authRoutes);
   app.use('/api/racks', rackRoutes);
@@ -132,7 +136,6 @@ function createApp() {
   app.use('/api/vehicles', vehiclesRoutes);
   app.use('/api/service-items', serviceItemsRoutes);
   app.use('/api/warranties', warrantiesRoutes);
-  app.use('/api/products', productsRoutes);
   app.use('/api/repair-notices', repairNoticesRoutes);
   app.use('/api/line', lineWebhookRoutes);
 

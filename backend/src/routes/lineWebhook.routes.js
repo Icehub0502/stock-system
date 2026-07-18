@@ -22,16 +22,37 @@ const router = express.Router();
 // (customer id/vehicle id) ไว้ใช้ตอนพิมพ์ผิดแล้วลบ/เรียกคืนข้อความ (unsend) — ลบ
 // ใบเสนอราคานั้นให้อัตโนมัติ (ดู deleteQuotationForMessage) เฉพาะข้อความที่ "เปิด
 // ใบใหม่" เท่านั้น — ข้อความที่ไปแก้ไขใบเดิม (คิว+ลูกค้าเดียวกัน) ไม่ถูกจำไว้ตรงนี้
-// กันเรียกคืนข้อความล่าสุดแล้วลบใบที่มีข้อมูลจากข้อความก่อนหน้าอยู่ด้วย เก็บใน
-// หน่วยความจำพอ เพราะแอปรันโปรเซสเดียวใน PM2 และเรื่องพวกนี้มักเกิดใกล้ ๆ เวลาที่
-// พิมพ์ผิดเท่านั้น
+// กันเรียกคืนข้อความล่าสุดแล้วลบใบที่มีข้อมูลจากข้อความก่อนหน้าอยู่ด้วย
+//
+// เก็บลง DB จริง (ตาราง processed_line_messages ดู db/init.js) ไม่ใช่แค่หน่วยความจำ
+// อีกต่อไป — เดิมใช้ Set/Map ล้วน ๆ ทำให้ทุกครั้งที่ PM2 restart/deploy ข้อมูลนี้
+// หายหมด ถ้า LINE retry ข้อความเดิมมาหลัง restart พอดีจะสร้างใบเสนอราคาซ้ำได้ ยังคง
+// แคช Set ไว้ในหน่วยความจำเป็นชั้นเร็ว ๆ ด้านหน้า (กัน query DB ทุกข้อความที่เข้ามา
+// ซ้ำ ๆ ในช่วงสั้น ๆ) แต่ความถูกต้องจริง ๆ มาจาก DB เสมอ
 const MAX_TRACKED = 1000;
 const processedIds = new Set();
 const processedOrder = [];
-const messageQuotations = new Map(); // messageId -> { quotationId, quotationNo, customerId, vehicleId, wasNewCustomer, wasNewVehicle }
-const trackedOrder = [];
 
-function markProcessed(id) {
+// message นี้เคยประมวลผลไปแล้วหรือยัง — เช็คแคชหน่วยความจำก่อน ไม่เจอค่อยถาม DB
+// (กรณี process เพิ่ง restart แล้ว LINE retry ข้อความเก่ามา แคชในหน่วยความจำว่างเปล่า)
+async function isProcessed(id) {
+  if (processedIds.has(id)) return true;
+  try {
+    const [rows] = await pool.execute(
+      'SELECT 1 FROM processed_line_messages WHERE message_id = ? LIMIT 1',
+      [id]
+    );
+    if (rows.length > 0) {
+      cacheProcessed(id);
+      return true;
+    }
+  } catch (err) {
+    console.error('Error checking processed LINE message id:', err);
+  }
+  return false;
+}
+
+function cacheProcessed(id) {
   processedIds.add(id);
   processedOrder.push(id);
   if (processedOrder.length > MAX_TRACKED) {
@@ -39,12 +60,76 @@ function markProcessed(id) {
   }
 }
 
-function trackMessageQuotation(messageId, info) {
+// บันทึกว่าประมวลผลข้อความนี้แล้ว (ไม่ว่าจะสร้างใบเสนอราคาสำเร็จหรือไม่ก็ตาม —
+// กัน retry จาก LINE มาลองใหม่ซ้ำ ๆ กับข้อความที่ error อยู่แล้วด้วย) ON DUPLICATE
+// KEY เผื่อ retry มาถึงเกือบพร้อมกันสองคำขอ (unique key ที่ message_id กันซ้ำอยู่แล้ว)
+async function markProcessed(id) {
+  cacheProcessed(id);
+  try {
+    await pool.execute(
+      'INSERT INTO processed_line_messages (message_id) VALUES (?) ON DUPLICATE KEY UPDATE message_id = message_id',
+      [id]
+    );
+  } catch (err) {
+    console.error('Error persisting processed LINE message id:', err);
+  }
+}
+
+// เติมข้อมูลใบเสนอราคาที่สร้างจากข้อความนี้ลงแถวเดิม (insert ไว้แล้วจาก
+// markProcessed ด้านบน) — เฉพาะข้อความที่ "เปิดใบใหม่" เท่านั้นที่ถูกเรียก
+async function trackMessageQuotation(messageId, info) {
   if (!messageId) return;
-  messageQuotations.set(messageId, info);
-  trackedOrder.push(messageId);
-  if (trackedOrder.length > MAX_TRACKED) {
-    messageQuotations.delete(trackedOrder.shift());
+  try {
+    await pool.execute(
+      `UPDATE processed_line_messages
+       SET quotation_id = ?, quotation_no = ?, customer_id = ?, vehicle_id = ?, was_new_customer = ?, was_new_vehicle = ?
+       WHERE message_id = ?`,
+      [
+        info.quotationId,
+        info.quotation_no,
+        info.customerId,
+        info.vehicleId,
+        info.wasNewCustomer ? 1 : 0,
+        info.wasNewVehicle ? 1 : 0,
+        messageId,
+      ]
+    );
+  } catch (err) {
+    console.error('Error persisting LINE message quotation link:', err);
+  }
+}
+
+// หาใบเสนอราคาที่ข้อความนี้เคยสร้างไว้ (ใช้ตอน unsend) — คืน null ถ้าไม่เคยสร้าง
+// หรือเคยแต่ถูกเคลียร์ลิงก์ไปแล้ว (unsend ไปแล้วครั้งหนึ่ง)
+async function getTrackedQuotation(messageId) {
+  if (!messageId) return null;
+  const [rows] = await pool.execute(
+    `SELECT quotation_id, quotation_no, customer_id, vehicle_id, was_new_customer, was_new_vehicle
+     FROM processed_line_messages WHERE message_id = ? AND quotation_id IS NOT NULL LIMIT 1`,
+    [messageId]
+  );
+  if (rows.length === 0) return null;
+  const r = rows[0];
+  return {
+    quotationId: r.quotation_id,
+    quotation_no: r.quotation_no,
+    customerId: r.customer_id,
+    vehicleId: r.vehicle_id,
+    wasNewCustomer: Boolean(r.was_new_customer),
+    wasNewVehicle: Boolean(r.was_new_vehicle),
+  };
+}
+
+// เคลียร์ลิงก์ใบเสนอราคาออกจากแถวหลัง unsend แล้ว (กันเรียกคืนข้อความเดิมซ้ำแล้ว
+// พยายามลบใบเดิมอีกรอบ — message_id ยังอยู่ในตาราง แค่ไม่ผูกกับใบไหนแล้ว)
+async function clearTrackedQuotation(messageId) {
+  try {
+    await pool.execute(
+      'UPDATE processed_line_messages SET quotation_id = NULL WHERE message_id = ?',
+      [messageId]
+    );
+  } catch (err) {
+    console.error('Error clearing LINE message quotation link:', err);
   }
 }
 
@@ -85,8 +170,11 @@ async function generateQuotationNo(conn) {
   const dateStr = String(today.getDate()).padStart(2, '0')
                 + String(today.getMonth() + 1).padStart(2, '0')
                 + String(today.getFullYear()).slice(-2);
+  // FOR UPDATE ล็อกแถวที่อ่านไว้จนกว่า transaction นี้จะ commit — กัน 2 ข้อความ
+  // ไลน์ที่มาถึงพร้อมกันอ่าน MAX เดิมแล้วได้เลขใบเสนอราคาซ้ำกัน (แบบเดียวกับที่
+  // ล็อก queue_no ไว้ด้านบนใน createQuotationFromQueue)
   const [rows] = await conn.execute(
-    'SELECT MAX(CAST(SUBSTRING(quotation_no, -3) AS UNSIGNED)) as maxNo FROM quotations WHERE quotation_no LIKE ?',
+    'SELECT MAX(CAST(SUBSTRING(quotation_no, -3) AS UNSIGNED)) as maxNo FROM quotations WHERE quotation_no LIKE ? FOR UPDATE',
     [`IV${dateStr}%`]
   );
   const nextNumber = (rows[0]?.maxNo || 0) + 1;
@@ -94,8 +182,9 @@ async function generateQuotationNo(conn) {
 }
 
 async function generateCustomerCode(conn) {
+  // เหตุผลเดียวกับ generateQuotationNo ด้านบน
   const [rows] = await conn.execute(
-    "SELECT MAX(CAST(SUBSTRING(customer_code, 5) AS UNSIGNED)) AS maxCode FROM customers WHERE customer_code LIKE 'CMM-%'"
+    "SELECT MAX(CAST(SUBSTRING(customer_code, 5) AS UNSIGNED)) AS maxCode FROM customers WHERE customer_code LIKE 'CMM-%' FOR UPDATE"
   );
   const nextNumber = (rows[0]?.maxCode || 0) + 1;
   return `CMM-${String(nextNumber).padStart(4, '0')}`;
@@ -191,13 +280,24 @@ async function createQuotationFromQueue(parsed) {
     conn = await pool.getConnection();
     await conn.beginTransaction();
 
-    // ลูกค้า: เทียบเบอร์แบบตัดขีด/ช่องว่าง เพราะในฐานข้อมูลพิมพ์มาหลายรูปแบบ
+    // ลูกค้า: parsed.phone ผ่าน formatPhone มาแล้วเสมอ (รูปแบบ XXX-XXX-XXXX คงที่ —
+    // ดู formatPhone ใน parseLineQueueMessage.js) จึงเทียบตรง ๆ กับคอลัมน์ phone ได้
+    // เลย ไม่ต้อง REPLACE() ตัดขีด/ช่องว่างออกจากทั้งสองฝั่งเหมือนเดิม (REPLACE() บน
+    // คอลัมน์ทำให้ index บน phone ใช้ไม่ได้ กลายเป็น full scan ทุกครั้ง) — จุดนี้ทำงาน
+    // ถูกต้องเพราะทุกจุดที่เขียนคอลัมน์ phone ของ customers ตอนนี้ normalize ผ่าน
+    // formatPhone เดียวกันแล้วทั้งหมด (customers.routes.js,
+    // quotation-customers.routes.js, และจุดสร้างลูกค้าใหม่แบบฝังในฟอร์มใบเสนอราคา/
+    // ใบเสร็จของ quotations.routes.js กับ receipts.routes.js) เบอร์ที่พิมพ์ผ่าน
+    // หน้าเว็บแบบไม่มีขีดจะถูกแปลงเป็นรูปแบบเดียวกันก่อนบันทึกเสมอ ไม่มีเบอร์รูปแบบ
+    // อื่นหลุดเข้ามาปนอีกต่อไป
+    // (ลูกค้าเดิมที่ถูกสร้างไว้ก่อนหน้านี้แบบไม่มีขีดยังไม่ถูก backfill อัตโนมัติ —
+    // ดูรายละเอียดในรายงานส่งมอบงาน)
     let customerId = null;
     let wasNewCustomer = false;
     if (parsed.phone) {
       const [rows] = await conn.execute(
-        "SELECT id FROM customers WHERE REPLACE(REPLACE(COALESCE(phone,''), '-', ''), ' ', '') = ? LIMIT 1",
-        [parsed.phone.replace(/[-\s]/g, '')]
+        'SELECT id FROM customers WHERE phone = ? LIMIT 1',
+        [parsed.phone]
       );
       if (rows.length > 0) customerId = rows[0].id;
     }
@@ -477,9 +577,9 @@ router.post('/webhook', async (req, res) => {
     // ใบเสนอราคาไว้ ให้ลบใบนั้นตาม (ไม่มี replyToken ในอีเวนต์นี้ ตอบกลับไม่ได้)
     if (event.type === 'unsend') {
       const messageId = event.unsend?.messageId;
-      const info = messageId && messageQuotations.get(messageId);
+      const info = messageId ? await getTrackedQuotation(messageId) : null;
       if (info) {
-        messageQuotations.delete(messageId);
+        await clearTrackedQuotation(messageId);
         try {
           await deleteQuotationForMessage(info);
           deleted.push(info.quotation_no);
@@ -493,12 +593,12 @@ router.post('/webhook', async (req, res) => {
     if (event.type !== 'message' || event.message?.type !== 'text') continue;
 
     const messageId = event.message.id;
-    if (messageId && processedIds.has(messageId)) continue;
+    if (messageId && (await isProcessed(messageId))) continue;
 
     const parsed = parseLineQueueMessage(event.message.text);
     if (!parsed) continue; // แชตทั่วไปในกลุ่ม — ข้ามเงียบ ๆ ไม่ตอบ ไม่รบกวน
 
-    if (messageId) markProcessed(messageId);
+    if (messageId) await markProcessed(messageId);
 
     try {
       const info = await createQuotationFromQueue(parsed);
@@ -507,7 +607,7 @@ router.post('/webhook', async (req, res) => {
       // แก้ไขใบเดิม (isUpdate) ไม่ติดตาม กันเรียกคืนข้อความล่าสุดแล้วลบใบที่มี
       // ข้อมูลจากข้อความก่อนหน้าอยู่ด้วยไปโดยไม่ตั้งใจ
       if (!info.isUpdate) {
-        trackMessageQuotation(messageId, info);
+        await trackMessageQuotation(messageId, info);
       }
       await replyToLine(event.replyToken, buildSuccessReplyText(parsed, info));
     } catch (err) {

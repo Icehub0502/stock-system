@@ -376,3 +376,9 @@ function parseLineQueueMessage(text) {
 }
 
 module.exports = parseLineQueueMessage;
+// เผยแพร่ formatPhone ให้ที่อื่นเรียกใช้ได้ด้วย — ทุกจุดที่เขียนคอลัมน์ phone ของ
+// customers (customers.routes.js, quotation-customers.routes.js) ต้อง normalize
+// ด้วยฟังก์ชันเดียวกันนี้เสมอ ไม่งั้นการค้นหาลูกค้าด้วย `WHERE phone = ?` แบบตรง ๆ
+// ใน lineWebhook.routes.js (createQuotationFromQueue) จะหาไม่เจอเบอร์ที่พิมพ์ผ่าน
+// หน้าเว็บแบบไม่มีขีด กลายเป็นสร้างลูกค้าซ้ำซ้อนโดยไม่ตั้งใจ
+module.exports.formatPhone = formatPhone;
