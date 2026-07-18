@@ -6,6 +6,11 @@ async function getOfficeToken() {
   return jwt.sign({ id: user.id, username: user.username, role: user.role }, process.env.JWT_SECRET, { expiresIn: '1h' });
 }
 
+async function getTechnicianToken() {
+  const [[user]] = await pool.query("SELECT id, username, role FROM users WHERE role = 'technician' LIMIT 1");
+  return jwt.sign({ id: user.id, username: user.username, role: user.role }, process.env.JWT_SECRET, { expiresIn: '1h' });
+}
+
 // Creates a throwaway customer + vehicle directly in the DB (fast, and
 // keeps fixture setup separate from the API behavior actually under test).
 async function createCustomerWithVehicle({ namePrefix = 'Test Customer' } = {}) {
@@ -42,4 +47,4 @@ async function cleanupCustomer(customerId) {
   await pool.execute('DELETE FROM customers WHERE id = ?', [customerId]);
 }
 
-module.exports = { getOfficeToken, createCustomerWithVehicle, cleanupCustomer };
+module.exports = { getOfficeToken, getTechnicianToken, createCustomerWithVehicle, cleanupCustomer };

@@ -1,9 +1,117 @@
 const request = require('supertest');
 const { createApp } = require('../src/app');
 const pool = require('../src/db/pool');
-const { getOfficeToken, createCustomerWithVehicle, cleanupCustomer } = require('./helpers');
+const { getOfficeToken, getTechnicianToken, createCustomerWithVehicle, cleanupCustomer } = require('./helpers');
 
 const app = createApp();
+
+describe('quotations.routes.js — office-only role gate', () => {
+  let officeToken;
+  let technicianToken;
+  let fixture;
+  let quotationId;
+
+  beforeAll(async () => {
+    officeToken = await getOfficeToken();
+    technicianToken = await getTechnicianToken();
+  });
+
+  beforeEach(async () => {
+    fixture = await createCustomerWithVehicle({ namePrefix: 'Role Gate Test Customer' });
+    const createRes = await request(app)
+      .post('/api/quotations')
+      .set('Authorization', `Bearer ${officeToken}`)
+      .send({
+        customer_id: fixture.customerId,
+        vehicle_id: fixture.vehicleId,
+        quotation_date: '2026-07-10',
+        items: [{ product_name: 'ทดสอบสิทธิ์', quantity: 1, unit_price: 100 }],
+      });
+    quotationId = createRes.body.quotation_id;
+  });
+
+  afterEach(async () => {
+    await cleanupCustomer(fixture.customerId);
+  });
+
+  test('a technician token gets 403 on DELETE /quotations/:id', async () => {
+    const res = await request(app)
+      .delete(`/api/quotations/${quotationId}`)
+      .set('Authorization', `Bearer ${technicianToken}`)
+      .send();
+    expect(res.status).toBe(403);
+  });
+
+  test('a technician token gets 403 on PUT /quotations/:id', async () => {
+    const res = await request(app)
+      .put(`/api/quotations/${quotationId}`)
+      .set('Authorization', `Bearer ${technicianToken}`)
+      .send({
+        customer_id: fixture.customerId,
+        vehicle_id: fixture.vehicleId,
+        quotation_date: '2026-07-10',
+        items: [{ product_name: 'ทดสอบสิทธิ์', quantity: 1, unit_price: 200 }],
+      });
+    expect(res.status).toBe(403);
+  });
+
+  test('a technician token gets 403 on POST /quotations', async () => {
+    const res = await request(app)
+      .post('/api/quotations')
+      .set('Authorization', `Bearer ${technicianToken}`)
+      .send({
+        customer_id: fixture.customerId,
+        vehicle_id: fixture.vehicleId,
+        quotation_date: '2026-07-10',
+        items: [{ product_name: 'ทดสอบสิทธิ์', quantity: 1, unit_price: 100 }],
+      });
+    expect(res.status).toBe(403);
+  });
+
+  test('requires authentication', async () => {
+    const res = await request(app).delete(`/api/quotations/${quotationId}`).send();
+    expect(res.status).toBe(401);
+  });
+});
+
+describe('POST /api/quotations — concurrent creation does not produce duplicate quotation_no', () => {
+  let token;
+  let fixture;
+
+  beforeAll(async () => {
+    token = await getOfficeToken();
+  });
+
+  beforeEach(async () => {
+    fixture = await createCustomerWithVehicle({ namePrefix: 'Concurrency Test Customer' });
+  });
+
+  afterEach(async () => {
+    await cleanupCustomer(fixture.customerId);
+  });
+
+  test('3 concurrent quotation creates all succeed with distinct quotation_no values', async () => {
+    const send = () =>
+      request(app)
+        .post('/api/quotations')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          customer_id: fixture.customerId,
+          vehicle_id: fixture.vehicleId,
+          quotation_date: '2026-07-10',
+          items: [{ product_name: 'สินค้าทดสอบการชนกันของเลขที่เอกสาร', quantity: 1, unit_price: 100 }],
+        });
+
+    const results = await Promise.all([send(), send(), send()]);
+
+    for (const res of results) {
+      expect(res.status).toBe(201);
+    }
+
+    const quotationNos = results.map((r) => r.body.quotation_no);
+    expect(new Set(quotationNos).size).toBe(quotationNos.length);
+  });
+});
 
 describe('PATCH /api/quotations/:id/approve — auto-creates a matching receipt', () => {
   let token;

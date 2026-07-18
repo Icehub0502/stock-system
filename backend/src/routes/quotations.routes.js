@@ -1,9 +1,22 @@
 const express = require('express');
 const pool = require('../db/pool');
-const { authenticate } = require('../middleware/auth');
+const { authenticate, requireRole } = require('../middleware/auth');
+const { formatPhone } = require('../utils/parseLineQueueMessage');
+
+// ทำให้ตรงรูปแบบเดียวกับที่ customers.routes.js ใช้ กันเบอร์ที่พิมพ์ไม่มีขีดตรงนี้
+// ไปหลุดจากการค้นหาของบอทไลน์ (lineWebhook.routes.js เทียบแบบ phone = ? ตรง ๆ)
+function normalizePhone(phone) {
+  if (!phone) return phone;
+  const digitsOnly = phone.replace(/\D/g, '');
+  return digitsOnly ? formatPhone(digitsOnly) : phone;
+}
 
 const router = express.Router();
 router.use(authenticate);
+// ใบเสนอราคาเป็นเอกสารการเงิน — จำกัดเฉพาะ office เหมือน receipts.routes.js
+// (หน้าเว็บ /quotations เองก็ล็อกไว้แค่ office อยู่แล้ว ช่างไม่มีหน้าจอที่เรียก
+// endpoint พวกนี้เลย กันไม่ให้ยิง API ตรง ๆ ข้ามการล็อกฝั่ง UI ไปแก้ไข/ลบ/อนุมัติได้)
+router.use(requireRole('office'));
 
 // ใบแจ้งซ่อมถือว่า "กรอกแล้ว" ก็ต่อเมื่อมีเนื้อหาจริง (ติ๊กอย่างน้อย 1 ช่อง,
 // กรอกหมายเหตุ/other, หรือกรอกชื่อผู้ตรวจ/ช่างซ่อม) ไม่ใช่แค่เคยกดบันทึกแล้ว —
@@ -32,14 +45,20 @@ function isRepairNoticeFilled(checklistRaw, checkedBy, repairedBy) {
 }
 
 // Generate quotation number (IV260630001)
-async function generateQuotationNo() {
+// conn: รับ connection ของ transaction ที่กำลังสร้างใบเสนอราคาอยู่ (ถ้ามี) — ใช้
+// FOR UPDATE ล็อกแถวที่อ่านไว้จนกว่า transaction นั้นจะ commit กัน 2 คำขอพร้อมกัน
+// อ่าน MAX เดิมแล้วได้เลขซ้ำกัน (ดูจุดเดียวกันใน generateReceiptNo/
+// generateCustomerCode/generateRepairNoticeCode ด้านล่าง และ generateQuotationNo
+// ใน lineWebhook.routes.js) ไม่มี conn ส่งมา (เช่น route /next-no ที่แค่พรีวิว
+// เลขไว้ดู ไม่ได้ insert จริง) ใช้ pool เฉย ๆ ไม่ต้องล็อกอะไร
+async function generateQuotationNo(conn = pool) {
   const today = new Date();
   const dateStr = String(today.getDate()).padStart(2, '0')
                 + String(today.getMonth() + 1).padStart(2, '0')
                 + String(today.getFullYear()).slice(-2);
 
-  const [rows] = await pool.execute(
-    'SELECT MAX(CAST(SUBSTRING(quotation_no, -3) AS UNSIGNED)) as maxNo FROM quotations WHERE quotation_no LIKE ?',
+  const [rows] = await conn.execute(
+    'SELECT MAX(CAST(SUBSTRING(quotation_no, -3) AS UNSIGNED)) as maxNo FROM quotations WHERE quotation_no LIKE ? FOR UPDATE',
     [`IV${dateStr}%`]
   );
 
@@ -59,8 +78,10 @@ function formatReceiptDate(date) {
 // flow inserts directly into receipts and needs the same numbering scheme.
 async function generateReceiptNo(conn) {
   const dateStr = formatReceiptDate(new Date());
+  // FOR UPDATE ล็อกแถว receipt_no วันนี้ไว้จนกว่า transaction ผู้เรียกจะ commit —
+  // กันคำขออนุมัติใบเสนอราคา 2 ใบพร้อมกันอ่าน MAX เดิมแล้วได้เลขบิลซ้ำกัน
   const [rows] = await conn.execute(
-    'SELECT MAX(CAST(SUBSTRING(receipt_no, -3) AS UNSIGNED)) AS maxNo FROM receipts WHERE receipt_no LIKE ?',
+    'SELECT MAX(CAST(SUBSTRING(receipt_no, -3) AS UNSIGNED)) AS maxNo FROM receipts WHERE receipt_no LIKE ? FOR UPDATE',
     [`RC${dateStr}%`]
   );
   const nextNumber = (rows[0]?.maxNo || 0) + 1;
@@ -68,8 +89,9 @@ async function generateReceiptNo(conn) {
 }
 
 async function generateCustomerCode(conn) {
+  // FOR UPDATE เหตุผลเดียวกับ generateReceiptNo/generateQuotationNo ด้านบน
   const [rows] = await conn.execute(
-    "SELECT MAX(CAST(SUBSTRING(customer_code, 5) AS UNSIGNED)) AS maxCode FROM customers WHERE customer_code LIKE 'CMM-%'"
+    "SELECT MAX(CAST(SUBSTRING(customer_code, 5) AS UNSIGNED)) AS maxCode FROM customers WHERE customer_code LIKE 'CMM-%' FOR UPDATE"
   );
   const nextNumber = (rows[0]?.maxCode || 0) + 1;
   return `CMM-${String(nextNumber).padStart(4, '0')}`;
@@ -79,8 +101,9 @@ async function generateCustomerCode(conn) {
 // auto-creates its repair notice in the same transaction, so it needs the same
 // "RN-####" numbering scheme.
 async function generateRepairNoticeCode(conn) {
+  // FOR UPDATE เหตุผลเดียวกับตัวสร้างเลขเอกสารด้านบน
   const [rows] = await conn.execute(
-    "SELECT MAX(CAST(SUBSTRING(code, 4) AS UNSIGNED)) AS maxNo FROM repair_notices WHERE code LIKE 'RN-%'"
+    "SELECT MAX(CAST(SUBSTRING(code, 4) AS UNSIGNED)) AS maxNo FROM repair_notices WHERE code LIKE 'RN-%' FOR UPDATE"
   );
   const nextNumber = (rows[0]?.maxNo || 0) + 1;
   return `RN-${String(nextNumber).padStart(4, '0')}`;
@@ -139,7 +162,7 @@ router.post('/', async (req, res) => {
       const customerCode = await generateCustomerCode(conn);
       const [customerResult] = await conn.execute(
         'INSERT INTO customers (customer_code, customer_name, phone) VALUES (?, ?, ?)',
-        [customerCode, customer_name, phone || null]
+        [customerCode, customer_name, normalizePhone(phone)]
       );
       selectedCustomerId = customerResult.insertId;
     } else {
@@ -168,7 +191,7 @@ router.post('/', async (req, res) => {
       }
     }
 
-    const quotation_no = await generateQuotationNo();
+    const quotation_no = await generateQuotationNo(conn);
     const total_amount = validItems.reduce((sum, item) => sum + Number(item.quantity || 1) * Number(item.unit_price || 0), 0);
 
     const [quotationResult] = await conn.execute(
@@ -245,6 +268,12 @@ router.post('/', async (req, res) => {
 // GET - Get all quotations with customer + vehicle info
 router.get('/', async (req, res) => {
   try {
+    // หน้า QuotationListPage ดึงมาทั้งชุดแล้วค้นหา/จัดกลุ่มฝั่ง client เอง (ไม่มี
+    // search param ส่งมาที่ endpoint นี้เลย) ใส่ LIMIT ตรงตัวเลข 200 แบบ
+    // receipts.routes.js จึงจะทำให้ค้นหาใบเก่ากว่านั้นหายไปเงียบ ๆ — ใส่เพดานสูง
+    // (5000) ไว้กันเติบโตแบบไม่จำกัดแทน ในสเกลร้านนี้ (คิวไม่กี่สิบ/วัน) ยังไม่มีทาง
+    // แตะเพดานนี้ในทางปฏิบัติ ถ้าจำนวนใบเสนอราคาโตเกินนี้จริง ต้องทำ pagination
+    // จริงจัง (search/limit/offset) ฝั่ง frontend ควบคู่กันแทน ไม่ใช่ตัด LIMIT ต่ำ ๆ ที่นี่
     const [rows] = await pool.execute(
       `SELECT q.*, c.customer_name, c.customer_code, c.phone,
               v.brand, v.model, v.color, v.license_plate,
@@ -254,7 +283,8 @@ router.get('/', async (req, res) => {
        LEFT JOIN customers c ON q.customer_id = c.id
        LEFT JOIN vehicles v ON q.vehicle_id = v.id
        LEFT JOIN repair_notices rn ON rn.quotation_id = q.id
-       ORDER BY q.created_at DESC`
+       ORDER BY q.created_at DESC
+       LIMIT 5000`
     );
 
     const data = rows.map((row) => {
@@ -371,7 +401,7 @@ router.put('/:id', async (req, res) => {
       const customerCode = await generateCustomerCode(conn);
       const [customerResult] = await conn.execute(
         'INSERT INTO customers (customer_code, customer_name, phone) VALUES (?, ?, ?)',
-        [customerCode, customer_name, phone || null]
+        [customerCode, customer_name, normalizePhone(phone)]
       );
       selectedCustomerId = customerResult.insertId;
     } else {
