@@ -190,8 +190,8 @@ async function generateCustomerCode(conn) {
   return `CMM-${String(nextNumber).padStart(4, '0')}`;
 }
 
-// Mirrors quotations.routes.js's generateReceiptNo() — บอทไลน์ที่ได้รับข้อความ
-// "ลูกค้าชำระเงิน:" ต้องอนุมัติ+สร้างใบเสร็จเองตรงนี้ (ดู createQuotationFromQueue)
+// Mirrors quotations.routes.js's generateReceiptNo() — บอทไลน์ที่ได้รับวลีแจ้งจ่ายเงิน
+// แล้ว (parsed.paid_confirmed) ต้องอนุมัติ+สร้างใบเสร็จเองตรงนี้ (ดู createQuotationFromQueue)
 // จึงต้องใช้เลขบิลรูปแบบเดียวกัน (RC + วันที่พ.ศ. + เลขรัน 3 หลัก)
 function formatReceiptDate(date) {
   const dd = String(date.getDate()).padStart(2, '0');
@@ -271,12 +271,17 @@ function buildQueueTemplateText(nextQueueNo) {
     'ยอดรวม:',
     'หมายเหตุ:',
     'ยอดที่ต้องชำระ:',
+    '',
+    '<--ลูกค้าชำระเงิน-->',
     'ช่องทางการชำระ:',
     'ลูกค้าชำระเงิน:',
   ].join('\n');
 }
 
-// ── กติกาปิดบิลอัตโนมัติเมื่อ "ลูกค้าชำระเงิน:" ถูกกรอกมา (ดู createQuotationFromQueue) ──
+// ── กติกาปิดบิลอัตโนมัติเมื่อพนักงานพิมพ์ "วลีแจ้งจ่ายเงินแล้ว" มา (parsed.paid_confirmed
+// — ดู PAID_PHRASE_RE ใน parseLineQueueMessage.js) ไม่ใช่แค่กรอก "ลูกค้าชำระเงิน:" เฉย ๆ
+// อีกต่อไป (ฟิลด์นั้นตอนนี้เป็นแค่ข้อมูลยอดที่จ่าย ใช้ประกอบการคำนวณยอดใบเสร็จเท่านั้น
+// — ดู createQuotationFromQueue) ──
 
 // ยอดที่ลงในใบเสร็จ: มีมัดจำ+ยอดค้าง (remaining_balance > 0) ใช้ยอดรวมทั้งบิลเป็นยอด
 // ใบเสร็จ (เจ้าของร้านยืนยันกติกา: มัดจำ + ยอดค้าง = ยอดรวม) ไม่งั้นใช้ยอดที่ลูกค้า
@@ -288,7 +293,7 @@ function computeReceiptAmount(parsed, itemSumTotal) {
   return parsed.paid_amount != null ? parsed.paid_amount : itemSumTotal;
 }
 
-// เตือนถ้ายอด "มัดจำ <N>" ที่ปนอยู่ในหมายเหตุ (จาก parser เดิม ดู PAID_REMARK_LINE_RE/
+// เตือนถ้ายอด "มัดจำ <N>" ที่ปนอยู่ในหมายเหตุ (จาก parser เดิม ดู PAID_PHRASE_RE/
 // มัดจำ ใน parseLineQueueMessage.js) บวกยอดค้างแล้วไม่เท่ากับยอดรวมที่แจ้งมา — เตือน
 // เฉย ๆ ไม่บล็อกการสร้างบิล (พนักงานพิมพ์เลขผิดกันได้ ให้เห็นแล้วไปแก้เองในแอป)
 function checkDepositMismatch(parsed) {
@@ -489,8 +494,9 @@ async function createQuotationFromQueue(parsed) {
 
     // ใบเสนอราคาเดิมของลูกค้า+คิวเดียวกัน สร้างวันนี้ → แก้ไขใบนั้นแทนสร้างซ้ำ ไม่ว่า
     // จะยัง pending หรืออนุมัติไปแล้วก็ตาม (อนุมัติแล้วไม่ได้แปลว่าบิลจบ — พนักงานพิมพ์
-    // แก้ไขรายการทางไลน์ได้เรื่อย ๆ จนกว่าจะมีคำว่า "ชำระเงินเรียบร้อย/แล้ว" ซึ่งกรอง
-    // ข้อความทั้งข้อความทิ้งไปแล้วตั้งแต่ parseLineQueueMessage — ถ้าอนุมัติแล้วและมี
+    // แก้ไขรายการทางไลน์ได้เรื่อย ๆ จนกว่าจะมีวลีแจ้งจ่ายเงินแล้ว ("ชำระเงินเรียบร้อย"/
+    // "จ่ายเงินเรียบร้อย"/"...แล้ว" — ดู PAID_PHRASE_RE ใน parseLineQueueMessage.js) ซึ่ง
+    // ปิดบิล (closed_at) ด้านล่าง กันไม่ให้ใบนี้ถูกแก้ไขต่อ — ถ้าอนุมัติแล้วและมี
     // ใบเสร็จผูกอยู่ ด้านล่างจะ sync ใบเสร็จนั้นให้ตรงกันด้วย)
     // เพิ่มเติม: ถ้าเลขคิวที่พิมพ์มาเคย "ถูกเปลี่ยนอัตโนมัติ" ไปแล้วจากการชนกับลูกค้า
     // คนอื่นในวันเดียวกัน (ดูด้านล่าง) ใบเสนอราคานั้นจะเก็บเลขที่พิมพ์มาครั้งแรกไว้ใน
@@ -598,17 +604,19 @@ async function createQuotationFromQueue(parsed) {
       syncedReceipt = true;
     }
 
-    // "ลูกค้าชำระเงิน:" ถูกกรอกมา (ไม่ว่างเปล่า) = สัญญาณปิดบิล — ต้องมีใบเสร็จอยู่
-    // (ถ้ายังไม่มีก็อนุมัติ+สร้างให้เองตรงนี้เลย เหมือนกดปุ่มอนุมัติบนเว็บ) แล้วเซ็ต
-    // payment_method/total_amount ตามกติกา + ปิดบิล (closed_at) กันไม่ให้ใบนี้ถูก
-    // merge/ชนคิวกับข้อความถัดไปอีก
+    // parsed.paid_confirmed (เจอวลี "ชำระเงินเรียบร้อย"/"จ่ายเงินเรียบร้อย"/"...แล้ว"
+    // ที่บรรทัดไหนก็ได้ — ดู PAID_PHRASE_RE) = สัญญาณปิดบิลจริง ไม่ใช่แค่กรอก
+    // "ลูกค้าชำระเงิน:" เฉย ๆ อีกต่อไป — ต้องมีใบเสร็จอยู่ (ถ้ายังไม่มีก็อนุมัติ+
+    // สร้างให้เองตรงนี้เลย เหมือนกดปุ่มอนุมัติบนเว็บ) แล้วเซ็ต payment_method/
+    // total_amount ตามกติกา + ปิดบิล (closed_at) กันไม่ให้ใบนี้ถูก merge/ชนคิวกับ
+    // ข้อความถัดไปอีก
     let paymentClosed = false;
     let paymentReceiptNo = null;
     let paymentAmount = null;
     let paymentWarning = null; // 'no_items' | 'no_vehicle'
     let depositMismatch = null;
 
-    if (parsed.paid_amount != null) {
+    if (parsed.paid_confirmed) {
       if (resolvedItems.length === 0) {
         // ไม่มีรายการสินค้าเลย — สร้างใบเสร็จไม่ได้ (receipts ต้องมี receipt_items
         // อย่างน้อย 1 แถวเหมือนกติกาของ PATCH /quotations/:id/approve) เตือนแล้วปล่อย
@@ -774,7 +782,7 @@ function buildSuccessReplyText(parsed, info) {
   // แก้ไขใบที่อนุมัติไปแล้ว → ใบเสร็จที่สร้างไว้ก่อนหน้าก็ถูกแก้ตามด้วย ต้องเตือน
   // ให้พิมพ์ใหม่ ไม่งั้นใบที่พิมพ์ไปแล้วจะไม่ตรงกับข้อมูลในระบบ
   const syncedLine = syncedReceipt ? '\n🧾 ใบเสร็จที่อนุมัติไว้แล้วถูกแก้ตามด้วย กรุณาพิมพ์ใหม่' : '';
-  // "ลูกค้าชำระเงิน:" ถูกกรอกมาแล้วปิดบิลสำเร็จ → แจ้งชัด ๆ ว่าปิดแล้ว พร้อมเลข
+  // วลีแจ้งจ่ายเงินแล้วถูกพิมพ์มาแล้วปิดบิลสำเร็จ → แจ้งชัด ๆ ว่าปิดแล้ว พร้อมเลข
   // ใบเสร็จที่สร้าง/แก้ให้ (กันหน้างานพิมพ์คิวเดิมซ้ำแล้วงงว่าทำไมแก้ไม่ได้อีก)
   const paymentLine = paymentClosed
     ? `\n💰 รับชำระแล้ว (${parsed.payment_method || '-'} ${Number(paymentAmount).toLocaleString()} บาท) — ปิดบิล ใบเสร็จ ${paymentReceiptNo}`

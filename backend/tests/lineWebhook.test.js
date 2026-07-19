@@ -159,7 +159,7 @@ describe('POST /api/line/webhook', () => {
   test('pattern มีสี+เลขไมล์ (ไม่มีทะเบียน) → เก็บลงรถ+ใบเสนอราคา, ส่งซ้ำไม่สร้างรถซ้ำ', async () => {
     const uniq = Date.now().toString().slice(-7);
     const phone = `087${uniq}`;
-    const text = `คิว14\nคุณ ทดสอบสิบ\n${phone}\nToyota Altis 09\nทอง\n215170\nอาการ ขับมีเสียงดัง ก๊อกๆ`;
+    const text = `คิว14\nชื่อลูกค้า:คุณทดสอบสิบ\nเบอร์โทร:${phone}\nยี่ห้อรถ:Toyota รุ่นรถ:Altis 09\nสีรถ:ทอง\nเลขไมล์:215170\nอาการ:ขับมีเสียงดัง ก๊อกๆ`;
 
     const res = await postWebhook(eventsBody([messageEvent(text, `msg-cm1-${uniq}`)]));
     expect(res.status).toBe(200);
@@ -179,7 +179,7 @@ describe('POST /api/line/webhook', () => {
     // ส่งซ้ำ (แก้เลขไมล์) — ต้องอัปเดตรถคันเดิม (เทียบยี่ห้อ+รุ่น เพราะไม่มีทะเบียน)
     // ไม่สร้างรถใหม่ และเลขไมล์ต้องเป็นค่าล่าสุด
     const res2 = await postWebhook(
-      eventsBody([messageEvent(`คิว14\nคุณ ทดสอบสิบ\n${phone}\nToyota Altis 09\nทอง\n215500\nอาการ ขับมีเสียงดัง ก๊อกๆ`, `msg-cm2-${uniq}`)])
+      eventsBody([messageEvent(`คิว14\nชื่อลูกค้า:คุณทดสอบสิบ\nเบอร์โทร:${phone}\nยี่ห้อรถ:Toyota รุ่นรถ:Altis 09\nสีรถ:ทอง\nเลขไมล์:215500\nอาการ:ขับมีเสียงดัง ก๊อกๆ`, `msg-cm2-${uniq}`)])
     );
     expect(res2.status).toBe(200);
 
@@ -191,7 +191,7 @@ describe('POST /api/line/webhook', () => {
   test('รายการ "1700*2 3,400" → quantity 2 + unit_price 1700 ลงใบเสนอราคา ยอดรวมถูก', async () => {
     const uniq = Date.now().toString().slice(-7);
     const phone = `090${uniq}`;
-    const text = `คิว15\nคุณ ทดสอบสิบสาม\n${phone}\nรายการ:\nลูกปืนล้อหน้า L+R 1700*2 3,400\nซ่อมคอ 2000`;
+    const text = `คิว15\nชื่อลูกค้า:คุณทดสอบสิบสาม\nเบอร์โทร:${phone}\nรายการ:\nลูกปืนล้อหน้า L+R 1700*2 3,400\nซ่อมคอ 2000`;
 
     const res = await postWebhook(eventsBody([messageEvent(text, `msg-qty1-${uniq}`)]));
     expect(res.status).toBe(200);
@@ -839,9 +839,11 @@ describe('POST /api/line/webhook', () => {
 
   describe('เทมเพลตใหม่: พิมพ์ "คิว" ขอเทมเพลต + ส่งเทมเพลตที่กรอกแล้วปิดบิลอัตโนมัติ', () => {
     // สร้างข้อความเทมเพลตแบบเต็ม — ให้ทดสอบเติมเฉพาะฟิลด์ที่ต้องใช้ ที่เหลือว่างไว้
+    // payment.confirm: true ต่อวลี "ชำระเงินเรียบร้อย" ท้ายข้อความ — สัญญาณปิดบิลจริง
+    // ในเทมเพลตใหม่ (กรอก "ลูกค้าชำระเงิน:" เฉย ๆ ไม่ปิดบิลเองอีกต่อไป)
     function templateText({ queueNo, name, phone, plate, items = [], payment = {} }) {
       const itemLines = items.map((it) => `${it.name} ${it.price}`);
-      return [
+      const lines = [
         `คิว ${queueNo}`,
         '18/07/69',
         `ชื่อ:${name}`,
@@ -859,9 +861,13 @@ describe('POST /api/line/webhook', () => {
         `ยอดรวม:${payment.statedTotal ?? ''}`,
         `หมายเหตุ:${payment.remark ?? ''}`,
         `ยอดที่ต้องชำระ:${payment.remainingBalance ?? ''}`,
+        '',
+        '<--ลูกค้าชำระเงิน-->',
         `ช่องทางการชำระ:${payment.method ?? ''}`,
         `ลูกค้าชำระเงิน:${payment.paidAmount ?? ''}`,
-      ].join('\n');
+      ];
+      if (payment.confirm) lines.push('ลูกค้าชำระเงินเรียบร้อย');
+      return lines.join('\n');
     }
 
     // ผูก checkDepositMismatch/computeReceiptAmount (mirror กติกาปิดบิล) เข้ากับผลจาก
@@ -932,8 +938,12 @@ describe('POST /api/line/webhook', () => {
       expect(text).toContain('เบอโทรศัพท์:');
       expect(text).toContain('<--สิ้นสุดรายการ-->');
       expect(text).toContain('ยอดที่ต้องชำระ:');
+      expect(text).toContain('<--ลูกค้าชำระเงิน-->');
       expect(text).toContain('ช่องทางการชำระ:');
       expect(text).toContain('ลูกค้าชำระเงิน:');
+      // ยอดที่ต้องชำระ ต้องอยู่ก่อนเส้นแบ่งที่สอง ซึ่งอยู่ก่อนช่องทางการชำระ (ลำดับตกลงกับเจ้าของร้าน)
+      expect(text.indexOf('ยอดที่ต้องชำระ:')).toBeLessThan(text.indexOf('<--ลูกค้าชำระเงิน-->'));
+      expect(text.indexOf('<--ลูกค้าชำระเงิน-->')).toBeLessThan(text.indexOf('ช่องทางการชำระ:'));
     });
 
     test('พิมพ์ "คิว" ซ้ำ (message id เดิม) → ไม่ตอบซ้ำ/ไม่มีผลข้างเคียงเพิ่ม', async () => {
@@ -970,7 +980,33 @@ describe('POST /api/line/webhook', () => {
       expect(receipts).toHaveLength(0);
     });
 
-    test('"ลูกค้าชำระเงิน:" กรอกมา (จ่ายเต็ม ไม่มีมัดจำ) บนใบที่ยัง pending → อนุมัติ+สร้างใบเสร็จอัตโนมัติ ยอด=ที่จ่ายจริง ปิดบิล', async () => {
+    test('"ลูกค้าชำระเงิน:" กรอกมามีค่าแต่ไม่มีวลีแจ้งจ่ายเงินแล้ว → ไม่ปิดบิล (แค่ข้อมูลยอดที่จ่าย ไม่ใช่สัญญาณปิดบิลอีกต่อไป)', async () => {
+      const uniq = Date.now().toString().slice(-7);
+      const phone = `060${uniq}`;
+      const queueNo = `0${uniq}`;
+      const text = templateText({
+        queueNo,
+        name: 'คุณยังไม่ยืนยัน',
+        phone,
+        plate: `9กฮ${uniq.slice(0, 4)}`,
+        items: [{ name: 'ค่าแรง', price: 2000 }],
+        payment: { statedTotal: 2000, method: 'เงินสด', paidAmount: 2000 }, // ไม่มี confirm: true
+      });
+
+      const res = await postWebhook(eventsBody([messageEvent(text, `msg-tmpl-noconfirm-${uniq}`)]));
+      expect(res.body.created).toHaveLength(1);
+
+      const [[quotation]] = await pool.query('SELECT * FROM quotations WHERE quotation_no = ?', [res.body.created[0]]);
+      createdCustomerIds.push(quotation.customer_id);
+      expect(quotation.status).toBe('pending'); // ยังไม่อนุมัติ/ปิดบิลเอง
+      expect(quotation.closed_at).toBeNull();
+      expect(quotation.converted_receipt_id).toBeNull();
+
+      const [receipts] = await pool.query('SELECT id FROM receipts WHERE customer_id = ?', [quotation.customer_id]);
+      expect(receipts).toHaveLength(0);
+    });
+
+    test('วลีแจ้งจ่ายเงินแล้ว (จ่ายเต็ม ไม่มีมัดจำ) บนใบที่ยัง pending → อนุมัติ+สร้างใบเสร็จอัตโนมัติ ยอด=ที่จ่ายจริง ปิดบิล', async () => {
       const uniq = Date.now().toString().slice(-7);
       const phone = `062${uniq}`;
       const queueNo = `2${uniq}`;
@@ -980,7 +1016,7 @@ describe('POST /api/line/webhook', () => {
         phone,
         plate: `1กข${uniq.slice(0, 4)}`,
         items: [{ name: 'ค่าแรง', price: 2000 }, { name: 'แร็ค OEM', price: 3000 }],
-        payment: { statedTotal: 5000, method: 'เงินสด', paidAmount: 5000 },
+        payment: { statedTotal: 5000, method: 'เงินสด', paidAmount: 5000, confirm: true },
       });
 
       const res = await postWebhook(eventsBody([messageEvent(text, `msg-tmpl-full-${uniq}`)]));
@@ -1003,7 +1039,7 @@ describe('POST /api/line/webhook', () => {
       expect(notices).toHaveLength(1); // อนุมัติเองแล้วต้องได้ใบแจ้งซ่อมคู่กันเหมือนอนุมัติผ่านเว็บ
     });
 
-    test('"ลูกค้าชำระเงิน:" กรอกมาพร้อมมัดจำ (ยอดที่ต้องชำระ > 0) → ยอดใบเสร็จ = ยอดรวมทั้งบิล (ไม่ใช่แค่ยอดที่จ่ายมา)', async () => {
+    test('วลีแจ้งจ่ายเงินแล้ว พร้อมมัดจำ (ยอดที่ต้องชำระ > 0) → ยอดใบเสร็จ = ยอดรวมทั้งบิล (ไม่ใช่แค่ยอดที่จ่ายมา)', async () => {
       const uniq = Date.now().toString().slice(-7);
       const phone = `063${uniq}`;
       const queueNo = `3${uniq}`;
@@ -1013,7 +1049,7 @@ describe('POST /api/line/webhook', () => {
         phone,
         plate: `2กค${uniq.slice(0, 4)}`,
         items: [{ name: 'ชุดโปรช่วงล่างเก๋ง', price: 10000 }],
-        payment: { statedTotal: 10000, method: 'โอน', remainingBalance: 4000, paidAmount: 6000 },
+        payment: { statedTotal: 10000, method: 'โอน', remainingBalance: 4000, paidAmount: 6000, confirm: true },
       });
 
       const res = await postWebhook(eventsBody([messageEvent(text, `msg-tmpl-deposit-${uniq}`)]));
@@ -1039,7 +1075,7 @@ describe('POST /api/line/webhook', () => {
         phone,
         plate: `3กง${uniq.slice(0, 4)}`,
         items: [{ name: 'ค่าแรง', price: 1000 }],
-        payment: { paidAmount: 1000, method: 'QRcode' },
+        payment: { paidAmount: 1000, method: 'QRcode', confirm: true },
       });
 
       const res = await postWebhook(eventsBody([messageEvent(text, `msg-tmpl-qr-${uniq}`)]));
@@ -1051,7 +1087,7 @@ describe('POST /api/line/webhook', () => {
       expect(receipt.payment_method).toBe('QRCode');
     });
 
-    test('"ลูกค้าชำระเงิน:" มาแต่ไม่มีรายการสินค้าเลย → ไม่สร้างใบเสร็จ ไม่ปิดบิล (ไม่มี closed_at)', async () => {
+    test('วลีแจ้งจ่ายเงินแล้วมาแต่ไม่มีรายการสินค้าเลย → ไม่สร้างใบเสร็จ ไม่ปิดบิล (ไม่มี closed_at)', async () => {
       const uniq = Date.now().toString().slice(-7);
       const phone = `065${uniq}`;
       const queueNo = `5${uniq}`;
@@ -1059,7 +1095,7 @@ describe('POST /api/line/webhook', () => {
         queueNo,
         name: 'คุณไม่มีรายการ',
         phone,
-        payment: { paidAmount: 1000, method: 'เงินสด' },
+        payment: { paidAmount: 1000, method: 'เงินสด', confirm: true },
       });
 
       const res = await postWebhook(eventsBody([messageEvent(text, `msg-tmpl-noitem-${uniq}`)]));
@@ -1084,7 +1120,7 @@ describe('POST /api/line/webhook', () => {
           phone,
           plate: `4กจ${uniq.slice(0, 4)}`,
           items: [{ name: 'ค่าแรง', price: 1500 }],
-          payment: { paidAmount: 1500, method: 'เงินสด' },
+          payment: { paidAmount: 1500, method: 'เงินสด', confirm: true },
         }),
         `msg-tmpl-close1-${uniq}`
       )]));
@@ -1119,7 +1155,7 @@ describe('POST /api/line/webhook', () => {
           phone: phoneA,
           plate: `6กฉ${uniq.slice(0, 4)}`,
           items: [{ name: 'ค่าแรง', price: 1000 }],
-          payment: { paidAmount: 1000, method: 'เงินสด' },
+          payment: { paidAmount: 1000, method: 'เงินสด', confirm: true },
         }),
         `msg-tmpl-free1-${uniq}`
       )]));
@@ -1143,7 +1179,7 @@ describe('POST /api/line/webhook', () => {
       expect(qB.requested_queue_no).toBeNull();
     });
 
-    test('"ลูกค้าชำระเงิน:" บนใบที่อนุมัติไปแล้ว (มีใบเสร็จผูกอยู่แล้วจากเว็บ) → ทับ payment_method+ยอดใบเสร็จเดิม แล้วปิดบิล', async () => {
+    test('วลีแจ้งจ่ายเงินแล้วบนใบที่อนุมัติไปแล้ว (มีใบเสร็จผูกอยู่แล้วจากเว็บ) → ทับ payment_method+ยอดใบเสร็จเดิม แล้วปิดบิล', async () => {
       const uniq = Date.now().toString().slice(-7);
       const phone = `069${uniq}`;
       const queueNo = `8${uniq}`;
@@ -1179,7 +1215,7 @@ describe('POST /api/line/webhook', () => {
           phone,
           plate: `5กฒ${uniq.slice(0, 2)}`,
           items: [{ name: 'ค่าแรง', price: 2000 }],
-          payment: { paidAmount: 2000, method: 'บัตรเครดิต' },
+          payment: { paidAmount: 2000, method: 'บัตรเครดิต', confirm: true },
         }),
         `msg-tmpl-appr2-${uniq}`
       )]));
