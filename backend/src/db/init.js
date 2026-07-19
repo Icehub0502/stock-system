@@ -367,6 +367,17 @@ async function initDatabase() {
     ADD COLUMN requested_queue_no VARCHAR(50) DEFAULT NULL
   `).catch(ignoreIfAlreadyApplied);
 
+  // closed_at: ตราเวลาที่บิลนี้ "ปิด" แล้ว (ลูกค้าชำระเงินเสร็จผ่านเทมเพลตไลน์ ดู
+  // createQuotationFromQueue ใน lineWebhook.routes.js) — ไม่ใช้ status ENUM ใหม่
+  // (status ยังเป็น 'approved' เหมือนบิลอนุมัติทั่วไปที่ยังไม่ปิด) เพราะ closed_at
+  // เป็นแค่ "ล็อกไม่ให้ merge/ชนคิวอีก" ไม่ใช่สถานะงานที่ต้องแสดงแยกในหน้าเว็บ บิลที่
+  // ปิดแล้วจะไม่ถูกจับคู่เป็นใบเดิมอีก (กันแก้ไขบิลที่จบงานไปแล้ว) และเลขคิวของมันจะ
+  // ถูกปล่อยว่างให้ลูกค้าคนใหม่ใช้ได้ (ดู takenByOther/existing lookup queries)
+  await conn.query(`
+    ALTER TABLE quotations
+    ADD COLUMN closed_at TIMESTAMP NULL DEFAULT NULL
+  `).catch(ignoreIfAlreadyApplied);
+
   await conn.query(`
     CREATE TABLE IF NOT EXISTS receipt_items (
       id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,

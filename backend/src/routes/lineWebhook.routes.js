@@ -190,9 +190,116 @@ async function generateCustomerCode(conn) {
   return `CMM-${String(nextNumber).padStart(4, '0')}`;
 }
 
+// Mirrors quotations.routes.js's generateReceiptNo() — บอทไลน์ที่ได้รับข้อความ
+// "ลูกค้าชำระเงิน:" ต้องอนุมัติ+สร้างใบเสร็จเองตรงนี้ (ดู createQuotationFromQueue)
+// จึงต้องใช้เลขบิลรูปแบบเดียวกัน (RC + วันที่พ.ศ. + เลขรัน 3 หลัก)
+function formatReceiptDate(date) {
+  const dd = String(date.getDate()).padStart(2, '0');
+  const mm = String(date.getMonth() + 1).padStart(2, '0');
+  const yy = String(date.getFullYear() + 543).slice(-2);
+  return `${yy}${mm}${dd}`;
+}
+
+async function generateReceiptNo(conn) {
+  const dateStr = formatReceiptDate(new Date());
+  // FOR UPDATE เหตุผลเดียวกับตัวสร้างเลขเอกสารด้านบน
+  const [rows] = await conn.execute(
+    'SELECT MAX(CAST(SUBSTRING(receipt_no, -3) AS UNSIGNED)) AS maxNo FROM receipts WHERE receipt_no LIKE ? FOR UPDATE',
+    [`RC${dateStr}%`]
+  );
+  const nextNumber = (rows[0]?.maxNo || 0) + 1;
+  return `RC${dateStr}${String(nextNumber).padStart(3, '0')}`;
+}
+
+// Mirrors quotations.routes.js's generateRepairNoticeCode() — ใบเสนอราคาที่บอท
+// อนุมัติเองต้องได้ใบแจ้งซ่อมคู่กันเหมือนอนุมัติผ่านหน้าเว็บทุกประการ
+async function generateRepairNoticeCode(conn) {
+  const [rows] = await conn.execute(
+    "SELECT MAX(CAST(SUBSTRING(code, 4) AS UNSIGNED)) AS maxNo FROM repair_notices WHERE code LIKE 'RN-%' FOR UPDATE"
+  );
+  const nextNumber = (rows[0]?.maxNo || 0) + 1;
+  return `RN-${String(nextNumber).padStart(4, '0')}`;
+}
+
 function todayStr() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+// ── เทมเพลตตอบกลับเมื่อพนักงานพิมพ์ "คิว" เดี่ยว ๆ (ดู router.post('/webhook')) ──
+
+// พรีวิวเลขคิวถัดไปของวันนี้เฉย ๆ ไม่ได้ "จอง" เลขไว้ — จงใจไม่ใช้ transaction/FOR
+// UPDATE เหมือน generateQuotationNo เพราะยังไม่มีการ insert อะไรจริง (แค่ทายเลขให้
+// พนักงานเห็นในเทมเพลต) พิมพ์ "คิว" สองครั้งติดกันอาจได้เลขเดิมซ้ำได้ — ไม่เป็นไร
+// เพราะตอนส่งเทมเพลตจริงเข้ามา กลไกชนคิว/เปลี่ยนเลขอัตโนมัติที่มีอยู่แล้ว
+// (createQuotationFromQueue ด้านล่าง) จะจัดการให้เอง ไม่ต้องสร้างระบบจองคิวใหม่
+async function getNextQueueNoPreview() {
+  const [rows] = await pool.execute(
+    `SELECT MAX(CAST(queue_no AS UNSIGNED)) AS maxQueue FROM quotations WHERE quotation_date = ? AND queue_no REGEXP '^[0-9]+$'`,
+    [todayStr()]
+  );
+  const maxQueue = rows[0]?.maxQueue || 0;
+  return String(maxQueue + 1);
+}
+
+// วันที่แบบไทย dd/mm/yy (พ.ศ.) ใช้แปะบนเทมเพลตให้พนักงานเห็นวันที่วันนี้ตรง ๆ
+function formatThaiShortDate(date) {
+  const dd = String(date.getDate()).padStart(2, '0');
+  const mm = String(date.getMonth() + 1).padStart(2, '0');
+  const yy = String(date.getFullYear() + 543).slice(-2);
+  return `${dd}/${mm}/${yy}`;
+}
+
+// เทมเพลตข้อความที่ตอบกลับตายตัว (รูปแบบตกลงกับเจ้าของร้านแล้ว) — เติมแค่เลขคิว
+// ถัดไปกับวันที่วันนี้ ที่เหลือเป็น label ว่างให้พนักงานกรอกทับแล้วส่งกลับมา
+function buildQueueTemplateText(nextQueueNo) {
+  const dateStr = formatThaiShortDate(new Date());
+  return [
+    `คิว ${nextQueueNo}`,
+    dateStr,
+    'ชื่อ:',
+    'เบอโทรศัพท์:',
+    'ยี่ห้อรถ:',
+    'รุ่นรถ:',
+    'ทะเบียนรถ:',
+    'สีรถ:',
+    'เลขไมค์:',
+    'อาการ:',
+    'รายการ:',
+    '',
+    '<--สิ้นสุดรายการ-->',
+    'ยอดรวม:',
+    'หมายเหตุ:',
+    'ยอดที่ต้องชำระ:',
+    'ช่องทางการชำระ:',
+    'ลูกค้าชำระเงิน:',
+  ].join('\n');
+}
+
+// ── กติกาปิดบิลอัตโนมัติเมื่อ "ลูกค้าชำระเงิน:" ถูกกรอกมา (ดู createQuotationFromQueue) ──
+
+// ยอดที่ลงในใบเสร็จ: มีมัดจำ+ยอดค้าง (remaining_balance > 0) ใช้ยอดรวมทั้งบิลเป็นยอด
+// ใบเสร็จ (เจ้าของร้านยืนยันกติกา: มัดจำ + ยอดค้าง = ยอดรวม) ไม่งั้นใช้ยอดที่ลูกค้า
+// จ่ายจริงตรง ๆ — ไม่มีตัวไหนระบุมาเลยค่อย fallback เป็นผลรวมรายการที่คำนวณเอง
+function computeReceiptAmount(parsed, itemSumTotal) {
+  if (parsed.remaining_balance != null && parsed.remaining_balance > 0) {
+    return parsed.stated_total != null ? parsed.stated_total : itemSumTotal;
+  }
+  return parsed.paid_amount != null ? parsed.paid_amount : itemSumTotal;
+}
+
+// เตือนถ้ายอด "มัดจำ <N>" ที่ปนอยู่ในหมายเหตุ (จาก parser เดิม ดู PAID_REMARK_LINE_RE/
+// มัดจำ ใน parseLineQueueMessage.js) บวกยอดค้างแล้วไม่เท่ากับยอดรวมที่แจ้งมา — เตือน
+// เฉย ๆ ไม่บล็อกการสร้างบิล (พนักงานพิมพ์เลขผิดกันได้ ให้เห็นแล้วไปแก้เองในแอป)
+function checkDepositMismatch(parsed) {
+  if (parsed.remaining_balance == null || parsed.remaining_balance <= 0) return null;
+  if (parsed.stated_total == null || !parsed.remark) return null;
+  const depositMatch = /มัดจำ\s*([\d,]+)/.exec(parsed.remark);
+  if (!depositMatch) return null;
+  const depositAmount = Number(depositMatch[1].replace(/,/g, ''));
+  const actual = depositAmount + parsed.remaining_balance;
+  if (actual === parsed.stated_total) return null;
+  return { depositAmount, actual, expected: parsed.stated_total };
 }
 
 // เลือกใช้เฉพาะตอนชื่อที่พิมพ์มาตรงกับสินค้าในแคตาล็อกแบบไม่มีข้อโต้แย้ง (ตัดช่องว่าง
@@ -311,6 +418,26 @@ async function createQuotationFromQueue(parsed) {
       wasNewCustomer = true;
     }
 
+    // บิลที่ "ปิดแล้ว" (ลูกค้าชำระเงินครบผ่านเทมเพลตไลน์ — ดูส่วนปิดบิลด้านล่าง) ของ
+    // ลูกค้า+คิวเดียวกันนี้ ภายใน 14 วันย้อนหลัง (หน้าต่างเดียวกับ existing lookup
+        // ด้านล่าง) → ไม่ใช่ "แก้ไขใบเดิม" อีกต่อไป เพราะบิลจบงานไปแล้ว พนักงานพิมพ์เลข
+    // คิวเดิมซ้ำมักมาจากพิมพ์ผิด/ทดสอบ ไม่ใช่งานใหม่จริง ๆ — เตือนแล้วข้าม ไม่สร้าง
+    // ใบเสนอราคาซ้อนเงียบ ๆ (เช็คตรงนี้ก่อนไปแตะ vehicles กันสร้าง/แก้รถของบิลที่ปิด
+    // ไปแล้วโดยไม่จำเป็น)
+    if (parsed.queue_no) {
+      const [closedRows] = await conn.execute(
+        `SELECT id, quotation_no, queue_no FROM quotations
+         WHERE customer_id = ? AND quotation_date >= DATE_SUB(?, INTERVAL 14 DAY) AND closed_at IS NOT NULL
+         AND (queue_no = ? OR requested_queue_no = ?)
+         ORDER BY id DESC LIMIT 1`,
+        [customerId, parsed.quotation_date || todayStr(), parsed.queue_no, parsed.queue_no]
+      );
+      if (closedRows.length > 0) {
+        await conn.commit(); // ยังไม่ได้แก้อะไรเลยตอนนี้ (ลูกค้าอาจเพิ่งถูกสร้างใหม่ถ้าเป็นเบอร์ใหม่จริง ๆ) — commit เก็บไว้เฉย ๆ
+        return { closedBillMatch: true, queue_no: closedRows[0].queue_no };
+      }
+    }
+
     // รถ: มีทะเบียนตรงกันใต้ลูกค้าคนนี้ → ใช้คันเดิม, ไม่มีทะเบียนในข้อความ →
     // ลองเทียบยี่ห้อ+รุ่นแทน (ร้านบางทีไม่พิมพ์ทะเบียน กันสร้างรถซ้ำทุกครั้งที่ส่ง
     // ข้อความแก้ไข), ไม่เจอเลยค่อยสร้างใหม่ถ้ามีข้อมูลพอ
@@ -374,11 +501,15 @@ async function createQuotationFromQueue(parsed) {
     // ต้องมองย้อนหลังไปด้วย (14 วัน) เพื่อยังเจอใบเดิมของลูกค้าคนนี้ที่ยัง pending/approved
     // อยู่ — จำกัดด้วย customer_id อยู่แล้วจึงไม่มีทางไปรวมกับใบของลูกค้าคนอื่น ส่วนใบเก่า
     // เกิน 14 วันที่ถูกลืมไปแล้วจะไม่ถูกดึงกลับมาโดยไม่ตั้งใจ
+    // AND closed_at IS NULL: บิลที่ปิดแล้ว (ชำระเงินครบผ่านเทมเพลตไลน์) จบงานไปแล้ว
+    // ไม่ถือเป็น "ใบเดิมที่ยังแก้ไขได้" อีก (เช็ค closedBillMatch ไว้แล้วด้านบน ก่อน
+    // จะมาถึงจุดนี้ได้แปลว่าไม่ตรงกับบิลที่ปิดไปแล้ว จึงปลอดภัยที่จะกันซ้ำอีกชั้นตรงนี้)
     let existing = null;
     if (parsed.queue_no) {
       const [rows] = await conn.execute(
         `SELECT id, quotation_no, status, converted_receipt_id FROM quotations
          WHERE customer_id = ? AND quotation_date >= DATE_SUB(?, INTERVAL 14 DAY) AND status IN ('pending', 'approved')
+         AND closed_at IS NULL
          AND (queue_no = ? OR requested_queue_no = ?)
          ORDER BY id DESC LIMIT 1`,
         [customerId, quotationDate, parsed.queue_no, parsed.queue_no]
@@ -403,8 +534,10 @@ async function createQuotationFromQueue(parsed) {
         `SELECT queue_no FROM quotations WHERE quotation_date = ? AND queue_no REGEXP '^[0-9]+$' FOR UPDATE`,
         [quotationDate]
       );
+      // AND closed_at IS NULL: บิลที่ปิดแล้วปล่อยเลขคิวของมันคืนให้ลูกค้าคนใหม่ใช้ได้
+      // เลย ไม่ถือว่า "ชน" อีกต่อไป (งานจบแล้วจริง ๆ)
       const [takenByOther] = await conn.execute(
-        `SELECT id FROM quotations WHERE quotation_date = ? AND queue_no = ? AND customer_id != ? AND status IN ('pending', 'approved') LIMIT 1`,
+        `SELECT id FROM quotations WHERE quotation_date = ? AND queue_no = ? AND customer_id != ? AND status IN ('pending', 'approved') AND closed_at IS NULL LIMIT 1`,
         [quotationDate, parsed.queue_no, customerId]
       );
       if (takenByOther.length > 0) {
@@ -465,6 +598,86 @@ async function createQuotationFromQueue(parsed) {
       syncedReceipt = true;
     }
 
+    // "ลูกค้าชำระเงิน:" ถูกกรอกมา (ไม่ว่างเปล่า) = สัญญาณปิดบิล — ต้องมีใบเสร็จอยู่
+    // (ถ้ายังไม่มีก็อนุมัติ+สร้างให้เองตรงนี้เลย เหมือนกดปุ่มอนุมัติบนเว็บ) แล้วเซ็ต
+    // payment_method/total_amount ตามกติกา + ปิดบิล (closed_at) กันไม่ให้ใบนี้ถูก
+    // merge/ชนคิวกับข้อความถัดไปอีก
+    let paymentClosed = false;
+    let paymentReceiptNo = null;
+    let paymentAmount = null;
+    let paymentWarning = null; // 'no_items' | 'no_vehicle'
+    let depositMismatch = null;
+
+    if (parsed.paid_amount != null) {
+      if (resolvedItems.length === 0) {
+        // ไม่มีรายการสินค้าเลย — สร้างใบเสร็จไม่ได้ (receipts ต้องมี receipt_items
+        // อย่างน้อย 1 แถวเหมือนกติกาของ PATCH /quotations/:id/approve) เตือนแล้วปล่อย
+        // ผ่าน ไม่ปิดบิล ไม่แตะ closed_at
+        paymentWarning = 'no_items';
+      } else {
+        paymentAmount = computeReceiptAmount(parsed, total_amount);
+        depositMismatch = checkDepositMismatch(parsed);
+
+        if (isUpdate && existing.status === 'approved' && existing.converted_receipt_id) {
+          // ใบเสร็จมีอยู่แล้ว (syncedReceipt ด้านบน sync รายการ+ยอดรวมตาม total_amount
+          // ไปแล้ว) — ทับด้วย payment_method + ยอดตามกติกาปิดบิล (อาจต่างจาก total_amount
+          // เช่นกรณีมัดจำ) แล้วปิดบิล
+          const receiptId = existing.converted_receipt_id;
+          await conn.execute(
+            'UPDATE receipts SET payment_method = ?, total_amount = ? WHERE id = ?',
+            [parsed.payment_method || null, paymentAmount, receiptId]
+          );
+          const [[receiptRow]] = await conn.query('SELECT receipt_no FROM receipts WHERE id = ?', [receiptId]);
+          paymentReceiptNo = receiptRow ? receiptRow.receipt_no : null;
+          await conn.execute('UPDATE quotations SET closed_at = NOW() WHERE id = ?', [quotationId]);
+          paymentClosed = true;
+        } else if (!vehicleId) {
+          // Mirrors PATCH /quotations/:id/approve's vehicle_id requirement — ไม่มี
+          // ข้อมูลรถพอจะสร้างใบเสร็จไม่ได้ เตือนแล้วปล่อยผ่าน ไม่ปิดบิล
+          paymentWarning = 'no_vehicle';
+        } else {
+          // ยัง pending (หรือเพิ่งสร้างใหม่) → อนุมัติ+สร้างใบเสร็จเองในทรานแซกชันนี้
+          // เลย (mirror ของ PATCH /quotations/:id/approve ใน quotations.routes.js —
+          // ดูเหตุผลที่ mirror แทนเรียกข้ามไฟล์ในหมายเหตุหัวไฟล์ generateReceiptNo ด้านบน)
+          const receipt_no = await generateReceiptNo(conn);
+          const [receiptResult] = await conn.execute(
+            `INSERT INTO receipts (receipt_no, receipt_date, customer_id, vehicle_id, mileage, remark, payment_method, total_amount, customer_signature)
+             VALUES (?, CURDATE(), ?, ?, ?, ?, ?, ?, ?)`,
+            [receipt_no, customerId, vehicleId, parsed.mileage ?? 0, parsed.remark || null, parsed.payment_method || null, paymentAmount, null]
+          );
+          const receiptId = receiptResult.insertId;
+          for (const item of resolvedItems) {
+            await conn.execute(
+              `INSERT INTO receipt_items (receipt_id, service_item_id, product_name_snapshot, qty, price, amount, warranty_name, warranty_year, warranty_month, warranty_km)
+               VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?, ?)`,
+              [receiptId, item.product_name, item.quantity, item.unit_price, item.quantity * item.unit_price, item.warranty_name, item.warranty_year, item.warranty_month, item.warranty_km]
+            );
+          }
+          await conn.execute(
+            "UPDATE quotations SET status = 'approved', converted_receipt_id = ?, closed_at = NOW() WHERE id = ?",
+            [receiptId, quotationId]
+          );
+          // ใบเสนอราคาปกติที่สร้างจากหน้าเว็บมีใบแจ้งซ่อมคู่กันมาตั้งแต่ตอนสร้างแล้ว
+          // แต่ใบที่บอทไลน์สร้างไม่มี (รอถึงตอนอนุมัติ) — อนุมัติเองตรงนี้ก็ต้องสร้าง
+          // ใบแจ้งซ่อมให้ครบเหมือนอนุมัติผ่านเว็บทุกประการ
+          const [existingNotice] = await conn.execute(
+            'SELECT id FROM repair_notices WHERE quotation_id = ? LIMIT 1',
+            [quotationId]
+          );
+          if (existingNotice.length === 0) {
+            const rnCode = await generateRepairNoticeCode(conn);
+            await conn.execute(
+              `INSERT INTO repair_notices (code, customer_id, vehicle_id, quotation_id, notice_date, checklist)
+               VALUES (?, ?, ?, ?, ?, ?)`,
+              [rnCode, customerId, vehicleId, quotationId, quotationDate, '{}']
+            );
+          }
+          paymentReceiptNo = receipt_no;
+          paymentClosed = true;
+        }
+      }
+    }
+
     await conn.commit();
     return {
       quotation_no,
@@ -477,6 +690,11 @@ async function createQuotationFromQueue(parsed) {
       wasNewCustomer,
       wasNewVehicle,
       isUpdate,
+      paymentClosed,
+      paymentReceiptNo,
+      paymentAmount,
+      paymentWarning,
+      depositMismatch,
       syncedReceipt,
       reassignedFrom, // เลขคิวเดิมที่พิมพ์มา (มีค่าเฉพาะตอนถูกเปลี่ยนอัตโนมัติ)
       reassignedTo: reassignedFrom ? actualQueueNo : null,
@@ -535,7 +753,10 @@ async function deleteQuotationForMessage(info) {
 // ส่วนเตือนยอดไม่ตรง (mismatchLine) ที่ไม่มีทางสังเกตได้จากเทสต์ end-to-end เลย
 // เพราะ replyToLine คุยกับ LINE API ตรง ๆ ไม่มี side effect อื่นให้ตรวจสอบ
 function buildSuccessReplyText(parsed, info) {
-  const { quotation_no, itemCount, totalAmount, hasNote, isUpdate, syncedReceipt, reassignedFrom, reassignedTo } = info;
+  const {
+    quotation_no, itemCount, totalAmount, hasNote, isUpdate, syncedReceipt, reassignedFrom, reassignedTo,
+    paymentClosed, paymentReceiptNo, paymentAmount, paymentWarning, depositMismatch,
+  } = info;
   const itemLine = itemCount > 0
     ? `รายการ ${itemCount} ชิ้น รวม ${totalAmount.toLocaleString()} บาท`
     : 'ยังไม่มีรายการสินค้า (เพิ่มในแอปได้)';
@@ -553,9 +774,26 @@ function buildSuccessReplyText(parsed, info) {
   // แก้ไขใบที่อนุมัติไปแล้ว → ใบเสร็จที่สร้างไว้ก่อนหน้าก็ถูกแก้ตามด้วย ต้องเตือน
   // ให้พิมพ์ใหม่ ไม่งั้นใบที่พิมพ์ไปแล้วจะไม่ตรงกับข้อมูลในระบบ
   const syncedLine = syncedReceipt ? '\n🧾 ใบเสร็จที่อนุมัติไว้แล้วถูกแก้ตามด้วย กรุณาพิมพ์ใหม่' : '';
+  // "ลูกค้าชำระเงิน:" ถูกกรอกมาแล้วปิดบิลสำเร็จ → แจ้งชัด ๆ ว่าปิดแล้ว พร้อมเลข
+  // ใบเสร็จที่สร้าง/แก้ให้ (กันหน้างานพิมพ์คิวเดิมซ้ำแล้วงงว่าทำไมแก้ไม่ได้อีก)
+  const paymentLine = paymentClosed
+    ? `\n💰 รับชำระแล้ว (${parsed.payment_method || '-'} ${Number(paymentAmount).toLocaleString()} บาท) — ปิดบิล ใบเสร็จ ${paymentReceiptNo}`
+    : '';
+  // แจ้งเงินมาแล้วแต่ปิดบิลไม่ได้ (ไม่มีรายการ/ไม่มีข้อมูลรถ) — ต้องเตือนชัด ๆ ไม่งั้น
+  // หน้างานเข้าใจผิดว่าบิลปิดแล้วทั้งที่จริงยังไม่มีใบเสร็จ
+  const paymentWarningLine = paymentWarning === 'no_items'
+    ? '\n⚠️ แจ้งชำระเงินมาแล้วแต่ยังไม่มีรายการสินค้า สร้างใบเสร็จไม่ได้ กรุณาเพิ่มรายการก่อน'
+    : paymentWarning === 'no_vehicle'
+      ? '\n⚠️ แจ้งชำระเงินมาแล้วแต่ยังไม่มีข้อมูลรถ สร้างใบเสร็จไม่ได้ กรุณาเพิ่มข้อมูลรถก่อน'
+      : '';
+  // ยอดมัดจำ (จากหมายเหตุ) + ยอดค้างที่แจ้งมา ไม่เท่ากับยอดรวมที่แจ้งมา — เตือนเฉย ๆ
+  // ไม่บล็อกการปิดบิล (ดู checkDepositMismatch)
+  const depositMismatchLine = depositMismatch
+    ? `\n⚠️ ยอดมัดจำ (${depositMismatch.depositAmount.toLocaleString()} บาท) + ยอดค้าง ไม่เท่ากับยอดรวมที่แจ้ง (คำนวณได้ ${depositMismatch.actual.toLocaleString()} บาท แต่แจ้งยอดรวม ${depositMismatch.expected.toLocaleString()} บาท) กรุณาตรวจสอบ`
+    : '';
   const verb = isUpdate ? 'แก้ไขใบเสนอราคา' : 'สร้างใบเสนอราคา';
   const displayQueueNo = reassignedTo || parsed.queue_no || '-';
-  return `✅ ${verb} ${quotation_no} แล้ว\nคิว ${displayQueueNo} · ${parsed.customer_name}${parsed.license_plate ? ` · ${parsed.license_plate}` : ''}\n${itemLine}${noteLine}${mismatchLine}${reassignLine}${syncedLine}`;
+  return `✅ ${verb} ${quotation_no} แล้ว\nคิว ${displayQueueNo} · ${parsed.customer_name}${parsed.license_plate ? ` · ${parsed.license_plate}` : ''}\n${itemLine}${noteLine}${mismatchLine}${reassignLine}${syncedLine}${paymentLine}${paymentWarningLine}${depositMismatchLine}`;
 }
 
 router.post('/webhook', async (req, res) => {
@@ -595,6 +833,23 @@ router.post('/webhook', async (req, res) => {
     const messageId = event.message.id;
     if (messageId && (await isProcessed(messageId))) continue;
 
+    // พนักงานพิมพ์คำว่า "คิว" เดี่ยว ๆ (ตัด whitespace แล้วต้องตรงเป๊ะ ไม่ใช่แค่ขึ้นต้น
+    // ด้วย "คิว" แบบ Pattern อื่น) → ตอบกลับเทมเพลตให้กรอกต่อ ไม่สร้างใบเสนอราคาอะไร
+    // เลย (แค่พรีวิวเลขคิวถัดไปให้ดู ไม่ได้จอง — ดู getNextQueueNoPreview)
+    if (event.message.text.trim() === 'คิว') {
+      // try/catch กัน error (เช่น DB สะดุดตอนพรีวิวเลขคิว) หลุดออกไปล้ม event
+      // อื่นในชุดเดียวกัน — ตอบไม่ได้ก็ปล่อยผ่าน ไม่ mark processed ให้ LINE
+      // retry มาลองใหม่ได้
+      try {
+        const nextQueueNo = await getNextQueueNoPreview();
+        await replyToLine(event.replyToken, buildQueueTemplateText(nextQueueNo));
+        if (messageId) await markProcessed(messageId);
+      } catch (err) {
+        console.error('Error replying queue template:', err);
+      }
+      continue;
+    }
+
     const parsed = parseLineQueueMessage(event.message.text);
     if (!parsed) continue; // แชตทั่วไปในกลุ่ม — ข้ามเงียบ ๆ ไม่ตอบ ไม่รบกวน
 
@@ -602,6 +857,17 @@ router.post('/webhook', async (req, res) => {
 
     try {
       const info = await createQuotationFromQueue(parsed);
+
+      // เลขคิวนี้ตรงกับบิลที่ปิดไปแล้วของลูกค้าคนนี้ — ไม่สร้าง/แก้ไขอะไร แค่เตือน
+      // ให้พิมพ์ "คิว" ขอเลขใหม่ถ้าเป็นงานใหม่จริง ๆ (ดู createQuotationFromQueue)
+      if (info.closedBillMatch) {
+        await replyToLine(
+          event.replyToken,
+          `⚠️ บิลนี้ปิดแล้ว (คิว ${info.queue_no} ของ ${parsed.customer_name}) หากเป็นงานใหม่กรุณาขอเลขคิวใหม่ด้วยการพิมพ์ "คิว"`
+        );
+        continue;
+      }
+
       created.push(info.quotation_no);
       // ติดตามไว้ลบตอน unsend เฉพาะข้อความที่ "เปิดใบใหม่" เท่านั้น — ข้อความที่ไป
       // แก้ไขใบเดิม (isUpdate) ไม่ติดตาม กันเรียกคืนข้อความล่าสุดแล้วลบใบที่มี
@@ -624,3 +890,6 @@ router.post('/webhook', async (req, res) => {
 
 module.exports = router;
 module.exports.buildSuccessReplyText = buildSuccessReplyText; // ให้เทสต์เรียกตรง ๆ ได้โดยไม่ต้องยิง LINE API จริง
+module.exports.buildQueueTemplateText = buildQueueTemplateText; // ให้เทสต์ตรวจเนื้อหาเทมเพลตตอบกลับ "คิว" ได้โดยไม่ต้องยิง LINE API จริง
+module.exports.checkDepositMismatch = checkDepositMismatch; // ให้เทสต์ตรวจกติกาเตือนยอดมัดจำไม่ตรงแยกจาก integration test ได้
+module.exports.computeReceiptAmount = computeReceiptAmount; // ให้เทสต์ตรวจกติกายอดใบเสร็จ (มัดจำ vs จ่ายเต็ม) แยกจาก integration test ได้

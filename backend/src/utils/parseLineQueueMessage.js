@@ -52,6 +52,15 @@
 // ข้อความที่มีคำว่า "ชำระเงินเรียบร้อย"/"ชำระเงินแล้ว" ก็คืน null เช่นกัน — ร้านมัก
 // ส่งข้อมูลคิวเดิมซ้ำพร้อมสรุปยอด/มัดจำ/ยอดค้างตอนลูกค้าจ่ายเงินเสร็จ ไม่ใช่คิวใหม่
 // หรือรายการแก้ไขที่ควรสร้าง/อัปเดตใบเสนอราคา
+//
+// เทมเพลตแบบมี label ชัดเจน (ตอบกลับอัตโนมัติเมื่อพนักงานพิมพ์ "คิว" เดี่ยว ๆ — ดู
+// lineWebhook.routes.js): เพิ่ม label "ชื่อ"/"เบอโทรศัพท์"/"เบอร์โทรศัพท์" เข้า
+// OPTIONAL_LABELS ด้านล่าง และรองรับ "<--สิ้นสุดรายการ-->" เป็นจุดจบรายการสินค้าแบบ
+// ชัดเจน (กันบรรทัดในส่วนชำระเงินที่ตามมาถูกตีความเป็นรายการสินค้าผิด ๆ) ส่วนชำระเงิน
+// หลัง marker นี้ (ยอดรวม/ยอดที่ต้องชำระ/ช่องทางการชำระ/ลูกค้าชำระเงิน/หมายเหตุ) ถูก
+// พาร์สแยกเข้าฟิลด์ใหม่ remaining_balance/payment_method/paid_amount — parsed.paid_amount
+// != null คือสัญญาณว่า "บิลนี้ปิดแล้ว" ให้ lineWebhook.routes.js ไปสร้าง/อนุมัติใบเสร็จ
+// ให้อัตโนมัติ (ดู createQuotationFromQueue) ข้อความแบบเดิมที่ไม่มีส่วนนี้ไม่กระทบเลย
 
 const PLATE_RE = /^\d?[ก-ฮ]{1,3}\s?\d{1,4}$/;
 // บรรทัดสีรถเดี่ยว ๆ ("ทอง", "สีขาว", "ขาวมุก", "บรอนซ์เงิน") — จำจากคำสีที่ใช้กัน
@@ -68,9 +77,16 @@ const IGNORED_LINE_RE = /^วันที่\b/; // ร้านบางที�
 // ช่องว่างยาว 3+ ตัว หรืออิโมจิ = สัญญาณว่าเป็นข้อความโปรโมทคัดลอกมาทั้งย่อหน้า
 // ไม่ใช่ชื่อรายการจริง ("ชุดโปร ช่วงล่าง    👍...🛠️...")
 const DECORATED_LINE_RE = /\s{3,}|[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}]/u;
+// ⚠️ ลำดับ key สำคัญมาก: OPTIONAL_LABEL_RE ต่อคีย์ทั้งหมดด้วย | (alternation) แล้ว
+// regex จะแมตช์ตัวเลือกแรกที่เจอตามลำดับที่เขียนไว้ ไม่ใช่ตัวที่ยาวที่สุด — label
+// ที่เป็น "คำนำหน้า" ของอีก label หนึ่ง (เช่น "เบอร์โทร" นำหน้า "เบอร์โทรศัพท์") ต้อง
+// เขียนตัวที่ยาวกว่าไว้ก่อนเสมอ ไม่งั้น "เบอร์โทรศัพท์:0812345678" จะโดนตัดที่
+// "เบอร์โทร" ก่อน เหลือ "ศัพท์:0812345678" เป็นเนื้อความที่เหลือ (ผิด)
 const OPTIONAL_LABELS = {
   ชื่อลูกค้า: 'customer_name',
+  เบอร์โทรศัพท์: 'phone', // ยาวกว่า "เบอร์โทร" ต้องมาก่อน
   เบอร์โทร: 'phone',
+  เบอโทรศัพท์: 'phone', // ยาวกว่า "เบอโทร" ต้องมาก่อน
   เบอโทร: 'phone',
   ยี่ห้อรถ: 'brand',
   รุ่นรถ: 'model',
@@ -80,8 +96,25 @@ const OPTIONAL_LABELS = {
   เลขไมค์: 'mileage', // สะกดแบบที่ร้านพิมพ์จริง
   อาการ: 'symptom',
   หมายเหตุ: 'remark',
+  ชื่อ: 'customer_name', // เทมเพลตใหม่ใช้ "ชื่อ:" เฉย ๆ — ต้องมาหลัง "ชื่อลูกค้า" เสมอ
 };
 const OPTIONAL_LABEL_RE = new RegExp(`^(${Object.keys(OPTIONAL_LABELS).join('|')})\\s*:*\\s*(.*)$`);
+
+// ── ส่วนชำระเงินของเทมเพลตใหม่ (หลัง "<--สิ้นสุดรายการ-->") ──
+// แยกเป็น label set ต่างหากจาก OPTIONAL_LABELS ด้านบน เพราะอยู่คนละ section ของ
+// ข้อความ (หลัง end marker) ไม่ปนกับ label หัวบิล — "หมายเหตุ" ซ้ำ label กับด้านบน
+// ได้เพราะคนละ regex/section กันคนละที่ ไม่ชนกัน
+const PAYMENT_LABELS = {
+  ยอดรวม: 'stated_total',
+  ยอดที่ต้องชำระ: 'remaining_balance',
+  ช่องทางการชำระ: 'payment_method',
+  ลูกค้าชำระเงิน: 'paid_amount',
+  หมายเหตุ: 'remark',
+};
+const PAYMENT_LABEL_RE = new RegExp(`^(${Object.keys(PAYMENT_LABELS).join('|')})\\s*:*\\s*(.*)$`);
+// จุดจบรายการแบบระบุชัดเจนในเทมเพลตใหม่ — ทุกอย่างหลังบรรทัดนี้เป็น "ส่วนชำระเงิน"
+// ไม่ใช่รายการสินค้าอีกต่อไป (ทนช่องว่างรอบคำได้ เผื่อพิมพ์ "<-- สิ้นสุดรายการ -->")
+const END_MARKER_RE = /^<--\s*สิ้นสุดรายการ\s*-->$/;
 // ข้อความแจ้งว่าชำระเงินแล้ว (ส่งซ้ำข้อมูลคิวเดิมพร้อมสรุปยอด/มัดจำ) — ไม่ใช่คิวใหม่
 // หรือรายการแก้ไข บอทต้องไม่จับข้อความนี้เลย ปล่อยผ่านเงียบ ๆ
 const PAID_MESSAGE_RE = /ชำระเงิน\s*(เรียบร้อย|แล้ว)/;
@@ -113,6 +146,63 @@ function todayStr() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+// ปรับ "ช่องทางการชำระ:" ให้ตรงกับตัวเลือกใน select ของหน้าสรุปยอดประจำวันเป๊ะ ๆ
+// (DailySummaryDetailModal.jsx: ['โอน','บัตรเครดิต','เงินสด','QRCode']) — พนักงานพิมพ์
+// "QRcode"/"qrcode"/"QR" มาก็ต้องกลายเป็น "QRCode" ตัวใหญ่-เล็กแบบนี้เป๊ะ ไม่งั้น select
+// ฝั่งหน้าเว็บจะไม่มีตัวเลือกไหนตรง กลายเป็นแสดงว่างเปล่า ค่าที่ไม่รู้จักคงข้อความเดิม
+// ไว้ตามที่พิมพ์มา ให้หน้างานแก้เองทีหลังในแอปได้
+function normalizePaymentMethod(raw) {
+  const value = raw.trim();
+  if (!value) return null;
+  const compact = value.toLowerCase().replace(/\s+/g, '');
+  if (compact === 'qrcode' || compact === 'qr') return 'QRCode';
+  return value;
+}
+
+// แยกส่วนชำระเงินท้ายเทมเพลต (หลัง "<--สิ้นสุดรายการ-->") ตาม label — ไม่พบ label
+// ที่รู้จักในบรรทัดไหนก็ข้ามบรรทัดนั้นเงียบ ๆ (กันข้อความแปลกปนมา ไม่ทำให้ทั้งข้อความ
+// พัง) ค่าว่างหลัง label เป็น null เสมอ ไม่ใช่ "" (ผู้เรียกเช็คแค่ != null ว่า "มีการ
+// กรอกมา" ได้ตรง ๆ)
+function parsePaymentSectionLines(lines) {
+  const result = {
+    stated_total: null,
+    remaining_balance: null,
+    payment_method: null,
+    paid_amount: null,
+    remarkNotes: [],
+  };
+
+  for (const rawLine of lines) {
+    const trimmed = rawLine.trim();
+    if (!trimmed) continue;
+
+    const match = PAYMENT_LABEL_RE.exec(trimmed);
+    if (!match) continue;
+    const [, label, rest] = match;
+    const field = PAYMENT_LABELS[label];
+    const value = rest.trim();
+
+    if (field === 'remark') {
+      if (value) result.remarkNotes.push(value);
+      continue;
+    }
+    if (field === 'payment_method') {
+      result.payment_method = value ? normalizePaymentMethod(value) : null;
+      continue;
+    }
+    // ฟิลด์ตัวเลขที่เหลือ: stated_total, remaining_balance, paid_amount
+    if (!value) {
+      result[field] = null;
+      continue;
+    }
+    const digits = value.replace(/,/g, '').replace(/บาท/g, '').trim();
+    const num = Number(digits);
+    result[field] = Number.isFinite(num) && digits !== '' ? num : null;
+  }
+
+  return result;
+}
+
 // บรรทัดในรายการ — ตัดเครื่องหมายหัวข้อ (-, •, ·), เลขลำดับนำหน้า ("1.", "2)")
 // และคำ "เพิ่มเติม" นำหน้าทิ้งก่อน — "-" ที่ตามด้วยตัวเลขติดกันเลย (เช่น "-1000")
 // ไม่ตัด เพราะเป็นเครื่องหมายลบของราคาส่วนลด ไม่ใช่หัวข้อ
@@ -140,6 +230,9 @@ function parseItemSectionLines(lines) {
   const notes = [];
   let statedTotal = null;
   let pendingName = null;
+  // บรรทัดที่เหลือหลัง end marker ("<--สิ้นสุดรายการ-->") — ส่วนชำระเงินของ
+  // เทมเพลตใหม่ ให้ผู้เรียก (parseLineQueueMessage) เอาไปพาร์สต่อแยกจากรายการสินค้า
+  let paymentSectionLines = [];
 
   const flushPending = () => {
     if (pendingName) {
@@ -148,9 +241,16 @@ function parseItemSectionLines(lines) {
     }
   };
 
-  for (const rawLine of lines) {
+  for (let lineIndex = 0; lineIndex < lines.length; lineIndex += 1) {
+    const rawLine = lines[lineIndex];
     const trimmedRaw = rawLine.trim();
     if (!trimmedRaw) continue;
+
+    if (END_MARKER_RE.test(trimmedRaw)) {
+      flushPending();
+      paymentSectionLines = lines.slice(lineIndex + 1);
+      break; // หยุดเก็บรายการทันที ทุกอย่างหลังจากนี้ไม่ใช่รายการสินค้าอีกต่อไป
+    }
 
     if (DECORATED_LINE_RE.test(trimmedRaw)) {
       flushPending();
@@ -238,7 +338,7 @@ function parseItemSectionLines(lines) {
   }
   flushPending();
 
-  return { items, statedTotal, notes };
+  return { items, statedTotal, notes, paymentSectionLines };
 }
 
 function parseLineQueueMessage(text) {
@@ -266,6 +366,11 @@ function parseLineQueueMessage(text) {
     remark: null,
     items: [],
     stated_total: null,
+    // ฟิลด์ใหม่จากส่วนชำระเงินของเทมเพลต (หลัง "<--สิ้นสุดรายการ-->") — ว่างเสมอ
+    // (null) สำหรับข้อความแบบเดิมที่ไม่มีส่วนนี้ ไม่กระทบพฤติกรรมเดิมเลย
+    remaining_balance: null,
+    payment_method: null,
+    paid_amount: null,
   };
 
   const leftovers = [];
@@ -363,11 +468,25 @@ function parseLineQueueMessage(text) {
   }
 
   if (itemSectionStartIndex >= 0) {
-    const { items, statedTotal, notes } = parseItemSectionLines(lines.slice(itemSectionStartIndex));
+    const { items, statedTotal, notes, paymentSectionLines } = parseItemSectionLines(lines.slice(itemSectionStartIndex));
     result.items = items;
     result.stated_total = statedTotal;
     if (notes.length > 0) {
       result.remark = result.remark ? `${result.remark}\n${notes.join('\n')}` : notes.join('\n');
+    }
+
+    // เทมเพลตใหม่: เจอ end marker แล้วมีเนื้อหาต่อท้าย → พาร์สเป็นส่วนชำระเงิน
+    // "ยอดรวม:" ทับ stated_total เดิม (ถ้ามีค่า) เพราะเป็นตัวที่ระบุชัดเจนกว่าบรรทัด
+    // "รวม xxxx" แบบเดา — ไม่มีค่าก็ไม่ทับ (คง stated_total จากรายการเดิมไว้)
+    if (paymentSectionLines.length > 0) {
+      const payment = parsePaymentSectionLines(paymentSectionLines);
+      if (payment.stated_total != null) result.stated_total = payment.stated_total;
+      result.remaining_balance = payment.remaining_balance;
+      result.payment_method = payment.payment_method;
+      result.paid_amount = payment.paid_amount;
+      if (payment.remarkNotes.length > 0) {
+        result.remark = result.remark ? `${result.remark}\n${payment.remarkNotes.join('\n')}` : payment.remarkNotes.join('\n');
+      }
     }
   }
 

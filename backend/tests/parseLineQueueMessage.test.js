@@ -495,4 +495,165 @@ describe('parseLineQueueMessage', () => {
     expect(first.queue_no).toBe('5');
     expect(second.queue_no).toBe('5');
   });
+
+  describe('เทมเพลตใหม่ (ตอบกลับอัตโนมัติเมื่อพิมพ์ "คิว" เดี่ยว ๆ)', () => {
+    test('round-trip เต็มรูปแบบ — ทุก label รวม alias ใหม่ + ส่วนชำระเงินแยกถูกฟิลด์', () => {
+      const parsed = parseLineQueueMessage(
+        [
+          'คิว 5',
+          '18/07/69',
+          'ชื่อ:คุณทดสอบเทมเพลต',
+          'เบอโทรศัพท์:099-000-0099',
+          'ยี่ห้อรถ:Toyota',
+          'รุ่นรถ:Vios',
+          'ทะเบียนรถ:1กก1234',
+          'สีรถ:ขาว',
+          'เลขไมค์:123456',
+          'อาการ:เช็คช่วงล่าง',
+          'รายการ:',
+          'แร็ค OEM 5000',
+          '',
+          '<--สิ้นสุดรายการ-->',
+          'ยอดรวม:5000',
+          'หมายเหตุ:ลูกค้ารอรับรถ',
+          'ยอดที่ต้องชำระ:0',
+          'ช่องทางการชำระ:เงินสด',
+          'ลูกค้าชำระเงิน:5000',
+        ].join('\n')
+      );
+      expect(parsed.customer_name).toBe('คุณทดสอบเทมเพลต');
+      expect(parsed.phone).toBe('099-000-0099');
+      expect(parsed.brand).toBe('Toyota');
+      expect(parsed.model).toBe('Vios');
+      expect(parsed.license_plate).toBe('1กก1234');
+      expect(parsed.color).toBe('ขาว');
+      expect(parsed.mileage).toBe(123456);
+      expect(parsed.symptom).toBe('เช็คช่วงล่าง');
+      expect(parsed.items).toEqual([{ name: 'แร็ค OEM', price: 5000 }]);
+      expect(parsed.stated_total).toBe(5000);
+      expect(parsed.remaining_balance).toBe(0);
+      expect(parsed.payment_method).toBe('เงินสด');
+      expect(parsed.paid_amount).toBe(5000);
+      expect(parsed.remark).toBe('ลูกค้ารอรับรถ');
+    });
+
+    test('เทมเพลตว่างเปล่าทั้งหมด (ยังไม่กรอกอะไรเลย) → ทุก label ว่าง เป็น null ไม่ใช่ ""', () => {
+      const parsed = parseLineQueueMessage(
+        [
+          'คิว 6',
+          '18/07/69',
+          'ชื่อ:คุณกรอกว่าง', // ต้องมีชื่อ ไม่งั้น parser คืน null ทั้งข้อความ
+          'เบอโทรศัพท์:',
+          'ยี่ห้อรถ:',
+          'รุ่นรถ:',
+          'ทะเบียนรถ:',
+          'สีรถ:',
+          'เลขไมค์:',
+          'อาการ:',
+          'รายการ:',
+          '',
+          '<--สิ้นสุดรายการ-->',
+          'ยอดรวม:',
+          'หมายเหตุ:',
+          'ยอดที่ต้องชำระ:',
+          'ช่องทางการชำระ:',
+          'ลูกค้าชำระเงิน:',
+        ].join('\n')
+      );
+      expect(parsed.phone).toBeNull();
+      expect(parsed.brand).toBeNull();
+      expect(parsed.model).toBeNull();
+      expect(parsed.license_plate).toBeNull();
+      expect(parsed.color).toBeNull();
+      expect(parsed.mileage).toBeNull();
+      expect(parsed.symptom).toBeNull();
+      expect(parsed.items).toEqual([]);
+      expect(parsed.stated_total).toBeNull();
+      expect(parsed.remaining_balance).toBeNull();
+      expect(parsed.payment_method).toBeNull();
+      expect(parsed.paid_amount).toBeNull();
+      expect(parsed.remark).toBeNull();
+    });
+
+    test('label ยาวต้องตัดถูกก่อน label สั้นที่เป็นคำนำหน้า — "ชื่อลูกค้า" vs "ชื่อ"', () => {
+      const parsed = parseLineQueueMessage('คิว 1\nชื่อลูกค้า:คุณเอ');
+      expect(parsed.customer_name).toBe('คุณเอ');
+    });
+
+    test('label ยาวต้องตัดถูกก่อน label สั้นที่เป็นคำนำหน้า — "เบอร์โทรศัพท์" vs "เบอร์โทร"', () => {
+      const parsed = parseLineQueueMessage('คิว 1\nคุณบี\nเบอร์โทรศัพท์:0812345678');
+      expect(parsed.phone).toBe('081-234-5678');
+    });
+
+    test('label ยาวต้องตัดถูกก่อน label สั้นที่เป็นคำนำหน้า — "เบอโทรศัพท์" vs "เบอโทร"', () => {
+      const parsed = parseLineQueueMessage('คิว 1\nคุณซี\nเบอโทรศัพท์:0898765432');
+      expect(parsed.phone).toBe('089-876-5432');
+    });
+
+    test('end marker หยุดเก็บรายการทันที — บรรทัดหลัง marker ไม่ถูกตีเป็นรายการสินค้า', () => {
+      const parsed = parseLineQueueMessage(
+        [
+          'คิว 2',
+          'คุณดี',
+          'รายการ:',
+          'แร็ค OEM 5000',
+          '<--สิ้นสุดรายการ-->',
+          'ยอดที่ต้องชำระ:2000',
+        ].join('\n')
+      );
+      expect(parsed.items).toEqual([{ name: 'แร็ค OEM', price: 5000 }]);
+      expect(parsed.remaining_balance).toBe(2000);
+    });
+
+    test('ช่องทางการชำระ: "QRcode"/"qrcode"/"QR" → normalize เป็น "QRCode" เป๊ะ (ตรงกับ select ฝั่งหน้าเว็บ)', () => {
+      const variants = ['QRcode', 'qrcode', 'QR', 'qr code'];
+      for (const variant of variants) {
+        const parsed = parseLineQueueMessage(
+          `คิว 3\nคุณอี\nรายการ:\n<--สิ้นสุดรายการ-->\nช่องทางการชำระ:${variant}`
+        );
+        expect(parsed.payment_method).toBe('QRCode');
+      }
+    });
+
+    test('ช่องทางการชำระที่จำไม่ได้ → คงข้อความเดิมไว้ (ให้หน้างานแก้เองในแอป)', () => {
+      const parsed = parseLineQueueMessage(
+        'คิว 3\nคุณเอฟ\nรายการ:\n<--สิ้นสุดรายการ-->\nช่องทางการชำระ:เช็คธนาคาร'
+      );
+      expect(parsed.payment_method).toBe('เช็คธนาคาร');
+    });
+
+    test('ตัวเลขมี comma คั่นในส่วนชำระเงิน → parse ได้ถูกต้อง', () => {
+      const parsed = parseLineQueueMessage(
+        [
+          'คิว 4',
+          'คุณจี',
+          'รายการ:',
+          '<--สิ้นสุดรายการ-->',
+          'ยอดรวม:34,000',
+          'ยอดที่ต้องชำระ:2,000',
+          'ลูกค้าชำระเงิน:32,000',
+        ].join('\n')
+      );
+      expect(parsed.stated_total).toBe(34000);
+      expect(parsed.remaining_balance).toBe(2000);
+      expect(parsed.paid_amount).toBe(32000);
+    });
+
+    test('PAID_MESSAGE_RE ไม่จับ "ลูกค้าชำระเงิน:" ในเทมเพลต — ข้อความทั้งบิลยังถูกพาร์สปกติ ไม่ถูกทิ้งเหมือนข้อความ "ชำระเงินแล้ว"', () => {
+      const parsed = parseLineQueueMessage(
+        [
+          'คิว 8',
+          'คุณเอช',
+          'รายการ:',
+          'ค่าแรง 2000',
+          '<--สิ้นสุดรายการ-->',
+          'ยอดรวม:2000',
+          'ลูกค้าชำระเงิน:2000',
+        ].join('\n')
+      );
+      expect(parsed).not.toBeNull();
+      expect(parsed.paid_amount).toBe(2000);
+      expect(parsed.items).toEqual([{ name: 'ค่าแรง', price: 2000 }]);
+    });
+  });
 });
