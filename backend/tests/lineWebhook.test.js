@@ -43,6 +43,40 @@ function eventsBody(events) {
   return JSON.stringify({ destination: 'Utest', events });
 }
 
+// สร้างข้อความเทมเพลตแบบเต็ม — ให้ทดสอบเติมเฉพาะฟิลด์ที่ต้องใช้ ที่เหลือว่างไว้
+// payment.confirm: true ต่อวลี "ชำระเงินเรียบร้อย" ท้ายข้อความ — สัญญาณปิดบิลจริง
+// ในเทมเพลตใหม่ (กรอก "ลูกค้าชำระเงิน:" เฉย ๆ ไม่ปิดบิลเองอีกต่อไป) — อยู่นอก describe
+// เพราะหลาย describe บล็อกในไฟล์นี้ใช้ร่วมกัน (ไม่ใช่แค่บล็อก "เทมเพลตใหม่" เดิม)
+function templateText({ queueNo, name, phone, plate, items = [], payment = {} }) {
+  const itemLines = items.map((it) => `${it.name} ${it.price}`);
+  const lines = [
+    `คิว ${queueNo}`,
+    '18/07/69',
+    `ชื่อ:${name}`,
+    `เบอโทรศัพท์:${phone || ''}`,
+    'ยี่ห้อรถ:',
+    'รุ่นรถ:',
+    `ทะเบียนรถ:${plate || ''}`,
+    'สีรถ:',
+    'เลขไมค์:',
+    'อาการ:',
+    'รายการ:',
+    ...itemLines,
+    '',
+    '<--สิ้นสุดรายการ-->',
+    `ยอดรวม:${payment.statedTotal ?? ''}`,
+    `มัดจำ:${payment.deposit ?? ''}`,
+    `หมายเหตุ:${payment.remark ?? ''}`,
+    `ยอดที่ต้องชำระ:${payment.remainingBalance ?? ''}`,
+    '',
+    '<--ลูกค้าชำระเงิน-->',
+    `ช่องทางการชำระ:${payment.method ?? ''}`,
+    `ลูกค้าชำระเงิน:${payment.paidAmount ?? ''}`,
+  ];
+  if (payment.confirm) lines.push('ลูกค้าชำระเงินเรียบร้อย');
+  return lines.join('\n');
+}
+
 function postWebhook(rawBody, signature = sign(rawBody)) {
   return request(app)
     .post('/api/line/webhook')
@@ -838,56 +872,25 @@ describe('POST /api/line/webhook', () => {
   });
 
   describe('เทมเพลตใหม่: พิมพ์ "คิว" ขอเทมเพลต + ส่งเทมเพลตที่กรอกแล้วปิดบิลอัตโนมัติ', () => {
-    // สร้างข้อความเทมเพลตแบบเต็ม — ให้ทดสอบเติมเฉพาะฟิลด์ที่ต้องใช้ ที่เหลือว่างไว้
-    // payment.confirm: true ต่อวลี "ชำระเงินเรียบร้อย" ท้ายข้อความ — สัญญาณปิดบิลจริง
-    // ในเทมเพลตใหม่ (กรอก "ลูกค้าชำระเงิน:" เฉย ๆ ไม่ปิดบิลเองอีกต่อไป)
-    function templateText({ queueNo, name, phone, plate, items = [], payment = {} }) {
-      const itemLines = items.map((it) => `${it.name} ${it.price}`);
-      const lines = [
-        `คิว ${queueNo}`,
-        '18/07/69',
-        `ชื่อ:${name}`,
-        `เบอโทรศัพท์:${phone || ''}`,
-        'ยี่ห้อรถ:',
-        'รุ่นรถ:',
-        `ทะเบียนรถ:${plate || ''}`,
-        'สีรถ:',
-        'เลขไมค์:',
-        'อาการ:',
-        'รายการ:',
-        ...itemLines,
-        '',
-        '<--สิ้นสุดรายการ-->',
-        `ยอดรวม:${payment.statedTotal ?? ''}`,
-        `หมายเหตุ:${payment.remark ?? ''}`,
-        `ยอดที่ต้องชำระ:${payment.remainingBalance ?? ''}`,
-        '',
-        '<--ลูกค้าชำระเงิน-->',
-        `ช่องทางการชำระ:${payment.method ?? ''}`,
-        `ลูกค้าชำระเงิน:${payment.paidAmount ?? ''}`,
-      ];
-      if (payment.confirm) lines.push('ลูกค้าชำระเงินเรียบร้อย');
-      return lines.join('\n');
-    }
-
     // ผูก checkDepositMismatch/computeReceiptAmount (mirror กติกาปิดบิล) เข้ากับผลจาก
     // parseLineQueueMessage จริง ๆ (ไม่ใช่ mock object) — พิสูจน์ว่า field ที่ parser
-    // คืนมา (remaining_balance/stated_total/remark) เดินผ่านกติกาในไฟล์นี้ได้ถูกต้อง
-    // จริง ๆ ไม่ใช่แค่ทดสอบแยกแต่ละฟังก์ชันด้วย object ที่เขียนมือ
+    // คืนมา (remaining_balance/stated_total/deposit_amount) เดินผ่านกติกาในไฟล์นี้ได้
+    // ถูกต้องจริง ๆ ไม่ใช่แค่ทดสอบแยกแต่ละฟังก์ชันด้วย object ที่เขียนมือ — deposit_amount
+    // เป็นฟิลด์ first-class จาก label "มัดจำ:" แล้ว (ไม่ได้เดาจากข้อความในหมายเหตุอีกต่อไป)
     test('checkDepositMismatch/computeReceiptAmount ต่อกับผลจาก parser จริง: มัดจำ+ยอดค้าง ตรงกับยอดรวม → ไม่มี mismatch, ยอดใบเสร็จ = ยอดรวมทั้งบิล', () => {
       const parsed = parseLineQueueMessage(
         templateText({
           queueNo: '1',
           name: 'คุณมัดจำตรง',
           items: [{ name: 'แร็ค OEM', price: 10000 }],
-          payment: { statedTotal: 10000, remainingBalance: 4000, paidAmount: 6000, remark: 'มัดจำ 6000' },
+          payment: { statedTotal: 10000, remainingBalance: 4000, paidAmount: 6000, deposit: 6000 },
         })
       );
       expect(parsed.remaining_balance).toBe(4000);
       expect(parsed.stated_total).toBe(10000);
-      expect(parsed.remark).toBe('มัดจำ 6000');
+      expect(parsed.deposit_amount).toBe(6000);
 
-      expect(lineWebhookRouter.checkDepositMismatch(parsed)).toBeNull(); // 6000+4000=10000 ตรงกับยอดรวม
+      expect(lineWebhookRouter.checkDepositMismatch(parsed, parsed.deposit_amount)).toBeNull(); // 6000+4000=10000 ตรงกับยอดรวม
       expect(lineWebhookRouter.computeReceiptAmount(parsed, 10000)).toBe(10000); // deposit case → ใช้ยอดรวมทั้งบิล
     });
 
@@ -898,10 +901,11 @@ describe('POST /api/line/webhook', () => {
           name: 'คุณมัดจำเพี้ยน',
           items: [{ name: 'แร็ค OEM', price: 10000 }],
           // พิมพ์ยอดรวมผิด (10000) แต่มัดจำ 2000 + ยอดค้าง 5000 = 7000 ไม่เท่ากัน
-          payment: { statedTotal: 10000, remainingBalance: 5000, paidAmount: 2000, remark: 'มัดจำ 2000' },
+          payment: { statedTotal: 10000, remainingBalance: 5000, paidAmount: 2000, deposit: 2000 },
         })
       );
-      const mismatch = lineWebhookRouter.checkDepositMismatch(parsed);
+      expect(parsed.deposit_amount).toBe(2000);
+      const mismatch = lineWebhookRouter.checkDepositMismatch(parsed, parsed.deposit_amount);
       expect(mismatch).toEqual({ depositAmount: 2000, actual: 7000, expected: 10000 });
     });
 
@@ -1229,6 +1233,217 @@ describe('POST /api/line/webhook', () => {
       const [[receiptAfter]] = await pool.query('SELECT payment_method, total_amount FROM receipts WHERE id = ?', [receiptId]);
       expect(receiptAfter.payment_method).toBe('บัตรเครดิต');
       expect(Number(receiptAfter.total_amount)).toBe(2000);
+    });
+  });
+
+  describe('Fix: แก้ทะเบียนผ่าน Vehicle Management แล้ว resend ข้อความเดิม ต้องไม่ล้างการแก้ไข', () => {
+    test('resend ข้อความเดิม (ทะเบียนเก่าที่ยังผิดอยู่) หลังออฟฟิศแก้ทะเบียนที่ถูกผ่านหน้า Vehicle Management → ยังผูกรถคันเดิม ทะเบียนที่แก้ไม่ถูกล้างทิ้ง ไม่มีรถใหม่ถูกสร้างซ้อน', async () => {
+      const uniq = Date.now().toString().slice(-7);
+      const phone = `074${uniq}`;
+      const queueNo = `96${uniq}`;
+      const wrongPlate = `1กก${uniq.slice(0, 4)}`;
+      const correctPlate = `2ขข${uniq.slice(0, 4)}`;
+
+      const first = await postWebhook(eventsBody([messageEvent(
+        `คิว:${queueNo}\nชื่อลูกค้า:คุณแก้ทะเบียน\nเบอร์โทร:${phone}\nทะเบียนรถ:${wrongPlate}`,
+        `msg-vehfix1-${uniq}`
+      )]));
+      expect(first.body.created).toHaveLength(1);
+      const [[q1]] = await pool.query('SELECT id, customer_id, vehicle_id FROM quotations WHERE quotation_no = ?', [first.body.created[0]]);
+      createdCustomerIds.push(q1.customer_id);
+      const originalVehicleId = q1.vehicle_id;
+      expect(originalVehicleId).toBeTruthy();
+
+      // จำลองออฟฟิศแก้ทะเบียนที่พิมพ์ผิดผ่านหน้า Vehicle Management (PUT /vehicles/:id
+      // — อัปเดตแถวเดิมในที่ ไม่สร้างแถวใหม่)
+      await pool.query('UPDATE vehicles SET license_plate = ? WHERE id = ?', [correctPlate, originalVehicleId]);
+
+      // พนักงานส่งข้อความเดิม (ทะเบียนเก่าที่ยังผิดอยู่ในข้อความ) ซ้ำมาเพิ่มรายการ —
+      // บั๊กเดิม: vehicle resolution รันก่อน existing lookup ทำให้ค้นหาด้วยทะเบียนที่
+      // พิมพ์มา (ผิด) ไม่เจอรถที่แก้แล้ว กลายเป็นสร้างรถใหม่/เปลี่ยนลิงก์ไปคันผิด
+      const secondText = `คิว:${queueNo}\nชื่อลูกค้า:คุณแก้ทะเบียน\nเบอร์โทร:${phone}\nทะเบียนรถ:${wrongPlate}\nรายการ:\nค่าแรง 1500`;
+      const second = await postWebhook(eventsBody([messageEvent(secondText, `msg-vehfix2-${uniq}`)]));
+      expect(second.status).toBe(200);
+      expect(second.body.created).toHaveLength(1);
+      expect(second.body.created[0]).toBe(first.body.created[0]); // แก้ไขใบเดิม ไม่เปิดใบใหม่
+
+      const [[q1After]] = await pool.query('SELECT vehicle_id FROM quotations WHERE id = ?', [q1.id]);
+      expect(q1After.vehicle_id).toBe(originalVehicleId); // ยังเป็นรถคันเดิม ไม่ถูกเปลี่ยนลิงก์
+
+      const [[vehicleAfter]] = await pool.query('SELECT license_plate FROM vehicles WHERE id = ?', [originalVehicleId]);
+      expect(vehicleAfter.license_plate).toBe(correctPlate); // ทะเบียนที่แก้ไว้ยังอยู่ ไม่ถูกล้างทิ้ง
+
+      const [allVehicles] = await pool.query('SELECT id FROM vehicles WHERE customer_id = ?', [q1.customer_id]);
+      expect(allVehicles).toHaveLength(1); // ไม่มีรถใหม่ถูกสร้างซ้อน
+    });
+  });
+
+  describe('close_only — ข้อความปิดบิลสั้น (อ้างอิงงานด้วยเลขคิวอย่างเดียว)', () => {
+    test('ไม่พบบิลที่เปิดอยู่สำหรับเลขคิวนี้ → ตอบเตือน ไม่สร้าง/แก้ไขอะไร', async () => {
+      const uniq = Date.now().toString().slice(-7);
+      const queueNo = `90${uniq}`;
+      const text = `คิว ${queueNo}\nช่องทางการชำระ: โอน\nลูกค้าชำระเงิน: 1000\nชำระเงินเรียบร้อย`;
+
+      const res = await postWebhook(eventsBody([messageEvent(text, `msg-closeonly-none-${uniq}`)]));
+      expect(res.status).toBe(200);
+      expect(res.body.created).toHaveLength(0);
+    });
+
+    test('เจอใบเดียว (ยัง pending, มีมัดจำตั้งไว้ตอนเปิดบิล) → อนุมัติ+สร้างใบเสร็จ+ปิดบิล ยอดใบเสร็จ = ยอดรวมทั้งบิล มัดจำก็อปจากใบเสนอราคา (ไม่ใช่จากข้อความปิดบิลสั้นซึ่งไม่มีฟิลด์นี้)', async () => {
+      const uniq = Date.now().toString().slice(-7);
+      const phone = `071${uniq}`;
+      const queueNo = `91${uniq}`;
+
+      const first = await postWebhook(eventsBody([messageEvent(
+        templateText({
+          queueNo,
+          name: 'คุณปิดบิลสั้น',
+          phone,
+          plate: `7กจ${uniq.slice(0, 4)}`,
+          items: [{ name: 'ค่าแรง', price: 10000 }],
+          payment: { statedTotal: 10000, deposit: 3000, remainingBalance: 7000 },
+        }),
+        `msg-closeonly1-${uniq}`
+      )]));
+      expect(first.body.created).toHaveLength(1);
+      const [[q1]] = await pool.query(
+        'SELECT id, customer_id, status, closed_at, deposit_amount FROM quotations WHERE quotation_no = ?',
+        [first.body.created[0]]
+      );
+      createdCustomerIds.push(q1.customer_id);
+      expect(Number(q1.deposit_amount)).toBe(3000);
+      expect(q1.status).toBe('pending');
+
+      const closeText = `คิว ${queueNo}\nช่องทางการชำระ: โอน\nลูกค้าชำระเงิน: 7000\nชำระเงินเรียบร้อย`;
+      const second = await postWebhook(eventsBody([messageEvent(closeText, `msg-closeonly2-${uniq}`)]));
+      expect(second.status).toBe(200);
+
+      const [[q1After]] = await pool.query(
+        'SELECT status, closed_at, converted_receipt_id, total_amount FROM quotations WHERE id = ?',
+        [q1.id]
+      );
+      expect(q1After.status).toBe('approved');
+      expect(q1After.closed_at).toBeTruthy();
+      expect(q1After.converted_receipt_id).toBeTruthy();
+
+      const [[receipt]] = await pool.query(
+        'SELECT payment_method, total_amount, deposit_amount FROM receipts WHERE id = ?',
+        [q1After.converted_receipt_id]
+      );
+      expect(receipt.payment_method).toBe('โอน');
+      expect(Number(receipt.total_amount)).toBe(Number(q1After.total_amount)); // ยอดใบเสร็จ = ยอดรวมทั้งบิล ไม่ใช่แค่ 7000 ที่แจ้งจ่าย
+      expect(Number(receipt.deposit_amount)).toBe(3000);
+    });
+
+    test('เจอมากกว่า 1 ใบ (เลขคิวชนกันข้ามลูกค้าคนละคน) → ไม่เดา ตอบให้ไปปิดในแอปแทน ไม่แก้ไขข้อมูลใด ๆ', async () => {
+      const uniq = Date.now().toString().slice(-7);
+      const queueNo = `95${uniq}`;
+      const phoneA = `072${uniq}`;
+      const phoneB = `073${uniq}`;
+
+      // สร้าง 2 ใบตรง ๆ ผ่าน pool (จำลองเลขคิวชนกันข้ามลูกค้าที่หลุดผ่านกลไกกันชน
+      // ปกติของ webhook มาได้ — เช่นข้อมูลเก่า/กรอกผ่านเว็บ) ไม่ผ่าน webhook เพราะ
+      // webhook มีกลไกเปลี่ยนเลขคิวอัตโนมัติกันชนอยู่แล้วตามปกติ
+      const [custA] = await pool.query(
+        'INSERT INTO customers (customer_code, customer_name, phone) VALUES (?, ?, ?)',
+        [`CMM-TEST${uniq}A`, 'คุณคิวชนเอ', phoneA]
+      );
+      const [custB] = await pool.query(
+        'INSERT INTO customers (customer_code, customer_name, phone) VALUES (?, ?, ?)',
+        [`CMM-TEST${uniq}B`, 'คุณคิวชนบี', phoneB]
+      );
+      createdCustomerIds.push(custA.insertId, custB.insertId);
+
+      const [vehA] = await pool.query(
+        "INSERT INTO vehicles (customer_id, brand, model, license_plate) VALUES (?, 'Toyota', 'Vios', ?)",
+        [custA.insertId, `9กจ${uniq.slice(0, 4)}A`]
+      );
+      const [vehB] = await pool.query(
+        "INSERT INTO vehicles (customer_id, brand, model, license_plate) VALUES (?, 'Toyota', 'Vios', ?)",
+        [custB.insertId, `9กจ${uniq.slice(0, 4)}B`]
+      );
+
+      const [qA] = await pool.query(
+        `INSERT INTO quotations (quotation_no, quotation_date, customer_id, vehicle_id, mileage, product_summary, total_amount, queue_no)
+         VALUES (?, CURDATE(), ?, ?, 0, 'ค่าแรง', 1000, ?)`,
+        [`IVTEST${uniq}A`, custA.insertId, vehA.insertId, queueNo]
+      );
+      const [qB] = await pool.query(
+        `INSERT INTO quotations (quotation_no, quotation_date, customer_id, vehicle_id, mileage, product_summary, total_amount, queue_no)
+         VALUES (?, CURDATE(), ?, ?, 0, 'ค่าแรง', 2000, ?)`,
+        [`IVTEST${uniq}B`, custB.insertId, vehB.insertId, queueNo]
+      );
+
+      const closeText = `คิว ${queueNo}\nช่องทางการชำระ: เงินสด\nลูกค้าชำระเงิน: 1000\nชำระเงินเรียบร้อย`;
+      const res = await postWebhook(eventsBody([messageEvent(closeText, `msg-closeonly-ambig-${uniq}`)]));
+      expect(res.status).toBe(200);
+
+      const [[qAAfter]] = await pool.query('SELECT status, closed_at FROM quotations WHERE id = ?', [qA.insertId]);
+      const [[qBAfter]] = await pool.query('SELECT status, closed_at FROM quotations WHERE id = ?', [qB.insertId]);
+      expect(qAAfter.status).toBe('pending');
+      expect(qAAfter.closed_at).toBeNull();
+      expect(qBAfter.status).toBe('pending');
+      expect(qBAfter.closed_at).toBeNull();
+    });
+  });
+
+  describe('มัดจำ (deposit_amount/deposit_date) ไหลผ่าน create → resend แก้ไข → ปิดบิล → ใบเสร็จ', () => {
+    test('resend ที่ไม่ได้พิมพ์ "มัดจำ:" ซ้ำ ไม่ล้างมัดจำเดิมทิ้ง แล้วปิดบิลด้วยข้อความสั้น → ใบเสร็จมีมัดจำเดียวกัน', async () => {
+      const uniq = Date.now().toString().slice(-7);
+      const phone = `075${uniq}`;
+      const queueNo = `97${uniq}`;
+      const plate = `3คค${uniq.slice(0, 4)}`;
+
+      const first = await postWebhook(eventsBody([messageEvent(
+        templateText({
+          queueNo,
+          name: 'คุณมัดจำไหล',
+          phone,
+          plate,
+          items: [{ name: 'ค่าแรง', price: 10000 }],
+          payment: { statedTotal: 10000, deposit: 4000, remainingBalance: 6000 },
+        }),
+        `msg-depositflow1-${uniq}`
+      )]));
+      expect(first.body.created).toHaveLength(1);
+      const firstNo = first.body.created[0];
+      const [[q1]] = await pool.query(
+        'SELECT id, customer_id, deposit_amount, deposit_date FROM quotations WHERE quotation_no = ?',
+        [firstNo]
+      );
+      createdCustomerIds.push(q1.customer_id);
+      expect(Number(q1.deposit_amount)).toBe(4000);
+
+      // resend เพิ่มรายการ ไม่พิมพ์ "มัดจำ:" ซ้ำ — มัดจำเดิมต้องไม่หาย (COALESCE)
+      const second = await postWebhook(eventsBody([messageEvent(
+        `คิว:${queueNo}\nชื่อลูกค้า:คุณมัดจำไหล\nเบอร์โทร:${phone}\nทะเบียนรถ:${plate}\nรายการ:\nค่าแรง 10000\nอะไหล่ 500`,
+        `msg-depositflow2-${uniq}`
+      )]));
+      expect(second.body.created).toHaveLength(1);
+      expect(second.body.created[0]).toBe(firstNo);
+
+      const [[q1After]] = await pool.query('SELECT deposit_amount, total_amount FROM quotations WHERE id = ?', [q1.id]);
+      expect(Number(q1After.deposit_amount)).toBe(4000); // ยังอยู่ ไม่หาย
+      expect(Number(q1After.total_amount)).toBe(10500);
+
+      // ปิดบิลด้วยข้อความสั้น (close_only)
+      const closeText = `คิว ${queueNo}\nช่องทางการชำระ: เงินสด\nลูกค้าชำระเงิน: 6500\nชำระเงินเรียบร้อย`;
+      const third = await postWebhook(eventsBody([messageEvent(closeText, `msg-depositflow3-${uniq}`)]));
+      expect(third.status).toBe(200);
+
+      const [[q1Final]] = await pool.query(
+        'SELECT converted_receipt_id, status, closed_at FROM quotations WHERE id = ?',
+        [q1.id]
+      );
+      expect(q1Final.status).toBe('approved');
+      expect(q1Final.closed_at).toBeTruthy();
+
+      const [[receipt]] = await pool.query(
+        'SELECT deposit_amount, deposit_date, total_amount FROM receipts WHERE id = ?',
+        [q1Final.converted_receipt_id]
+      );
+      expect(Number(receipt.deposit_amount)).toBe(4000);
+      expect(Number(receipt.total_amount)).toBe(10500); // ยอดรวมทั้งบิล ไม่ใช่ยอดที่จ่าย 6500
     });
   });
 });

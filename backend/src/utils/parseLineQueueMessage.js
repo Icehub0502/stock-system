@@ -74,7 +74,11 @@
 
 const BARE_DATE_RE = /^\d{1,2}\/\d{1,2}\/\d{2,4}$/;
 const ITEM_SECTION_TRIGGER_RE = /^รายการ\s*:*\s*$/;
-const IGNORED_LINE_RE = /^วันที่\b/; // ร้านบางทีพิมพ์วันที่มาด้วย ไม่ใช้ ไม่งั้นหลุดไปปนกับอาการ
+// negative lookahead กัน "วันที่มัดจำ:" (label ใหม่ในส่วนชำระเงิน ดู PAYMENT_LABELS
+// ด้านล่าง) ไม่ให้โดนกลืนเป็นบรรทัดวันที่หัวบิลที่ไม่ใช้ทิ้งไปแบบบรรทัดวันที่เฉย ๆ
+// (ไม่ใช้ \b ปิดท้าย — อักษรไทยไม่ใช่ \w เลยไม่มี word boundary ให้ \b จับ ใส่ไปจะ
+// เป็น regex ที่ไม่มีผลอะไรเลย)
+const IGNORED_LINE_RE = /^วันที่(?!มัดจำ)/; // ร้านบางทีพิมพ์วันที่มาด้วย ไม่ใช้ ไม่งั้นหลุดไปปนกับอาการ
 // ช่องว่างยาว 3+ ตัว หรืออิโมจิ = สัญญาณว่าเป็นข้อความโปรโมทคัดลอกมาทั้งย่อหน้า
 // ไม่ใช่ชื่อรายการจริง ("ชุดโปร ช่วงล่าง    👍...🛠️...")
 const DECORATED_LINE_RE = /\s{3,}|[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}]/u;
@@ -111,6 +115,12 @@ const PAYMENT_LABELS = {
   ช่องทางการชำระ: 'payment_method',
   ลูกค้าชำระเงิน: 'paid_amount',
   หมายเหตุ: 'remark',
+  // มัดจำเป็นฟิลด์ first-class ของบิล (deposit_amount/deposit_date ใน quotations/
+  // receipts) ไม่ใช่แค่ข้อความในหมายเหตุอีกต่อไป — ยังคงรองรับ "มัดจำ" แบบข้อความ
+  // เดิมในส่วนรายการสินค้า (ดู /มัดจำ/ ใน parseItemSectionLines ด้านล่าง) แยกกันไป
+  // เพื่อ backward compat กับพนักงานที่คุ้นเคยพิมพ์ไว้ในรายการ
+  มัดจำ: 'deposit_amount',
+  วันที่มัดจำ: 'deposit_date',
 };
 const PAYMENT_LABEL_RE = new RegExp(`^(${Object.keys(PAYMENT_LABELS).join('|')})\\s*:*\\s*(.*)$`);
 // จุดจบรายการแบบระบุชัดเจนในเทมเพลตใหม่ — ทุกอย่างหลังบรรทัดนี้เป็น "ส่วนชำระเงิน"
@@ -145,6 +155,22 @@ function formatPhone(digitsOnly) {
   return digitsOnly;
 }
 
+// แปลงวันที่ไทย dd/mm/yy (พ.ศ.) ที่พิมพ์มาใน "วันที่มัดจำ:" เป็น YYYY-MM-DD (ค.ศ.)
+// เก็บลง DB — ปีที่พิมพ์มาแบบ 2 หลัก (เช่น "69") ถือว่าเป็น พ.ศ. 25xx เสมอ (ร้านพิมพ์
+// ปีปัจจุบันรูปแบบนี้มาตลอด ไม่มีทางพิมพ์ปีอื่นที่ไกลจากวันนี้ขนาดนั้น) รูปแบบไม่ตรง/
+// วัน-เดือนไม่สมเหตุสมผลคืน null (ไม่บล็อกการพาร์สทั้งข้อความ แค่ฟิลด์นี้ไม่ได้ค่า)
+function parseThaiShortDate(value) {
+  const match = /^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/.exec(value.trim());
+  if (!match) return null;
+  const dd = Number(match[1]);
+  const mm = Number(match[2]);
+  let buddhistYear = Number(match[3]);
+  if (match[3].length <= 2) buddhistYear += 2500; // ปี 2 หลัก → พ.ศ. เต็ม (25xx)
+  if (dd < 1 || dd > 31 || mm < 1 || mm > 12) return null;
+  const ceYear = buddhistYear - 543; // พ.ศ. → ค.ศ.
+  return `${ceYear}-${String(mm).padStart(2, '0')}-${String(dd).padStart(2, '0')}`;
+}
+
 function todayStr() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -163,6 +189,24 @@ function normalizePaymentMethod(raw) {
   return value;
 }
 
+// แปลงค่าดิบหลัง label หนึ่งตัวของ PAYMENT_LABELS ให้เป็นค่าที่พร้อมเก็บลง result —
+// ใช้ร่วมกันทั้ง parsePaymentSectionLines ด้านล่าง (ส่วนชำระเงินของเทมเพลตเต็ม) และ
+// fallback ในลูปหลักของ parseLineQueueMessage (ข้อความปิดบิลสั้นแบบ close_only ที่ไม่มี
+// "รายการ:"/"<--สิ้นสุดรายการ-->" เลย จึงไม่มีทางเข้าถึง parsePaymentSectionLines ได้)
+// ค่าว่างหลัง label คืน null เสมอ ไม่ใช่ "" (ผู้เรียกเช็คแค่ != null ว่า "มีการกรอกมา"
+// ได้ตรง ๆ)
+function parsePaymentLabelValue(field, rawValue) {
+  const value = rawValue.trim();
+  if (field === 'payment_method') return value ? normalizePaymentMethod(value) : null;
+  if (field === 'deposit_date') return value ? parseThaiShortDate(value) : null;
+  if (field === 'remark') return value || null;
+  // ฟิลด์ตัวเลขที่เหลือ: stated_total, remaining_balance, paid_amount, deposit_amount
+  if (!value) return null;
+  const digits = value.replace(/,/g, '').replace(/บาท/g, '').trim();
+  const num = Number(digits);
+  return Number.isFinite(num) && digits !== '' ? num : null;
+}
+
 // แยกส่วนชำระเงินท้ายเทมเพลต (หลัง "<--สิ้นสุดรายการ-->") ตาม label — ไม่พบ label
 // ที่รู้จักในบรรทัดไหนก็ข้ามบรรทัดนั้นเงียบ ๆ (กันข้อความแปลกปนมา ไม่ทำให้ทั้งข้อความ
 // พัง) ค่าว่างหลัง label เป็น null เสมอ ไม่ใช่ "" (ผู้เรียกเช็คแค่ != null ว่า "มีการ
@@ -173,6 +217,8 @@ function parsePaymentSectionLines(lines) {
     remaining_balance: null,
     payment_method: null,
     paid_amount: null,
+    deposit_amount: null,
+    deposit_date: null,
     remarkNotes: [],
     paid_confirmed: false,
   };
@@ -196,24 +242,13 @@ function parsePaymentSectionLines(lines) {
     if (!match) continue;
     const [, label, rest] = match;
     const field = PAYMENT_LABELS[label];
-    const value = rest.trim();
+    const value = parsePaymentLabelValue(field, rest);
 
     if (field === 'remark') {
       if (value) result.remarkNotes.push(value);
       continue;
     }
-    if (field === 'payment_method') {
-      result.payment_method = value ? normalizePaymentMethod(value) : null;
-      continue;
-    }
-    // ฟิลด์ตัวเลขที่เหลือ: stated_total, remaining_balance, paid_amount
-    if (!value) {
-      result[field] = null;
-      continue;
-    }
-    const digits = value.replace(/,/g, '').replace(/บาท/g, '').trim();
-    const num = Number(digits);
-    result[field] = Number.isFinite(num) && digits !== '' ? num : null;
+    result[field] = value;
   }
 
   return result;
@@ -389,6 +424,11 @@ function parseLineQueueMessage(text) {
     remaining_balance: null,
     payment_method: null,
     paid_amount: null,
+    // มัดจำ (deposit) เป็นฟิลด์ first-class เหมือนกัน — มาจาก label "มัดจำ:"/
+    // "วันที่มัดจำ:" ในส่วนชำระเงิน (ดู PAYMENT_LABELS) deposit_date เป็นสตริง
+    // YYYY-MM-DD พร้อมเก็บลง DB แล้ว (แปลงจาก dd/mm/yy พ.ศ. ที่พิมพ์มา)
+    deposit_amount: null,
+    deposit_date: null,
     // true เมื่อเจอวลีแจ้งจ่ายเงินแล้ว (PAID_PHRASE_RE) ที่บรรทัดไหนก็ได้ในข้อความ
     // — สัญญาณปิดบิลจริง (ดู lineWebhook.routes.js) ไม่ใช่แค่กรอก "ลูกค้าชำระเงิน:"
     paid_confirmed: false,
@@ -434,6 +474,29 @@ function parseLineQueueMessage(text) {
       continue;
     }
 
+    // ข้อความปิดบิลสั้นแบบ close_only (ดูด้านล่าง) ไม่มี "รายการ:"/end marker เลย —
+    // บรรทัดจ่ายเงิน (ช่องทางการชำระ/ลูกค้าชำระเงิน/วลีแจ้งจ่ายเงินแล้ว) จึงมาถึงลูป
+    // หลักนี้ตรง ๆ โดยไม่ผ่าน parsePaymentSectionLines เลย (ฟังก์ชันนั้นถูกเรียกก็
+    // ต่อเมื่อเจอ end marker ในรายการสินค้าเท่านั้น) ต้องดักจับที่นี่ด้วยเป็น fallback
+    // (เทมเพลตเต็มปกติไม่มีทางมาถึงจุดนี้ เพราะ "รายการ:" ทำให้ loop break ไปก่อนเจอ
+    // บรรทัดพวกนี้อยู่แล้ว)
+    if (PAID_PHRASE_RE.test(line)) {
+      result.paid_confirmed = true;
+      continue;
+    }
+    const paymentMatch = PAYMENT_LABEL_RE.exec(line);
+    if (paymentMatch) {
+      const [, paymentLabel, paymentRest] = paymentMatch;
+      const paymentField = PAYMENT_LABELS[paymentLabel];
+      const paymentValue = parsePaymentLabelValue(paymentField, paymentRest);
+      if (paymentField === 'remark') {
+        if (paymentValue) result.remark = result.remark ? `${result.remark}\n${paymentValue}` : paymentValue;
+      } else {
+        result[paymentField] = paymentValue;
+      }
+      continue;
+    }
+
     // ไม่ตรง label ที่รู้จักเลย (เทมเพลตเดียวเท่านั้นที่รองรับแล้ว — ไม่มีการเดา
     // รูปแบบจากหน้าตาบรรทัดอีกต่อไป) ข้ามเงียบ ๆ
   }
@@ -456,11 +519,29 @@ function parseLineQueueMessage(text) {
       result.remaining_balance = payment.remaining_balance;
       result.payment_method = payment.payment_method;
       result.paid_amount = payment.paid_amount;
+      result.deposit_amount = payment.deposit_amount;
+      result.deposit_date = payment.deposit_date;
       if (payment.paid_confirmed) result.paid_confirmed = true;
       if (payment.remarkNotes.length > 0) {
         result.remark = result.remark ? `${result.remark}\n${payment.remarkNotes.join('\n')}` : payment.remarkNotes.join('\n');
       }
     }
+  }
+
+  // รูปแบบ "close_only" — ข้อความปิดบิลสั้น ๆ ที่อ้างอิงงานที่เปิดไว้แล้วด้วยเลขคิว
+  // เท่านั้น ไม่มีชื่อลูกค้า/รถ/รายการเลย (เช่น "คิว 3\nช่องทางการชำระ: โอน\n
+  // ลูกค้าชำระเงิน: 15400\nชำระเงินเรียบร้อย") — ต้องมีเลขคิว + วลีแจ้งจ่ายเงินแล้ว
+  // จริง ๆ (paid_confirmed) และไม่มีทั้งชื่อลูกค้าและรายการสินค้า ไม่งั้นถือว่าเป็น
+  // ข้อความเปิดบิลใหม่/แก้ไขบิลตามปกติที่แค่ลืมกรอกชื่อ (ให้ตกไปคืน null ข้างล่าง
+  // เหมือนเดิม ไม่ใช่ตีความเป็นคำสั่งปิดบิลผิด ๆ)
+  if (!result.customer_name && result.queue_no && result.paid_confirmed && itemSectionStartIndex < 0) {
+    return {
+      close_only: true,
+      queue_no: result.queue_no,
+      payment_method: result.payment_method,
+      paid_amount: result.paid_amount,
+      paid_confirmed: true,
+    };
   }
 
   if (!result.customer_name) return null;

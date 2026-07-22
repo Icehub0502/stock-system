@@ -677,4 +677,105 @@ describe('parseLineQueueMessage', () => {
       expect(parsed.paid_confirmed).toBe(true);
     });
   });
+
+  describe('มัดจำ (deposit_amount/deposit_date) — ฟิลด์ first-class จาก label ใหม่', () => {
+    test('label "มัดจำ:" ในส่วนชำระเงิน → deposit_amount เป็นตัวเลข', () => {
+      const parsed = parseLineQueueMessage(
+        [
+          'คิว 1',
+          'ชื่อ:คุณเอ',
+          'รายการ:',
+          'แร็ค OEM 10000',
+          '<--สิ้นสุดรายการ-->',
+          'ยอดรวม:10000',
+          'มัดจำ:2000',
+        ].join('\n')
+      );
+      expect(parsed.deposit_amount).toBe(2000);
+    });
+
+    test('label "วันที่มัดจำ:" (dd/mm/yy พ.ศ.) → deposit_date แปลงเป็น YYYY-MM-DD (ค.ศ.)', () => {
+      const parsed = parseLineQueueMessage(
+        [
+          'คิว 1',
+          'ชื่อ:คุณบี',
+          'รายการ:',
+          'แร็ค OEM 10000',
+          '<--สิ้นสุดรายการ-->',
+          'ยอดรวม:10000',
+          'มัดจำ:2000',
+          'วันที่มัดจำ:15/01/69',
+        ].join('\n')
+      );
+      expect(parsed.deposit_amount).toBe(2000);
+      expect(parsed.deposit_date).toBe('2026-01-15');
+    });
+
+    test('ไม่มี label มัดจำเลย → deposit_amount/deposit_date เป็น null (ไม่กระทบข้อความแบบเดิม)', () => {
+      const parsed = parseLineQueueMessage(
+        ['คิว 1', 'ชื่อ:คุณซี', 'รายการ:', 'ค่าแรง 1000', '<--สิ้นสุดรายการ-->', 'ยอดรวม:1000'].join('\n')
+      );
+      expect(parsed.deposit_amount).toBeNull();
+      expect(parsed.deposit_date).toBeNull();
+    });
+
+    test('"วันที่มัดจำ:" ไม่ถูก IGNORED_LINE_RE (บรรทัดวันที่หัวบิลที่ไม่ใช้) กลืนทิ้ง — ยังคงถูกอ่านเป็น deposit_date ปกติ', () => {
+      // ป้องกันการถดถอย: IGNORED_LINE_RE เดิมแมตช์อะไรก็ได้ที่ขึ้นต้นด้วย "วันที่"
+      // ถ้าไม่ระวังจะกลืน "วันที่มัดจำ:" ทิ้งไปเงียบ ๆ แทนที่จะพาร์สเป็นฟิลด์จริง
+      const parsed = parseLineQueueMessage(
+        ['คิว 1', 'ชื่อ:คุณดี', 'รายการ:', 'ค่าแรง 1000', '<--สิ้นสุดรายการ-->', 'ยอดรวม:1000', 'วันที่มัดจำ:01/01/69'].join(
+          '\n'
+        )
+      );
+      expect(parsed.deposit_date).toBe('2026-01-01');
+    });
+
+    test('บรรทัดวันที่หัวบิลเดี่ยว ๆ (dd/mm/yy) ยังถูกข้ามตามเดิม — ไม่กระทบจากการแก้ IGNORED_LINE_RE', () => {
+      const parsed = parseLineQueueMessage('คิวที่10\n16/7/69\nชื่อ:คุณอี\nอาการ:เลี้ยวติดตัวถัง');
+      expect(parsed.symptom).toBe('เลี้ยวติดตัวถัง');
+      expect(parsed.symptom).not.toMatch(/69/);
+    });
+
+    test('label "วันที่:" (บรรทัดวันที่หัวบิลแบบมี label) ยังถูกข้ามตามเดิม', () => {
+      const parsed = parseLineQueueMessage('คิว 9\nวันที่:17/07/26\nชื่อ:คุณเทสไลน์\nอาการ:เช็คช่วงล่าง');
+      expect(parsed.symptom).toBe('เช็คช่วงล่าง');
+    });
+
+    test('มัดจำแบบข้อความเดิมในรายการ (ไม่มี label) ยังตกไปเป็นหมายเหตุตามเดิม (backward compat)', () => {
+      const parsed = parseLineQueueMessage(
+        ['คิว 1', 'ชื่อ:คุณเอฟ', 'รายการ:', 'ค่าแรง 1000', 'มัดจำ 500 แล้ว'].join('\n')
+      );
+      expect(parsed.remark).toBe('มัดจำ 500 แล้ว');
+      expect(parsed.deposit_amount).toBeNull(); // ไม่มี label "มัดจำ:" ชัดเจน — ไม่ใช่ฟิลด์ first-class
+    });
+  });
+
+  describe('close_only — ข้อความปิดบิลสั้น อ้างอิงงานด้วยเลขคิวอย่างเดียว', () => {
+    test('มีเลขคิว + วลีแจ้งจ่ายเงินแล้ว + ไม่มีชื่อลูกค้า/รายการ → คืนรูปแบบ close_only', () => {
+      const parsed = parseLineQueueMessage(
+        ['คิว 3', 'ช่องทางการชำระ: โอน', 'ลูกค้าชำระเงิน: 15400', 'ชำระเงินเรียบร้อย'].join('\n')
+      );
+      expect(parsed).toEqual({
+        close_only: true,
+        queue_no: '3',
+        payment_method: 'โอน',
+        paid_amount: 15400,
+        paid_confirmed: true,
+      });
+    });
+
+    test('มีเลขคิวแต่ไม่มีวลีแจ้งจ่ายเงินแล้ว → ไม่ใช่ close_only (ไม่มีชื่อลูกค้า → คืน null ตามเดิม)', () => {
+      const parsed = parseLineQueueMessage(['คิว 3', 'ช่องทางการชำระ: โอน', 'ลูกค้าชำระเงิน: 15400'].join('\n'));
+      expect(parsed).toBeNull();
+    });
+
+    test('มีชื่อลูกค้าด้วย (ข้อความเปิดบิลปกติที่มีวลีจ่ายเงินแล้วติดมา) → ไม่ใช่ close_only', () => {
+      const parsed = parseLineQueueMessage(
+        ['คิว 3', 'ชื่อ:คุณจี', 'ช่องทางการชำระ: โอน', 'ลูกค้าชำระเงิน: 15400', 'ชำระเงินเรียบร้อย'].join('\n')
+      );
+      expect(parsed.close_only).toBeUndefined();
+      expect(parsed.customer_name).toBe('คุณจี');
+      expect(parsed.paid_confirmed).toBe(true);
+    });
+  });
 });

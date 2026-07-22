@@ -304,6 +304,15 @@ async function initDatabase() {
     ADD COLUMN customer_signature LONGTEXT DEFAULT NULL
   `).catch(ignoreIfAlreadyApplied);
 
+  // Mirrors quotations.deposit_amount/deposit_date — receipts เก็บ snapshot
+  // ของฟิลด์ที่ลูกค้าเห็น (เหมือน remark/mileage/payment_method ด้านบน) แทนการ
+  // join กลับไปที่ quotations เดิม ค่าจะถูกคัดลอกมาตอนใบเสนอราคาถูกอนุมัติ
+  await conn.query(`
+    ALTER TABLE receipts
+    ADD COLUMN deposit_amount DECIMAL(10,2) NULL,
+    ADD COLUMN deposit_date DATE NULL
+  `).catch(ignoreIfAlreadyApplied);
+
   // Quotation approval workflow: pending -> approved (auto-converted to a
   // receipt) or scheduled (customer asked to come back on scheduled_date).
   // Added via ALTER (not the CREATE TABLE above) because vehicles/receipts
@@ -376,6 +385,16 @@ async function initDatabase() {
   await conn.query(`
     ALTER TABLE quotations
     ADD COLUMN closed_at TIMESTAMP NULL DEFAULT NULL
+  `).catch(ignoreIfAlreadyApplied);
+
+  // deposit_amount/deposit_date: เงินมัดจำที่ลูกค้าวางไว้ตอนเปิดใบเสนอราคา (ก่อนงาน
+  // เสร็จจริง) และวันที่วางมัดจำ — ไม่บังคับกรอก (NULL ได้) เพราะใบเสนอราคาส่วนใหญ่
+  // ไม่มีมัดจำ ค่าจะถูกคัดลอกไปที่ receipts ตอนอนุมัติ เหมือนกับ remark/mileage/
+  // payment_method ที่ทำอยู่แล้ว (ดู quotations.routes.js และ lineWebhook.routes.js)
+  await conn.query(`
+    ALTER TABLE quotations
+    ADD COLUMN deposit_amount DECIMAL(10,2) NULL,
+    ADD COLUMN deposit_date DATE NULL
   `).catch(ignoreIfAlreadyApplied);
 
   await conn.query(`
@@ -467,6 +486,18 @@ async function initDatabase() {
       was_new_customer TINYINT(1) DEFAULT 0,
       was_new_vehicle TINYINT(1) DEFAULT 0,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  // เก็บค่า config ทั่วไปแบบ key-value สำหรับ LINE bot เช่น group id ที่จะใช้ push
+  // ข้อความเชิงรุก (proactive) หา — บันทึกอัตโนมัติครั้งแรกที่มีข้อความจากกลุ่มนั้น
+  // เข้ามา (ดู lineWebhook.routes.js) ไม่ต้องตั้งค่าเอง ใช้ตารางแยกแทนเพิ่มคอลัมน์
+  // ในตารางอื่นเพราะเป็น config ระดับระบบ ไม่ผูกกับ entity ไหนโดยเฉพาะ
+  await conn.query(`
+    CREATE TABLE IF NOT EXISTS app_settings (
+      \`key\` VARCHAR(100) PRIMARY KEY,
+      value TEXT,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
 
