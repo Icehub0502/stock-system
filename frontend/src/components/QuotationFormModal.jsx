@@ -36,6 +36,8 @@ export default function QuotationFormModal({ quotation, onClose, onSuccess }) {
   const [remark, setRemark] = useState('');
   const [queueNo, setQueueNo] = useState('');
   const [symptom, setSymptom] = useState('');
+  const [depositAmount, setDepositAmount] = useState('');
+  const [depositDate, setDepositDate] = useState('');
   const [items, setItems] = useState([{ ...defaultItem }]);
   const [productSuggestions, setProductSuggestions] = useState({});
   const [suggestionIndex, setSuggestionIndex] = useState({});
@@ -80,6 +82,8 @@ export default function QuotationFormModal({ quotation, onClose, onSuccess }) {
     setRemark('');
     setQueueNo('');
     setSymptom('');
+    setDepositAmount('');
+    setDepositDate('');
     setItems([{ ...defaultItem }]);
     setProductSuggestions({});
     setSuggestionIndex({});
@@ -108,6 +112,8 @@ export default function QuotationFormModal({ quotation, onClose, onSuccess }) {
       setRemark(detail.remark || '');
       setQueueNo(detail.queue_no || '');
       setSymptom(detail.symptom || '');
+      setDepositAmount(detail.deposit_amount != null ? String(detail.deposit_amount) : '');
+      setDepositDate(detail.deposit_date || '');
       setVehicleMode(detail.vehicle_id ? 'existing' : 'new');
       setVehicleId(detail.vehicle_id?.toString() || '');
       setNewVehicle({ brand: '', model: '', color: '', license_plate: '' });
@@ -501,6 +507,11 @@ export default function QuotationFormModal({ quotation, onClose, onSuccess }) {
         remark: remark.trim(),
         queue_no: queueNo.trim() || null,
         symptom: symptom.trim() || null,
+        // Explicit null/'' (not omitted) so clearing a previously-set deposit
+        // actually clears it server-side — omitting the key means "leave
+        // untouched" per the backend's loose-validation contract.
+        deposit_amount: depositAmount !== '' ? Number(depositAmount) : null,
+        deposit_date: depositAmount !== '' ? (depositDate || null) : null,
         items: validItems.map((item) => ({
           product_id: item.product_id || null,
           product_name: item.product_name.trim(),
@@ -556,6 +567,8 @@ export default function QuotationFormModal({ quotation, onClose, onSuccess }) {
     remark,
     subtotal: calculateTotal(),
     discount: 0,
+    deposit_amount: depositAmount !== '' ? Number(depositAmount) : null,
+    deposit_date: depositDate || null,
   };
 
   return (
@@ -594,6 +607,25 @@ export default function QuotationFormModal({ quotation, onClose, onSuccess }) {
                       value={queueNo}
                       onChange={(e) => setQueueNo(e.target.value)}
                       placeholder="เช่น 001"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>เงินมัดจำ</label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={depositAmount}
+                      onChange={(e) => setDepositAmount(e.target.value)}
+                      placeholder="0.00"
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>วันที่มัดจำ</label>
+                    <input
+                      type="date"
+                      value={depositDate}
+                      onChange={(e) => setDepositDate(e.target.value)}
                     />
                   </div>
                 </div>
@@ -693,6 +725,12 @@ export default function QuotationFormModal({ quotation, onClose, onSuccess }) {
                       <div className="summary-label">ยอดสุทธิ</div>
                       <div className="summary-value">฿{formatMoney(calculateTotal())}</div>
                     </div>
+                    {Number(depositAmount) > 0 && (
+                      <div>
+                        <div className="summary-label">ยอดที่ต้องชำระ</div>
+                        <div className="summary-value">฿{formatMoney(calculateTotal() - Number(depositAmount))}</div>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

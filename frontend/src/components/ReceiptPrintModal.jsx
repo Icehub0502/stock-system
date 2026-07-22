@@ -71,6 +71,8 @@ export default function ReceiptPrintModal({ receiptId, onClose, onPrinted }) {
     discount: receipt.discount || 0,
     total_amount: receipt.total_amount,
     customer_signature: receipt.customer_signature,
+    deposit_amount: receipt.deposit_amount,
+    deposit_date: receipt.deposit_date,
   };
 
   return (

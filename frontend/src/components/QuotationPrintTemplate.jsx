@@ -38,6 +38,16 @@ function formatThaiDate(dateInput) {
   return `${dd}/${mm}/${yyyy}`;
 }
 
+// dd/mm/yy (Buddhist Era, 2-digit year) — used only for the compact deposit
+// line so it matches the short format requested for that line specifically.
+function formatThaiDateShort(dateInput) {
+  const d = new Date(dateInput);
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const yy = String((d.getFullYear() + 543) % 100).padStart(2, '0');
+  return `${dd}/${mm}/${yy}`;
+}
+
 function chunkItems(items, size) {
   if (items.length === 0) return [[]];
   const pages = [];
@@ -81,6 +91,8 @@ export default function QuotationPrintTemplate({ data }) {
     vehicle = {},
     items = [],
     remark,
+    deposit_amount,
+    deposit_date,
   } = data;
 
   const subtotal = Number(
@@ -90,6 +102,8 @@ export default function QuotationPrintTemplate({ data }) {
   const discount = Number(data.discount || 0);
   const grandTotal = subtotal - discount;
   const amountWords = amountToWords(grandTotal);
+  const depositAmountNum = Number(deposit_amount || 0);
+  const hasDeposit = depositAmountNum > 0;
   const docDateText = quotation_date ? formatThaiDate(quotation_date) : '.........................';
 
   const pages = chunkItems(items, ITEMS_PER_PAGE);
@@ -183,6 +197,12 @@ export default function QuotationPrintTemplate({ data }) {
                 <strong>{formatMoney(grandTotal)} บาท</strong>
               </span>
             </div>
+
+            {hasDeposit && (
+              <div className="doc-remark-row">
+                <b>มัดจำ :</b> ฿{formatMoney(depositAmountNum)}{deposit_date ? ` (${formatThaiDateShort(deposit_date)})` : ''}
+              </div>
+            )}
 
             <div className="doc-warranty-row">
               {WARRANTY_SLOTS.map((slot) => {

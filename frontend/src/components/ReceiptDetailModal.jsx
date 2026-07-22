@@ -35,6 +35,18 @@ export default function ReceiptDetailModal({ receiptId, onClose }) {
   if (!receipt) return null;
 
   const warrantyItems = receipt.items?.filter((item) => item.warranty_name) || [];
+  const depositAmountNum = Number(receipt.deposit_amount || 0);
+  const hasDeposit = depositAmountNum > 0;
+  // dd/mm/yy Buddhist Era, matching the print templates' short deposit-date format.
+  const depositDateText = receipt.deposit_date
+    ? (() => {
+        const d = new Date(receipt.deposit_date);
+        const dd = String(d.getDate()).padStart(2, '0');
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const yy = String((d.getFullYear() + 543) % 100).padStart(2, '0');
+        return `${dd}/${mm}/${yy}`;
+      })()
+    : '';
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
@@ -159,6 +171,12 @@ export default function ReceiptDetailModal({ receiptId, onClose }) {
                 <div className="summary-label">ส่วนลด</div>
                 <div className="summary-value">฿{formatMoney(receipt.discount || 0)}</div>
               </div>
+              {hasDeposit && (
+                <div className="summary-grid">
+                  <div className="summary-label">มัดจำ</div>
+                  <div className="summary-value">฿{formatMoney(depositAmountNum)}{depositDateText ? ` (${depositDateText})` : ''}</div>
+                </div>
+              )}
               <div className="signature-block">
                 <div className="signature-box">
                   <div className="signature-line" />

@@ -1930,6 +1930,16 @@ button:disabled { background: #f3f4f6; color: #9ca3af; cursor: not-allowed; }
   border: 1px solid #f59e0b;
 }
 
+/* Bill closed (paid in full via the LINE "ชำระเงินเรียบร้อย" flow) — a
+   distinct blue so it reads as "done/settled", not confused with the green
+   "approved" badge (approved just means the quote turned into a receipt,
+   not that money changed hands). */
+.status-badge-paid {
+  background: #dbeafe;
+  color: #1d4ed8;
+  border: 1px solid #3b82f6;
+}
+
 .actions {
   display: flex;
   gap: 6px;

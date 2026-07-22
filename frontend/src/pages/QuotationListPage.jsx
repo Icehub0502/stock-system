@@ -7,7 +7,13 @@ import ScheduleDateDialog from "../components/ScheduleDateDialog";
 import SignatureModal from "../components/SignatureModal";
 import { todayStr } from "../utils/format";
 
-function StatusBadge({ status, scheduledDate }) {
+function StatusBadge({ status, scheduledDate, closedAt }) {
+  // บิลที่ลูกค้าชำระเงินครบผ่านเทมเพลตไลน์แล้ว (closed_at ถูกตั้ง) ให้เห็นชัดกว่า
+  // สถานะอื่นเสมอ ไม่ว่า status จะเป็นอะไรอยู่ก็ตาม เพราะนี่คือคำตอบของ "จ่ายหรือยัง"
+  // ที่หน้างานอยากรู้จริง ๆ ไม่ใช่แค่ "อนุมัติหรือยัง"
+  if (closedAt) {
+    return <span className="status-badge status-badge-paid">💰 ชำระแล้ว</span>;
+  }
   if (status === 'approved') {
     return <span className="status-badge status-badge-success">✅ อนุมัติแล้ว</span>;
   }
@@ -262,7 +268,7 @@ export default function QuotationListPage() {
                         ฿{parseFloat(q.total_amount).toFixed(2)}
                       </td>
                       <td data-label="สถานะ">
-                        <StatusBadge status={q.status} scheduledDate={q.scheduled_date} />
+                        <StatusBadge status={q.status} scheduledDate={q.scheduled_date} closedAt={q.closed_at} />
                         {Number(q.repair_notice_filled) === 1 ? (
                           <span className="status-badge status-badge-success" style={{ marginTop: 4, display: 'inline-block' }}>🔧 แจ้งซ่อมแล้ว</span>
                         ) : (

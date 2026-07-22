@@ -27,6 +27,16 @@ function formatThaiDate(dateInput) {
   return `${dd}/${mm}/${yyyy}`;
 }
 
+// dd/mm/yy (Buddhist Era, 2-digit year) — used only for the compact deposit
+// line so it matches the short format requested for that line specifically.
+function formatThaiDateShort(dateInput) {
+  const d = new Date(dateInput);
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const yy = String((d.getFullYear() + 543) % 100).padStart(2, '0');
+  return `${dd}/${mm}/${yy}`;
+}
+
 function findWarrantySlotText(items, matchKeyword) {
   const match = items.find((it) => {
     const name = it.product_name_snapshot || it.product_name || it.service_item_name || '';
@@ -97,6 +107,8 @@ export default function ReceiptPrintTemplate({ data }) {
     vehicle = {},
     items = [],
     remark,
+    deposit_amount,
+    deposit_date,
   } = data;
 
   const subtotal = Number(data.total_amount ?? items.reduce((sum, it) => sum + Number(it.amount || 0), 0));
@@ -104,6 +116,8 @@ export default function ReceiptPrintTemplate({ data }) {
   const grandTotal = subtotal - discount;
   const paidAmount = Number(data.paid_amount ?? grandTotal);
   const amountWords = amountToWords(grandTotal);
+  const depositAmountNum = Number(deposit_amount || 0);
+  const hasDeposit = depositAmountNum > 0;
   const docDateText = receipt_date ? formatThaiDate(receipt_date) : '.........................';
 
   const pages = chunkItems(items, ITEMS_PER_PAGE);
@@ -192,6 +206,12 @@ export default function ReceiptPrintTemplate({ data }) {
                 <strong>{formatMoney(paidAmount)} บาท</strong>
               </span>
             </div>
+
+            {hasDeposit && (
+              <div className="doc-remark-row">
+                <b>มัดจำ :</b> ฿{formatMoney(depositAmountNum)}{deposit_date ? ` (${formatThaiDateShort(deposit_date)})` : ''}
+              </div>
+            )}
 
             <div className="doc-warranty-row">
               {WARRANTY_SLOTS.map((slot) => {
