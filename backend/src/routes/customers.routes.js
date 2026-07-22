@@ -2,6 +2,9 @@ const express = require('express');
 const pool = require('../db/pool');
 const { authenticate, requireRole } = require('../middleware/auth');
 const { formatPhone } = require('../utils/parseLineQueueMessage');
+// pushQuotationUpdate: ดันข้อมูลอัปเดตกลับเข้ากลุ่มไลน์ของร้าน — ใช้ตอนแก้ไขลูกค้า
+// ผ่านหน้า Customer Management ดู PUT /:id ด้านล่าง
+const { pushQuotationUpdate } = require('./lineWebhook.routes');
 
 // normalize เบอร์โทรก่อนบันทึกเสมอ (ตัดอักขระอื่นออก ใส่ขีดรูปแบบเดียวกับที่บอทไลน์
 // ใช้) กันเบอร์แบบไม่มีขีดหลุดเข้าฐานจากหน้าเว็บ — ทำให้ WHERE phone = ? แบบตรง ๆ ใน
@@ -124,6 +127,21 @@ router.put('/:id', async (req, res) => {
 
     if (result.affectedRows === 0) {
       return res.status(404).json({ error: 'ไม่พบลูกค้า' });
+    }
+
+    // แก้ไขลูกค้าคนนี้แล้ว — หาใบเสนอราคาที่มาจากไลน์+ยังเปิดอยู่ทุกใบของลูกค้าคนนี้
+    // แล้ว push ข้อมูลอัปเดตกลับเข้ากลุ่มไลน์ทีละใบ (mirror ของ PUT /vehicles/:id —
+    // ดูคำอธิบายเต็มที่นั่น) best-effort ไม่กระทบผลลัพธ์การบันทึกลูกค้าที่สำเร็จไปแล้ว
+    try {
+      const [openQuotations] = await pool.execute(
+        'SELECT id FROM quotations WHERE customer_id = ? AND queue_no IS NOT NULL AND closed_at IS NULL',
+        [req.params.id]
+      );
+      for (const q of openQuotations) {
+        await pushQuotationUpdate(q.id);
+      }
+    } catch (err) {
+      console.error('Error pushing quotation update to LINE after customer edit:', err);
     }
 
     res.json({ success: true, message: 'อัปเดตลูกค้าสำเร็จ' });

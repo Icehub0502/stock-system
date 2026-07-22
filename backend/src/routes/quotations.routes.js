@@ -2,6 +2,10 @@ const express = require('express');
 const pool = require('../db/pool');
 const { authenticate, requireRole } = require('../middleware/auth');
 const { formatPhone } = require('../utils/parseLineQueueMessage');
+// pushQuotationUpdate: ดัน "ข้อมูลอัปเดตแล้ว" กลับเข้ากลุ่มไลน์ของร้านหลังแก้ไขใบ
+// เสนอราคาที่มาจากไลน์ (มีเลขคิว+ยังไม่ปิดบิล) ผ่านหน้าเว็บ — กันพนักงานคัดลอก
+// ข้อความไลน์เก่าที่ยังผิดอยู่มาส่งซ้ำทับข้อมูลที่ออฟฟิศเพิ่งแก้ (ดู PUT /:id ด้านล่าง)
+const { pushQuotationUpdate } = require('./lineWebhook.routes');
 
 // ทำให้ตรงรูปแบบเดียวกับที่ customers.routes.js ใช้ กันเบอร์ที่พิมพ์ไม่มีขีดตรงนี้
 // ไปหลุดจากการค้นหาของบอทไลน์ (lineWebhook.routes.js เทียบแบบ phone = ? ตรง ๆ)
@@ -134,12 +138,20 @@ function buildValidItems(items) {
 
 // POST - Create new quotation
 router.post('/', async (req, res) => {
-  const { customer_id, newCustomer, vehicle_id, newVehicle, quotation_date, mileage, remark, queue_no, symptom, items } = req.body;
+  const { customer_id, newCustomer, vehicle_id, newVehicle, quotation_date, mileage, remark, queue_no, symptom, items, deposit_amount, deposit_date } = req.body;
 
   const toNumber = (value) => {
     const n = Number(value);
     return Number.isFinite(n) ? n : null;
   };
+
+  // มัดจำ: ไม่บังคับกรอก — ว่าง/ไม่ส่งมา = NULL, มีค่าก็แปลงเป็นตัวเลข (loose
+  // validation พอ ร้านเล็กไม่ต้อง over-engineer) วันที่คงรูปแบบ YYYY-MM-DD ตามที่
+  // ฟอร์มส่งมาตรง ๆ (เหมือน quotation_date ด้านบนที่ไม่แปลงอะไรเพิ่ม)
+  const depositAmount = deposit_amount !== undefined && deposit_amount !== '' && deposit_amount !== null
+    ? Number(deposit_amount)
+    : null;
+  const depositDate = deposit_date || null;
 
   let selectedCustomerId = customer_id ? toNumber(customer_id) : null;
   let selectedVehicleId = vehicle_id ? toNumber(vehicle_id) : null;
@@ -195,8 +207,8 @@ router.post('/', async (req, res) => {
     const total_amount = validItems.reduce((sum, item) => sum + Number(item.quantity || 1) * Number(item.unit_price || 0), 0);
 
     const [quotationResult] = await conn.execute(
-      `INSERT INTO quotations (quotation_no, quotation_date, customer_id, vehicle_id, mileage, remark, product_summary, total_amount, queue_no, symptom)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO quotations (quotation_no, quotation_date, customer_id, vehicle_id, mileage, remark, product_summary, total_amount, queue_no, symptom, deposit_amount, deposit_date)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         quotation_no,
         quotation_date,
@@ -207,7 +219,9 @@ router.post('/', async (req, res) => {
         validItems.map((i) => i.product_name).join(', '),
         total_amount,
         queue_no || null,
-        symptom || null
+        symptom || null,
+        depositAmount,
+        depositDate
       ]
     );
 
@@ -368,7 +382,7 @@ router.patch('/:id/mark-printed', async (req, res) => {
 // PUT - Update quotation
 router.put('/:id', async (req, res) => {
   const { id } = req.params;
-  const { customer_id, newCustomer, vehicle_id, newVehicle, quotation_date, mileage, remark, queue_no, symptom, items } = req.body;
+  const { customer_id, newCustomer, vehicle_id, newVehicle, quotation_date, mileage, remark, queue_no, symptom, items, deposit_amount, deposit_date } = req.body;
 
   const toNumber = (value) => {
     const n = Number(value);
@@ -389,12 +403,22 @@ router.put('/:id', async (req, res) => {
     conn = await pool.getConnection();
     await conn.beginTransaction();
 
-    const [existingRows] = await conn.execute('SELECT id, status, converted_receipt_id FROM quotations WHERE id = ?', [id]);
+    // เพิ่ม queue_no ในผลลัพธ์ที่ดึงมา — ใช้เช็คหลัง commit ว่าใบนี้ "มาจากไลน์และ
+    // ยังเปิดอยู่" ไหม (มีเลขคิว + closed_at ยังว่าง) เพื่อตัดสินใจ push ข้อมูล
+    // อัปเดตกลับเข้ากลุ่มไลน์ (ดู pushQuotationUpdate ท้ายฟังก์ชันนี้)
+    const [existingRows] = await conn.execute('SELECT id, status, converted_receipt_id, deposit_amount, deposit_date, queue_no, closed_at FROM quotations WHERE id = ?', [id]);
     if (existingRows.length === 0) {
       await conn.rollback();
       return res.status(404).json({ error: 'ไม่พบใบเสนอราคา' });
     }
     const existingQuotation = existingRows[0];
+
+    // มัดจำ: ไม่ส่ง field มาเลย (เช่นฟอร์มเก่าที่ยังไม่มีช่องมัดจำ) = คงค่าเดิมไว้
+    // ไม่ทับด้วย null ทิ้ง — ส่งมาชัดเจน (แม้จะเป็นค่าว่าง/null) = ตั้งใจล้าง/แก้ไขจริง
+    const depositAmount = deposit_amount === undefined
+      ? existingQuotation.deposit_amount
+      : (deposit_amount === '' || deposit_amount === null ? null : Number(deposit_amount));
+    const depositDate = deposit_date === undefined ? existingQuotation.deposit_date : (deposit_date || null);
 
     if (!selectedCustomerId) {
       const { customer_name, phone } = newCustomer;
@@ -434,7 +458,7 @@ router.put('/:id', async (req, res) => {
 
     await conn.execute(
       `UPDATE quotations
-       SET customer_id = ?, vehicle_id = ?, quotation_date = ?, mileage = ?, remark = ?, product_summary = ?, total_amount = ?, queue_no = ?, symptom = ?
+       SET customer_id = ?, vehicle_id = ?, quotation_date = ?, mileage = ?, remark = ?, product_summary = ?, total_amount = ?, queue_no = ?, symptom = ?, deposit_amount = ?, deposit_date = ?
        WHERE id = ?`,
       [
         selectedCustomerId,
@@ -446,6 +470,8 @@ router.put('/:id', async (req, res) => {
         total_amount,
         queue_no || null,
         symptom || null,
+        depositAmount,
+        depositDate,
         id
       ]
     );
@@ -477,9 +503,12 @@ router.put('/:id', async (req, res) => {
     let syncedReceipt = false;
     if (existingQuotation.status === 'approved' && existingQuotation.converted_receipt_id) {
       const receiptId = existingQuotation.converted_receipt_id;
+      // deposit_amount/deposit_date: snapshot ค่ามัดจำที่แก้ไขมาในคำขอนี้ลงใบเสร็จ
+      // ด้วยเหมือน remark/mileage ด้านบน — ถ้าออฟฟิศแก้มัดจำของใบที่อนุมัติไปแล้ว
+      // ต้องสะท้อนไปที่ใบเสร็จทันที ไม่ใช่ค้างค่าเดิมก่อนแก้ไว้
       await conn.execute(
-        `UPDATE receipts SET customer_id = ?, vehicle_id = ?, mileage = ?, remark = ?, total_amount = ? WHERE id = ?`,
-        [selectedCustomerId, selectedVehicleId, Number(mileage) || 0, remark || null, total_amount, receiptId]
+        `UPDATE receipts SET customer_id = ?, vehicle_id = ?, mileage = ?, remark = ?, total_amount = ?, deposit_amount = ?, deposit_date = ? WHERE id = ?`,
+        [selectedCustomerId, selectedVehicleId, Number(mileage) || 0, remark || null, total_amount, depositAmount, depositDate, receiptId]
       );
       await conn.execute('DELETE FROM receipt_items WHERE receipt_id = ?', [receiptId]);
       for (const item of validItems) {
@@ -495,6 +524,19 @@ router.put('/:id', async (req, res) => {
     }
 
     await conn.commit();
+
+    // Push ข้อมูลอัปเดตกลับเข้ากลุ่มไลน์ของร้าน ถ้าใบนี้ "มาจากไลน์และยังเปิดอยู่"
+    // (มีเลขคิว + closed_at ยังว่าง — เช็คจากค่าที่อ่านไว้ก่อน UPDATE ด้านบน เพราะ
+    // ฟอร์มนี้ไม่มีช่องแก้ closed_at) กันพนักงานคัดลอกข้อความไลน์เก่าที่ยังผิดอยู่มา
+    // ส่งซ้ำทับข้อมูลที่ออฟฟิศเพิ่งแก้ — best-effort ทั้งหมด (ดู pushQuotationUpdate)
+    // ไม่ block/ไม่ทำให้ request นี้ล้มเหลวแม้ push จะพลาด
+    if (existingQuotation.queue_no && !existingQuotation.closed_at) {
+      try {
+        await pushQuotationUpdate(id);
+      } catch (err) {
+        console.error('Error pushing quotation update to LINE after edit:', err);
+      }
+    }
 
     res.json({
       success: true,
@@ -549,10 +591,12 @@ router.patch('/:id/approve', async (req, res) => {
     const receipt_no = await generateReceiptNo(conn);
     const total_amount = items.reduce((sum, item) => sum + Number(item.quantity) * Number(item.unit_price), 0);
 
+    // deposit_amount/deposit_date: snapshot จากใบเสนอราคาลงใบเสร็จเหมือน remark/
+    // mileage ด้านบน (ตั้งมาจากบอทไลน์ก่อนกดอนุมัติได้ — ดู createQuotationFromQueue)
     const [receiptResult] = await conn.execute(
-      `INSERT INTO receipts (receipt_no, receipt_date, customer_id, vehicle_id, mileage, remark, total_amount, customer_signature)
-       VALUES (?, CURDATE(), ?, ?, ?, ?, ?, ?)`,
-      [receipt_no, quotation.customer_id, quotation.vehicle_id, quotation.mileage || 0, quotation.remark || null, total_amount, quotation.customer_signature || null]
+      `INSERT INTO receipts (receipt_no, receipt_date, customer_id, vehicle_id, mileage, remark, total_amount, customer_signature, deposit_amount, deposit_date)
+       VALUES (?, CURDATE(), ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [receipt_no, quotation.customer_id, quotation.vehicle_id, quotation.mileage || 0, quotation.remark || null, total_amount, quotation.customer_signature || null, quotation.deposit_amount, quotation.deposit_date]
     );
     const receiptId = receiptResult.insertId;
 

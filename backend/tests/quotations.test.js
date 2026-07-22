@@ -224,10 +224,6 @@ describe('PUT /api/quotations/:id — editing an approved quotation syncs its re
     await cleanupCustomer(fixture.customerId);
   });
 
-  afterAll(async () => {
-    await pool.end();
-  });
-
   test('editing items/remark on an already-approved quotation updates its linked receipt to match', async () => {
     const createRes = await request(app)
       .post('/api/quotations')
@@ -306,5 +302,207 @@ describe('PUT /api/quotations/:id — editing an approved quotation syncs its re
       [fixture.customerId]
     );
     expect(receipts).toHaveLength(0);
+  });
+});
+
+// มัดจำ (deposit_amount/deposit_date) เป็นฟิลด์ first-class ของใบเสนอราคาแล้ว (บอทไลน์
+// เป็นคนตั้งค่าให้ตอนนี้ — ฟอร์มเว็บยังไม่มีช่องกรอกเอง เป็นงานถัดไป) ต้อง snapshot
+// ไหลลงใบเสร็จที่จุดเดียวกับ remark/mileage เสมอ (approve-insert และ PUT-triggered sync)
+describe('deposit_amount/deposit_date ไหลจากใบเสนอราคาลงใบเสร็จ (approve + PUT sync)', () => {
+  let token;
+  let fixture;
+
+  beforeAll(async () => {
+    token = await getOfficeToken();
+  });
+
+  beforeEach(async () => {
+    fixture = await createCustomerWithVehicle({ namePrefix: 'Deposit Snapshot Test Customer' });
+  });
+
+  afterEach(async () => {
+    await cleanupCustomer(fixture.customerId);
+  });
+  // pool.end() ย้ายไปอยู่ที่ describe บล็อกสุดท้ายของไฟล์นี้แทน (ดูด้านล่าง) —
+  // เรียกที่นี่จะปิด pool ก่อน describe บล็อกถัดไปในไฟล์เดียวกันได้ทำงานเสร็จ
+
+  test('อนุมัติใบเสนอราคาที่มีมัดจำอยู่แล้ว (ตั้งไว้ก่อนจากบอทไลน์) → ใบเสร็จที่สร้างมี deposit_amount/deposit_date ตรงกัน', async () => {
+    const createRes = await request(app)
+      .post('/api/quotations')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        customer_id: fixture.customerId,
+        vehicle_id: fixture.vehicleId,
+        quotation_date: '2026-07-10',
+        items: [{ product_name: 'ผ้าเบรค', quantity: 1, unit_price: 1800 }],
+      });
+    const quotationId = createRes.body.quotation_id;
+
+    // จำลองมัดจำที่บอทไลน์ตั้งไว้ก่อนหน้า (ฟอร์มเว็บยังไม่มีช่องกรอกเอง)
+    await pool.query(
+      'UPDATE quotations SET deposit_amount = ?, deposit_date = ? WHERE id = ?',
+      [500, '2026-07-05', quotationId]
+    );
+
+    const approveRes = await request(app)
+      .patch(`/api/quotations/${quotationId}/approve`)
+      .set('Authorization', `Bearer ${token}`)
+      .send();
+    expect(approveRes.status).toBe(200);
+
+    const [[receipt]] = await pool.query(
+      'SELECT deposit_amount, deposit_date, total_amount FROM receipts WHERE id = ?',
+      [approveRes.body.receipt_id]
+    );
+    expect(Number(receipt.deposit_amount)).toBe(500);
+    expect(new Date(receipt.deposit_date).toISOString().slice(0, 10)).toBe('2026-07-05');
+    expect(Number(receipt.total_amount)).toBe(1800); // มัดจำไม่ลดยอดใบเสร็จ — แค่ข้อมูลติดตาม
+  });
+
+  test('แก้ไขใบเสนอราคาที่อนุมัติแล้วผ่าน PUT (ฟอร์มยังไม่มีช่องมัดจำ) → มัดจำเดิมในใบเสร็จยังอยู่ ไม่ถูกล้างทิ้ง', async () => {
+    const createRes = await request(app)
+      .post('/api/quotations')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        customer_id: fixture.customerId,
+        vehicle_id: fixture.vehicleId,
+        quotation_date: '2026-07-10',
+        items: [{ product_name: 'ผ้าเบรค', quantity: 1, unit_price: 1800 }],
+      });
+    const quotationId = createRes.body.quotation_id;
+
+    await pool.query(
+      'UPDATE quotations SET deposit_amount = ?, deposit_date = ? WHERE id = ?',
+      [500, '2026-07-05', quotationId]
+    );
+
+    const approveRes = await request(app)
+      .patch(`/api/quotations/${quotationId}/approve`)
+      .set('Authorization', `Bearer ${token}`)
+      .send();
+    const receiptId = approveRes.body.receipt_id;
+
+    // แก้ไขรายการผ่านฟอร์มเว็บ (ไม่มีช่องมัดจำให้กรอก — body ไม่มี deposit_amount เลย)
+    const editRes = await request(app)
+      .put(`/api/quotations/${quotationId}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        customer_id: fixture.customerId,
+        vehicle_id: fixture.vehicleId,
+        quotation_date: '2026-07-10',
+        items: [{ product_name: 'ผ้าเบรค', quantity: 2, unit_price: 1800 }],
+      });
+    expect(editRes.status).toBe(200);
+    expect(editRes.body.synced_receipt).toBe(true);
+
+    const [[receipt]] = await pool.query(
+      'SELECT deposit_amount, deposit_date, total_amount FROM receipts WHERE id = ?',
+      [receiptId]
+    );
+    expect(Number(receipt.deposit_amount)).toBe(500); // ยังอยู่ ไม่หายไปตอนแก้ไขฟิลด์อื่น
+    expect(new Date(receipt.deposit_date).toISOString().slice(0, 10)).toBe('2026-07-05');
+    expect(Number(receipt.total_amount)).toBe(3600);
+  });
+});
+
+// gap-fill: POST /quotations และ PUT /quotations/:id ตอนนี้รับ deposit_amount/
+// deposit_date จาก body โดยตรงแล้ว (เดิมรับแค่จากบอทไลน์เท่านั้น — ดู describe
+// ด้านบน) ให้หน้าเว็บกรอกมัดจำเองได้ผ่านฟอร์มปกติ — loose validation: ว่าง/ไม่ส่งมา
+// = NULL, มีค่า = แปลงเป็นตัวเลข
+describe('POST/PUT /quotations — deposit_amount/deposit_date รับค่าจาก body ได้โดยตรง', () => {
+  let token;
+  let fixture;
+
+  beforeAll(async () => {
+    token = await getOfficeToken();
+  });
+
+  beforeEach(async () => {
+    fixture = await createCustomerWithVehicle({ namePrefix: 'Deposit Gap-fill Test Customer' });
+  });
+
+  afterEach(async () => {
+    await cleanupCustomer(fixture.customerId);
+  });
+
+  afterAll(async () => {
+    await pool.end();
+  });
+
+  test('POST /quotations พร้อม deposit_amount/deposit_date → บันทึกลง DB ตรงกัน', async () => {
+    const createRes = await request(app)
+      .post('/api/quotations')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        customer_id: fixture.customerId,
+        vehicle_id: fixture.vehicleId,
+        quotation_date: '2026-07-10',
+        items: [{ product_name: 'ผ้าเบรค', quantity: 1, unit_price: 1800 }],
+        deposit_amount: 700,
+        deposit_date: '2026-07-08',
+      });
+    expect(createRes.status).toBe(201);
+
+    const [[row]] = await pool.query(
+      'SELECT deposit_amount, deposit_date FROM quotations WHERE id = ?',
+      [createRes.body.quotation_id]
+    );
+    expect(Number(row.deposit_amount)).toBe(700);
+    expect(new Date(row.deposit_date).toISOString().slice(0, 10)).toBe('2026-07-08');
+  });
+
+  test('POST /quotations ไม่ส่ง deposit_amount/deposit_date มา → เป็น NULL (ไม่บังคับกรอก)', async () => {
+    const createRes = await request(app)
+      .post('/api/quotations')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        customer_id: fixture.customerId,
+        vehicle_id: fixture.vehicleId,
+        quotation_date: '2026-07-10',
+        items: [{ product_name: 'ผ้าเบรค', quantity: 1, unit_price: 1800 }],
+      });
+    expect(createRes.status).toBe(201);
+
+    const [[row]] = await pool.query(
+      'SELECT deposit_amount, deposit_date FROM quotations WHERE id = ?',
+      [createRes.body.quotation_id]
+    );
+    expect(row.deposit_amount).toBeNull();
+    expect(row.deposit_date).toBeNull();
+  });
+
+  test('PUT /quotations/:id พร้อม deposit_amount/deposit_date → อัปเดตค่าใหม่ลง DB ตรงกัน', async () => {
+    const createRes = await request(app)
+      .post('/api/quotations')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        customer_id: fixture.customerId,
+        vehicle_id: fixture.vehicleId,
+        quotation_date: '2026-07-10',
+        items: [{ product_name: 'ผ้าเบรค', quantity: 1, unit_price: 1800 }],
+        deposit_amount: 700,
+        deposit_date: '2026-07-08',
+      });
+    const quotationId = createRes.body.quotation_id;
+
+    const editRes = await request(app)
+      .put(`/api/quotations/${quotationId}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        customer_id: fixture.customerId,
+        vehicle_id: fixture.vehicleId,
+        quotation_date: '2026-07-10',
+        items: [{ product_name: 'ผ้าเบรค', quantity: 1, unit_price: 1800 }],
+        deposit_amount: 1200,
+        deposit_date: '2026-07-09',
+      });
+    expect(editRes.status).toBe(200);
+
+    const [[row]] = await pool.query(
+      'SELECT deposit_amount, deposit_date FROM quotations WHERE id = ?',
+      [quotationId]
+    );
+    expect(Number(row.deposit_amount)).toBe(1200);
+    expect(new Date(row.deposit_date).toISOString().slice(0, 10)).toBe('2026-07-09');
   });
 });
