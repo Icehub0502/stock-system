@@ -103,7 +103,14 @@ const OPTIONAL_LABELS = {
   หมายเหตุ: 'remark',
   ชื่อ: 'customer_name', // เทมเพลตใหม่ใช้ "ชื่อ:" เฉย ๆ — ต้องมาหลัง "ชื่อลูกค้า" เสมอ
 };
-const OPTIONAL_LABEL_RE = new RegExp(`^(${Object.keys(OPTIONAL_LABELS).join('|')})\\s*:*\\s*(.*)$`);
+// escape ตัวอักษร regex พิเศษใน label ก่อนต่อเป็น alternation — จำเป็นเพราะ label
+// บางตัวมีวงเล็บจริง ๆ ในข้อความ (เช่น "ช่องทางการชำระ (โอน/บัตรเครดิต/เงินสด/QRCode)")
+// ถ้าไม่ escape วงเล็บจะกลายเป็น capturing group เพิ่ม ทำให้ index ของ match[1]/match[2]
+// เพี้ยนไปหมด
+function escapeRegExp(str) {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+const OPTIONAL_LABEL_RE = new RegExp(`^(${Object.keys(OPTIONAL_LABELS).map(escapeRegExp).join('|')})\\s*:*\\s*(.*)$`);
 
 // ── ส่วนชำระเงินของเทมเพลตใหม่ (หลัง "<--สิ้นสุดรายการ-->") ──
 // แยกเป็น label set ต่างหากจาก OPTIONAL_LABELS ด้านบน เพราะอยู่คนละ section ของ
@@ -112,7 +119,14 @@ const OPTIONAL_LABEL_RE = new RegExp(`^(${Object.keys(OPTIONAL_LABELS).join('|')
 const PAYMENT_LABELS = {
   ยอดรวม: 'stated_total',
   ยอดที่ต้องชำระ: 'remaining_balance',
+  // เทมเพลตใหม่ใส่คำแนะนำในวงเล็บต่อท้าย label ให้พนักงานเห็นตัวเลือก/ความหมายชัด ๆ
+  // (ดู buildQueueTemplateText/buildFilledTemplateText ใน lineWebhook.routes.js) —
+  // ต้องเขียนตัวที่มีวงเล็บไว้ก่อนตัวเปล่าเสมอ (⚠️ กติกาเดียวกับ OPTIONAL_LABELS
+  // ด้านบน) ไม่งั้น "ช่องทางการชำระ" เปล่าจะแมตช์ก่อนแล้วเหลือ " (โอน/...):ค่า" ติด
+  // มากับ value ที่พาร์สได้
+  'ช่องทางการชำระ (โอน/บัตรเครดิต/เงินสด/QRCode)': 'payment_method',
   ช่องทางการชำระ: 'payment_method',
+  'ลูกค้าชำระเงิน (ยอดที่ได้รับจริง)': 'paid_amount',
   ลูกค้าชำระเงิน: 'paid_amount',
   หมายเหตุ: 'remark',
   // มัดจำเป็นฟิลด์ first-class ของบิล (deposit_amount/deposit_date ใน quotations/
@@ -122,7 +136,7 @@ const PAYMENT_LABELS = {
   มัดจำ: 'deposit_amount',
   วันที่มัดจำ: 'deposit_date',
 };
-const PAYMENT_LABEL_RE = new RegExp(`^(${Object.keys(PAYMENT_LABELS).join('|')})\\s*:*\\s*(.*)$`);
+const PAYMENT_LABEL_RE = new RegExp(`^(${Object.keys(PAYMENT_LABELS).map(escapeRegExp).join('|')})\\s*:*\\s*(.*)$`);
 // จุดจบรายการแบบระบุชัดเจนในเทมเพลตใหม่ — ทุกอย่างหลังบรรทัดนี้เป็น "ส่วนชำระเงิน"
 // ไม่ใช่รายการสินค้าอีกต่อไป (ทนช่องว่างรอบคำได้ เผื่อพิมพ์ "<-- สิ้นสุดรายการ -->")
 const END_MARKER_RE = /^<--\s*สิ้นสุดรายการ\s*-->$/;

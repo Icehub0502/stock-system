@@ -331,12 +331,14 @@ function buildQueueTemplateText(nextQueueNo) {
     '',
     '<--สิ้นสุดรายการ-->',
     'ยอดรวม:',
-    'หมายเหตุ:',
+    'มัดจำ:',
+    'วันที่มัดจำ:',
     'ยอดที่ต้องชำระ:',
+    'หมายเหตุ:',
     '',
     '<--ลูกค้าชำระเงิน-->',
-    'ช่องทางการชำระ:',
-    'ลูกค้าชำระเงิน:',
+    'ช่องทางการชำระ (โอน/บัตรเครดิต/เงินสด/QRCode):',
+    'ลูกค้าชำระเงิน (ยอดที่ได้รับจริง):',
   ].join('\n');
 }
 
@@ -390,8 +392,8 @@ function buildFilledTemplateText(data) {
     `หมายเหตุ:${data.remark || ''}`,
     '',
     '<--ลูกค้าชำระเงิน-->',
-    'ช่องทางการชำระ:',
-    'ลูกค้าชำระเงิน:',
+    'ช่องทางการชำระ (โอน/บัตรเครดิต/เงินสด/QRCode):',
+    'ลูกค้าชำระเงิน (ยอดที่ได้รับจริง):',
   ].join('\n');
   return `${banner}\n\n${template}`;
 }
@@ -440,14 +442,19 @@ async function pushQuotationUpdate(quotationId) {
 // อีกต่อไป (ฟิลด์นั้นตอนนี้เป็นแค่ข้อมูลยอดที่จ่าย ใช้ประกอบการคำนวณยอดใบเสร็จเท่านั้น
 // — ดู createQuotationFromQueue) ──
 
-// ยอดที่ลงในใบเสร็จ: มีมัดจำ+ยอดค้าง (remaining_balance > 0) ใช้ยอดรวมทั้งบิลเป็นยอด
-// ใบเสร็จ (เจ้าของร้านยืนยันกติกา: มัดจำ + ยอดค้าง = ยอดรวม) ไม่งั้นใช้ยอดที่ลูกค้า
-// จ่ายจริงตรง ๆ — ไม่มีตัวไหนระบุมาเลยค่อย fallback เป็นผลรวมรายการที่คำนวณเอง
-function computeReceiptAmount(parsed, itemSumTotal) {
-  if (parsed.remaining_balance != null && parsed.remaining_balance > 0) {
-    return parsed.stated_total != null ? parsed.stated_total : itemSumTotal;
+// ยอดที่ลงในใบเสร็จ: มัดจำที่เคยรับไว้ (ถ้ามี) + ยอดที่ลูกค้าชำระเงินครั้งนี้ (พิมพ์
+// ตอนปิดบิล) — สูตรเดียวครอบคลุมทุกกรณีอัตโนมัติ ไม่ต้องแยกเงื่อนไขมีมัดจำ/ไม่มีมัดจำ
+// อีกต่อไป: จ่ายเต็มไม่มีมัดจำ (deposit=0 + จ่ายเต็ม), มีมัดจำจ่ายส่วนที่เหลือปกติ
+// (มัดจำ + ส่วนที่เหลือ = ยอดรวมพอดี), หรือจ่ายผ่านบัตรเครดิตที่มีค่าธรรมเนียมบวก
+// เพิ่ม (พนักงานพิมพ์ยอดที่รูดจริงรวมค่าธรรมเนียมแล้วลง "ลูกค้าชำระเงิน" ตรง ๆ สูตร
+// นี้จะบวกเข้ากับมัดจำให้ถูกต้องเอง ไม่ต้องมีช่องพิเศษสำหรับบัตร) — ไม่ได้พิมพ์ยอดที่
+// จ่ายมาเลย (แค่วลีปิดบิลเฉย ๆ ไม่ได้กรอกยอด) ค่อย fallback เป็น fallbackTotal
+// (ยอดรวมที่แจ้งไว้ หรือผลรวมรายการที่คำนวณเอง)
+function computeReceiptAmount(depositAmount, paidAmount, fallbackTotal) {
+  if (paidAmount != null) {
+    return (depositAmount != null ? Number(depositAmount) : 0) + Number(paidAmount);
   }
-  return parsed.paid_amount != null ? parsed.paid_amount : itemSumTotal;
+  return fallbackTotal;
 }
 
 // เตือนถ้ายอดมัดจำ (deposit_amount — ฟิลด์ first-class จาก label "มัดจำ:" ใน
@@ -793,12 +800,14 @@ async function createQuotationFromQueue(parsed) {
         // ผ่าน ไม่ปิดบิล ไม่แตะ closed_at
         paymentWarning = 'no_items';
       } else {
-        paymentAmount = computeReceiptAmount(parsed, total_amount);
         // ค่ามัดจำที่จะถูกบันทึกจริง (COALESCE เดียวกับจุด UPDATE quotations ด้านบน) —
         // ข้อความปิดบิลอาจไม่ได้พิมพ์ "มัดจำ:" ซ้ำ ต้องย้อนไปใช้ค่าที่เคยบันทึกไว้ในใบเดิม
+        // ต้องคำนวณก่อน computeReceiptAmount เพราะสูตรใหม่ต้องใช้ค่านี้ตรง ๆ
         const effectiveDepositAmount = parsed.deposit_amount != null
           ? parsed.deposit_amount
           : (existing && existing.deposit_amount != null ? Number(existing.deposit_amount) : null);
+        const fallbackTotal = parsed.stated_total != null ? parsed.stated_total : total_amount;
+        paymentAmount = computeReceiptAmount(effectiveDepositAmount, parsed.paid_amount, fallbackTotal);
         depositMismatch = checkDepositMismatch(parsed, effectiveDepositAmount);
 
         if (isUpdate && existing.status === 'approved' && existing.converted_receipt_id) {
@@ -986,8 +995,12 @@ async function closeQuotationByQueue(parsed) {
       return { matchCount: 1, warning: 'no_items', quotation_no: quotation.quotation_no };
     }
 
-    // มัดจำ + ยอดค้าง = ยอดรวม เสมอ — ยอดใบเสร็จคือยอดรวมทั้งบิลของใบเสนอราคาตรง ๆ
-    const receiptAmount = quotation.total_amount;
+    // มัดจำที่เคยรับไว้ (ถ้ามี) + ยอดที่ลูกค้าชำระเงินครั้งนี้ (parsed.paid_amount —
+    // ข้อความปิดบิลสั้นมีช่องนี้อยู่แล้ว) — สูตรเดียวกับ computeReceiptAmount ใน
+    // createQuotationFromQueue ครอบคลุมเคสจ่ายผ่านบัตรเครดิตที่มีค่าธรรมเนียมบวก
+    // เพิ่มด้วย (พนักงานพิมพ์ยอดที่รูดจริงลง "ลูกค้าชำระเงิน" ตรง ๆ) ไม่ได้พิมพ์ยอดที่
+    // จ่ายมาเลย (แค่วลีปิดบิลเฉย ๆ) ค่อย fallback เป็น total_amount ของใบเดิม
+    const receiptAmount = computeReceiptAmount(quotation.deposit_amount, parsed.paid_amount, quotation.total_amount);
 
     let receiptId;
     let receipt_no;

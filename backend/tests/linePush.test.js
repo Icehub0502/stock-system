@@ -128,8 +128,8 @@ describe('buildFilledTemplateText', () => {
     expect(text).toContain('มัดจำ:2000');
     expect(text).toContain('ยอดที่ต้องชำระ:24050'); // 26050 - 2000
     expect(text).toContain('<--ลูกค้าชำระเงิน-->');
-    expect(text).toContain('ช่องทางการชำระ:');
-    expect(text).toContain('ลูกค้าชำระเงิน:');
+    expect(text).toContain('ช่องทางการชำระ (โอน/บัตรเครดิต/เงินสด/QRCode):');
+    expect(text).toContain('ลูกค้าชำระเงิน (ยอดที่ได้รับจริง):');
   });
 
   test('ไม่มีมัดจำ/ไม่มีรถ → label ยังอยู่ครบแต่เป็นค่าว่าง ไม่พังเทมเพลต', () => {

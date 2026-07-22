@@ -877,13 +877,14 @@ describe('POST /api/line/webhook', () => {
     // คืนมา (remaining_balance/stated_total/deposit_amount) เดินผ่านกติกาในไฟล์นี้ได้
     // ถูกต้องจริง ๆ ไม่ใช่แค่ทดสอบแยกแต่ละฟังก์ชันด้วย object ที่เขียนมือ — deposit_amount
     // เป็นฟิลด์ first-class จาก label "มัดจำ:" แล้ว (ไม่ได้เดาจากข้อความในหมายเหตุอีกต่อไป)
-    test('checkDepositMismatch/computeReceiptAmount ต่อกับผลจาก parser จริง: มัดจำ+ยอดค้าง ตรงกับยอดรวม → ไม่มี mismatch, ยอดใบเสร็จ = ยอดรวมทั้งบิล', () => {
+    test('checkDepositMismatch/computeReceiptAmount ต่อกับผลจาก parser จริง: มัดจำ+ยอดที่จ่ายเพิ่ม ตรงกับยอดรวม → ไม่มี mismatch, ยอดใบเสร็จ = มัดจำ+ยอดที่จ่ายเพิ่ม', () => {
       const parsed = parseLineQueueMessage(
         templateText({
           queueNo: '1',
           name: 'คุณมัดจำตรง',
           items: [{ name: 'แร็ค OEM', price: 10000 }],
-          payment: { statedTotal: 10000, remainingBalance: 4000, paidAmount: 6000, deposit: 6000 },
+          // มัดจำ 6000 ไว้ก่อน เหลือ 4000 — ตอนปิดบิลจ่ายส่วนที่เหลือ 4000 พอดี
+          payment: { statedTotal: 10000, remainingBalance: 4000, paidAmount: 4000, deposit: 6000 },
         })
       );
       expect(parsed.remaining_balance).toBe(4000);
@@ -891,7 +892,8 @@ describe('POST /api/line/webhook', () => {
       expect(parsed.deposit_amount).toBe(6000);
 
       expect(lineWebhookRouter.checkDepositMismatch(parsed, parsed.deposit_amount)).toBeNull(); // 6000+4000=10000 ตรงกับยอดรวม
-      expect(lineWebhookRouter.computeReceiptAmount(parsed, 10000)).toBe(10000); // deposit case → ใช้ยอดรวมทั้งบิล
+      // สูตรใหม่: มัดจำ (6000) + ยอดที่ลูกค้าชำระเงินครั้งนี้ (4000) = 10000
+      expect(lineWebhookRouter.computeReceiptAmount(parsed.deposit_amount, parsed.paid_amount, 10000)).toBe(10000);
     });
 
     test('checkDepositMismatch ต่อกับผลจาก parser จริง: มัดจำ+ยอดค้าง ไม่ตรงกับยอดรวม → คืน mismatch พร้อมตัวเลขที่ถูกต้อง', () => {
@@ -919,7 +921,7 @@ describe('POST /api/line/webhook', () => {
         })
       );
       expect(parsed.remaining_balance).toBeNull();
-      expect(lineWebhookRouter.computeReceiptAmount(parsed, 3000)).toBe(3000);
+      expect(lineWebhookRouter.computeReceiptAmount(parsed.deposit_amount, parsed.paid_amount, 3000)).toBe(3000);
     });
 
     test('พิมพ์ "คิว" เดี่ยว ๆ → ไม่สร้างใบเสนอราคา แค่จำว่าประมวลผลแล้ว (เนื้อหาเทมเพลตตรวจแยกผ่าน buildQueueTemplateText)', async () => {
@@ -943,11 +945,11 @@ describe('POST /api/line/webhook', () => {
       expect(text).toContain('<--สิ้นสุดรายการ-->');
       expect(text).toContain('ยอดที่ต้องชำระ:');
       expect(text).toContain('<--ลูกค้าชำระเงิน-->');
-      expect(text).toContain('ช่องทางการชำระ:');
-      expect(text).toContain('ลูกค้าชำระเงิน:');
+      expect(text).toContain('ช่องทางการชำระ (โอน/บัตรเครดิต/เงินสด/QRCode):');
+      expect(text).toContain('ลูกค้าชำระเงิน (ยอดที่ได้รับจริง):');
       // ยอดที่ต้องชำระ ต้องอยู่ก่อนเส้นแบ่งที่สอง ซึ่งอยู่ก่อนช่องทางการชำระ (ลำดับตกลงกับเจ้าของร้าน)
       expect(text.indexOf('ยอดที่ต้องชำระ:')).toBeLessThan(text.indexOf('<--ลูกค้าชำระเงิน-->'));
-      expect(text.indexOf('<--ลูกค้าชำระเงิน-->')).toBeLessThan(text.indexOf('ช่องทางการชำระ:'));
+      expect(text.indexOf('<--ลูกค้าชำระเงิน-->')).toBeLessThan(text.indexOf('ช่องทางการชำระ (โอน/บัตรเครดิต/เงินสด/QRCode):'));
     });
 
     test('พิมพ์ "คิว" ซ้ำ (message id เดิม) → ไม่ตอบซ้ำ/ไม่มีผลข้างเคียงเพิ่ม', async () => {
@@ -1043,7 +1045,7 @@ describe('POST /api/line/webhook', () => {
       expect(notices).toHaveLength(1); // อนุมัติเองแล้วต้องได้ใบแจ้งซ่อมคู่กันเหมือนอนุมัติผ่านเว็บ
     });
 
-    test('วลีแจ้งจ่ายเงินแล้ว พร้อมมัดจำ (ยอดที่ต้องชำระ > 0) → ยอดใบเสร็จ = ยอดรวมทั้งบิล (ไม่ใช่แค่ยอดที่จ่ายมา)', async () => {
+    test('วลีแจ้งจ่ายเงินแล้ว พร้อมมัดจำ (ยอดที่ต้องชำระ > 0) → ยอดใบเสร็จ = มัดจำ + ยอดที่จ่ายปิดบิลจริง', async () => {
       const uniq = Date.now().toString().slice(-7);
       const phone = `063${uniq}`;
       const queueNo = `3${uniq}`;
@@ -1053,7 +1055,8 @@ describe('POST /api/line/webhook', () => {
         phone,
         plate: `2กค${uniq.slice(0, 4)}`,
         items: [{ name: 'ชุดโปรช่วงล่างเก๋ง', price: 10000 }],
-        payment: { statedTotal: 10000, method: 'โอน', remainingBalance: 4000, paidAmount: 6000, confirm: true },
+        // มัดจำไว้ก่อน 6000 เหลือ 4000 — ตอนปิดบิลพิมพ์ยอดที่จ่ายจริง (ส่วนที่เหลือ) ลง "ลูกค้าชำระเงิน"
+        payment: { statedTotal: 10000, method: 'โอน', remainingBalance: 4000, paidAmount: 4000, deposit: 6000, confirm: true },
       });
 
       const res = await postWebhook(eventsBody([messageEvent(text, `msg-tmpl-deposit-${uniq}`)]));
@@ -1066,7 +1069,7 @@ describe('POST /api/line/webhook', () => {
 
       const [[receipt]] = await pool.query('SELECT payment_method, total_amount FROM receipts WHERE id = ?', [quotation.converted_receipt_id]);
       expect(receipt.payment_method).toBe('โอน');
-      expect(Number(receipt.total_amount)).toBe(10000); // ยอดรวมทั้งบิล ไม่ใช่ 6000 ที่จ่ายมา
+      expect(Number(receipt.total_amount)).toBe(10000); // มัดจำ 6000 + จ่ายปิดบิล 4000 = 10000
     });
 
     test('ช่องทางการชำระ "QRcode" (พิมพ์ผิดตัวใหญ่เล็ก) → normalize เป็น "QRCode" ลงใบเสร็จ ตรงกับ select ฝั่งหน้าเว็บ', async () => {
