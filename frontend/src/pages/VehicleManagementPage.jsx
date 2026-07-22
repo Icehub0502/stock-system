@@ -10,6 +10,7 @@ export default function VehicleManagementPage() {
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState({ customer_id: '', brand: '', model: '', color: '', license_plate: '', mileage: 0 });
+  const [saving, setSaving] = useState(false);
 
   const fetchCustomers = async () => {
     try {
@@ -68,10 +69,13 @@ export default function VehicleManagementPage() {
 
   const saveVehicle = async (e) => {
     e.preventDefault();
+    if (saving) return; // กันกดปุ่มบันทึกซ้ำ (double-click) ยิง request ซ้ำ — เคยทำให้
+    // บอทดันข้อความอัปเดตเข้ากลุ่มไลน์ซ้ำสองรอบสำหรับการแก้ไขครั้งเดียว
     if (!form.customer_id || !form.brand.trim() || !form.model.trim()) {
       setError('กรุณากรอกข้อมูลรถให้ครบถ้วน');
       return;
     }
+    setSaving(true);
     try {
       if (editing) {
         await client.put(`/vehicles/${editing.id}`, form);
@@ -83,6 +87,8 @@ export default function VehicleManagementPage() {
     } catch (err) {
       console.error('Save vehicle error:', err);
       setError(err.response?.data?.error || 'บันทึกข้อมูลรถไม่สำเร็จ');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -240,8 +246,10 @@ export default function VehicleManagementPage() {
                 />
               </div>
               <div className="modal-actions">
-                <button type="submit" className="btn btn-primary">บันทึก</button>
-                <button type="button" className="btn btn-secondary" onClick={closeModal}>ยกเลิก</button>
+                <button type="submit" className="btn btn-primary" disabled={saving}>
+                  {saving ? 'กำลังบันทึก...' : 'บันทึก'}
+                </button>
+                <button type="button" className="btn btn-secondary" onClick={closeModal} disabled={saving}>ยกเลิก</button>
               </div>
             </form>
           </div>

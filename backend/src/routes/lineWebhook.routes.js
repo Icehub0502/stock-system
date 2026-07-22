@@ -354,18 +354,21 @@ function formatDbDateThai(dateStr) {
 // เทมเพลตแบบ "กรอกข้อมูลจริงแล้ว" (ต่างจาก buildQueueTemplateText ด้านบนที่เป็น
 // label ว่างให้กรอก) ใช้ตอน push ข้อมูลอัปเดตกลับเข้ากลุ่มหลังออฟฟิศแก้ไขใบเสนอราคา/
 // รถ/ลูกค้าผ่านหน้าเว็บ (ดู pushQuotationUpdate ด้านล่าง) — ขึ้นต้นด้วยแบนเนอร์แจ้ง
-// เตือนคั่นบรรทัดว่างแล้วตามด้วยเทมเพลตจริงที่ขึ้นต้นด้วย "คิว N" ตามรูปแบบเดิมทุก
-// ประการ (label เดียวกับ OPTIONAL_LABELS/PAYMENT_LABELS ใน parseLineQueueMessage.js)
-// เพื่อให้พนักงานคัดลอกส่วนเทมเพลต (ตั้งแต่ "คิว N" เป็นต้นไป) แล้วส่งกลับเข้ากลุ่ม
-// ได้ทันทีถ้าต้องแก้ไขต่อ โดยพาร์สกลับเข้าระบบได้ถูกต้องเหมือนข้อความเทมเพลตปกติ —
-// ไม่ใส่ส่วนยอดรวม/ช่องทางการชำระ/ลูกค้าชำระเงิน เพราะจุดประสงค์คือแจ้งแก้ไขข้อมูล
-// หัวบิล ไม่ใช่แจ้งชำระเงิน
+// เตือนคั่นบรรทัดว่างแล้วตามด้วยเทมเพลตจริงที่ขึ้นต้นด้วย "คิว N" ครบทุกส่วนเหมือน
+// เทมเพลตปกติทุกประการ (รวมยอดรวม/ยอดที่ต้องชำระ/ส่วนชำระเงิน) เพื่อให้พนักงาน
+// คัดลอกทั้งก้อนไปใช้ต่อได้เลยไม่ว่าจะแก้ไขข้อมูลต่อหรือปิดบิลเลยก็ตาม (ยอดรวมคำนวณ
+// จาก total_amount ที่บันทึกไว้จริงในใบเสนอราคา ไม่ใช่คำนวณจากรายการซ้ำ กันกรณี
+// ออฟฟิศปรับยอดรวมเองไว้ในเว็บไม่ตรงกับผลรวมรายการเป๊ะ ๆ — ยอดที่ต้องชำระคำนวณสด
+// จาก total_amount ลบมัดจำเสมอ ไม่ได้เก็บแยกไว้)
 function buildFilledTemplateText(data) {
   const banner = `🔄 ข้อมูลอัปเดตแล้ว (คิว ${data.queue_no}) — คัดลอกไปใช้แทนของเดิมได้เลย`;
   const itemLines = (data.items || []).map((it) => {
     const amount = Number(it.quantity || 1) * Number(it.unit_price || 0);
     return `${it.product_name} ${amount}`;
   });
+  const totalAmount = Number(data.total_amount || 0);
+  const depositAmount = data.deposit_amount != null ? Number(data.deposit_amount) : 0;
+  const remaining = totalAmount - depositAmount;
   const template = [
     `คิว ${data.queue_no}`,
     `ชื่อ:${data.customer_name || ''}`,
@@ -378,10 +381,17 @@ function buildFilledTemplateText(data) {
     `อาการ:${data.symptom || ''}`,
     'รายการ:',
     ...itemLines,
+    '',
     '<--สิ้นสุดรายการ-->',
+    `ยอดรวม:${totalAmount}`,
     `มัดจำ:${data.deposit_amount != null ? data.deposit_amount : ''}`,
     `วันที่มัดจำ:${formatDbDateThai(data.deposit_date)}`,
+    `ยอดที่ต้องชำระ:${remaining}`,
     `หมายเหตุ:${data.remark || ''}`,
+    '',
+    '<--ลูกค้าชำระเงิน-->',
+    'ช่องทางการชำระ:',
+    'ลูกค้าชำระเงิน:',
   ].join('\n');
   return `${banner}\n\n${template}`;
 }
@@ -391,7 +401,7 @@ function buildFilledTemplateText(data) {
 // ถ้าไม่พบใบเสนอราคานี้แล้ว (เช่นถูกลบไปแล้วระหว่างทาง)
 async function fetchQuotationForPush(quotationId) {
   const [[q]] = await pool.query(
-    `SELECT q.id, q.queue_no, q.closed_at, q.symptom, q.remark, q.deposit_amount, q.deposit_date,
+    `SELECT q.id, q.queue_no, q.closed_at, q.symptom, q.remark, q.deposit_amount, q.deposit_date, q.total_amount,
             c.customer_name, c.phone,
             v.brand, v.model, v.color, v.license_plate, v.mileage
      FROM quotations q

@@ -116,6 +116,22 @@ describe('buildFilledTemplateText', () => {
     expect(parsed.items).toEqual([{ name: 'แร็ค OEM', price: 5000 }]);
   });
 
+  test('ครบทุกส่วนเหมือนเทมเพลตจริง — ยอดรวม/ยอดที่ต้องชำระ/ส่วนชำระเงิน คำนวณและใส่มาให้เลย ไม่ใช่แค่ข้อมูลหัวบิล (พนักงานคัดลอกไปปิดบิลต่อได้ทันที)', () => {
+    const text = lineWebhook.buildFilledTemplateText({
+      queue_no: '2',
+      customer_name: 'คุณทดสอบ3',
+      total_amount: 26050,
+      deposit_amount: 2000,
+      items: [{ product_name: 'ลูกหมากปลาย', quantity: 1, unit_price: 26050 }],
+    });
+    expect(text).toContain('ยอดรวม:26050');
+    expect(text).toContain('มัดจำ:2000');
+    expect(text).toContain('ยอดที่ต้องชำระ:24050'); // 26050 - 2000
+    expect(text).toContain('<--ลูกค้าชำระเงิน-->');
+    expect(text).toContain('ช่องทางการชำระ:');
+    expect(text).toContain('ลูกค้าชำระเงิน:');
+  });
+
   test('ไม่มีมัดจำ/ไม่มีรถ → label ยังอยู่ครบแต่เป็นค่าว่าง ไม่พังเทมเพลต', () => {
     const text = lineWebhook.buildFilledTemplateText({
       queue_no: '3',

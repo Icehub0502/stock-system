@@ -9,6 +9,7 @@ export default function CustomerManagementPage() {
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState({ customer_name: '', phone: '' });
+  const [saving, setSaving] = useState(false);
 
   const fetchCustomers = async () => {
     try {
@@ -56,11 +57,14 @@ export default function CustomerManagementPage() {
 
   const saveCustomer = async (e) => {
     e.preventDefault();
+    if (saving) return; // กันกดปุ่มบันทึกซ้ำ (double-click) ยิง request ซ้ำ — เคยทำให้
+    // บอทดันข้อความอัปเดตเข้ากลุ่มไลน์ซ้ำสองรอบสำหรับการแก้ไขครั้งเดียว
     if (!form.customer_name.trim()) {
       setError('กรุณากรอกชื่อลูกค้า');
       return;
     }
 
+    setSaving(true);
     try {
       if (editing) {
         await client.put(`/customers/${editing.id}`, form);
@@ -72,6 +76,8 @@ export default function CustomerManagementPage() {
     } catch (err) {
       console.error('Save customer error:', err);
       setError(err.response?.data?.error || 'บันทึกลูกค้าไม่สำเร็จ');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -170,10 +176,10 @@ export default function CustomerManagementPage() {
                 />
               </div>
               <div className="modal-actions">
-                <button type="submit" className="btn btn-primary">
-                  บันทึก
+                <button type="submit" className="btn btn-primary" disabled={saving}>
+                  {saving ? 'กำลังบันทึก...' : 'บันทึก'}
                 </button>
-                <button type="button" className="btn btn-secondary" onClick={closeModal}>
+                <button type="button" className="btn btn-secondary" onClick={closeModal} disabled={saving}>
                   ยกเลิก
                 </button>
               </div>
