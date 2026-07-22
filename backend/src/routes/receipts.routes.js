@@ -114,12 +114,19 @@ router.get('/service-items', async (req, res) => {
 router.get('/', async (req, res) => {
   try {
     const [rows] = await pool.execute(
+      // ใบเสร็จที่เกิดจากปุ่ม "อนุมัติ" บนใบเสนอราคาจะถูกสร้างทันทีเพื่อพิมพ์เอกสาร
+      // ให้ลูกค้า แต่ไม่ได้แปลว่าจ่ายเงินแล้ว — ต้องเช็ค quotations.closed_at (ตั้งค่า
+      // เฉพาะตอนบอทไลน์ยืนยันจ่ายเงินจริง) เพื่อรู้สถานะที่แท้จริง ใบที่ไม่มี
+      // ใบเสนอราคาต้นทาง (สร้างตรงจากปุ่ม "สร้างบิลใหม่" หน้าเว็บ) ถือว่าจ่ายแล้วเสมอ
+      // เพราะเป็นการออกบิลหน้าเคาน์เตอร์ตอนรับเงิน
       `SELECT r.id, r.receipt_no, r.receipt_date, r.total_amount, r.remark, r.printed_at,
               c.customer_name, c.customer_code,
-              v.brand, v.model, v.color, v.license_plate
+              v.brand, v.model, v.color, v.license_plate,
+              (q.id IS NULL OR q.closed_at IS NOT NULL) AS is_paid
        FROM receipts r
        JOIN customers c ON r.customer_id = c.id
        LEFT JOIN vehicles v ON r.vehicle_id = v.id
+       LEFT JOIN quotations q ON q.converted_receipt_id = r.id
        ORDER BY r.receipt_date DESC, r.created_at DESC
        LIMIT 200`
     );

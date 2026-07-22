@@ -146,7 +146,11 @@ export default function ReceiptListPage() {
                           <td className="car-info" data-label="รถ">{receipt.brand} {receipt.model} / {receipt.license_plate}</td>
                           <td className="amount" data-label="จำนวนเงิน">฿{Number(receipt.total_amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                           <td data-label="สถานะ">
-                            <span className="status-badge status-badge-paid">💰 ชำระแล้ว</span>
+                            {receipt.is_paid ? (
+                              <span className="status-badge status-badge-paid">💰 ชำระแล้ว</span>
+                            ) : (
+                              <span className="status-badge status-badge-warning">⏳ รอชำระ</span>
+                            )}
                           </td>
                           <td className="actions" data-label="จัดการ">
                             <button
