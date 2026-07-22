@@ -119,6 +119,7 @@ export default function ReceiptListPage() {
                 <th>ชื่อลูกค้า</th>
                 <th>รถ</th>
                 <th>จำนวนเงิน</th>
+                <th>สถานะ</th>
                 <th>จัดการ</th>
               </tr>
             </thead>
@@ -128,7 +129,7 @@ export default function ReceiptListPage() {
                 return groups.map((group) => (
                   <React.Fragment key={group.dateKey}>
                     <tr className="date-group-header-row">
-                      <td colSpan={8}>
+                      <td colSpan={9}>
                         {new Date(group.dateKey).toLocaleDateString('th-TH', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
                         <span className="date-group-count"> ({group.rows.length} บิล)</span>
                       </td>
@@ -144,6 +145,9 @@ export default function ReceiptListPage() {
                           <td className="col-customer-name" data-label="ชื่อลูกค้า">{receipt.customer_name}</td>
                           <td className="car-info" data-label="รถ">{receipt.brand} {receipt.model} / {receipt.license_plate}</td>
                           <td className="amount" data-label="จำนวนเงิน">฿{Number(receipt.total_amount).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                          <td data-label="สถานะ">
+                            <span className="status-badge status-badge-paid">💰 ชำระแล้ว</span>
+                          </td>
                           <td className="actions" data-label="จัดการ">
                             <button
                               className="btn-icon-small"
