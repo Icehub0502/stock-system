@@ -612,7 +612,19 @@ button:disabled { background: #f3f4f6; color: #9ca3af; cursor: not-allowed; }
     flex-wrap: wrap;
     white-space: normal;
   }
-  .quotation-table td.actions button { flex: 1 1 auto; width: auto; }
+  .quotation-table td.actions button {
+    flex: 1 1 auto;
+    width: auto;
+    /* ปุ่มเล็ก (.btn-icon-small) สูงแค่ 32px ปกติ — บนจอสัมผัสต้องขยายให้ถึงขั้นต่ำ
+       ที่แนะนำ (~44px) กันกดพลาด โดยเฉพาะตอนเรียงหลายปุ่มติดกันในแถวเดียว */
+    min-height: 44px;
+  }
+  /* ปุ่ม "ลบ" (ทำลายข้อมูลถาวร) แยกไปอยู่แถวของตัวเอง ไม่ให้ติดกับปุ่มอื่นในระยะที่
+     นิ้วกดพลาดได้ง่าย — เคยเป็นความเสี่ยงเพราะเรียงชิดกัน 3 ปุ่มในแถวเดียวบนจอแคบ */
+  .quotation-table td.actions button.btn-danger {
+    flex-basis: 100%;
+    margin-top: 4px;
+  }
 
   /* Cells holding a form control (select/input/textarea) read better with
      the label stacked above a full-width control than squeezed side-by-side. */
