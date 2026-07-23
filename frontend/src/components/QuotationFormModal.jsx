@@ -20,6 +20,13 @@ const defaultItem = {
   amount: 0,
 };
 
+// ช่อง "ประกันแร็ค"/"ประกันลูกหมาก"/"ประกันอื่นๆ" ก่อนหมายเหตุ — เลือกจากแคตตาล็อก
+// การรับประกัน (/warranties) แล้วผูกอัตโนมัติเข้ากับรายการที่ชื่อตรงคำเหล่านี้
+// "ประกันอื่นๆ" ครอบคลุมรายการที่เหลือทั้งหมดที่ไม่ตรงทั้งสองคำ
+const RACK_KEYWORDS = ['แร็ค'];
+const BALL_JOINT_KEYWORDS = ['ลูกหมาก'];
+const ALL_WARRANTY_KEYWORDS = [...RACK_KEYWORDS, ...BALL_JOINT_KEYWORDS];
+
 export default function QuotationFormModal({ quotation, onClose, onSuccess, onDelete }) {
   const [quotationNo, setQuotationNo] = useState('');
   const [quotationDate, setQuotationDate] = useState(todayStr());
@@ -39,6 +46,10 @@ export default function QuotationFormModal({ quotation, onClose, onSuccess, onDe
   const [depositAmount, setDepositAmount] = useState('');
   const [depositDate, setDepositDate] = useState('');
   const [items, setItems] = useState([{ ...defaultItem }]);
+  const [warranties, setWarranties] = useState([]);
+  const [rackWarrantyId, setRackWarrantyId] = useState('');
+  const [ballJointWarrantyId, setBallJointWarrantyId] = useState('');
+  const [otherWarrantyId, setOtherWarrantyId] = useState('');
   const [productSuggestions, setProductSuggestions] = useState({});
   const [suggestionIndex, setSuggestionIndex] = useState({});
   const [loading, setLoading] = useState(false);
@@ -85,12 +96,55 @@ export default function QuotationFormModal({ quotation, onClose, onSuccess, onDe
     setDepositAmount('');
     setDepositDate('');
     setItems([{ ...defaultItem }]);
+    setRackWarrantyId('');
+    setBallJointWarrantyId('');
+    setOtherWarrantyId('');
     setProductSuggestions({});
     setSuggestionIndex({});
     setFieldErrors({});
     setError('');
     setToast(null);
     fetchQuotationNo();
+  };
+
+  useEffect(() => {
+    client.get('/warranties')
+      .then((res) => setWarranties((res.data.data || []).filter((w) => w.is_active)))
+      .catch((err) => console.error('Error loading warranties:', err));
+  }, []);
+
+  // ผูกประกันที่เลือกจาก dropdown เข้ากับรายการที่ชื่อตรงคำที่กำหนด (isOther=true
+  // หมายถึง "รายการที่เหลือทั้งหมดที่ไม่ตรงทั้งแร็คและลูกหมาก") — เลือก "ไม่มี" (id ว่าง)
+  // จะล้างค่าประกันของรายการที่ตรงเงื่อนไขนั้นทิ้ง
+  const applyWarrantyToItems = (keywords, warrantyId, isOther) => {
+    const warranty = warranties.find((w) => String(w.id) === warrantyId);
+    setItems((prev) => prev.map((item) => {
+      const name = item.product_name || '';
+      const matches = isOther
+        ? name && !keywords.some((kw) => name.includes(kw))
+        : keywords.some((kw) => name.includes(kw));
+      if (!matches) return item;
+      return {
+        ...item,
+        warranty_name: warranty ? warranty.warranty_name : '',
+        warranty_year: warranty ? warranty.warranty_year : 0,
+        warranty_month: warranty ? warranty.warranty_month : 0,
+        warranty_km: warranty ? warranty.warranty_km : 0,
+      };
+    }));
+  };
+
+  const handleRackWarrantyChange = (id) => {
+    setRackWarrantyId(id);
+    applyWarrantyToItems(RACK_KEYWORDS, id, false);
+  };
+  const handleBallJointWarrantyChange = (id) => {
+    setBallJointWarrantyId(id);
+    applyWarrantyToItems(BALL_JOINT_KEYWORDS, id, false);
+  };
+  const handleOtherWarrantyChange = (id) => {
+    setOtherWarrantyId(id);
+    applyWarrantyToItems(ALL_WARRANTY_KEYWORDS, id, true);
   };
 
   const loadQuotation = async (id) => {
@@ -690,10 +744,57 @@ export default function QuotationFormModal({ quotation, onClose, onSuccess, onDe
                 fieldErrors={fieldErrors}
                 nameField="product_name"
                 showWarranty={true}
-                enableManualWarranty={true}
                 placeholder="พิมพ์ชื่อสินค้า/บริการ"
                 compactRows={true}
               />
+
+              <div className="info-card">
+                <div className="info-card-title">การรับประกัน</div>
+                <div className="receipt-info-grid">
+                  <div className="form-group">
+                    <label>ประกันแร็ค</label>
+                    <select
+                      value={rackWarrantyId}
+                      onChange={(e) => handleRackWarrantyChange(e.target.value)}
+                    >
+                      <option value="">ไม่มี</option>
+                      {warranties.map((w) => (
+                        <option key={w.id} value={w.id}>
+                          {w.warranty_name} • {w.warranty_year} ปี {w.warranty_month} เดือน {Number(w.warranty_km).toLocaleString()} กม.
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label>ประกันลูกหมาก</label>
+                    <select
+                      value={ballJointWarrantyId}
+                      onChange={(e) => handleBallJointWarrantyChange(e.target.value)}
+                    >
+                      <option value="">ไม่มี</option>
+                      {warranties.map((w) => (
+                        <option key={w.id} value={w.id}>
+                          {w.warranty_name} • {w.warranty_year} ปี {w.warranty_month} เดือน {Number(w.warranty_km).toLocaleString()} กม.
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="form-group">
+                    <label>ประกันอื่นๆ</label>
+                    <select
+                      value={otherWarrantyId}
+                      onChange={(e) => handleOtherWarrantyChange(e.target.value)}
+                    >
+                      <option value="">ไม่มี</option>
+                      {warranties.map((w) => (
+                        <option key={w.id} value={w.id}>
+                          {w.warranty_name} • {w.warranty_year} ปี {w.warranty_month} เดือน {Number(w.warranty_km).toLocaleString()} กม.
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              </div>
 
               <div className="notes-summary-grid">
                 <div className="info-card note-card">

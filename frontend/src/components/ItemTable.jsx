@@ -28,7 +28,6 @@ export default function ItemTable({
   amountHeader = 'จำนวนเงิน',
   placeholder = 'พิมพ์ชื่อสินค้า/บริการ',
   showWarranty = true,
-  enableManualWarranty = false,
   codeFormatter,
 }) {
   const getCodeValue = (item) => {
@@ -92,7 +91,6 @@ export default function ItemTable({
                     nameField={nameField}
                     placeholder={placeholder}
                     showWarranty={showWarranty}
-                    enableManualWarranty={enableManualWarranty}
                   />
                 </td>
                 {!compactRows && <td className="item-detail-cell" data-label="รายละเอียด">{getDetailText(item)}</td>}
