@@ -45,6 +45,18 @@
   font-size: 0.92rem;
 }
 .receipt-warranty-note { margin-top: var(--space-xxs); font-size: 0.82rem; color: var(--color-success); }
+/* ช่องกรอกประกันเอง (เฉพาะรายการแร็ค/ลูกหมาก — ดู MANUAL_WARRANTY_KEYWORDS ใน
+   ItemSearch.jsx) แทนที่ .receipt-warranty-note แบบอ่านอย่างเดียวด้านบน */
+.warranty-manual-inputs { display: flex; gap: 4px; margin-top: var(--space-xxs); }
+.warranty-manual-input {
+  padding: 4px 6px !important;
+  font-size: 0.78rem !important;
+  border: 1px solid var(--color-border-muted) !important;
+  border-radius: var(--radius-sm) !important;
+  min-width: 0;
+}
+.warranty-manual-input.warranty-manual-name { flex: 2; }
+.warranty-manual-input:not(.warranty-manual-name) { flex: 1; }
 .receipt-modal-form .modal-subtitle { margin-top: var(--space-xxs); color: #4b5563; font-size: 0.95rem; }
 .receipt-modal-form .optional-label { color: var(--color-muted); font-size: 0.85rem; font-weight: 400; margin-left: 4px; }
 .receipt-modal-form .form-group label { display: block; margin-bottom: 6px; font-weight: 600; color: var(--color-text); }

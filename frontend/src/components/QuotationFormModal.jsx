@@ -690,6 +690,7 @@ export default function QuotationFormModal({ quotation, onClose, onSuccess, onDe
                 fieldErrors={fieldErrors}
                 nameField="product_name"
                 showWarranty={true}
+                enableManualWarranty={true}
                 placeholder="พิมพ์ชื่อสินค้า/บริการ"
                 compactRows={true}
               />
