@@ -606,24 +606,34 @@ button:disabled { background: #f3f4f6; color: #9ca3af; cursor: not-allowed; }
     flex-shrink: 0;
   }
 
+  /* Grid แทน flex เดิม — flex ที่มี ::before label ("จัดการ") ปนอยู่ในแถวเดียวกับปุ่ม
+     ทำให้ปุ่มไม่กระจายเต็มความกว้าง (เหลือพื้นที่ว่างด้านขวา, ปุ่มเบียดชิดซ้าย)
+     grid + auto-fit บังคับให้ปุ่มที่เหลือ (ไม่ว่ากี่ปุ่ม) กระจายเต็มแถวเสมอ */
   .quotation-table td.actions {
-    justify-content: stretch;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
     gap: 8px;
-    flex-wrap: wrap;
     white-space: normal;
+    padding-top: 12px;
+    padding-bottom: 12px;
+  }
+  /* label "จัดการ" ซ้ำซ้อนกับแถวปุ่มที่เห็นชัดอยู่แล้วว่าไว้จัดการรายการ — ซ่อนทิ้งเพื่อ
+     ให้ปุ่มมีพื้นที่เต็มแถวไม่ต้องแบ่งให้ label */
+  .quotation-table td.actions::before {
+    display: none;
   }
   .quotation-table td.actions button {
-    flex: 1 1 auto;
-    width: auto;
+    width: 100%;
+    margin: 0;
     /* ปุ่มเล็ก (.btn-icon-small) สูงแค่ 32px ปกติ — บนจอสัมผัสต้องขยายให้ถึงขั้นต่ำ
        ที่แนะนำ (~44px) กันกดพลาด โดยเฉพาะตอนเรียงหลายปุ่มติดกันในแถวเดียว */
     min-height: 44px;
   }
-  /* ปุ่ม "ลบ" (ทำลายข้อมูลถาวร) แยกไปอยู่แถวของตัวเอง ไม่ให้ติดกับปุ่มอื่นในระยะที่
-     นิ้วกดพลาดได้ง่าย — เคยเป็นความเสี่ยงเพราะเรียงชิดกัน 3 ปุ่มในแถวเดียวบนจอแคบ */
+  /* ปุ่ม "ลบ" (ทำลายข้อมูลถาวร) กินเต็มแถวของตัวเอง แยกจากปุ่มอื่นชัดเจน — เคยเป็น
+     ความเสี่ยงเพราะเรียงชิดกันในแถวเดียวบนจอแคบ */
   .quotation-table td.actions button.btn-danger {
-    flex-basis: 100%;
-    margin-top: 4px;
+    grid-column: 1 / -1;
+    margin-top: 2px;
   }
 
   /* Cells holding a form control (select/input/textarea) read better with
@@ -1969,7 +1979,7 @@ button:disabled { background: #f3f4f6; color: #9ca3af; cursor: not-allowed; }
   background: transparent;
   border: 1px solid #e5e7eb;
   padding: 6px 10px;
-  border-radius: 4px;
+  border-radius: 8px;
   cursor: pointer;
   font-size: 0.8rem;
   font-weight: 600;
