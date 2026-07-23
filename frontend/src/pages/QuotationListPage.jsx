@@ -6,6 +6,7 @@ import QuotationFormModal from "../components/QuotationFormModal";
 import QuotationPrintModal from "../components/QuotationPrintModal";
 import ScheduleDateDialog from "../components/ScheduleDateDialog";
 import SignatureModal from "../components/SignatureModal";
+import ActionsMenu from "../components/ActionsMenu";
 import { todayStr } from "../utils/format";
 
 function StatusBadge({ status, scheduledDate, closedAt }) {
@@ -288,22 +289,6 @@ export default function QuotationListPage() {
                           แก้ไข
                         </button>
                         <button
-                          className="btn-icon-small"
-                          title="แก้ไขชื่อ/เบอร์โทรลูกค้า"
-                          onClick={() => navigate(`/customers?edit=${q.customer_id}`)}
-                        >
-                          แก้ไขลูกค้า
-                        </button>
-                        {q.vehicle_id && (
-                          <button
-                            className="btn-icon-small"
-                            title="แก้ไขยี่ห้อ/รุ่น/สี/ทะเบียนรถ"
-                            onClick={() => navigate(`/vehicles?edit=${q.vehicle_id}`)}
-                          >
-                            แก้ไขรถ
-                          </button>
-                        )}
-                        <button
                           className={`btn-icon-small ${q.printed_at ? 'btn-printed' : ''}`}
                           onClick={() => {
                             setSelectedQuotation(q);
@@ -313,36 +298,43 @@ export default function QuotationListPage() {
                         >
                           {q.printed_at ? 'พิมพ์แล้ว' : 'พิมพ์'}
                         </button>
-                        <button
-                          className={`btn-icon-small ${q.customer_signature ? 'btn-printed' : ''}`}
-                          onClick={() => setSigningQuotationId(q.id)}
-                        >
-                          {q.customer_signature ? '✓ เซ็นแล้ว' : 'เซ็นเอกสาร'}
-                        </button>
                         {q.status !== 'approved' && (
-                          <>
-                            <button
-                              className="btn-icon-small"
-                              onClick={() => handleApprove(q)}
-                              disabled={actioningId === q.id}
-                            >
-                              อนุมัติ
-                            </button>
-                            <button
-                              className="btn-icon-small"
-                              onClick={() => setSchedulingQuotation(q)}
-                              disabled={actioningId === q.id}
-                            >
-                              วันที่
-                            </button>
-                          </>
+                          <button
+                            className="btn-icon-small"
+                            onClick={() => handleApprove(q)}
+                            disabled={actioningId === q.id}
+                          >
+                            อนุมัติ
+                          </button>
                         )}
-                        <button
-                          className="btn-icon-small btn-danger"
-                          onClick={() => handleDelete(q.id)}
-                        >
-                          ลบ
-                        </button>
+                        <ActionsMenu
+                          items={[
+                            {
+                              label: 'แก้ไขลูกค้า',
+                              onClick: () => navigate(`/customers?edit=${q.customer_id}`),
+                            },
+                            {
+                              label: 'แก้ไขรถ',
+                              hidden: !q.vehicle_id,
+                              onClick: () => navigate(`/vehicles?edit=${q.vehicle_id}`),
+                            },
+                            {
+                              label: q.customer_signature ? '✓ เซ็นแล้ว (แก้ไข)' : 'เซ็นเอกสาร',
+                              onClick: () => setSigningQuotationId(q.id),
+                            },
+                            {
+                              label: 'วันที่',
+                              hidden: q.status === 'approved',
+                              disabled: actioningId === q.id,
+                              onClick: () => setSchedulingQuotation(q),
+                            },
+                            {
+                              label: 'ลบ',
+                              danger: true,
+                              onClick: () => handleDelete(q.id),
+                            },
+                          ]}
+                        />
                       </td>
                     </tr>
                   ))}

@@ -2010,6 +2010,58 @@ button:disabled { background: #f3f4f6; color: #9ca3af; cursor: not-allowed; }
   border-color: #059669;
 }
 
+/* เมนู "⋮ เพิ่มเติม" — เก็บปุ่มที่ใช้ไม่บ่อยของแต่ละแถวตาราง กันแถวปุ่มแน่นเกินไป */
+.actions-menu {
+  position: relative;
+  display: inline-block;
+}
+.actions-menu-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 50;
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  min-width: 160px;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.actions-menu-item {
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #374151;
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.actions-menu-item:hover {
+  background: #f3f4f6;
+}
+.actions-menu-item.danger {
+  color: #dc2626;
+}
+.actions-menu-item.danger:hover {
+  background: #fee2e2;
+}
+.actions-menu-item:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+@media (max-width: 640px) {
+  /* ในมุมมองการ์ดมือถือ (.quotation-table td.actions เป็น grid) ให้ dropdown
+     กินเต็มความกว้างแทนการลอยชิดขวา (พื้นที่แคบเกินจะลอยได้สวย) */
+  .actions-menu { width: 100%; }
+  .actions-menu-dropdown { left: 0; right: 0; width: 100%; }
+}
+
 /* Modal Styles */
 .modal-card {
   background: white;
