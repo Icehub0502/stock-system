@@ -1,12 +1,9 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import client from "../api/client";
 import QuotationFormModal from "../components/QuotationFormModal";
 import QuotationPrintModal from "../components/QuotationPrintModal";
 import ScheduleDateDialog from "../components/ScheduleDateDialog";
-import SignatureModal from "../components/SignatureModal";
-import ActionsMenu from "../components/ActionsMenu";
 import { todayStr } from "../utils/format";
 
 function StatusBadge({ status, scheduledDate, closedAt }) {
@@ -36,7 +33,6 @@ function StatusBadge({ status, scheduledDate, closedAt }) {
 
 export default function QuotationListPage() {
   const { user } = useAuth();
-  const navigate = useNavigate();
   const [quotations, setQuotations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -50,7 +46,6 @@ export default function QuotationListPage() {
   const [selectedQuotation, setSelectedQuotation] = useState(null);
   const [editingQuotation, setEditingQuotation] = useState(null);
   const [schedulingQuotation, setSchedulingQuotation] = useState(null);
-  const [signingQuotationId, setSigningQuotationId] = useState(null);
 
   // Fetch quotations
   const fetchQuotations = async () => {
@@ -104,12 +99,16 @@ export default function QuotationListPage() {
     [quotations]
   );
 
-  // Handle delete
+  // Handle delete — also callable from inside QuotationFormModal's own
+  // "ลบใบเสนอราคา" button (ย้ายมารวมกับปุ่มแก้ไข แทนปุ่มแยกในตาราง), จึงต้องปิด
+  // modal แก้ไขให้ด้วยถ้ากำลังเปิดอยู่
   const handleDelete = async (id) => {
     if (window.confirm("คุณต้องการลบใบเสนอราคานี้หรือไม่?")) {
       try {
         await client.delete(`/quotations/${id}`);
-        setQuotations(quotations.filter(q => q.id !== id));
+        setQuotations((prev) => prev.filter(q => q.id !== id));
+        setShowFormModal(false);
+        setEditingQuotation(null);
         alert("ลบสำเร็จ");
       } catch (err) {
         alert(err.response?.data?.error || "เกิดข้อผิดพลาด");
@@ -166,13 +165,6 @@ export default function QuotationListPage() {
     } finally {
       setActioningId(null);
     }
-  };
-
-  const handleSaveSignature = async (dataUrl) => {
-    await client.patch(`/quotations/${signingQuotationId}/signature`, { signature: dataUrl });
-    setQuotations((prev) =>
-      prev.map((q) => (q.id === signingQuotationId ? { ...q, customer_signature: dataUrl } : q))
-    );
   };
 
   const handleFormSuccess = () => {
@@ -299,42 +291,23 @@ export default function QuotationListPage() {
                           {q.printed_at ? 'พิมพ์แล้ว' : 'พิมพ์'}
                         </button>
                         {q.status !== 'approved' && (
-                          <button
-                            className="btn-icon-small"
-                            onClick={() => handleApprove(q)}
-                            disabled={actioningId === q.id}
-                          >
-                            อนุมัติ
-                          </button>
+                          <>
+                            <button
+                              className="btn-icon-small"
+                              onClick={() => handleApprove(q)}
+                              disabled={actioningId === q.id}
+                            >
+                              อนุมัติ
+                            </button>
+                            <button
+                              className="btn-icon-small"
+                              onClick={() => setSchedulingQuotation(q)}
+                              disabled={actioningId === q.id}
+                            >
+                              วันที่
+                            </button>
+                          </>
                         )}
-                        <ActionsMenu
-                          items={[
-                            {
-                              label: 'แก้ไขลูกค้า',
-                              onClick: () => navigate(`/customers?edit=${q.customer_id}`),
-                            },
-                            {
-                              label: 'แก้ไขรถ',
-                              hidden: !q.vehicle_id,
-                              onClick: () => navigate(`/vehicles?edit=${q.vehicle_id}`),
-                            },
-                            {
-                              label: q.customer_signature ? '✓ เซ็นแล้ว (แก้ไข)' : 'เซ็นเอกสาร',
-                              onClick: () => setSigningQuotationId(q.id),
-                            },
-                            {
-                              label: 'วันที่',
-                              hidden: q.status === 'approved',
-                              disabled: actioningId === q.id,
-                              onClick: () => setSchedulingQuotation(q),
-                            },
-                            {
-                              label: 'ลบ',
-                              danger: true,
-                              onClick: () => handleDelete(q.id),
-                            },
-                          ]}
-                        />
                       </td>
                     </tr>
                   ))}
@@ -354,6 +327,7 @@ export default function QuotationListPage() {
             setEditingQuotation(null);
           }}
           onSuccess={handleFormSuccess}
+          onDelete={handleDelete}
         />
       )}
 
@@ -372,15 +346,6 @@ export default function QuotationListPage() {
           onConfirm={handleScheduleConfirm}
           onNoDate={handleNoDate}
           onCancel={() => setSchedulingQuotation(null)}
-        />
-      )}
-
-      {signingQuotationId && (
-        <SignatureModal
-          title="เซ็นชื่อลูกค้า"
-          subtitle="ให้ลูกค้าเซ็นชื่อยืนยันในกรอบด้านล่าง"
-          onSave={handleSaveSignature}
-          onClose={() => setSigningQuotationId(null)}
         />
       )}
 

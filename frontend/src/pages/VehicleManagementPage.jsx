@@ -1,9 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
 import client from '../api/client';
 
 export default function VehicleManagementPage() {
-  const [searchParams, setSearchParams] = useSearchParams();
   const [vehicles, setVehicles] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [search, setSearch] = useState('');
@@ -40,18 +38,6 @@ export default function VehicleManagementPage() {
     fetchCustomers();
     fetchVehicles();
   }, []);
-
-  // ทางลัดจากหน้าใบเสนอราคา ("แก้ไขรถ") ส่ง ?edit=<id> มา — เปิด modal แก้ไขให้
-  // อัตโนมัติเมื่อโหลดรายการรถเสร็จ แล้วล้าง query param ทิ้งกันรีเฟรชหน้าซ้ำแล้วเด้ง
-  // modal ขึ้นมาอีกทั้งที่ไม่ได้ตั้งใจ
-  useEffect(() => {
-    const editId = searchParams.get('edit');
-    if (!editId || vehicles.length === 0) return;
-    const target = vehicles.find((v) => String(v.id) === editId);
-    if (target) openEdit(target);
-    setSearchParams({}, { replace: true });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [vehicles, searchParams]);
 
   const openAdd = () => {
     setEditing(null);

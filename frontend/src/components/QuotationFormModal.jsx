@@ -20,7 +20,7 @@ const defaultItem = {
   amount: 0,
 };
 
-export default function QuotationFormModal({ quotation, onClose, onSuccess }) {
+export default function QuotationFormModal({ quotation, onClose, onSuccess, onDelete }) {
   const [quotationNo, setQuotationNo] = useState('');
   const [quotationDate, setQuotationDate] = useState(todayStr());
   const [customerQuery, setCustomerQuery] = useState('');
@@ -742,6 +742,15 @@ export default function QuotationFormModal({ quotation, onClose, onSuccess }) {
                 <button type="button" className="btn btn-secondary" onClick={requestClose}>
                   ยกเลิก
                 </button>
+                {quotation && onDelete && (
+                  <button
+                    type="button"
+                    className="btn btn-danger"
+                    onClick={() => onDelete(quotation.id)}
+                  >
+                    ลบใบเสนอราคา
+                  </button>
+                )}
               </div>
             </form>
           </div>

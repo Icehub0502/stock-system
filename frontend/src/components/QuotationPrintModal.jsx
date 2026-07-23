@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import client from "../api/client";
 import QuotationPrintTemplate from "./QuotationPrintTemplate";
 import PrintPortal from "./PrintPortal";
+import SignatureModal from "./SignatureModal";
 import useFitToWidth from "../hooks/useFitToWidth";
 
 export default function QuotationPrintModal({ quotation, onClose, onPrinted }) {
@@ -10,6 +11,14 @@ export default function QuotationPrintModal({ quotation, onClose, onPrinted }) {
   // the on-screen preview is scaled; the PrintPortal copy prints full A4.
   const { containerRef: previewRef, scale: previewScale } = useFitToWidth([detail]);
   const [justPrinted, setJustPrinted] = useState(false);
+  // เซ็นเอกสารย้ายมาไว้ในหน้าพิมพ์แทนปุ่มแยกในตารางหลัก — เซ็นแล้วเห็นผลทันทีในตัวอย่าง
+  // ก่อนพิมพ์จริง (เหมาะกับ flow จริง: ให้ลูกค้าเซ็นตอนจะพิมพ์เอกสารให้)
+  const [showSignature, setShowSignature] = useState(false);
+
+  const handleSaveSignature = async (dataUrl) => {
+    await client.patch(`/quotations/${quotation.id}/signature`, { signature: dataUrl });
+    setDetail((prev) => ({ ...prev, customer_signature: dataUrl }));
+  };
 
   useEffect(() => {
     if (!quotation?.items) {
@@ -84,6 +93,9 @@ export default function QuotationPrintModal({ quotation, onClose, onPrinted }) {
         <div className="modal-header print-header">
           <h2>ตัวอย่างการพิมพ์</h2>
           <div className="print-actions">
+            <button className="btn btn-secondary" onClick={() => setShowSignature(true)}>
+              {detail.customer_signature ? '✓ เซ็นแล้ว (แก้ไข)' : 'เซ็นเอกสาร'}
+            </button>
             <button className="btn btn-primary" onClick={handlePrint}>
               {justPrinted ? '✅ พิมพ์แล้วครับ' : '🖨️ พิมพ์'}
             </button>
@@ -109,6 +121,14 @@ export default function QuotationPrintModal({ quotation, onClose, onPrinted }) {
       <PrintPortal>
         <QuotationPrintTemplate data={data} />
       </PrintPortal>
+      {showSignature && (
+        <SignatureModal
+          title="เซ็นชื่อลูกค้า"
+          subtitle="ให้ลูกค้าเซ็นชื่อยืนยันในกรอบด้านล่าง"
+          onSave={handleSaveSignature}
+          onClose={() => setShowSignature(false)}
+        />
+      )}
     </div>
   );
 }
