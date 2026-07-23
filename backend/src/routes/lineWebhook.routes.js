@@ -658,14 +658,22 @@ async function createQuotationFromQueue(parsed) {
       );
       if (rows.length > 0) vehicleId = rows[0].id;
     }
-    if (vehicleId && (parsed.color || parsed.mileage != null)) {
-      // รถคันเดิมแต่ข้อความบอกสี/เลขไมล์มาใหม่ → อัปเดตให้เป็นค่าล่าสุด (เลขไมล์
-      // เปลี่ยนทุกครั้งที่รถเข้า, สีเติมให้ถ้าเพิ่งบอกมา) ค่าที่ไม่ได้บอกไม่แตะ — รวมถึง
-      // กรณีใช้รถเดิมจาก existing.vehicle_id ด้านบนด้วย (เลขไมล์ยังต้องอัปเดตได้ปกติ
-      // แม้ตัวรถ (id) จะคงเดิมเสมอก็ตาม)
+    if (vehicleId && parsed.mileage != null) {
+      // เลขไมล์เปลี่ยนทุกครั้งที่รถเข้า (ข้อมูลการเข้าใช้บริการ ไม่ใช่ข้อมูลประจำตัวรถ)
+      // จึงยังอัปเดตได้ปกติทุกครั้งที่ข้อความบอกมา ไม่ว่าจะเป็นข้อความแรกหรือ resend
       await conn.execute(
-        'UPDATE vehicles SET color = COALESCE(?, color), mileage = COALESCE(?, mileage) WHERE id = ?',
-        [parsed.color || null, parsed.mileage ?? null, vehicleId]
+        'UPDATE vehicles SET mileage = ? WHERE id = ?',
+        [parsed.mileage, vehicleId]
+      );
+    }
+    if (vehicleId && !isUpdate && parsed.color) {
+      // สี (เหมือนชื่อ/เบอร์โทร/ยี่ห้อ/รุ่น/ทะเบียน) ถือเป็นข้อมูลประจำตัวลูกค้า/รถ —
+      // แก้ไขได้จากข้อความแรกที่สร้าง/เชื่อมรถเท่านั้น ข้อความ resend (isUpdate=true,
+      // เช่นพนักงานก๊อปเทมเพลตเดิมส่งซ้ำเพื่อเพิ่มรายการ) ห้ามทับค่าที่อาจเคยแก้ไขถูก
+      // ต้องแล้วในหน้าเว็บ — เจ้าของร้านสั่งให้แก้ข้อมูลประจำตัวได้ทางเว็บเท่านั้น
+      await conn.execute(
+        'UPDATE vehicles SET color = ? WHERE id = ?',
+        [parsed.color, vehicleId]
       );
     }
     if (!vehicleId && (parsed.brand || parsed.license_plate)) {

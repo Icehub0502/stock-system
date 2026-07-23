@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import client from '../api/client';
 
 export default function CustomerManagementPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [customers, setCustomers] = useState([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
@@ -30,6 +32,18 @@ export default function CustomerManagementPage() {
     }, 300);
     return () => clearTimeout(timer);
   }, [search]);
+
+  // ทางลัดจากหน้าใบเสนอราคา ("แก้ไขลูกค้า") ส่ง ?edit=<id> มา — เปิด modal แก้ไข
+  // ให้อัตโนมัติเมื่อโหลดรายชื่อลูกค้าเสร็จ แล้วล้าง query param ทิ้งกันรีเฟรชหน้าซ้ำ
+  // แล้วเด้ง modal ขึ้นมาอีกทั้งที่ไม่ได้ตั้งใจ
+  useEffect(() => {
+    const editId = searchParams.get('edit');
+    if (!editId || customers.length === 0) return;
+    const target = customers.find((c) => String(c.id) === editId);
+    if (target) openEdit(target);
+    setSearchParams({}, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [customers, searchParams]);
 
   const openAdd = () => {
     setEditing(null);

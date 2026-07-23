@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import client from "../api/client";
 import QuotationFormModal from "../components/QuotationFormModal";
@@ -34,6 +35,7 @@ function StatusBadge({ status, scheduledDate, closedAt }) {
 
 export default function QuotationListPage() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [quotations, setQuotations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -285,6 +287,22 @@ export default function QuotationListPage() {
                         >
                           แก้ไข
                         </button>
+                        <button
+                          className="btn-icon-small"
+                          title="แก้ไขชื่อ/เบอร์โทรลูกค้า"
+                          onClick={() => navigate(`/customers?edit=${q.customer_id}`)}
+                        >
+                          แก้ไขลูกค้า
+                        </button>
+                        {q.vehicle_id && (
+                          <button
+                            className="btn-icon-small"
+                            title="แก้ไขยี่ห้อ/รุ่น/สี/ทะเบียนรถ"
+                            onClick={() => navigate(`/vehicles?edit=${q.vehicle_id}`)}
+                          >
+                            แก้ไขรถ
+                          </button>
+                        )}
                         <button
                           className={`btn-icon-small ${q.printed_at ? 'btn-printed' : ''}`}
                           onClick={() => {
