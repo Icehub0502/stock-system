@@ -68,7 +68,9 @@ function findWarrantySlotText(items, slot) {
 // enforce their own small hardware margin that CSS `@page { margin: 0 }`
 // cannot override, meaning content sized to the full nominal 297mm can still
 // clip on a real printer. 12 rows measured ~286mm, leaving an ~11mm buffer.
-const ITEMS_PER_PAGE = 12;
+// Deposit row is now always rendered (fixed height regardless of data), so
+// ITEMS_PER_PAGE is reduced from 12 to 11 to keep the page within A4 bounds.
+const ITEMS_PER_PAGE = 11;
 
 function chunkItems(items, size) {
   if (items.length === 0) return [[]];
@@ -215,12 +217,10 @@ export default function ReceiptPrintTemplate({ data }) {
               </span>
             </div>
 
-            {hasDeposit && (
-              <div className="doc-remark-row doc-deposit-row">
-                <span><b>มัดจำ :</b> ฿{formatMoney(depositAmountNum)}{deposit_date ? ` (${formatThaiDateShort(deposit_date)})` : ''}</span>
-                <span className="doc-remaining-balance"><b>ยอดคงเหลือชำระ :</b> ฿{formatMoney(grandTotal - depositAmountNum)}</span>
-              </div>
-            )}
+            <div className="doc-remark-row doc-deposit-row">
+              <span><b>มัดจำ :</b> {hasDeposit ? `฿${formatMoney(depositAmountNum)}${deposit_date ? ` (${formatThaiDateShort(deposit_date)})` : ''}` : '-'}</span>
+              <span className="doc-remaining-balance"><b>ยอดคงเหลือชำระ :</b> {hasDeposit ? `฿${formatMoney(grandTotal - depositAmountNum)}` : '-'}</span>
+            </div>
 
             <div className="doc-warranty-row">
               {WARRANTY_SLOTS.map((slot) => {

@@ -32,11 +32,12 @@ function findWarrantySlotText(items, slot) {
 }
 
 // Measured against real A4 (297mm) with the symptom + warranty rows now
-// included: 13 rows leaves only ~2mm, 14+ overflows outright. 12 rows
-// measures ~287mm, leaving a ~10mm buffer — matches ReceiptPrintTemplate.jsx's
-// own ITEMS_PER_PAGE now that both pages carry almost the same fixed content
-// (this template is just missing the payment-method checkbox row).
-const ITEMS_PER_PAGE = 12;
+// included, and the deposit row always rendered (fixed-height regardless of
+// data): 12 rows overflows, 11 rows fits with a small buffer — matches
+// ReceiptPrintTemplate.jsx's own ITEMS_PER_PAGE now that both pages carry
+// almost the same fixed content (this template is just missing the
+// payment-method checkbox row).
+const ITEMS_PER_PAGE = 11;
 
 function formatThaiDate(dateInput) {
   const d = new Date(dateInput);
@@ -206,12 +207,10 @@ export default function QuotationPrintTemplate({ data }) {
               </span>
             </div>
 
-            {hasDeposit && (
-              <div className="doc-remark-row doc-deposit-row">
-                <span><b>มัดจำ :</b> ฿{formatMoney(depositAmountNum)}{deposit_date ? ` (${formatThaiDateShort(deposit_date)})` : ''}</span>
-                <span className="doc-remaining-balance"><b>ยอดคงเหลือชำระ :</b> ฿{formatMoney(grandTotal - depositAmountNum)}</span>
-              </div>
-            )}
+            <div className="doc-remark-row doc-deposit-row">
+              <span><b>มัดจำ :</b> {hasDeposit ? `฿${formatMoney(depositAmountNum)}${deposit_date ? ` (${formatThaiDateShort(deposit_date)})` : ''}` : '-'}</span>
+              <span className="doc-remaining-balance"><b>ยอดคงเหลือชำระ :</b> {hasDeposit ? `฿${formatMoney(grandTotal - depositAmountNum)}` : '-'}</span>
+            </div>
 
             <div className="doc-warranty-row">
               {WARRANTY_SLOTS.map((slot) => {
