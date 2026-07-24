@@ -85,6 +85,8 @@ export default function QuotationPrintModal({ quotation, onClose, onPrinted }) {
     items: detail.items || [],
     remark: detail.remark,
     customer_signature: detail.customer_signature,
+    deposit_amount: detail.deposit_amount,
+    deposit_date: detail.deposit_date,
   };
 
   return (
