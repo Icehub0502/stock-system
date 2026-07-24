@@ -67,7 +67,7 @@ router.get('/next-code', async (req, res) => {
 router.get('/', async (req, res) => {
   try {
     const [rows] = await pool.execute(
-      `SELECT rn.id, rn.code, rn.notice_date, rn.checked_by, rn.repaired_by, rn.created_at,
+      `SELECT rn.id, rn.code, rn.notice_date, rn.checked_by, rn.repaired_by, rn.checklist, rn.created_at,
               c.customer_name, c.customer_code,
               v.brand, v.model, v.color, v.license_plate,
               q.queue_no
