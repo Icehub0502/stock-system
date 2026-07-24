@@ -101,6 +101,7 @@ export default function ItemTable({
                     type="number"
                     min="1"
                     step="1"
+                    required
                     value={item.quantity ?? item.qty}
                     onChange={(e) => handleItemChange(idx, 'quantity' in item ? 'quantity' : 'qty', e.target.value)}
                   />

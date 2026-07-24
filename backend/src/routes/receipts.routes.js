@@ -11,6 +11,21 @@ function normalizePhone(phone) {
   return digitsOnly ? formatPhone(digitsOnly) : phone;
 }
 
+// รายการที่มีชื่อ/service_item_id จริง แต่จำนวนกรอกมาไม่ใช่ตัวเลขบวก (เช่น พิมพ์
+// ตัวอักษรผิดในช่องจำนวน กลายเป็น NaN) — การกรอง validItems ด้านล่างจะดรอปรายการ
+// แบบนี้ทิ้งเงียบ ๆ ถ้ายังมีรายการอื่นที่ถูกต้องเหลืออยู่ (ไม่ครบ 0 รายการ เลยไม่โดน
+// เช็ค "กรุณาเพิ่มรายการ" ด้านล่าง) ต้องเช็คแยกก่อนเพื่อตอบ 400 ให้แก้ไขแทน
+function findInvalidItems(items) {
+  if (!Array.isArray(items)) return [];
+  return items.filter((item) => {
+    const productName = item.product_name_snapshot?.toString().trim();
+    const hasService = Boolean(item.service_item_id);
+    if (!productName && !hasService) return false;
+    const qty = Number(item.qty || 0);
+    return !(qty > 0);
+  });
+}
+
 const router = express.Router();
 router.use(authenticate);
 router.use(requireRole('office'));
@@ -368,6 +383,11 @@ router.post('/', async (req, res) => {
     return res.status(400).json(formatValidation([['general', 'กรุณากรอกข้อมูลบิลให้ครบถ้วน']]));
   }
 
+  const invalidItems = findInvalidItems(items);
+  if (invalidItems.length > 0) {
+    return res.status(400).json(formatValidation([['items', `จำนวนของรายการ "${invalidItems[0].product_name_snapshot || '-'}" ไม่ถูกต้อง กรุณาตรวจสอบ`]]));
+  }
+
   const validItems = Array.isArray(items)
     ? items.filter((item) => {
         const productName = item.product_name_snapshot?.toString().trim();
@@ -408,12 +428,22 @@ router.post('/', async (req, res) => {
 
     if (!selectedCustomerId) {
       const { customer_name, phone } = newCustomer;
-      const customerCode = await generateCustomerCode(conn);
-      const [customerResult] = await conn.execute(
-        `INSERT INTO customers (customer_code, customer_name, phone) VALUES (?, ?, ?)`,
-        [customerCode, customer_name, normalizePhone(phone)]
-      );
-      selectedCustomerId = customerResult.insertId;
+      const normalizedNewPhone = normalizePhone(phone);
+      // เช็คเบอร์ซ้ำก่อนสร้างลูกค้าใหม่ (เหมือนที่บอทไลน์ทำ) — กันสร้างลูกค้าซ้ำซ้อน
+      // ถ้าเบอร์นี้เคยมีอยู่แล้วในระบบ (เช่น เคยสร้างผ่านไลน์มาก่อน) ใช้คนเดิมแทน
+      const [existingByPhone] = normalizedNewPhone
+        ? await conn.execute('SELECT id FROM customers WHERE phone = ? LIMIT 1', [normalizedNewPhone])
+        : [[]];
+      if (existingByPhone.length > 0) {
+        selectedCustomerId = existingByPhone[0].id;
+      } else {
+        const customerCode = await generateCustomerCode(conn);
+        const [customerResult] = await conn.execute(
+          `INSERT INTO customers (customer_code, customer_name, phone) VALUES (?, ?, ?)`,
+          [customerCode, customer_name, normalizedNewPhone]
+        );
+        selectedCustomerId = customerResult.insertId;
+      }
     } else {
       const [customerRows] = await conn.execute('SELECT id FROM customers WHERE id = ?', [selectedCustomerId]);
       if (customerRows.length === 0) {
@@ -490,7 +520,7 @@ router.post('/', async (req, res) => {
 
 router.put('/:id', async (req, res) => {
   const receiptId = Number(req.params.id);
-  const { customer_id, newCustomer, vehicle_id, receipt_date, mileage, remark, payment_method, technician_name, items, newVehicle } = req.body;
+  const { customer_id, newCustomer, vehicle_id, receipt_date, mileage, remark, payment_method, technician_name, items, newVehicle, deposit_amount, deposit_date } = req.body;
   const toNumber = (value) => {
     const n = Number(value);
     return Number.isFinite(n) ? n : null;
@@ -507,6 +537,11 @@ router.put('/:id', async (req, res) => {
 
   if ((!selectedCustomerId && (!newCustomer || !newCustomer.customer_name)) || !receipt_date || !items || !Array.isArray(items) || items.length === 0) {
     return res.status(400).json(formatValidation([['general', 'กรุณากรอกข้อมูลบิลให้ครบถ้วน']]));
+  }
+
+  const invalidItems = findInvalidItems(items);
+  if (invalidItems.length > 0) {
+    return res.status(400).json(formatValidation([['items', `จำนวนของรายการ "${invalidItems[0].product_name_snapshot || '-'}" ไม่ถูกต้อง กรุณาตรวจสอบ`]]));
   }
 
   const validItems = Array.isArray(items)
@@ -546,20 +581,39 @@ router.put('/:id', async (req, res) => {
     conn = await pool.getConnection();
     await conn.beginTransaction();
 
-    const [receiptRows] = await conn.execute('SELECT id FROM receipts WHERE id = ?', [receiptId]);
+    const [receiptRows] = await conn.execute('SELECT id, deposit_amount, deposit_date FROM receipts WHERE id = ?', [receiptId]);
     if (receiptRows.length === 0) {
       await conn.rollback();
       return res.status(404).json({ error: 'ไม่พบบิลนี้' });
     }
+    const existingReceipt = receiptRows[0];
+
+    // มัดจำ: ไม่ส่ง field มาเลย (ฟอร์มเก่า/ไม่ได้แตะช่องนี้) = คงค่าเดิมไว้ ไม่ทับด้วย
+    // null ทิ้ง — ส่งมาชัดเจน (แม้จะเป็นค่าว่าง/null) = ตั้งใจล้าง/แก้ไขจริง (เหมือน
+    // จุดเดียวกันใน quotations.routes.js PUT /:id)
+    const depositAmount = deposit_amount === undefined
+      ? existingReceipt.deposit_amount
+      : (deposit_amount === '' || deposit_amount === null ? null : Number(deposit_amount));
+    const depositDate = deposit_date === undefined ? existingReceipt.deposit_date : (deposit_date || null);
 
     if (!selectedCustomerId) {
       const { customer_name, phone } = newCustomer;
-      const customerCode = await generateCustomerCode(conn);
-      const [customerResult] = await conn.execute(
-        `INSERT INTO customers (customer_code, customer_name, phone) VALUES (?, ?, ?)`,
-        [customerCode, customer_name, normalizePhone(phone)]
-      );
-      selectedCustomerId = customerResult.insertId;
+      const normalizedNewPhone = normalizePhone(phone);
+      // เช็คเบอร์ซ้ำก่อนสร้างลูกค้าใหม่ (เหมือนที่บอทไลน์ทำ) — กันสร้างลูกค้าซ้ำซ้อน
+      // ถ้าเบอร์นี้เคยมีอยู่แล้วในระบบ (เช่น เคยสร้างผ่านไลน์มาก่อน) ใช้คนเดิมแทน
+      const [existingByPhone] = normalizedNewPhone
+        ? await conn.execute('SELECT id FROM customers WHERE phone = ? LIMIT 1', [normalizedNewPhone])
+        : [[]];
+      if (existingByPhone.length > 0) {
+        selectedCustomerId = existingByPhone[0].id;
+      } else {
+        const customerCode = await generateCustomerCode(conn);
+        const [customerResult] = await conn.execute(
+          `INSERT INTO customers (customer_code, customer_name, phone) VALUES (?, ?, ?)`,
+          [customerCode, customer_name, normalizedNewPhone]
+        );
+        selectedCustomerId = customerResult.insertId;
+      }
     } else {
       const [customerRows] = await conn.execute('SELECT id FROM customers WHERE id = ?', [selectedCustomerId]);
       if (customerRows.length === 0) {
@@ -593,8 +647,8 @@ router.put('/:id', async (req, res) => {
     const total_amount = normalizedItems.reduce((sum, item) => sum + item.qty * item.price, 0);
 
     await conn.execute(
-      `UPDATE receipts SET receipt_date = ?, customer_id = ?, vehicle_id = ?, mileage = ?, remark = ?, payment_method = ?, technician_name = ?, total_amount = ? WHERE id = ?`,
-      [receipt_date, selectedCustomerId, selectedVehicleId, Number(mileage) || 0, remark || null, payment_method || null, technician_name || null, total_amount, receiptId]
+      `UPDATE receipts SET receipt_date = ?, customer_id = ?, vehicle_id = ?, mileage = ?, remark = ?, payment_method = ?, technician_name = ?, total_amount = ?, deposit_amount = ?, deposit_date = ? WHERE id = ?`,
+      [receipt_date, selectedCustomerId, selectedVehicleId, Number(mileage) || 0, remark || null, payment_method || null, technician_name || null, total_amount, depositAmount, depositDate, receiptId]
     );
 
     await conn.execute('DELETE FROM receipt_items WHERE receipt_id = ?', [receiptId]);

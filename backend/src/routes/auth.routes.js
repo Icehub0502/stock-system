@@ -8,6 +8,13 @@ const { JWT_SECRET, JWT_EXPIRES_IN } = require('../config');
 
 const router = express.Router();
 
+// ใช้เทียบแทนตอน username ไม่มีอยู่จริง กันการ short-circuit (return ทันทีโดยไม่เรียก
+// bcrypt.compareSync เลย) ที่ทำให้ตอบกลับเร็วกว่ากรณี username มีอยู่จริงแต่ password
+// ผิด (bcrypt ใช้เวลา ~50-100ms) — ต่างเวลาตอบขนาดนี้พอให้เดารายชื่อ user ที่มีอยู่จริง
+// ในระบบได้ (username enumeration) แม้ความเสี่ยงจะต่ำเพราะเป็นระบบใช้ภายในร้าน + มี
+// rate limit กันไว้แล้วก็ตาม แก้ให้ตอบเวลาใกล้เคียงกันทั้งสองกรณีไปเลย
+const DUMMY_HASH = bcrypt.hashSync('dummy-password-for-timing', 10);
+
 // จำกัดการพยายาม login เพื่อกัน brute-force เดารหัสผ่าน
 // 10 ครั้ง/IP ต่อ 15 นาที (นับเฉพาะครั้งที่ล็อกอินไม่สำเร็จ)
 const loginLimiter = rateLimit({
@@ -27,7 +34,8 @@ router.post('/login', loginLimiter, async (req, res) => {
   try {
     const [rows] = await pool.execute('SELECT * FROM users WHERE username = ?', [username.trim()]);
     const user = rows[0];
-    if (!user || !bcrypt.compareSync(password, user.password_hash)) {
+    const passwordMatches = bcrypt.compareSync(password, user ? user.password_hash : DUMMY_HASH);
+    if (!user || !passwordMatches) {
       return res.status(401).json({ error: 'username หรือ password ไม่ถูกต้อง' });
     }
     const payload = {

@@ -241,6 +241,7 @@ export default function VehicleManagementPage() {
                 <input
                   type="number"
                   min="0"
+                  max="9999999"
                   value={form.mileage}
                   onChange={(e) => setForm({ ...form, mileage: Number(e.target.value) })}
                 />

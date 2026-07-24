@@ -13,9 +13,18 @@ export function applyWarrantyToItems(items, warranties, keywords, warrantyId, is
   const warranty = warranties.find((w) => String(w.id) === warrantyId);
   return items.map((item) => {
     const name = item[nameField] || '';
-    const matches = isOther
-      ? name && !keywords.some((kw) => name.includes(kw))
-      : keywords.some((kw) => name.includes(kw));
+    let matches;
+    if (isOther) {
+      matches = name && !ALL_WARRANTY_KEYWORDS.some((kw) => name.includes(kw));
+    } else {
+      // ชื่อที่มีทั้งคำของแร็คและลูกหมากพร้อมกัน (เช่น "แร็คลูกหมาก...") กำกวมว่าจะ
+      // ผูกกับ dropdown ไหน — เดิมเลือก dropdown ไหนทีหลังจะทับอีกอันเงียบ ๆ โดยไม่รู้ตัว
+      // ตอนนี้ไม่ผูกอัตโนมัติให้ทั้งคู่เลย (ตกไปอยู่ใน "อื่นๆ" แทน) กันความกำกวมนี้
+      const otherKeywords = ALL_WARRANTY_KEYWORDS.filter((kw) => !keywords.includes(kw));
+      const matchesOwn = keywords.some((kw) => name.includes(kw));
+      const matchesOther = otherKeywords.some((kw) => name.includes(kw));
+      matches = matchesOwn && !matchesOther;
+    }
     if (!matches) return item;
     return {
       ...item,
@@ -35,9 +44,11 @@ export function findMatchingWarrantyId(items, warranties, keywords, isOther, nam
   const match = items.find((item) => {
     const name = item[nameField] || '';
     if (!name || !item.warranty_name) return false;
-    return isOther
-      ? !keywords.some((kw) => name.includes(kw))
-      : keywords.some((kw) => name.includes(kw));
+    if (isOther) return !ALL_WARRANTY_KEYWORDS.some((kw) => name.includes(kw));
+    // ชื่อที่ตรงทั้งสองคำพร้อมกัน (แร็ค+ลูกหมาก) ถือเป็น "อื่นๆ" เหมือนตอน apply —
+    // กันดึงค่าประกันที่จริง ๆ ตั้งใจให้เป็น "อื่นๆ" มาโผล่ผิด dropdown ตอนเปิดแก้ไข
+    const otherKeywords = ALL_WARRANTY_KEYWORDS.filter((kw) => !keywords.includes(kw));
+    return keywords.some((kw) => name.includes(kw)) && !otherKeywords.some((kw) => name.includes(kw));
   });
   if (!match) return '';
   const found = warranties.find((w) =>

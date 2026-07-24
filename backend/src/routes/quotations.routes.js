@@ -136,6 +136,20 @@ function buildValidItems(items) {
     : [];
 }
 
+// รายการที่มีชื่อจริง (ไม่ใช่แถวว่างเปล่าที่ตั้งใจไม่กรอก) แต่จำนวนกรอกมาไม่ใช่
+// ตัวเลขบวก (เช่น พิมพ์ตัวอักษรผิดพลาดในช่องจำนวน กลายเป็น NaN) — buildValidItems
+// ด้านบนกรองรายการแบบนี้ทิ้งเงียบ ๆ ทำให้เคยเกิดใบเสนอราคาว่างเปล่า/ยอด 0 โดยไม่มี
+// error เตือนเลย ต้องเช็คแยกก่อน insert เพื่อตอบ 400 ให้แก้ไขแทนที่จะปล่อยผ่าน
+function findInvalidItems(items) {
+  if (!Array.isArray(items)) return [];
+  return items.filter((item) => {
+    const name = item.product_name?.toString().trim();
+    if (!name) return false;
+    const quantity = Number(item.quantity || 0);
+    return !(quantity > 0);
+  });
+}
+
 // POST - Create new quotation
 router.post('/', async (req, res) => {
   const { customer_id, newCustomer, vehicle_id, newVehicle, quotation_date, mileage, remark, queue_no, symptom, items, deposit_amount, deposit_date } = req.body;
@@ -162,6 +176,10 @@ router.post('/', async (req, res) => {
 
   // รายการสินค้าไม่บังคับตอนสร้าง — กรอกแค่ข้อมูลลูกค้า/รถแล้วบันทึกได้เลย
   // ให้หน้างานมาเพิ่มรายการทีหลังตอนเสนอราคาจริง
+  const invalidItems = findInvalidItems(items);
+  if (invalidItems.length > 0) {
+    return res.status(400).json({ error: `จำนวนของรายการ "${invalidItems[0].product_name}" ไม่ถูกต้อง กรุณาตรวจสอบ` });
+  }
   const validItems = buildValidItems(items);
 
   let conn;
@@ -171,12 +189,22 @@ router.post('/', async (req, res) => {
 
     if (!selectedCustomerId) {
       const { customer_name, phone } = newCustomer;
-      const customerCode = await generateCustomerCode(conn);
-      const [customerResult] = await conn.execute(
-        'INSERT INTO customers (customer_code, customer_name, phone) VALUES (?, ?, ?)',
-        [customerCode, customer_name, normalizePhone(phone)]
-      );
-      selectedCustomerId = customerResult.insertId;
+      const normalizedNewPhone = normalizePhone(phone);
+      // เช็คเบอร์ซ้ำก่อนสร้างลูกค้าใหม่ (เหมือนที่บอทไลน์ทำ) — กันสร้างลูกค้าซ้ำซ้อน
+      // ถ้าเบอร์นี้เคยมีอยู่แล้วในระบบ (เช่น เคยสร้างผ่านไลน์มาก่อน) ใช้คนเดิมแทน
+      const [existingByPhone] = normalizedNewPhone
+        ? await conn.execute('SELECT id FROM customers WHERE phone = ? LIMIT 1', [normalizedNewPhone])
+        : [[]];
+      if (existingByPhone.length > 0) {
+        selectedCustomerId = existingByPhone[0].id;
+      } else {
+        const customerCode = await generateCustomerCode(conn);
+        const [customerResult] = await conn.execute(
+          'INSERT INTO customers (customer_code, customer_name, phone) VALUES (?, ?, ?)',
+          [customerCode, customer_name, normalizedNewPhone]
+        );
+        selectedCustomerId = customerResult.insertId;
+      }
     } else {
       const [customerRows] = await conn.execute('SELECT id FROM customers WHERE id = ?', [selectedCustomerId]);
       if (customerRows.length === 0) {
@@ -396,6 +424,10 @@ router.put('/:id', async (req, res) => {
     return res.status(400).json({ error: 'กรุณากรอกข้อมูลลูกค้าและวันที่ให้ครบถ้วน' });
   }
 
+  const invalidItems = findInvalidItems(items);
+  if (invalidItems.length > 0) {
+    return res.status(400).json({ error: `จำนวนของรายการ "${invalidItems[0].product_name}" ไม่ถูกต้อง กรุณาตรวจสอบ` });
+  }
   const validItems = buildValidItems(items);
 
   let conn;
@@ -422,12 +454,22 @@ router.put('/:id', async (req, res) => {
 
     if (!selectedCustomerId) {
       const { customer_name, phone } = newCustomer;
-      const customerCode = await generateCustomerCode(conn);
-      const [customerResult] = await conn.execute(
-        'INSERT INTO customers (customer_code, customer_name, phone) VALUES (?, ?, ?)',
-        [customerCode, customer_name, normalizePhone(phone)]
-      );
-      selectedCustomerId = customerResult.insertId;
+      const normalizedNewPhone = normalizePhone(phone);
+      // เช็คเบอร์ซ้ำก่อนสร้างลูกค้าใหม่ (เหมือนที่บอทไลน์ทำ) — กันสร้างลูกค้าซ้ำซ้อน
+      // ถ้าเบอร์นี้เคยมีอยู่แล้วในระบบ (เช่น เคยสร้างผ่านไลน์มาก่อน) ใช้คนเดิมแทน
+      const [existingByPhone] = normalizedNewPhone
+        ? await conn.execute('SELECT id FROM customers WHERE phone = ? LIMIT 1', [normalizedNewPhone])
+        : [[]];
+      if (existingByPhone.length > 0) {
+        selectedCustomerId = existingByPhone[0].id;
+      } else {
+        const customerCode = await generateCustomerCode(conn);
+        const [customerResult] = await conn.execute(
+          'INSERT INTO customers (customer_code, customer_name, phone) VALUES (?, ?, ?)',
+          [customerCode, customer_name, normalizedNewPhone]
+        );
+        selectedCustomerId = customerResult.insertId;
+      }
     } else {
       const [customerRows] = await conn.execute('SELECT id FROM customers WHERE id = ?', [selectedCustomerId]);
       if (customerRows.length === 0) {
@@ -723,6 +765,21 @@ router.delete('/:id', async (req, res) => {
   const { id } = req.params;
 
   try {
+    // ใบที่อนุมัติแล้ว+มีใบเสร็จผูกอยู่ ห้ามลบตรง ๆ — repair_notices.quotation_id
+    // เป็น ON DELETE SET NULL (จะหลุดการเชื่อมโยงย้อนกลับไปหาใบเสนอราคาเงียบ ๆ) และ
+    // ใบเสร็จเองก็ไม่มีอะไรอ้างอิงกลับมาบอกว่าเคยมาจากใบเสนอราคาใบนี้อีกต่อไป ถ้าจะ
+    // ลบจริงต้องลบใบเสร็จ/ยกเลิกอนุมัติก่อน (จัดการผ่านหน้าใบเสร็จแทน)
+    const [[quotation]] = await pool.query(
+      'SELECT status, converted_receipt_id FROM quotations WHERE id = ?',
+      [id]
+    );
+    if (!quotation) {
+      return res.status(404).json({ error: 'ไม่พบใบเสนอราคา' });
+    }
+    if (quotation.status === 'approved' && quotation.converted_receipt_id) {
+      return res.status(409).json({ error: 'ใบเสนอราคานี้อนุมัติและมีใบเสร็จผูกอยู่แล้ว กรุณาจัดการที่ใบเสร็จแทน' });
+    }
+
     const [result] = await pool.execute(
       'DELETE FROM quotations WHERE id = ?',
       [id]

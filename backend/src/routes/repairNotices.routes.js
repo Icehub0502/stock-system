@@ -10,12 +10,17 @@ router.use(authenticate);
 // office-only.
 router.use(requireRole('office', 'technician'));
 
-async function generateCode() {
+// conn: รับ connection ของ transaction ที่กำลังสร้างใบแจ้งซ่อมอยู่ (ถ้ามี) ให้ FOR
+// UPDATE ล็อกแถวที่อ่านไว้จนกว่า transaction จะ commit กัน 2 คำขอพร้อมกันอ่าน MAX
+// เดิมแล้วได้เลขซ้ำกัน (เหมือน generateQuotationNo/generateReceiptNo) — ไม่มี conn
+// ส่งมา (เช่น route /next-code ที่แค่พรีวิวเลขไว้ดู ไม่ได้ insert จริง) ใช้ pool เฉย ๆ
+// ไม่ต้องล็อกอะไร
+async function generateCode(conn = pool) {
   // Document number prefix is "RN-" (repair notice). "SPK" is reserved for the
   // rack code the office writes on the printed form, so it must NOT be reused
   // as the document number. SUBSTRING(code, 4) strips the 3-char "RN-" prefix.
-  const [rows] = await pool.execute(
-    "SELECT MAX(CAST(SUBSTRING(code, 4) AS UNSIGNED)) AS maxNo FROM repair_notices WHERE code LIKE 'RN-%'"
+  const [rows] = await conn.execute(
+    "SELECT MAX(CAST(SUBSTRING(code, 4) AS UNSIGNED)) AS maxNo FROM repair_notices WHERE code LIKE 'RN-%' FOR UPDATE"
   );
   const nextNumber = (rows[0]?.maxNo || 0) + 1;
   return `RN-${String(nextNumber).padStart(4, '0')}`;
@@ -116,9 +121,12 @@ router.post('/', async (req, res) => {
     return res.status(400).json({ error: 'ข้อมูลรายการตรวจเช็คไม่ถูกต้อง' });
   }
 
+  let conn;
   try {
-    const code = await generateCode();
-    const [result] = await pool.execute(
+    conn = await pool.getConnection();
+    await conn.beginTransaction();
+    const code = await generateCode(conn);
+    const [result] = await conn.execute(
       `INSERT INTO repair_notices (code, customer_id, vehicle_id, quotation_id, notice_date, checklist, checked_by, repaired_by)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [
@@ -132,10 +140,16 @@ router.post('/', async (req, res) => {
         repaired_by || null,
       ]
     );
+    await conn.commit();
     res.status(201).json({ success: true, id: result.insertId, code });
   } catch (err) {
+    if (conn) {
+      try { await conn.rollback(); } catch (rollbackErr) { console.error('Rollback error:', rollbackErr); }
+    }
     console.error('Error creating repair notice:', err);
     res.status(500).json({ error: 'สร้างใบแจ้งซ่อมไม่สำเร็จ' });
+  } finally {
+    if (conn) conn.release();
   }
 });
 

@@ -73,7 +73,8 @@ router.get('/:id', async (req, res) => {
 });
 
 router.post('/', async (req, res) => {
-  const { customer_name, phone } = req.body;
+  const customer_name = req.body.customer_name?.toString().trim();
+  const { phone } = req.body;
 
   if (!customer_name) {
     return res.status(400).json({ error: 'กรุณากรอกชื่อลูกค้า' });
@@ -113,7 +114,8 @@ router.post('/', async (req, res) => {
 });
 
 router.put('/:id', async (req, res) => {
-  const { customer_name, phone } = req.body;
+  const customer_name = req.body.customer_name?.toString().trim();
+  const { phone } = req.body;
 
   if (!customer_name) {
     return res.status(400).json({ error: 'กรุณากรอกชื่อลูกค้า' });
@@ -153,6 +155,17 @@ router.put('/:id', async (req, res) => {
 
 router.delete('/:id', async (req, res) => {
   try {
+    // vehicles.customer_id เป็น ON DELETE CASCADE — ถ้าไม่เช็คก่อน รถของลูกค้าคนนี้
+    // จะหายไปด้วยแบบเงียบ ๆ ไม่มีคำเตือนเลย (ต่างจากกรณีมีใบเสนอราคา/ใบเสร็จผูกอยู่ที่
+    // อย่างน้อยยัง error ชัดเจนจาก FK constraint) กันไว้ก่อนให้ต้องลบรถออกเองก่อน
+    const [[{ vehicleCount }]] = await pool.query(
+      'SELECT COUNT(*) AS vehicleCount FROM vehicles WHERE customer_id = ?',
+      [req.params.id]
+    );
+    if (vehicleCount > 0) {
+      return res.status(409).json({ error: `ลูกค้ารายนี้มีรถผูกอยู่ ${vehicleCount} คัน กรุณาลบข้อมูลรถออกก่อน` });
+    }
+
     const [result] = await pool.execute('DELETE FROM customers WHERE id = ?', [req.params.id]);
 
     if (result.affectedRows === 0) {

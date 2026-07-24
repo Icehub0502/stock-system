@@ -171,6 +171,7 @@ export default function CustomerManagementPage() {
                 <input
                   type="tel"
                   name="phone"
+                  maxLength={20}
                   value={form.phone}
                   onChange={(e) => setForm({ ...form, phone: e.target.value })}
                 />

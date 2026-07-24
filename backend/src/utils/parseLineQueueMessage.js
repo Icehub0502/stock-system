@@ -324,8 +324,35 @@ function parseItemSectionLines(lines) {
       continue;
     }
 
+    // "-" นำหน้าบรรทัด (ไม่ตามด้วยตัวเลขติดกัน กันชนกับราคาส่วนลด "-500") ที่มีวงเล็บ
+    // ระบุยี่ห้อต่อท้ายชื่อ (เช่น "ลูกหมากคันชักนอก (555)") = รายการย่อยของบรรทัดข้างบน
+    // (เจ้าของร้านสั่งไว้ ให้ lineWebhook.routes.js เอาไปจับคู่แทนที่รายการย่อยในชุด
+    // "ชุดโปร..." หรือเพิ่มเป็นรายการแยกถ้าไม่เจอที่จับคู่) ราคาไม่บังคับ — ถ้าใส่ต้อง
+    // เป็นตัวเลขล้วนต่อท้ายวงเล็บอีกที (เช่น "ลูกหมากคันชักนอก (555) 200") ไม่ใส่ก็นับ
+    // เป็น 0 (วงเล็บเป็นยี่ห้อ ไม่ใช่ราคา — ราคาต้องอยู่นอกวงเล็บเสมอ)
+    //
+    // ⚠️ ต้องแยกจากธรรมเนียมเดิมที่ "-" เป็นแค่เครื่องหมายหัวข้อ/บุลเล็ตของรายการปกติ
+    // ที่ไม่มีวงเล็บเลย (เช่น "- ค่าแรง 2000") — เคสนั้นต้องปล่อยให้ประมวลผลแบบรายการ
+    // ปกติเหมือนเดิมทุกประการ ไม่งั้นราคาจะหายไปเป็น 0 หมด จึงใช้ "มีวงเล็บหรือไม่" เป็น
+    // ตัวตัดสินว่าเป็นรายการย่อยแบบใหม่หรือรายการปกติแบบเดิม
+    const isSubItemLine = /^-(?!\d)/.test(trimmedRaw);
+
     const line = cleanItemName(trimmedRaw);
     if (!line) continue;
+
+    if (isSubItemLine && /\(.*\)/.test(line)) {
+      flushPending();
+      // ราคา (ถ้ามี) อยู่นอกวงเล็บเสมอ เป็นตัวเลขล้วนต่อท้ายวงเล็บปิดอีกที
+      const trailingPriceMatch = /^(.*\))\s+(-?[\d,]+)\s*(?:บาท)?$/.exec(line);
+      if (trailingPriceMatch) {
+        items.push({ name: trailingPriceMatch[1].trim(), price: Number(trailingPriceMatch[2].replace(/,/g, '')), isSubItem: true });
+      } else {
+        items.push({ name: line, price: 0, isSubItem: true });
+      }
+      continue;
+    }
+    // "-" นำหน้าแต่ไม่มีวงเล็บ = ธรรมเนียมเดิม บุลเล็ตนำหน้ารายการปกติเฉย ๆ ปล่อยผ่าน
+    // ไปประมวลผลด้านล่างเหมือนไม่มี isSubItemLine เลย
 
     // คำแจ้งในกลุ่ม ไม่ใช่รายการสินค้า ("ลูกค้าอนุมัติ"/"ชำระเรียบร้อยครับ" ปิดท้าย,
     // "เพิ่มรายการ" คั่นก่อนรายการที่เพิ่มมาทีหลัง) — เจอวลีจ่ายเงินแล้วในรายการก็เซ็ต
@@ -409,8 +436,18 @@ function parseItemSectionLines(lines) {
   return { items, statedTotal, notes, paymentSectionLines, paidConfirmed };
 }
 
+// เลขไทย (๐-๙) → เลขอารบิก — พนักงานบางทีสลับคีย์บอร์ดมือถือเป็นเลขไทยโดยไม่ทันสังเกต
+// แล้วพิมพ์ราคา/จำนวนเป็นเลขไทยแทน ทุก regex ตัวเลขในไฟล์นี้ใช้ [\d] (อารบิกล้วน) จึง
+// ต้องแปลงให้เป็นเลขอารบิกตั้งแต่ต้นก่อนพาร์สอะไรทั้งหมด ไม่งั้นทั้งบรรทัดจะกลายเป็น
+// ชื่อรายการที่มีเลขไทยติดอยู่ ราคาอ่านไม่ได้เลยกลายเป็น 0
+const THAI_DIGITS = '๐๑๒๓๔๕๖๗๘๙';
+function thaiDigitsToArabic(str) {
+  return str.replace(/[๐-๙]/g, (ch) => String(THAI_DIGITS.indexOf(ch)));
+}
+
 function parseLineQueueMessage(text) {
   if (!text || typeof text !== 'string') return null;
+  text = thaiDigitsToArabic(text);
 
   const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
   if (lines.length === 0 || !/^คิว/.test(lines[0])) return null;

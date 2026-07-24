@@ -464,8 +464,17 @@ function computeReceiptAmount(depositAmount, paidAmount, fallbackTotal) {
 // resend อาจไม่ได้พิมพ์มัดจำซ้ำ (COALESCE เก็บค่าจากใบเดิมไว้ — ดูจุด UPDATE quotations
 // ด้านบน) ต้องใช้ค่าที่จะถูกบันทึกจริงลงฐานข้อมูล ไม่ใช่แค่ค่าจากข้อความล่าสุด
 function checkDepositMismatch(parsed, depositAmount) {
-  if (parsed.remaining_balance == null || parsed.remaining_balance <= 0) return null;
   if (parsed.stated_total == null || depositAmount == null) return null;
+  // มัดจำมากกว่ายอดรวมทั้งบิล — เป็นไปได้ทางคณิตศาสตร์ (ยอดที่ต้องชำระจะติดลบ) แต่ใน
+  // ทางปฏิบัติมักเกิดจากพิมพ์ผิด ต้องเตือนไว้เสมอไม่ว่าจะพิมพ์ "ยอดที่ต้องชำระ" มาด้วย
+  // หรือไม่ก็ตาม (เดิมเช็คนี้ข้ามไปเงียบ ๆ ถ้าไม่มี remaining_balance เลย)
+  if (depositAmount > parsed.stated_total) {
+    return { depositAmount, actual: depositAmount, expected: parsed.stated_total };
+  }
+  // ไม่ได้พิมพ์ "ยอดที่ต้องชำระ" มาเลย ไม่มีอะไรให้เช็คต่อ (เดิมเงื่อนไขนี้ยังกรอง
+  // remaining_balance <= 0 ทิ้งด้วย ทำให้เคสมัดจำเกินยอดรวม (ยอดที่ต้องชำระติดลบตาม
+  // ความจริง) ไม่ถูกตรวจสอบเลย — เอาเงื่อนไข <= 0 ออก เหลือแค่เช็คว่ามีค่าให้ตรวจ)
+  if (parsed.remaining_balance == null) return null;
   const actual = depositAmount + parsed.remaining_balance;
   if (actual === parsed.stated_total) return null;
   return { depositAmount, actual, expected: parsed.stated_total };
@@ -690,10 +699,62 @@ async function createQuotationFromQueue(parsed) {
     // จับคู่แต่ละรายการกับแคตาล็อกก่อน insert/update quotation หลัก เพราะต้องใช้
     // ผลรวมราคามาเป็น total_amount และชื่อสินค้ามาเป็น product_summary — รายการที่
     // เป็น "ชุด" ขยายเป็นหลายแถว (ดู resolveQuotationItemRows) จึงต้อง flatten
+    //
+    // บรรทัด "-" (item.isSubItem) ที่ตามหลัง "ชุด" ทันที ให้ลองจับคู่ชื่อกับรายการย่อย
+    // ที่ชุดนั้นขยายไว้แล้ว (เช่น "ลูกหมากคันชักนอก (555)" จับคู่กับ "ลูกหมากคันชักนอก
+    // L+R" ที่ขยายมาจากชุด) แล้วแทนที่ชื่อ+บวกราคาเข้าไปแทนที่จะเพิ่มเป็นแถวใหม่แยก
+    // ต่างหาก (เจ้าของร้านสั่งไว้ — กันรายการย่อยของชุดที่พิมพ์เพิ่มยี่ห้อเข้ามาแล้วกลาย
+    // เป็นแถวซ้ำซ้อนกับที่ชุดขยายไว้อยู่แล้ว) ไม่เจอที่จับคู่ (ไม่มีชุดค้างอยู่ หรือชื่อไม่
+    // ตรงกับรายการย่อยไหนเลย) ก็ตกไปเป็นรายการแยกตามปกติ
+    // ชื่อรายการย่อยในแคตาล็อกจริงมักมี "- " นำหน้าฝังอยู่ในข้อความเลย (เช่น
+    // "- ลูกหมากปีกนกล่าง L+R" ใน service_item_components) และมี "L+R" ต่อท้าย —
+    // ต้องตัดทั้งสองฝั่งออกก่อนเทียบกับชื่อที่พนักงานพิมพ์มา (ซึ่งมักไม่มีทั้งคู่)
+    const stripSetSuffix = (name) => name.replace(/^[-•·]\s*/, '').replace(/\s*L\+R\s*$/i, '').trim();
     const resolvedItems = [];
+    let activeSetStart = null;
+    let activeSetLength = 0;
     for (const item of parsed.items) {
+      if (item.isSubItem && activeSetStart != null) {
+        const subName = item.name.trim();
+        let matchedIndex = -1;
+        // รอบแรก: หาแบบชื่อตรงเป๊ะก่อน (แม่นยำสุด)
+        for (let i = activeSetStart; i < activeSetStart + activeSetLength; i += 1) {
+          if (stripSetSuffix(resolvedItems[i].product_name) === subName) {
+            matchedIndex = i;
+            break;
+          }
+        }
+        // รอบสอง: ไม่เจอตรงเป๊ะ ค่อยหาแบบ substring แต่เลือกตัวที่ชื่อยาวที่สุด
+        // (เจาะจงสุด) กันเผลอจับคู่ผิด เช่น "ปีกนกล่าง" ที่เป็นส่วนหนึ่งของ
+        // "ลูกหมากปีกนกล่าง" อยู่แล้ว ไม่ควรถูกเลือกก่อนตัวที่ชื่อตรงกว่า
+        if (matchedIndex === -1) {
+          let bestLength = -1;
+          for (let i = activeSetStart; i < activeSetStart + activeSetLength; i += 1) {
+            const compBase = stripSetSuffix(resolvedItems[i].product_name);
+            if (compBase && (subName.includes(compBase) || compBase.includes(subName)) && compBase.length > bestLength) {
+              matchedIndex = i;
+              bestLength = compBase.length;
+            }
+          }
+        }
+        if (matchedIndex !== -1) {
+          resolvedItems[matchedIndex] = {
+            ...resolvedItems[matchedIndex],
+            product_name: item.name,
+            unit_price: Number(resolvedItems[matchedIndex].unit_price || 0) + Number(item.price || 0),
+          };
+          continue;
+        }
+      }
       const rows = await resolveQuotationItemRows(conn, item);
       resolvedItems.push(...rows);
+      if (!item.isSubItem && rows.length > 1) {
+        activeSetStart = resolvedItems.length - rows.length;
+        activeSetLength = rows.length;
+      } else if (!item.isSubItem) {
+        activeSetStart = null;
+        activeSetLength = 0;
+      }
     }
     const total_amount = resolvedItems.reduce((sum, it) => sum + it.quantity * it.unit_price, 0);
     const product_summary = resolvedItems.map((it) => it.product_name).join(', ');

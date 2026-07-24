@@ -334,6 +334,85 @@ describe('POST /api/line/webhook', () => {
     expect(items.every((it) => Number(it.unit_price) === 0)).toBe(true);
   });
 
+  test('บรรทัด "-" ต่อจาก "ชุด" ที่ชื่อตรงกับรายการย่อยในชุด → แทนที่แถวนั้นแทนที่จะเพิ่มแถวใหม่ (วงเล็บ = ยี่ห้อ ราคาต่อท้ายนอกวงเล็บ)', async () => {
+    const uniq = Date.now().toString().slice(-7);
+    const phone = `087${uniq}`;
+    const text = [
+      'คิว:15',
+      'ชื่อลูกค้า:คุณแทนที่ย่อย',
+      `เบอร์โทร:${phone}`,
+      'รายการ:',
+      ' - ชุดโปรช่วงล่าง เก๋ง 7500',
+      '- ลูกหมากปีกนกล่าง (555) 200',
+    ].join('\n');
+
+    const res = await postWebhook(eventsBody([messageEvent(text, `msg-subitem-${uniq}`)]));
+    expect(res.body.created).toHaveLength(1);
+
+    const [[quotation]] = await pool.query('SELECT * FROM quotations WHERE quotation_no = ?', [res.body.created[0]]);
+    createdCustomerIds.push(quotation.customer_id);
+    expect(Number(quotation.total_amount)).toBe(7700); // 7500 (ชุด) + 200 (บวกเข้ารายการย่อยที่จับคู่ได้) ไม่ใช่แถวใหม่แยก
+
+    const [items] = await pool.query(
+      'SELECT product_name, unit_price FROM quotation_items WHERE quotation_id = ? ORDER BY id ASC',
+      [quotation.id]
+    );
+    expect(items).toHaveLength(3); // ยังคง 3 แถวเท่าเดิม (หัวข้อ + อุปกรณ์ย่อย 2 ชิ้น) ไม่เพิ่มเป็น 4
+    expect(items[0]).toEqual({ product_name: 'ชุดโปรช่วงล่าง', unit_price: '7500.00' });
+    expect(items[1]).toEqual({ product_name: '- ปีกนกล่าง L+R', unit_price: '0.00' }); // ไม่ตรงชื่อ ไม่ถูกแตะ
+    expect(items[2]).toEqual({ product_name: 'ลูกหมากปีกนกล่าง (555)', unit_price: '200.00' }); // ถูกแทนที่ชื่อ (คงยี่ห้อในวงเล็บ) + ราคา
+  });
+
+  test('บรรทัด "-" ที่มีวงเล็บยี่ห้อแต่ไม่ใส่ราคา → นับเป็น 0', async () => {
+    const uniq = Date.now().toString().slice(-7);
+    const phone = `089${uniq}`;
+    const text = [
+      'คิว:17',
+      'ชื่อลูกค้า:คุณไม่ใส่ราคาย่อย',
+      `เบอร์โทร:${phone}`,
+      'รายการ:',
+      ' - ชุดโปรช่วงล่าง เก๋ง 7500',
+      '- ลูกหมากปีกนกล่าง (555)',
+    ].join('\n');
+
+    const res = await postWebhook(eventsBody([messageEvent(text, `msg-subitem-noprice-${uniq}`)]));
+    const [[quotation]] = await pool.query('SELECT * FROM quotations WHERE quotation_no = ?', [res.body.created[0]]);
+    createdCustomerIds.push(quotation.customer_id);
+    expect(Number(quotation.total_amount)).toBe(7500); // ไม่ใส่ราคาต่อท้ายวงเล็บ = 0
+
+    const [items] = await pool.query(
+      'SELECT product_name, unit_price FROM quotation_items WHERE quotation_id = ? ORDER BY id ASC',
+      [quotation.id]
+    );
+    expect(items).toHaveLength(3);
+    expect(items[2]).toEqual({ product_name: 'ลูกหมากปีกนกล่าง (555)', unit_price: '0.00' });
+  });
+
+  test('บรรทัด "-" ที่ไม่ตรงกับรายการย่อยในชุดไหนเลย → ตกไปเป็นรายการแยกตามปกติ', async () => {
+    const uniq = Date.now().toString().slice(-7);
+    const phone = `088${uniq}`;
+    const text = [
+      'คิว:16',
+      'ชื่อลูกค้า:คุณไม่ตรงย่อย',
+      `เบอร์โทร:${phone}`,
+      'รายการ:',
+      ' - ชุดโปรช่วงล่าง เก๋ง 7500',
+      '- น็อตพิเศษ (ตราช้าง) 100',
+    ].join('\n');
+
+    const res = await postWebhook(eventsBody([messageEvent(text, `msg-subitem-nomatch-${uniq}`)]));
+    const [[quotation]] = await pool.query('SELECT * FROM quotations WHERE quotation_no = ?', [res.body.created[0]]);
+    createdCustomerIds.push(quotation.customer_id);
+    expect(Number(quotation.total_amount)).toBe(7600); // 7500 + 100 แยกกันคนละแถว
+
+    const [items] = await pool.query(
+      'SELECT product_name, unit_price FROM quotation_items WHERE quotation_id = ? ORDER BY id ASC',
+      [quotation.id]
+    );
+    expect(items).toHaveLength(4); // หัวข้อ + อุปกรณ์ย่อย 2 ชิ้น + แถวใหม่ที่ไม่ตรงกับใคร
+    expect(items[3]).toEqual({ product_name: 'น็อตพิเศษ (ตราช้าง)', unit_price: '100.00' });
+  });
+
   test('พิมพ์ข้อความคิว+ลูกค้าเดิมซ้ำ (วันเดียวกัน ยังไม่อนุมัติ) → แก้ไขใบเดิม ไม่เปิดใบใหม่', async () => {
     const uniq = Date.now().toString().slice(-7);
     const phone = `085${uniq}`;

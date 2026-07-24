@@ -96,6 +96,18 @@ router.put('/:id', requireRole('office'), async (req, res) => {
 
 router.delete('/:id', requireRole('office'), async (req, res) => {
   try {
+    // quotations.vehicle_id เป็น ON DELETE SET NULL — ถ้าไม่เช็คก่อน ใบเสนอราคาที่
+    // ยังเปิดอยู่จะหลุดจากรถคันนี้แบบเงียบ ๆ ไม่มีคำเตือนเลย (receipts.vehicle_id
+    // เป็น RESTRICT อยู่แล้วจึง error ชัดเจนถ้ามีใบเสร็จผูกอยู่ — จุดนี้เป็นแค่ช่องโหว่
+    // ฝั่งใบเสนอราคาที่ยังไม่ปิดบิล)
+    const [[{ quotationCount }]] = await pool.query(
+      `SELECT COUNT(*) AS quotationCount FROM quotations WHERE vehicle_id = ? AND closed_at IS NULL`,
+      [req.params.id]
+    );
+    if (quotationCount > 0) {
+      return res.status(409).json({ error: `รถคันนี้มีใบเสนอราคาที่ยังไม่ปิดบิลผูกอยู่ ${quotationCount} ใบ กรุณาจัดการใบเสนอราคาก่อน` });
+    }
+
     const [result] = await pool.execute('DELETE FROM vehicles WHERE id = ?', [req.params.id]);
     if (result.affectedRows === 0) {
       return res.status(404).json({ error: 'ไม่พบรถ' });
