@@ -222,7 +222,6 @@ export default function QuotationListPage() {
             <thead>
               <tr>
                 <th>เลขที่</th>
-                <th>วันที่</th>
                 <th>ชื่อลูกค้า</th>
                 <th>รุ่น/สี/ทะเบียน</th>
                 <th>จำนวนรวม</th>
@@ -234,7 +233,7 @@ export default function QuotationListPage() {
               {groups.map((group) => (
                 <React.Fragment key={group.dateKey}>
                   <tr className="date-group-header-row">
-                    <td colSpan={7}>
+                    <td colSpan={6}>
                       {new Date(group.dateKey).toLocaleDateString('th-TH', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
                       <span className="date-group-count"> ({group.rows.length} ใบ)</span>
                     </td>
@@ -253,7 +252,6 @@ export default function QuotationListPage() {
                       <td data-label="เลขที่">
                         <strong>{q.quotation_no}</strong>
                       </td>
-                      <td data-label="วันที่">{new Date(q.quotation_date).toLocaleDateString('th-TH')}</td>
                       <td className="col-customer-name" data-label="ชื่อลูกค้า">{q.customer_name}</td>
                       <td className="car-info" data-label="รุ่น/สี/ทะเบียน">
                         {q.brand || q.car_brand} {q.model || q.car_model} / {q.color || q.car_color} /{" "}

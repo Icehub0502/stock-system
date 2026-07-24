@@ -114,7 +114,6 @@ export default function ReceiptListPage() {
               <tr>
                 <th className="col-no">ลำดับ</th>
                 <th>เลขที่บิล</th>
-                <th>วันที่</th>
                 <th>รหัสลูกค้า</th>
                 <th>ชื่อลูกค้า</th>
                 <th>รถ</th>
@@ -129,7 +128,7 @@ export default function ReceiptListPage() {
                 return groups.map((group) => (
                   <React.Fragment key={group.dateKey}>
                     <tr className="date-group-header-row">
-                      <td colSpan={9}>
+                      <td colSpan={8}>
                         {new Date(group.dateKey).toLocaleDateString('th-TH', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
                         <span className="date-group-count"> ({group.rows.length} บิล)</span>
                       </td>
@@ -140,7 +139,6 @@ export default function ReceiptListPage() {
                         <tr key={receipt.id}>
                           <td className="col-no" data-label="ลำดับ">{rowNo}</td>
                           <td data-label="เลขที่บิล"><strong>{receipt.receipt_no}</strong></td>
-                          <td data-label="วันที่">{new Date(receipt.receipt_date).toLocaleDateString('th-TH')}</td>
                           <td data-label="รหัสลูกค้า">{receipt.customer_code || '-'}</td>
                           <td className="col-customer-name" data-label="ชื่อลูกค้า">{receipt.customer_name}</td>
                           <td className="car-info" data-label="รถ">{receipt.brand} {receipt.model} / {receipt.license_plate}</td>
