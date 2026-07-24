@@ -208,6 +208,120 @@ describe('PATCH /api/quotations/:id/approve — auto-creates a matching receipt'
   });
 });
 
+describe('PATCH /api/quotations/:id/close — รับชำระเงิน/ปิดบิลจากหน้าเว็บโดยตรง', () => {
+  let token;
+  let fixture;
+
+  beforeAll(async () => {
+    token = await getOfficeToken();
+  });
+
+  beforeEach(async () => {
+    fixture = await createCustomerWithVehicle({ namePrefix: 'Close Bill Test Customer' });
+  });
+
+  afterEach(async () => {
+    await cleanupCustomer(fixture.customerId);
+  });
+
+  test('ปิดบิลตั้ง closed_at ให้ใบเสนอราคาและอัปเดต payment_method/total_amount ของใบเสร็จ', async () => {
+    const createRes = await request(app)
+      .post('/api/quotations')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        customer_id: fixture.customerId,
+        vehicle_id: fixture.vehicleId,
+        quotation_date: '2026-07-10',
+        items: [{ product_name: 'ค่าแรง', quantity: 1, unit_price: 1000 }],
+      });
+    const quotationId = createRes.body.quotation_id;
+
+    const approveRes = await request(app)
+      .patch(`/api/quotations/${quotationId}/approve`)
+      .set('Authorization', `Bearer ${token}`)
+      .send();
+    expect(approveRes.status).toBe(200);
+
+    const closeRes = await request(app)
+      .patch(`/api/quotations/${quotationId}/close`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ payment_method: 'เงินสด', paid_amount: 1000 });
+    expect(closeRes.status).toBe(200);
+    expect(Number(closeRes.body.total_amount)).toBe(1000);
+
+    const [[quotationAfter]] = await pool.query('SELECT closed_at FROM quotations WHERE id = ?', [quotationId]);
+    expect(quotationAfter.closed_at).toBeTruthy();
+
+    const [[receipt]] = await pool.query(
+      'SELECT payment_method, total_amount FROM receipts WHERE id = ?',
+      [approveRes.body.receipt_id]
+    );
+    expect(receipt.payment_method).toBe('เงินสด');
+    expect(Number(receipt.total_amount)).toBe(1000);
+  });
+
+  test('ไม่ใส่ยอดที่ได้รับจริงมา → fallback เป็นยอดรวมทั้งบิลเดิม', async () => {
+    const createRes = await request(app)
+      .post('/api/quotations')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        customer_id: fixture.customerId,
+        vehicle_id: fixture.vehicleId,
+        quotation_date: '2026-07-10',
+        items: [{ product_name: 'ค่าแรง', quantity: 1, unit_price: 2000 }],
+      });
+    const quotationId = createRes.body.quotation_id;
+    await request(app).patch(`/api/quotations/${quotationId}/approve`).set('Authorization', `Bearer ${token}`).send();
+
+    const closeRes = await request(app)
+      .patch(`/api/quotations/${quotationId}/close`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ payment_method: 'โอน' });
+    expect(closeRes.status).toBe(200);
+    expect(Number(closeRes.body.total_amount)).toBe(2000);
+  });
+
+  test('ยังไม่อนุมัติ/ไม่มีใบเสร็จ → ปิดบิลไม่ได้', async () => {
+    const createRes = await request(app)
+      .post('/api/quotations')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        customer_id: fixture.customerId,
+        vehicle_id: fixture.vehicleId,
+        quotation_date: '2026-07-10',
+        items: [{ product_name: 'ค่าแรง', quantity: 1, unit_price: 500 }],
+      });
+    const quotationId = createRes.body.quotation_id;
+
+    const closeRes = await request(app)
+      .patch(`/api/quotations/${quotationId}/close`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ payment_method: 'เงินสด' });
+    expect(closeRes.status).toBe(400);
+  });
+
+  test('ปิดบิลไปแล้ว ปิดซ้ำไม่ได้', async () => {
+    const createRes = await request(app)
+      .post('/api/quotations')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        customer_id: fixture.customerId,
+        vehicle_id: fixture.vehicleId,
+        quotation_date: '2026-07-10',
+        items: [{ product_name: 'ค่าแรง', quantity: 1, unit_price: 500 }],
+      });
+    const quotationId = createRes.body.quotation_id;
+    await request(app).patch(`/api/quotations/${quotationId}/approve`).set('Authorization', `Bearer ${token}`).send();
+    await request(app).patch(`/api/quotations/${quotationId}/close`).set('Authorization', `Bearer ${token}`).send({ payment_method: 'เงินสด' });
+
+    const secondClose = await request(app)
+      .patch(`/api/quotations/${quotationId}/close`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ payment_method: 'เงินสด' });
+    expect(secondClose.status).toBe(400);
+  });
+});
+
 describe('PUT /api/quotations/:id — editing an approved quotation syncs its receipt', () => {
   let token;
   let fixture;

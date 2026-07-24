@@ -4,6 +4,7 @@ import client from "../api/client";
 import QuotationFormModal from "../components/QuotationFormModal";
 import QuotationPrintModal from "../components/QuotationPrintModal";
 import ScheduleDateDialog from "../components/ScheduleDateDialog";
+import ClosePaymentDialog from "../components/ClosePaymentDialog";
 import { todayStr } from "../utils/format";
 
 function StatusBadge({ status, scheduledDate, closedAt }) {
@@ -46,6 +47,7 @@ export default function QuotationListPage() {
   const [selectedQuotation, setSelectedQuotation] = useState(null);
   const [editingQuotation, setEditingQuotation] = useState(null);
   const [schedulingQuotation, setSchedulingQuotation] = useState(null);
+  const [closingQuotation, setClosingQuotation] = useState(null);
 
   // Fetch quotations
   const fetchQuotations = async () => {
@@ -167,6 +169,20 @@ export default function QuotationListPage() {
     }
   };
 
+  const handleCloseConfirm = async ({ payment_method, paid_amount }) => {
+    if (!closingQuotation) return;
+    setActioningId(closingQuotation.id);
+    try {
+      await client.patch(`/quotations/${closingQuotation.id}/close`, { payment_method, paid_amount });
+      setClosingQuotation(null);
+      fetchQuotations();
+    } catch (err) {
+      alert(err.response?.data?.error || "ปิดบิลไม่สำเร็จ");
+    } finally {
+      setActioningId(null);
+    }
+  };
+
   const handleFormSuccess = () => {
     setShowFormModal(false);
     setEditingQuotation(null);
@@ -267,6 +283,11 @@ export default function QuotationListPage() {
                         ) : (
                           <span className="status-badge status-badge-neutral" style={{ marginTop: 4, display: 'inline-block' }}>🔧 ยังไม่กรอกแจ้งซ่อม</span>
                         )}
+                        {q.customer_signature ? (
+                          <span className="status-badge status-badge-success" style={{ marginTop: 4, display: 'inline-block' }}>✍️ เซ็นแล้ว</span>
+                        ) : (
+                          <span className="status-badge status-badge-neutral" style={{ marginTop: 4, display: 'inline-block' }}>✍️ ยังไม่เซ็น</span>
+                        )}
                       </td>
                       <td className="actions" data-label="จัดการ">
                         <button
@@ -306,6 +327,15 @@ export default function QuotationListPage() {
                             </button>
                           </>
                         )}
+                        {q.status === 'approved' && !q.closed_at && (
+                          <button
+                            className="btn-icon-small"
+                            onClick={() => setClosingQuotation(q)}
+                            disabled={actioningId === q.id}
+                          >
+                            รับชำระ/ปิดบิล
+                          </button>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -344,6 +374,15 @@ export default function QuotationListPage() {
           onConfirm={handleScheduleConfirm}
           onNoDate={handleNoDate}
           onCancel={() => setSchedulingQuotation(null)}
+        />
+      )}
+
+      {closingQuotation && (
+        <ClosePaymentDialog
+          quotation={closingQuotation}
+          loading={actioningId === closingQuotation.id}
+          onConfirm={handleCloseConfirm}
+          onCancel={() => setClosingQuotation(null)}
         />
       )}
 

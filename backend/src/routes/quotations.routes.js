@@ -5,7 +5,7 @@ const { formatPhone } = require('../utils/parseLineQueueMessage');
 // pushQuotationUpdate: ดัน "ข้อมูลอัปเดตแล้ว" กลับเข้ากลุ่มไลน์ของร้านหลังแก้ไขใบ
 // เสนอราคาที่มาจากไลน์ (มีเลขคิว+ยังไม่ปิดบิล) ผ่านหน้าเว็บ — กันพนักงานคัดลอก
 // ข้อความไลน์เก่าที่ยังผิดอยู่มาส่งซ้ำทับข้อมูลที่ออฟฟิศเพิ่งแก้ (ดู PUT /:id ด้านล่าง)
-const { pushQuotationUpdate } = require('./lineWebhook.routes');
+const { pushQuotationUpdate, computeReceiptAmount } = require('./lineWebhook.routes');
 
 // ทำให้ตรงรูปแบบเดียวกับที่ customers.routes.js ใช้ กันเบอร์ที่พิมพ์ไม่มีขีดตรงนี้
 // ไปหลุดจากการค้นหาของบอทไลน์ (lineWebhook.routes.js เทียบแบบ phone = ? ตรง ๆ)
@@ -687,6 +687,62 @@ router.patch('/:id/approve', async (req, res) => {
     }
     console.error('Error approving quotation:', err);
     res.status(500).json({ error: 'อนุมัติใบเสนอราคาไม่สำเร็จ' });
+  } finally {
+    if (conn) conn.release();
+  }
+});
+
+// PATCH - รับชำระเงิน/ปิดบิลจากหน้าเว็บโดยตรง — เดิมมีแค่ 2 ทางที่ตั้งค่า closed_at
+// ได้ (ทั้งคู่มาจากไลน์: วลี "ชำระเงินเรียบร้อย" หรือข้อความปิดบิลสั้น) ทำให้ออฟฟิศที่
+// ปิดงานผ่านเว็บอย่างเดียวไม่มีทางตั้งสถานะ "ชำระแล้ว" ได้เลย ต้องย้อนไปพิมพ์ในไลน์
+// เสมอ — endpoint นี้ทำหน้าที่เดียวกับปิดบิลผ่านไลน์ แต่เรียกจากเว็บตรง ๆ
+router.patch('/:id/close', async (req, res) => {
+  const { id } = req.params;
+  const { payment_method, paid_amount } = req.body || {};
+
+  let conn;
+  try {
+    conn = await pool.getConnection();
+    await conn.beginTransaction();
+
+    const [[quotation]] = await conn.query(
+      'SELECT id, status, converted_receipt_id, closed_at, deposit_amount, total_amount FROM quotations WHERE id = ?',
+      [id]
+    );
+    if (!quotation) {
+      await conn.rollback();
+      return res.status(404).json({ error: 'ไม่พบใบเสนอราคา' });
+    }
+    if (quotation.status !== 'approved' || !quotation.converted_receipt_id) {
+      await conn.rollback();
+      return res.status(400).json({ error: 'ใบเสนอราคานี้ยังไม่อนุมัติ/ยังไม่มีใบเสร็จ กรุณาอนุมัติก่อนปิดบิล' });
+    }
+    if (quotation.closed_at) {
+      await conn.rollback();
+      return res.status(400).json({ error: 'ใบเสนอราคานี้ปิดบิลไปแล้ว' });
+    }
+
+    // สูตรเดียวกับตอนปิดบิลผ่านไลน์ — ไม่ได้พิมพ์ยอดที่ได้รับจริงมา (paid_amount ว่าง)
+    // ก็ fallback เป็นยอดรวมทั้งบิลเดิม (มัดจำ+ยอดรวมทั้งบิล ถ้ามีมัดจำอยู่แล้ว)
+    const paidAmountNum = paid_amount !== undefined && paid_amount !== '' && paid_amount !== null
+      ? Number(paid_amount)
+      : null;
+    const receiptAmount = computeReceiptAmount(quotation.deposit_amount, paidAmountNum, Number(quotation.total_amount));
+
+    await conn.execute(
+      'UPDATE receipts SET payment_method = ?, total_amount = ? WHERE id = ?',
+      [payment_method || null, receiptAmount, quotation.converted_receipt_id]
+    );
+    await conn.execute('UPDATE quotations SET closed_at = NOW() WHERE id = ?', [id]);
+
+    await conn.commit();
+    res.json({ success: true, message: 'ปิดบิลสำเร็จ', total_amount: receiptAmount });
+  } catch (err) {
+    if (conn) {
+      try { await conn.rollback(); } catch (rollbackErr) { console.error('Rollback error:', rollbackErr); }
+    }
+    console.error('Error closing quotation:', err);
+    res.status(500).json({ error: 'ปิดบิลไม่สำเร็จ' });
   } finally {
     if (conn) conn.release();
   }
