@@ -7,7 +7,7 @@ import WarrantySection from "./WarrantySection";
 import QuotationPrintTemplate from "./QuotationPrintTemplate";
 import FormModalShell from "./FormModalShell";
 import { todayStr, formatMoney } from "../utils/format";
-import { RACK_KEYWORDS, BALL_JOINT_KEYWORDS, ALL_WARRANTY_KEYWORDS, applyWarrantyToItems } from "../utils/warrantyKeywords";
+import { RACK_KEYWORDS, BALL_JOINT_KEYWORDS, ALL_WARRANTY_KEYWORDS, applyWarrantyToItems, findMatchingWarrantyId } from "../utils/warrantyKeywords";
 
 const defaultItem = {
   product_id: null,
@@ -145,20 +145,34 @@ export default function QuotationFormModal({ quotation, onClose, onSuccess, onDe
       setVehicleMode(detail.vehicle_id ? 'existing' : 'new');
       setVehicleId(detail.vehicle_id?.toString() || '');
       setNewVehicle({ brand: '', model: '', color: '', license_plate: '' });
-      setItems(
-        (detail.items && detail.items.length > 0 ? detail.items : [{ ...defaultItem }]).map((item) => ({
-          product_id: item.product_id || null,
-          product_name: item.product_name || '',
-          category: item.category || '',
-          warranty_name: item.warranty_name || '',
-          warranty_year: item.warranty_year || 0,
-          warranty_month: item.warranty_month || 0,
-          warranty_km: item.warranty_km || 0,
-          quantity: item.quantity ?? 1,
-          unit_price: item.unit_price ?? '',
-          amount: Number(item.quantity ?? 0) * Number(item.unit_price ?? 0),
-        }))
-      );
+      const loadedItems = (detail.items && detail.items.length > 0 ? detail.items : [{ ...defaultItem }]).map((item) => ({
+        product_id: item.product_id || null,
+        product_name: item.product_name || '',
+        category: item.category || '',
+        warranty_name: item.warranty_name || '',
+        warranty_year: item.warranty_year || 0,
+        warranty_month: item.warranty_month || 0,
+        warranty_km: item.warranty_km || 0,
+        quantity: item.quantity ?? 1,
+        unit_price: item.unit_price ?? '',
+        amount: Number(item.quantity ?? 0) * Number(item.unit_price ?? 0),
+      }));
+      setItems(loadedItems);
+
+      // ตั้งค่าเริ่มต้นของ dropdown ประกันให้ตรงกับข้อมูลที่บันทึกไว้แล้วในรายการ —
+      // ดึงแคตตาล็อกสดใหม่ตรงนี้ (แทนที่จะพึ่ง state `warranties` ที่โหลดจาก effect
+      // แยก) กันปัญหา race condition ที่แคตตาล็อกอาจยังโหลดไม่เสร็จตอนนี้
+      try {
+        const warRes = await client.get('/warranties');
+        const activeWarranties = (warRes.data.data || []).filter((w) => w.is_active);
+        setWarranties(activeWarranties);
+        setRackWarrantyId(findMatchingWarrantyId(loadedItems, activeWarranties, RACK_KEYWORDS, false, 'product_name'));
+        setBallJointWarrantyId(findMatchingWarrantyId(loadedItems, activeWarranties, BALL_JOINT_KEYWORDS, false, 'product_name'));
+        setOtherWarrantyId(findMatchingWarrantyId(loadedItems, activeWarranties, ALL_WARRANTY_KEYWORDS, true, 'product_name'));
+      } catch (err) {
+        console.error('Error loading warranties:', err);
+      }
+
       setProductSuggestions({});
       setSuggestionIndex({});
       setFieldErrors({});

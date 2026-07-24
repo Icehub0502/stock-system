@@ -8,7 +8,7 @@ import WarrantySection from "./WarrantySection";
 import ReceiptPrintTemplate from "./ReceiptPrintTemplate";
 import FormModalShell from "./FormModalShell";
 import { todayStr, formatMoney } from "../utils/format";
-import { RACK_KEYWORDS, BALL_JOINT_KEYWORDS, ALL_WARRANTY_KEYWORDS, applyWarrantyToItems } from "../utils/warrantyKeywords";
+import { RACK_KEYWORDS, BALL_JOINT_KEYWORDS, ALL_WARRANTY_KEYWORDS, applyWarrantyToItems, findMatchingWarrantyId } from "../utils/warrantyKeywords";
 
 export default function ReceiptFormModal({ onClose, onSuccess, receiptId }) {
   const [receiptNo, setReceiptNo] = useState('');
@@ -125,7 +125,7 @@ export default function ReceiptFormModal({ onClose, onSuccess, receiptId }) {
       setVehicleMode('existing');
       setVehicleId(receiptData.vehicle_id?.toString() || '');
       setNewVehicle({ brand: '', model: '', color: '', license_plate: '' });
-      setItems((receiptData.items || [{
+      const loadedItems = (receiptData.items || [{
         service_item_id: null,
         product_name_snapshot: '',
         category: '',
@@ -147,7 +147,22 @@ export default function ReceiptFormModal({ onClose, onSuccess, receiptId }) {
         qty: item.qty ?? 1,
         price: item.price ?? '',
         amount: item.amount ?? 0,
-      })));
+      }));
+      setItems(loadedItems);
+
+      // ตั้งค่าเริ่มต้นของ dropdown ประกันให้ตรงกับข้อมูลที่บันทึกไว้แล้วในรายการ —
+      // ดึงแคตตาล็อกสดใหม่ตรงนี้กันปัญหา race condition กับ effect ที่โหลดแยกต่างหาก
+      try {
+        const warRes = await client.get('/warranties');
+        const activeWarranties = (warRes.data.data || []).filter((w) => w.is_active);
+        setWarranties(activeWarranties);
+        setRackWarrantyId(findMatchingWarrantyId(loadedItems, activeWarranties, RACK_KEYWORDS, false, 'product_name_snapshot'));
+        setBallJointWarrantyId(findMatchingWarrantyId(loadedItems, activeWarranties, BALL_JOINT_KEYWORDS, false, 'product_name_snapshot'));
+        setOtherWarrantyId(findMatchingWarrantyId(loadedItems, activeWarranties, ALL_WARRANTY_KEYWORDS, true, 'product_name_snapshot'));
+      } catch (err) {
+        console.error('Error loading warranties:', err);
+      }
+
       setItemSuggestions({});
       setSuggestionIndex({});
       setFieldErrors({});
