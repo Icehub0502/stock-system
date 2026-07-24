@@ -1570,6 +1570,11 @@
   page-break-inside: avoid;
 }
 
+/* มัดจำ + ยอดคงเหลือชำระ อยู่แถวเดียวกัน ต่อจากกล่องยอดรวม — ยอดคงเหลือเน้นสีแดง
+   ให้เห็นชัดว่าลูกค้ายังต้องจ่ายอีกเท่าไหร่ */
+.doc-deposit-row { justify-content: space-between; }
+.doc-remaining-balance { color: #dc2626; font-weight: 700; }
+
 /* Highlights "มัดจำ <amount>" wherever remark text is rendered read-only
    (print templates, detail views) — a warm badge-like pill so a deposit note
    can't be missed. print-color-adjust:exact (set globally under @media print

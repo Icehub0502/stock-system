@@ -3,6 +3,7 @@ import champpowerLogo from '../image/champpower-logo.jpg';
 import { COMPANY, amountToWords } from '../utils/printDoc';
 import { formatMoney } from '../utils/format';
 import { highlightDeposit } from '../utils/highlightDeposit';
+import { ALL_WARRANTY_KEYWORDS } from '../utils/warrantyKeywords';
 
 // Fixed warranty-tag slots printed on every receipt (matches the physical form).
 // Matched against the item name itself — `category` isn't persisted on saved
@@ -10,6 +11,7 @@ import { highlightDeposit } from '../utils/highlightDeposit';
 const WARRANTY_SLOTS = [
   { label: 'แร็คพวงมาลัย', matchKeyword: 'แร็ค' },
   { label: 'ลูกหมากช่วงล่าง', matchKeyword: 'ลูกหมาก' },
+  { label: 'อื่นๆ', isOther: true },
 ];
 
 // Printed as blank checkboxes for staff to tick by hand — not tied to any
@@ -37,10 +39,16 @@ function formatThaiDateShort(dateInput) {
   return `${dd}/${mm}/${yy}`;
 }
 
-function findWarrantySlotText(items, matchKeyword) {
+// slot.isOther = รายการที่เหลือทั้งหมดที่ไม่ตรงทั้งแร็คและลูกหมาก (ดู
+// ALL_WARRANTY_KEYWORDS/WarrantySection.jsx — ต้อง match กติกาเดียวกับตอนเลือก
+// "ประกันอื่นๆ" จาก dropdown ในฟอร์ม)
+function findWarrantySlotText(items, slot) {
   const match = items.find((it) => {
     const name = it.product_name_snapshot || it.product_name || it.service_item_name || '';
-    return name.includes(matchKeyword) && it.warranty_name;
+    if (!name || !it.warranty_name) return false;
+    return slot.isOther
+      ? !ALL_WARRANTY_KEYWORDS.some((kw) => name.includes(kw))
+      : name.includes(slot.matchKeyword);
   });
   if (!match) return '';
   // warranty_name already carries the year/km inline (e.g. "แร็ค 1 ปี 100000 Km") —
@@ -208,14 +216,15 @@ export default function ReceiptPrintTemplate({ data }) {
             </div>
 
             {hasDeposit && (
-              <div className="doc-remark-row">
-                <b>มัดจำ :</b> ฿{formatMoney(depositAmountNum)}{deposit_date ? ` (${formatThaiDateShort(deposit_date)})` : ''}
+              <div className="doc-remark-row doc-deposit-row">
+                <span><b>มัดจำ :</b> ฿{formatMoney(depositAmountNum)}{deposit_date ? ` (${formatThaiDateShort(deposit_date)})` : ''}</span>
+                <span className="doc-remaining-balance"><b>ยอดคงเหลือชำระ :</b> ฿{formatMoney(grandTotal - depositAmountNum)}</span>
               </div>
             )}
 
             <div className="doc-warranty-row">
               {WARRANTY_SLOTS.map((slot) => {
-                const text = findWarrantySlotText(items, slot.matchKeyword);
+                const text = findWarrantySlotText(items, slot);
                 return (
                   <span key={slot.label}>
                     <b>{slot.label} :</b> <span className={text ? 'doc-warranty-value' : ''}>{text || '-'}</span>
