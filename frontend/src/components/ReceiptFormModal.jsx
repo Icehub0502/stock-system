@@ -4,9 +4,11 @@ import ReceiptInfoSection from "./ReceiptInfoSection";
 import CustomerSection from "./CustomerSection";
 import VehicleSection from "./VehicleSection";
 import ItemTable from "./ItemTable";
+import WarrantySection from "./WarrantySection";
 import ReceiptPrintTemplate from "./ReceiptPrintTemplate";
 import FormModalShell from "./FormModalShell";
 import { todayStr, formatMoney } from "../utils/format";
+import { RACK_KEYWORDS, BALL_JOINT_KEYWORDS, ALL_WARRANTY_KEYWORDS, applyWarrantyToItems } from "../utils/warrantyKeywords";
 
 export default function ReceiptFormModal({ onClose, onSuccess, receiptId }) {
   const [receiptNo, setReceiptNo] = useState('');
@@ -37,6 +39,10 @@ export default function ReceiptFormModal({ onClose, onSuccess, receiptId }) {
   }]);
   const [itemSuggestions, setItemSuggestions] = useState({});
   const [suggestionIndex, setSuggestionIndex] = useState({});
+  const [warranties, setWarranties] = useState([]);
+  const [rackWarrantyId, setRackWarrantyId] = useState('');
+  const [ballJointWarrantyId, setBallJointWarrantyId] = useState('');
+  const [otherWarrantyId, setOtherWarrantyId] = useState('');
   const itemNameRefs = useRef([]);
   const itemQtyRefs = useRef([]);
   const itemPriceRefs = useRef([]);
@@ -87,6 +93,9 @@ export default function ReceiptFormModal({ onClose, onSuccess, receiptId }) {
     }]);
     setItemSuggestions({});
     setSuggestionIndex({});
+    setRackWarrantyId('');
+    setBallJointWarrantyId('');
+    setOtherWarrantyId('');
     setFieldErrors({});
     setError('');
     setToast(null);
@@ -375,6 +384,25 @@ export default function ReceiptFormModal({ onClose, onSuccess, receiptId }) {
 
   const handleRemoveItem = (index) => {
     setItems((prev) => prev.filter((_, idx) => idx !== index));
+  };
+
+  useEffect(() => {
+    client.get('/warranties')
+      .then((res) => setWarranties((res.data.data || []).filter((w) => w.is_active)))
+      .catch((err) => console.error('Error loading warranties:', err));
+  }, []);
+
+  const handleRackWarrantyChange = (id) => {
+    setRackWarrantyId(id);
+    setItems((prev) => applyWarrantyToItems(prev, warranties, RACK_KEYWORDS, id, false, 'product_name_snapshot'));
+  };
+  const handleBallJointWarrantyChange = (id) => {
+    setBallJointWarrantyId(id);
+    setItems((prev) => applyWarrantyToItems(prev, warranties, BALL_JOINT_KEYWORDS, id, false, 'product_name_snapshot'));
+  };
+  const handleOtherWarrantyChange = (id) => {
+    setOtherWarrantyId(id);
+    setItems((prev) => applyWarrantyToItems(prev, warranties, ALL_WARRANTY_KEYWORDS, id, true, 'product_name_snapshot'));
   };
 
   const handleItemChange = (index, field, value) => {
@@ -696,7 +724,18 @@ export default function ReceiptFormModal({ onClose, onSuccess, receiptId }) {
                 formatMoney={formatMoney}
                 fieldErrors={fieldErrors}
                 showCodeColumn={false}
+                showWarranty={false}
                 compactRows={true}
+              />
+
+              <WarrantySection
+                warranties={warranties}
+                rackWarrantyId={rackWarrantyId}
+                ballJointWarrantyId={ballJointWarrantyId}
+                otherWarrantyId={otherWarrantyId}
+                onRackChange={handleRackWarrantyChange}
+                onBallJointChange={handleBallJointWarrantyChange}
+                onOtherChange={handleOtherWarrantyChange}
               />
 
               {warrantyHighlights.length > 0 && (
