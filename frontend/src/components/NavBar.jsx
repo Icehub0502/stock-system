@@ -67,6 +67,14 @@ export default function NavBar() {
     setOpenCategory(null);
   }, [location.pathname]);
 
+  // Lets BottomNav's "เมนู" tab (a sibling component with no shared state)
+  // open this same drawer instead of duplicating the nav-links markup/data.
+  useEffect(() => {
+    const openDrawer = () => setMenuOpen(true);
+    window.addEventListener('open-nav-drawer', openDrawer);
+    return () => window.removeEventListener('open-nav-drawer', openDrawer);
+  }, []);
+
   if (!user) return null;
 
   const handleLogout = () => {
@@ -99,6 +107,8 @@ export default function NavBar() {
           {menuOpen ? "✕" : "☰"}
         </button>
       </div>
+
+      {menuOpen && <div className="navbar-drawer-backdrop" onClick={close} />}
 
       <div className={`navbar-links ${menuOpen ? "open" : ""}`}>
         {user.role === "office" && (

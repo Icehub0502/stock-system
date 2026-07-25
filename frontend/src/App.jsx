@@ -1,8 +1,10 @@
 import React, { Suspense, lazy } from "react";
-import { Routes, Route, Navigate } from "react-router-dom";
+import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import ProtectedRoute from "./components/ProtectedRoute";
 import NavBar from "./components/NavBar";
+import BottomNav from "./components/BottomNav";
+import PageSkeleton from "./components/PageSkeleton";
 // LoginPage stays a static import — every visitor needs it before we know
 // their role, so lazy-loading it would only add a network round trip.
 import LoginPage from "./pages/LoginPage";
@@ -38,11 +40,16 @@ function Home() {
 }
 
 function AppRoutes() {
+  const location = useLocation();
   return (
     <>
       <NavBar />
       <div className="container">
-        <Suspense fallback={<div className="loading">กำลังโหลด...</div>}>
+        {/* key={pathname} forces this subtree to remount on navigation, which
+            both retriggers the fade-in animation and gives Suspense a fresh
+            boundary per page instead of reusing the previous page's. */}
+        <div key={location.pathname} className="page-fade-in">
+        <Suspense fallback={<PageSkeleton />}>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/" element={<Home />} />
@@ -184,7 +191,9 @@ function AppRoutes() {
           />
         </Routes>
         </Suspense>
+        </div>
       </div>
+      <BottomNav />
     </>
   );
 }

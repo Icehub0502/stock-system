@@ -652,19 +652,53 @@ button:disabled { background: #f3f4f6; color: #9ca3af; cursor: not-allowed; }
   .quotation-table td.daily-summary-checkbox-cell::before { display: none; }
 }
 
+/* Sticky top app bar — stays visible while scrolling long list/table pages,
+   like a native app's header. Desktop keeps the same visual bar, just fixed
+   in place (harmless there since desktop pages rarely scroll past it anyway). */
+.navbar {
+  position: sticky;
+  top: 0;
+  z-index: 55;
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+.navbar-drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 78;
+  animation: toast-fade-in 0.15s ease;
+}
+
 @media (max-width: 768px) {
-  .navbar { padding: 0 14px; }
+  .navbar { padding: 0 14px; padding-top: env(safe-area-inset-top, 0px); }
   .navbar-hamburger { display: block; }
+
+  /* Slide-in drawer instead of an inline accordion that pushes page content
+     down — reads as a native app nav drawer, and doesn't shove the page's
+     own header out of view every time the menu opens. */
   .navbar-links {
-    display: none;
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: min(300px, 85vw);
+    display: flex;
     flex-direction: column;
     align-items: flex-start;
     gap: 0;
-    padding-bottom: 10px;
-    width: 100%;
-    border-top: 1px solid #2a2a2a;
+    padding: env(safe-area-inset-top, 0px) 14px calc(10px + env(safe-area-inset-bottom, 0px));
+    box-sizing: border-box;
+    background: #111111;
+    border-top: none;
+    border-left: 1px solid #2a2a2a;
+    overflow-y: auto;
+    z-index: 79;
+    transform: translateX(100%);
+    transition: transform 0.22s ease;
+    visibility: hidden;
   }
-  .navbar-links.open { display: flex; }
+  .navbar-links.open { transform: translateX(0); visibility: visible; }
   .navbar-links a {
     width: 100%;
     padding: 12px 0;
@@ -3101,3 +3135,181 @@ button:disabled { background: #f3f4f6; color: #9ca3af; cursor: not-allowed; }
 @media (max-width: 768px) {
   .dash-columns { grid-template-columns: 1fr; }
 }
+
+/* ════════════════════════════════════════
+   PWA — offline / install / update banners
+   ════════════════════════════════════════ */
+.pwa-offline-banner {
+  position: sticky;
+  top: 0;
+  z-index: 60;
+  background: #b45309;
+  color: #fff;
+  font-size: 0.82rem;
+  font-weight: 600;
+  text-align: center;
+  padding: 8px 14px;
+  padding-top: calc(8px + env(safe-area-inset-top, 0px));
+}
+
+.pwa-install-banner,
+.pwa-update-banner {
+  position: fixed;
+  left: 16px;
+  right: 16px;
+  bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  z-index: 70;
+  max-width: 420px;
+  margin: 0 auto;
+  background: #111111;
+  color: #fff;
+  border-radius: 12px;
+  padding: 14px 16px;
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.25);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  animation: toast-fade-in 0.18s ease;
+}
+
+.pwa-install-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1 1 200px; }
+.pwa-install-text strong { font-size: 0.9rem; }
+.pwa-install-text span { font-size: 0.78rem; color: #cbd5e1; }
+
+.pwa-install-actions,
+.pwa-update-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+
+.pwa-banner-close {
+  background: transparent;
+  border: none;
+  color: #9ca3af;
+  font-size: 1rem;
+  padding: 4px 6px;
+  min-height: unset;
+  cursor: pointer;
+}
+.pwa-banner-close:hover { color: #fff; }
+
+.pwa-update-banner span { font-size: 0.85rem; font-weight: 600; }
+
+@media (max-width: 480px) {
+  .pwa-install-banner,
+  .pwa-update-banner { left: 10px; right: 10px; bottom: calc(10px + env(safe-area-inset-bottom, 0px)); }
+}
+
+/* ════════════════════════════════════════
+   BOTTOM NAV — phones only
+   ════════════════════════════════════════ */
+.bottom-nav { display: none; }
+
+@media (max-width: 768px) {
+  .bottom-nav {
+    display: flex;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 55;
+    background: #111111;
+    border-top: 1px solid #2a2a2a;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .bottom-nav-item {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    padding: 8px 4px 6px;
+    min-height: 52px;
+    color: #9ca3af;
+    text-decoration: none;
+    background: transparent;
+    border: none;
+    font-family: inherit;
+    cursor: pointer;
+  }
+  .bottom-nav-icon { width: 22px; height: 22px; display: flex; }
+  .bottom-nav-icon svg { width: 100%; height: 100%; }
+  .bottom-nav-label { font-size: 0.68rem; font-weight: 600; }
+  .bottom-nav-item.active { color: #eab308; }
+
+  /* Reserve space so the last row of a table/list isn't hidden behind the
+     fixed bottom bar. Scoped with :has() to pages that actually render one
+     (i.e. any logged-in page) — the login page has no .bottom-nav so its
+     .container is untouched. */
+  body:has(.bottom-nav) .container { padding-bottom: 76px; }
+}
+
+/* ════════════════════════════════════════
+   PAGE TRANSITION
+   ════════════════════════════════════════ */
+.page-fade-in { animation: page-fade-in 0.18s ease; }
+@keyframes page-fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ════════════════════════════════════════
+   LOADING SKELETON (route-level Suspense fallback)
+   ════════════════════════════════════════ */
+.page-skeleton { display: flex; flex-direction: column; gap: 10px; padding-top: 4px; }
+.skel {
+  border-radius: 10px;
+  background: linear-gradient(90deg, #e5e7eb 25%, #f3f4f6 37%, #e5e7eb 63%);
+  background-size: 400% 100%;
+  animation: skel-shimmer 1.4s ease infinite;
+}
+.skel-header { height: 64px; }
+.skel-row { height: 44px; }
+.skel-row-short { width: 60%; }
+@keyframes skel-shimmer {
+  0% { background-position: 100% 50%; }
+  100% { background-position: 0 50%; }
+}
+
+/* ════════════════════════════════════════
+   EMPTY / ERROR STATES — shared classes used across most list pages
+   ════════════════════════════════════════ */
+/* .no-result-text is intentionally excluded here — it's always a <td> inside
+   a data table (see .rack-table/.quotation-table mobile card rules, which
+   already carry their own higher-specificity display + a matching
+   `.no-result-text::before { display:none }` override for ≤640px). Styling
+   it here as flex/icon would fight those existing, more specific rules. */
+.loading,
+.empty-message,
+.pcp-empty,
+.pcp-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+.empty-message::before {
+  content: '📭';
+  font-size: 1.6rem;
+  opacity: 0.6;
+}
+/* .pcp-empty already renders its own icon (.pcp-empty-icon) — skip the
+   generic ::before here to avoid a duplicate. */
+.loading::before,
+.pcp-loading::before {
+  content: '';
+  width: 22px;
+  height: 22px;
+  border: 3px solid #e5e7eb;
+  border-top-color: #6b7280;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.error-message::before {
+  content: '⚠️ ';
+}
+/* Animations above (.page-fade-in, .skel, .loading::before) are already
+   killed site-wide by the existing prefers-reduced-motion rule near the
+   navbar breakpoints. */
