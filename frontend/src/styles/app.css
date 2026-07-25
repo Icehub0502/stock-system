@@ -398,17 +398,6 @@ button:disabled { background: #f3f4f6; color: #9ca3af; cursor: not-allowed; }
   z-index: 50;
 }
 
-.modal-card {
-  background: white;
-  border-radius: 12px;
-  padding: 24px;
-  max-width: 400px;
-  width: 100%;
-  text-align: left;
-  max-height: 90vh;
-  overflow-y: auto;
-}
-
 .modal-body {
   color: #334155;
   margin-top: 12px;
