@@ -1998,6 +1998,19 @@ button:disabled { background: #f3f4f6; color: #9ca3af; cursor: not-allowed; }
   max-width: 260px;
 }
 
+/* On tablet-width screens (e.g. an 11" tablet held portrait, ~700-750px —
+   too wide to trigger the <=640px mobile card layout, but not wide enough
+   for auto table layout to give this column its usual ~260px) the actions
+   column gets squeezed down to ~110px of usable width, forcing every
+   button (แก้ไข/พิมพ์/อนุมัติ/วันที่...) onto its own row — very tall,
+   cramped rows, bad for a screen a customer is signing on. A width floor
+   gives flex-wrap enough room to pack 2 buttons per row instead. */
+@media (min-width: 641px) {
+  .quotation-table td.actions {
+    min-width: 190px;
+  }
+}
+
 .btn-icon-small {
   background: transparent;
   border: 1px solid #e5e7eb;
