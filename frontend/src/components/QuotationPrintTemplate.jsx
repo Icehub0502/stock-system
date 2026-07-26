@@ -20,10 +20,16 @@ const WARRANTY_SLOTS = [
 // slot.isOther = รายการที่เหลือทั้งหมดที่ไม่ตรงทั้งแร็คและลูกหมาก (ดู
 // ALL_WARRANTY_KEYWORDS/WarrantySection.jsx — ต้อง match กติกาเดียวกับตอนเลือก
 // "ประกันอื่นๆ" จาก dropdown ในฟอร์ม)
-function findWarrantySlotText(items, slot) {
+//
+// excludeWarrantyNames กัน "ชุดโปร" ที่ทุกแถวย่อยได้ประกันเดียวกันหมด (ดู
+// resolveQuotationItemRows/expandSetIntoItems) — แถวย่อยบางแถวในชุด (เช่น
+// ค่าแรง) ชื่อไม่ตรงคำว่าแร็ค/ลูกหมาก แต่ถือ warranty_name เดียวกับแถวลูกหมาก
+// ในชุดเดียวกัน ถ้าไม่กันไว้ ประกันตัวเดียวกันจะโผล่ซ้ำในช่อง "อื่นๆ" ด้วย
+function findWarrantySlotText(items, slot, excludeWarrantyNames = []) {
   const match = items.find((it) => {
     const name = it.product_name || it.product_name_snapshot || '';
     if (!name || !it.warranty_name) return false;
+    if (slot.isOther && excludeWarrantyNames.includes(it.warranty_name)) return false;
     return slot.isOther
       ? !ALL_WARRANTY_KEYWORDS.some((kw) => name.includes(kw))
       : name.includes(slot.matchKeyword);
@@ -213,14 +219,19 @@ export default function QuotationPrintTemplate({ data }) {
             </div>
 
             <div className="doc-warranty-row">
-              {WARRANTY_SLOTS.map((slot) => {
-                const text = findWarrantySlotText(items, slot);
-                return (
-                  <span key={slot.label}>
-                    <b>{slot.label} :</b> <span className={text ? 'doc-warranty-value' : ''}>{text || '-'}</span>
-                  </span>
-                );
-              })}
+              {(() => {
+                const nonOtherTexts = WARRANTY_SLOTS.filter((slot) => !slot.isOther)
+                  .map((slot) => findWarrantySlotText(items, slot))
+                  .filter(Boolean);
+                return WARRANTY_SLOTS.map((slot) => {
+                  const text = findWarrantySlotText(items, slot, nonOtherTexts);
+                  return (
+                    <span key={slot.label}>
+                      <b>{slot.label} :</b> <span className={text ? 'doc-warranty-value' : ''}>{text || '-'}</span>
+                    </span>
+                  );
+                });
+              })()}
             </div>
 
             <div className="doc-remark-row"><b>หมายเหตุ :</b> {highlightDeposit(remark) || ''}</div>
