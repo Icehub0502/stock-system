@@ -738,9 +738,11 @@ async function createQuotationFromQueue(parsed) {
           }
         }
         if (matchedIndex !== -1) {
+          // เก็บ "- " นำหน้าไว้ด้วย ให้หน้าตาแถวที่ถูกแทนที่เหมือนแถวย่อยอื่น ๆ
+          // ของชุดเดียวกันที่ไม่ได้ถูกแตะ (ซึ่งยังมี "- " ติดมากับชื่อจากแคตาล็อก)
           resolvedItems[matchedIndex] = {
             ...resolvedItems[matchedIndex],
-            product_name: item.name,
+            product_name: `- ${item.name}`,
             unit_price: Number(resolvedItems[matchedIndex].unit_price || 0) + Number(item.price || 0),
           };
           continue;

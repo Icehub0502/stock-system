@@ -360,7 +360,7 @@ describe('POST /api/line/webhook', () => {
     expect(items).toHaveLength(3); // ยังคง 3 แถวเท่าเดิม (หัวข้อ + อุปกรณ์ย่อย 2 ชิ้น) ไม่เพิ่มเป็น 4
     expect(items[0]).toEqual({ product_name: 'ชุดโปรช่วงล่าง', unit_price: '7500.00' });
     expect(items[1]).toEqual({ product_name: '- ปีกนกล่าง L+R', unit_price: '0.00' }); // ไม่ตรงชื่อ ไม่ถูกแตะ
-    expect(items[2]).toEqual({ product_name: 'ลูกหมากปีกนกล่าง (555)', unit_price: '200.00' }); // ถูกแทนที่ชื่อ (คงยี่ห้อในวงเล็บ) + ราคา
+    expect(items[2]).toEqual({ product_name: '- ลูกหมากปีกนกล่าง (555)', unit_price: '200.00' }); // ถูกแทนที่ชื่อ (คงยี่ห้อในวงเล็บ + "- " นำหน้า) + ราคา
   });
 
   test('บรรทัด "-" ที่มีวงเล็บยี่ห้อแต่ไม่ใส่ราคา → นับเป็น 0', async () => {
@@ -385,7 +385,7 @@ describe('POST /api/line/webhook', () => {
       [quotation.id]
     );
     expect(items).toHaveLength(3);
-    expect(items[2]).toEqual({ product_name: 'ลูกหมากปีกนกล่าง (555)', unit_price: '0.00' });
+    expect(items[2]).toEqual({ product_name: '- ลูกหมากปีกนกล่าง (555)', unit_price: '0.00' });
   });
 
   test('บรรทัด "-" ที่ไม่ตรงกับรายการย่อยในชุดไหนเลย → ตกไปเป็นรายการแยกตามปกติ', async () => {
