@@ -4039,4 +4039,130 @@ button:disabled { background: #f3f4f6; color: #9ca3af; cursor: not-allowed; }
   .pcp-col-cb input[type="checkbox"] {
     accent-color: var(--m-accent) !important;
   }
+
+  /* ════════════════════════════════════════════════════════════════
+     MOTION POLISH — loading states + tap feedback + entrance animation,
+     layered on top of the dark theme above. Everything here is already
+     covered by the sitewide `@media (prefers-reduced-motion: reduce)`
+     kill-switch near the top of this file (transition/animation: none
+     !important on *), so nothing extra is needed for that.
+     ════════════════════════════════════════════════════════════════ */
+
+  /* ── skeleton loader — was a light-grey shimmer, now matches the dark
+     cards it's standing in for ── */
+  .skel {
+    background: linear-gradient(90deg, var(--m-surface) 25%, var(--m-line) 37%, var(--m-surface) 63%);
+    background-size: 400% 100%;
+  }
+
+  /* ── spinner (.loading/.pcp-loading ::before) ── */
+  .loading::before,
+  .pcp-loading::before {
+    border-color: var(--m-line);
+    border-top-color: var(--m-accent);
+  }
+
+  /* ── tap feedback — buttons/cards shrink slightly on touch, like a
+     native control, instead of the flat instant-click feel of a web
+     page. Scoped to :active only, so it never fires from a mouse hover
+     lingering (this whole rollout only ever applies ≤768px anyway). ── */
+  .btn,
+  .qbtn,
+  .btn-icon-small,
+  .btn-fab-mobile,
+  .dash-quicklink-btn,
+  .rnf2-item,
+  .rnf2-chip,
+  .rnf2-vcard,
+  .pcp-cat-chip-btn,
+  .pcp-btn-page {
+    transition: transform 0.12s ease, opacity 0.12s ease;
+  }
+  .btn:active,
+  .qbtn:active,
+  .btn-icon-small:active,
+  .dash-quicklink-btn:active,
+  .rnf2-item:active,
+  .rnf2-chip:active,
+  .rnf2-vcard:active,
+  .pcp-cat-chip-btn:active,
+  .pcp-btn-page:active {
+    transform: scale(0.96);
+    opacity: 0.85;
+  }
+  .btn-fab-mobile:active {
+    transform: scale(0.92);
+  }
+  .quotation-table tbody tr,
+  .rack-table tbody tr,
+  .pcp-table tbody tr {
+    transition: transform 0.12s ease;
+  }
+  .quotation-table tr.clickable-row:active,
+  .pcp-table tbody tr:active {
+    transform: scale(0.985);
+  }
+
+  /* ── card entrance — rows/cards lift in with a short stagger instead
+     of all popping in at once, first ~6 rows only (anything past that
+     would just make a long list feel slow to finish appearing). ── */
+  .quotation-table tbody tr,
+  .rack-table tbody tr,
+  .pcp-table tbody tr {
+    animation: m-card-rise 0.32s ease both;
+  }
+  .quotation-table tbody tr.date-group-header-row,
+  .pcp-table tbody tr:has(th) {
+    animation: none;
+  }
+  /* transform-only (no opacity) on purpose — this is a "nice to have"
+     entrance flourish, not something content correctness should ever
+     depend on. If the animation somehow never completes (throttled tab,
+     low-power mode, etc.) the row just sits 8px offset, fully visible,
+     instead of being stuck invisible at opacity: 0. */
+  @keyframes m-card-rise {
+    from { transform: translateY(8px); }
+    to   { transform: translateY(0); }
+  }
+  .quotation-table tbody tr:nth-child(1) { animation-delay: 0.02s; }
+  .quotation-table tbody tr:nth-child(2) { animation-delay: 0.06s; }
+  .quotation-table tbody tr:nth-child(3) { animation-delay: 0.10s; }
+  .quotation-table tbody tr:nth-child(4) { animation-delay: 0.14s; }
+  .quotation-table tbody tr:nth-child(5) { animation-delay: 0.18s; }
+  .quotation-table tbody tr:nth-child(6) { animation-delay: 0.22s; }
+  .rack-table tbody tr:nth-child(1),
+  .pcp-table tbody tr:nth-child(1) { animation-delay: 0.02s; }
+  .rack-table tbody tr:nth-child(2),
+  .pcp-table tbody tr:nth-child(2) { animation-delay: 0.06s; }
+  .rack-table tbody tr:nth-child(3),
+  .pcp-table tbody tr:nth-child(3) { animation-delay: 0.10s; }
+  .rack-table tbody tr:nth-child(4),
+  .pcp-table tbody tr:nth-child(4) { animation-delay: 0.14s; }
+  .rack-table tbody tr:nth-child(5),
+  .pcp-table tbody tr:nth-child(5) { animation-delay: 0.18s; }
+  .rack-table tbody tr:nth-child(6),
+  .pcp-table tbody tr:nth-child(6) { animation-delay: 0.22s; }
+  .dash-stat-card,
+  .dash-panel {
+    animation: m-card-rise 0.32s ease both;
+  }
+  .dash-stat-grid .dash-stat-card:nth-child(1) { animation-delay: 0.02s; }
+  .dash-stat-grid .dash-stat-card:nth-child(2) { animation-delay: 0.06s; }
+  .dash-stat-grid .dash-stat-card:nth-child(3) { animation-delay: 0.10s; }
+  .dash-stat-grid .dash-stat-card:nth-child(4) { animation-delay: 0.14s; }
+
+  /* ── bottom nav — smooth color shift + a small lift when a tab becomes
+     active, instead of an instant color snap. ── */
+  .bottom-nav-item {
+    transition: color 0.18s ease, transform 0.12s ease;
+  }
+  .bottom-nav-item:active {
+    transform: scale(0.92);
+  }
+  .bottom-nav-icon {
+    transition: transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  .bottom-nav-item.active .bottom-nav-icon {
+    transform: translateY(-2px);
+  }
 }
