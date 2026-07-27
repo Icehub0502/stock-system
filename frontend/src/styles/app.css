@@ -3326,3 +3326,90 @@ button:disabled { background: #f3f4f6; color: #9ca3af; cursor: not-allowed; }
 /* Animations above (.page-fade-in, .skel, .loading::before) are already
    killed site-wide by the existing prefers-reduced-motion rule near the
    navbar breakpoints. */
+
+/* ════════════════════════════════════════════════════════════════════
+   MOBILE/TABLET THEME — dark, high-tech accent palette
+   Scoped entirely inside @media (max-width: 768px): desktop keeps its
+   existing look untouched. Placed at the very end of the file on purpose
+   so these rules win the cascade over the earlier same-specificity
+   desktop rules (.status-badge-*, .btn-primary, etc.) whenever the media
+   query matches, without needing !important anywhere.
+   ════════════════════════════════════════════════════════════════════ */
+@media (max-width: 768px) {
+  :root {
+    --m-ink: #0c1117;
+    --m-surface: #141b23;
+    --m-line: #223038;
+    --m-text-hi: #eaf6f4;
+    --m-text-lo: #7d97a0;
+    --m-accent: #2ee6c9;
+    --m-accent-ink: #04211d;
+    --m-good: #35d19b;
+    --m-good-soft: rgba(53, 209, 155, 0.16);
+    --m-warn: #e0b13a;
+    --m-warn-soft: rgba(224, 177, 58, 0.16);
+    --m-bad: #ff5d6c;
+    --m-bad-soft: rgba(255, 93, 108, 0.16);
+    --m-info: #4fa8ff;
+    --m-info-soft: rgba(79, 168, 255, 0.16);
+    --m-display-font: 'Chakra Petch', 'Sarabun', Arial, sans-serif;
+  }
+
+  /* ── card list (quotations/receipts/customers/vehicles/service items/
+     warranties/daily summary — all share .quotation-table) ── */
+  .quotation-table tbody tr {
+    background: var(--m-surface);
+    border-color: var(--m-line);
+    box-shadow: 0 8px 20px -12px rgba(0, 0, 0, 0.6);
+  }
+  .quotation-table td {
+    border-bottom-color: var(--m-line);
+    color: var(--m-text-hi);
+  }
+  .quotation-table td[data-label]::before {
+    color: var(--m-text-lo);
+  }
+  /* เลขที่ใบเสนอราคา/ใบเสร็จ — ใช้ฟอนต์เกจ์วัดตัวหนา อ่านไวขึ้นตอนถืออุปกรณ์ */
+  .quotation-table td[data-label="เลขที่"] {
+    font-family: var(--m-display-font);
+    font-weight: 700;
+    letter-spacing: 0.01em;
+  }
+  .quotation-table td.amount {
+    font-family: var(--m-display-font);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    color: var(--m-accent);
+  }
+
+  /* ── status badges — translucent chip on dark card instead of pastel-on-white ── */
+  .status-badge-neutral { background: rgba(125, 151, 160, 0.16); color: var(--m-text-lo); }
+  .status-badge-success { background: var(--m-good-soft); color: var(--m-good); }
+  .status-badge-warning { background: var(--m-warn-soft); color: var(--m-warn); }
+  .status-badge-danger  { background: var(--m-bad-soft); color: var(--m-bad); }
+  .status-badge-today   { background: var(--m-warn-soft); color: var(--m-warn); border-color: var(--m-warn); }
+  .status-badge-paid    { background: var(--m-info-soft); color: var(--m-info); border-color: var(--m-info); }
+
+  /* ── primary action button (บันทึก/อนุมัติ/รับชำระ-ปิดบิล) ── */
+  .btn {
+    border-radius: 10px;
+    font-family: var(--m-display-font);
+    font-weight: 600;
+  }
+  .btn-primary {
+    background: var(--m-accent);
+    color: var(--m-accent-ink);
+  }
+  .btn-primary:hover {
+    background: var(--m-accent);
+    opacity: 0.9;
+  }
+
+  /* ── bottom nav — recolor to match, was generic dark+amber ── */
+  .bottom-nav {
+    background: var(--m-ink);
+    border-top-color: var(--m-line);
+  }
+  .bottom-nav-label { font-family: var(--m-display-font); }
+  .bottom-nav-item.active { color: var(--m-accent); }
+}
