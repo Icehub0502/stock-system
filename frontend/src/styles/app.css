@@ -3766,4 +3766,277 @@ button:disabled { background: #f3f4f6; color: #9ca3af; cursor: not-allowed; }
     background: var(--m-accent);
     color: var(--m-accent-ink);
   }
+
+  /* ════════════════════════════════════════════════════════════════════
+     PRODUCT COST PAGE (.pcp-*) — cost/pricing tool: search+filters,
+     category/brand chips, data table with bulk-select, add/edit modal.
+     .pcp-root itself has no background in the desktop stylesheet — it
+     just relies on `body`'s plain #f4f5f7, which is never overridden for
+     dark mode elsewhere in this file. Painting the dark background
+     directly on .pcp-root (rather than touching the global `body`) keeps
+     this page's mobile reskin fully self-contained. */
+  .pcp-root { background: var(--m-ink); }
+  .pcp-header { color: var(--m-text-hi); }
+  .pcp-title { color: var(--m-text-hi); font-family: var(--m-display-font); }
+  .pcp-subtitle { color: var(--m-text-lo); }
+
+  .pcp-btn-add {
+    background: var(--m-accent);
+    color: var(--m-accent-ink);
+  }
+  .pcp-btn-add:hover { background: var(--m-accent); opacity: 0.9; }
+  .pcp-btn-select-mode {
+    background: var(--m-surface);
+    border-color: var(--m-line);
+    color: var(--m-text-hi);
+  }
+  .pcp-btn-select-mode:hover,
+  .pcp-btn-select-mode.active {
+    background: var(--m-line);
+    border-color: var(--m-accent);
+    color: var(--m-text-hi);
+  }
+
+  /* ── filters ── */
+  .pcp-filter-search {
+    background: var(--m-surface);
+    border-color: var(--m-line);
+  }
+  .pcp-filter-search:focus-within { border-color: var(--m-accent); }
+  .pcp-filter-search input { color: var(--m-text-hi); }
+  .pcp-filter-search input::placeholder { color: var(--m-text-lo); }
+  .pcp-filter-icon { color: var(--m-text-lo); }
+  .pcp-filter-clear { color: var(--m-text-lo); }
+  .pcp-filter-clear:hover { color: var(--m-text-hi); }
+  .pcp-select {
+    background: var(--m-surface);
+    border-color: var(--m-line);
+    color: var(--m-text-hi);
+  }
+  .pcp-select:focus { border-color: var(--m-accent); }
+  .pcp-btn-clear-all {
+    background: var(--m-surface);
+    border-color: var(--m-line);
+    color: var(--m-text-hi);
+  }
+  .pcp-btn-clear-all:hover { background: var(--m-line); }
+
+  /* ── bulk toolbar ── */
+  .pcp-bulk-bar {
+    background: var(--m-surface);
+    border-color: var(--m-line);
+    color: var(--m-text-hi);
+  }
+  .pcp-bulk-count { color: var(--m-text-lo); }
+  .pcp-btn-print-bulk {
+    background: var(--m-ink);
+    border-color: var(--m-line);
+    color: var(--m-text-hi);
+  }
+  .pcp-btn-print-bulk:hover {
+    background: var(--m-line);
+    border-color: var(--m-accent);
+    color: var(--m-text-hi);
+  }
+  .pcp-btn-delete-bulk {
+    background: var(--m-bad);
+    color: var(--m-text-hi);
+  }
+  .pcp-btn-delete-bulk:hover { background: var(--m-bad); opacity: 0.85; }
+
+  /* ── stat badges / category chips — desktop's black #111 "active" state
+     becomes the teal accent, matching every other active/selected chip
+     in this rollout. ── */
+  .pcp-stat-badge {
+    background: var(--m-surface);
+    border-color: var(--m-line);
+    color: var(--m-text-lo);
+  }
+  .pcp-stat-badge strong { color: var(--m-text-hi); }
+  .pcp-stat-badge.active {
+    background: var(--m-accent);
+    border-color: var(--m-accent);
+    color: var(--m-accent-ink);
+  }
+  .pcp-stat-badge.active strong { color: var(--m-accent-ink); }
+  .pcp-stat-value strong { color: var(--m-accent); }
+  .pcp-chip-clear { color: inherit; }
+
+  .pcp-cat-chip-btn {
+    background: var(--m-surface);
+    border-color: var(--m-line);
+    color: var(--m-text-lo);
+  }
+  .pcp-cat-chip-btn:hover { border-color: var(--m-accent); color: var(--m-text-hi); }
+  .pcp-cat-chip-btn.active {
+    background: var(--m-accent);
+    border-color: var(--m-accent);
+    color: var(--m-accent-ink);
+  }
+  .pcp-cat-chip-count { background: rgba(0, 0, 0, 0.18); }
+  .pcp-cat-chip-btn.active .pcp-cat-chip-count { background: rgba(4, 33, 29, 0.25); }
+
+  /* ── pagination ── */
+  .pcp-btn-page {
+    background: var(--m-surface);
+    border-color: var(--m-line);
+    color: var(--m-text-hi);
+  }
+  .pcp-btn-page:hover:not(:disabled) {
+    background: var(--m-line);
+    border-color: var(--m-accent);
+    color: var(--m-text-hi);
+  }
+  .pcp-page-info { color: var(--m-text-lo); }
+
+  /* ── table wrap + table ── same trap as .quotation-table/.rack-table:
+     the visible surface is each <td> (zebra/hover/selected all painted
+     there), not the <tr> — every one of those <td> rules is re-pointed
+     at the dark surface here too. ── */
+  .pcp-table-wrap {
+    background: var(--m-surface);
+    border-color: var(--m-line);
+  }
+  .pcp-loading, .pcp-empty { color: var(--m-text-lo); }
+  .pcp-table th {
+    background: var(--m-ink);
+    border-bottom-color: var(--m-line);
+    color: var(--m-text-lo);
+  }
+  .pcp-table td {
+    background: var(--m-surface);
+    border-bottom-color: var(--m-line);
+    color: var(--m-text-hi);
+  }
+  .pcp-table tbody tr:hover td { background: var(--m-line); }
+  .pcp-table tbody tr:hover { border-left-color: var(--m-accent); }
+  .pcp-table tbody tr.row-selected td { background: var(--m-line); }
+  .pcp-table tbody tr.row-selected { border-left-color: var(--m-accent); }
+  .pcp-col-no { color: var(--m-text-lo); }
+
+  .pcp-parts-badge {
+    background: var(--m-ink);
+    border-color: var(--m-line);
+    color: var(--m-text-hi);
+  }
+  .pcp-cat-chip {
+    background: var(--m-ink);
+    border-color: var(--m-line);
+    color: var(--m-text-lo);
+  }
+  .pcp-car-chip {
+    background: var(--m-accent);
+    color: var(--m-accent-ink);
+  }
+  .pcp-price-val {
+    color: var(--m-accent);
+    font-family: var(--m-display-font);
+  }
+  .pcp-price-na { color: var(--m-text-lo); }
+
+  .pcp-btn-edit {
+    background: var(--m-ink);
+    border-color: var(--m-line);
+    color: var(--m-text-hi);
+  }
+  .pcp-btn-edit:hover { background: var(--m-line); border-color: var(--m-accent); color: var(--m-text-hi); }
+
+  /* ── toast ── */
+  .pcp-toast--success { background: var(--m-good); color: var(--m-accent-ink); }
+  .pcp-toast--error { background: var(--m-bad); color: var(--m-text-hi); }
+
+  /* ── add/edit + confirm modal — uses its own .pcp-modal-* classes,
+     NOT the shared .modal-card, so it needs its own full treatment
+     rather than relying on the shared modal reskin above. ── */
+  .pcp-modal-box {
+    background: var(--m-surface);
+    border-color: var(--m-line);
+    box-shadow: 0 20px 48px -16px rgba(0, 0, 0, 0.7);
+  }
+  .pcp-modal-header { border-bottom-color: var(--m-line); }
+  .pcp-modal-header h3 {
+    color: var(--m-text-hi);
+    font-family: var(--m-display-font);
+  }
+  .pcp-modal-close { color: var(--m-text-lo); }
+  .pcp-modal-close:hover { color: var(--m-text-hi); }
+  .pcp-modal-body { color: var(--m-text-hi); }
+  .pcp-modal-footer { border-top-color: var(--m-line); }
+  .pcp-btn-cancel {
+    background: var(--m-ink);
+    border-color: var(--m-line);
+    color: var(--m-text-hi);
+  }
+  .pcp-btn-cancel:hover { background: var(--m-line); }
+  .pcp-btn-save {
+    background: var(--m-accent);
+    color: var(--m-accent-ink);
+  }
+  .pcp-btn-save:hover { background: var(--m-accent); opacity: 0.9; }
+  .pcp-btn-save:disabled { background: var(--m-line); color: var(--m-text-lo); }
+  .pcp-btn-delete-confirm {
+    background: var(--m-bad);
+    color: var(--m-text-hi);
+  }
+  .pcp-btn-delete-confirm:hover { background: var(--m-bad); opacity: 0.85; }
+
+  .pcp-edit-divider { border-top-color: var(--m-line); }
+  .pcp-btn-delete-in-modal {
+    background: var(--m-ink);
+    border-color: var(--m-bad);
+    color: var(--m-bad);
+  }
+  .pcp-btn-delete-in-modal:hover { background: var(--m-bad-soft); }
+
+  .pcp-bulk-hint { color: var(--m-text-hi); }
+  .pcp-bulk-hint small { color: var(--m-text-lo); }
+  .pcp-bulk-textarea {
+    background: var(--m-ink);
+    border-color: var(--m-line);
+    color: var(--m-text-hi);
+  }
+  .pcp-bulk-textarea:focus { border-color: var(--m-accent); }
+  .pcp-bulk-error {
+    background: var(--m-bad-soft);
+    border-color: var(--m-bad);
+    color: var(--m-bad);
+  }
+  .pcp-bulk-preview p { color: var(--m-text-hi); }
+  .pcp-preview-scroll { border-color: var(--m-line); }
+  .pcp-preview-table th {
+    background: var(--m-ink);
+    border-bottom-color: var(--m-line);
+    color: var(--m-text-lo);
+  }
+  .pcp-preview-table td { border-bottom-color: var(--m-line); color: var(--m-text-hi); }
+  .pcp-td-more { color: var(--m-text-lo); }
+
+  .pcp-divider-or { color: var(--m-text-lo); }
+  .pcp-divider-or::before,
+  .pcp-divider-or::after { background: var(--m-line); }
+
+  .pcp-form-field label { color: var(--m-text-lo); }
+  .pcp-form-field input {
+    background: var(--m-ink);
+    border-color: var(--m-line);
+    color: var(--m-text-hi);
+  }
+  .pcp-form-field input:focus { border-color: var(--m-accent); }
+  /* this specific field sets background/color via an inline style prop
+     in ProductCostPage.jsx (not just the :read-only pseudo-class), which
+     beats a plain CSS rule regardless of specificity — needs !important
+     to actually override it, same reasoning as the checkbox fix below. */
+  .pcp-form-field input:read-only {
+    background: var(--m-surface) !important;
+    color: var(--m-text-lo) !important;
+  }
+
+  /* select-all / row checkboxes set accent-color inline (JS, ProductCostPage.jsx)
+     — a plain CSS rule can't beat an inline style, but !important can. Left as
+     black (#111) on desktop intentionally; on the new dark cards a black-tinted
+     checkbox would be nearly invisible, so it becomes the teal accent here. */
+  .pcp-bulk-bar input[type="checkbox"],
+  .pcp-col-cb input[type="checkbox"] {
+    accent-color: var(--m-accent) !important;
+  }
 }
