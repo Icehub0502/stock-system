@@ -135,3 +135,92 @@
    (ReceiptListPage/QuotationListPage) แทน grid การ์ดเดิม — เหลือแค่ utility เล็ก ๆ
    ที่ยังใช้อยู่จริงตรงนี้ */
 .rnl-mut { color: #94a3b8; font-size: 12px; }
+
+/* ════════════════════════════════════════════════════════════════════
+   MOBILE/TABLET THEME — same dark palette as app.css (reuses its --m-*
+   tokens; custom properties resolve via the DOM at render time so this
+   works fine from a separate stylesheet). This form was already built
+   mobile-first with its own dark top bar, but the cards/inputs/footer
+   below it were still plain white — this brings those in line.
+   ════════════════════════════════════════════════════════════════════ */
+@media (max-width: 768px) {
+  .rnf2-page { background: var(--m-ink); }
+
+  .rnf2-h1 { color: var(--m-text-hi); }
+  .rnf2-hsub, .rnf2-hint { color: var(--m-text-lo); }
+  .rnf2-input {
+    background: var(--m-surface);
+    border-color: var(--m-line);
+    color: var(--m-text-hi);
+  }
+  .rnf2-input:focus {
+    border-color: var(--m-accent);
+    box-shadow: 0 0 0 3px rgba(46, 230, 201, 0.18);
+  }
+  .rnf2-vcard {
+    background: var(--m-surface);
+    border-color: var(--m-line);
+  }
+  .rnf2-vplate { color: var(--m-text-hi); }
+  .rnf2-vmeta, .rnf2-vcust { color: var(--m-text-lo); }
+
+  .rnf2-card {
+    background: var(--m-surface);
+    border-color: var(--m-line);
+  }
+  .rnf2-card-head { background: var(--m-ink); border-bottom-color: var(--m-line); }
+  .rnf2-num { background: var(--m-accent); color: var(--m-accent-ink); }
+  .rnf2-card-title { color: var(--m-text-hi); }
+
+  .rnf2-item {
+    background: var(--m-surface);
+    border-color: var(--m-line);
+  }
+  .rnf2-item.on {
+    border-color: var(--m-accent);
+    background: rgba(46, 230, 201, 0.12);
+    box-shadow: 0 0 0 1px var(--m-accent) inset;
+  }
+  .rnf2-item-label { color: var(--m-text-hi); }
+  .rnf2-check {
+    background: var(--m-ink);
+    border-color: var(--m-line);
+    color: var(--m-accent);
+  }
+  .rnf2-check.on { background: var(--m-ink); border-color: var(--m-accent); color: var(--m-accent); }
+  .rnf2-note {
+    background: var(--m-ink);
+    border-color: var(--m-line);
+    color: var(--m-text-hi);
+  }
+  .rnf2-note:focus { border-color: var(--m-accent); }
+  .rnf2-axle { color: var(--m-text-lo); }
+  .rnf2-chip {
+    background: var(--m-surface);
+    border-color: var(--m-line);
+    color: var(--m-text-hi);
+  }
+  .rnf2-chip.on {
+    border-color: var(--m-accent);
+    background: rgba(46, 230, 201, 0.12);
+    box-shadow: 0 0 0 1px var(--m-accent) inset;
+  }
+  .rnf2-check-sm {
+    background: var(--m-ink);
+    border-color: var(--m-line);
+    color: var(--m-accent);
+  }
+  .rnf2-check-sm.on { border-color: var(--m-accent); color: var(--m-accent); }
+  .rnf2-textarea {
+    background: var(--m-ink);
+    border-color: var(--m-line);
+    color: var(--m-text-hi);
+  }
+
+  .rnf2-footer { background: var(--m-surface); border-color: var(--m-line); }
+  .rnf2-flabel { color: var(--m-text-lo); }
+  .rnf2-savebar { background: var(--m-surface); border-top-color: var(--m-line); }
+  .rnf2-savebtn { background: var(--m-accent); color: var(--m-accent-ink); }
+
+  .rnl-mut { color: var(--m-text-lo); }
+}

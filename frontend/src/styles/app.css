@@ -3735,4 +3735,35 @@ button:disabled { background: #f3f4f6; color: #9ca3af; cursor: not-allowed; }
     background: transparent;
     box-shadow: none;
   }
+
+  /* ── global page background — fallback for any page that doesn't set its
+     own (.office-dashboard/.container, used by StockRackPage/WingArmDashboard/
+     TransactionHistoryPage, has no background of its own; it was silently
+     falling through to this). ── */
+  body {
+    background: var(--m-ink);
+    color: var(--m-text-hi);
+  }
+
+  /* ── .dashboard-header — the white title bar used by StockRackPage,
+     WingArmDashboard, TransactionHistoryPage (their equivalent of
+     .quotation-header, which was already fixed separately). ── */
+  .dashboard-header {
+    background: var(--m-surface);
+    border-top-color: var(--m-accent);
+    box-shadow: none;
+  }
+  .dashboard-header h2 { color: var(--m-text-hi); }
+  .dashboard-header-sub { color: var(--m-text-lo); }
+
+  /* ── login screen ── */
+  .login-card {
+    background: var(--m-surface);
+    box-shadow: 0 20px 48px -16px rgba(0, 0, 0, 0.7);
+  }
+  .login-card h2 { color: var(--m-text-hi); }
+  .login-card form button[type="submit"] {
+    background: var(--m-accent);
+    color: var(--m-accent-ink);
+  }
 }
