@@ -1810,3 +1810,56 @@
 #quotation-print-area .doc-original-tag {
   color: #2563eb;
 }
+
+/* ════════════════════════════════════════════════════════════════════
+   MOBILE/TABLET THEME OVERRIDES — this file loads *after* app.css
+   (see main.jsx), so .receipt-modal-card's own `background: var(--color-bg)`
+   (a plain light grey) wins over app.css's mobile `.modal-card` dark
+   override at equal specificity, since it's simply later in the cascade.
+   Re-pointing it here (same file, later still) fixes that. Reuses the
+   --m-* tokens defined in app.css's mobile theme block — custom properties
+   resolve via the DOM at render time, not per-file, so this works fine
+   despite living in a different stylesheet.
+   Scoped to the on-screen form chrome only — the print/preview area stays
+   white on purpose, since it's meant to look like the real printed paper
+   output regardless of app theme.
+   ════════════════════════════════════════════════════════════════════ */
+@media (max-width: 768px) {
+  .receipt-modal-card {
+    background: var(--m-surface);
+    border: 1px solid var(--m-line);
+  }
+  .receipt-items-table th {
+    background: var(--m-ink);
+    color: var(--m-text-hi);
+  }
+  .receipt-items-table th,
+  .receipt-items-table td {
+    border-bottom-color: var(--m-line);
+  }
+  .mobile-preview-toggle {
+    background: var(--m-surface);
+    color: var(--m-text-hi);
+    border-color: var(--m-line);
+  }
+  .receipt-modal-form .form-group label,
+  .receipt-modal-form .optional-label,
+  .receipt-modal-form .no-data-note {
+    color: var(--m-text-lo);
+  }
+  .receipt-modal-form .modal-subtitle {
+    color: var(--m-text-lo);
+  }
+  .autocomplete-dropdown {
+    background: var(--m-surface);
+    border-color: var(--m-line);
+  }
+  .autocomplete-item {
+    color: var(--m-text-hi);
+  }
+  .autocomplete-item:hover,
+  .autocomplete-item:focus,
+  .autocomplete-item.is-active {
+    background: var(--m-line);
+  }
+}

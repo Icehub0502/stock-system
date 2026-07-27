@@ -3433,6 +3433,38 @@ button:disabled { background: #f3f4f6; color: #9ca3af; cursor: not-allowed; }
   .status-badge-today   { background: var(--m-warn-soft); color: var(--m-warn); border-color: var(--m-warn); }
   .status-badge-paid    { background: var(--m-info-soft); color: var(--m-info); border-color: var(--m-info); }
 
+  /* ── card list (stock rack / wing-arm racks — .rack-table) ──
+     Same trap as .quotation-table above: the visible surface is each <td>,
+     not the <tr>. Desktop paints its zebra stripe (nth-child(even)) and its
+     low-stock highlight directly on <td>, on top of any plain `tr`
+     background — so every one of those <td> rules must be re-pointed at the
+     dark surface here too, and zebra striping is dropped (not useful) in
+     favor of a uniform dark card, matching the rest of this rollout. */
+  .rack-table tbody tr {
+    background: var(--m-surface);
+    border-color: var(--m-line);
+  }
+  .rack-table tbody tr td,
+  .rack-table tbody tr:nth-child(even) td {
+    background: var(--m-surface);
+  }
+  .rack-table tr.low-stock td {
+    background: var(--m-warn-soft);
+  }
+  .rack-table tbody tr.low-stock {
+    border-color: var(--m-warn);
+  }
+  .rack-table tbody tr:hover td {
+    background: var(--m-line);
+  }
+  .rack-table td {
+    border-bottom-color: var(--m-line);
+    color: var(--m-text-hi);
+  }
+  .rack-table td::before {
+    color: var(--m-text-lo);
+  }
+
   /* ── primary action button (บันทึก/อนุมัติ/รับชำระ-ปิดบิล) ── */
   .btn {
     border-radius: 10px;
@@ -3595,5 +3627,77 @@ button:disabled { background: #f3f4f6; color: #9ca3af; cursor: not-allowed; }
     font-size: 28px;
     font-weight: 700;
     line-height: 1;
+  }
+
+  /* ── shared modal/form chrome (.modal-card/.modal-backdrop/.form-group) —
+     used by every dialog in the app: quotation/receipt forms, customer/
+     vehicle add-edit, close-payment, schedule-date, signature, change-
+     password, warranty dropdowns (WarrantySection's .info-card), etc.
+     Reskinning this one component gives every dialog the dark theme.
+     .modal-backdrop's dark scrim already reads fine against a dark card,
+     so it's left untouched. */
+  .modal-card {
+    background: var(--m-surface);
+    border: 1px solid var(--m-line);
+    box-shadow: 0 20px 48px -16px rgba(0, 0, 0, 0.7);
+  }
+  .modal-header h2,
+  .modal-title {
+    color: var(--m-text-hi);
+    font-family: var(--m-display-font);
+  }
+  .btn-close {
+    color: var(--m-text-lo);
+  }
+  .btn-close:hover {
+    color: var(--m-text-hi);
+  }
+  .modal-body {
+    color: var(--m-text-hi);
+  }
+  .modal-delete-zone hr {
+    border-top-color: var(--m-line);
+  }
+  .modal-form label,
+  .form-group label {
+    color: var(--m-text-lo);
+  }
+  .form-header {
+    background: var(--m-ink);
+    border-color: var(--m-line);
+  }
+  .form-section h3 {
+    color: var(--m-text-hi);
+  }
+  .form-group input,
+  .form-group select,
+  .form-group textarea,
+  .modal-form input,
+  .modal-form select,
+  .modal-form textarea {
+    background: var(--m-ink);
+    border-color: var(--m-line);
+    color: var(--m-text-hi);
+  }
+  .form-group input:focus,
+  .form-group select:focus,
+  .form-group textarea:focus,
+  .modal-form input:focus,
+  .modal-form select:focus,
+  .modal-form textarea:focus {
+    border-color: var(--m-accent);
+    box-shadow: 0 0 0 3px rgba(46, 230, 201, 0.18);
+  }
+
+  /* ── WarrantySection's card (rendered inside quotation/receipt forms) —
+     scoped to .modal-card so the print-preview's own unrelated reuse of
+     the same .info-card/.info-card-title class names is left alone. ── */
+  .modal-card .info-card {
+    background: var(--m-ink);
+    border: 1px solid var(--m-line);
+    box-shadow: none;
+  }
+  .modal-card .info-card-title {
+    color: var(--m-text-hi);
   }
 }
