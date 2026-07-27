@@ -3217,6 +3217,12 @@ button:disabled { background: #f3f4f6; color: #9ca3af; cursor: not-allowed; }
    ════════════════════════════════════════ */
 .bottom-nav { display: none; }
 
+/* Avatar initials shown before customer/vehicle-owner names — mobile card
+   list only (see MOBILE/TABLET THEME block at the end of this file for the
+   visible styling). Hidden by default so desktop's plain-text look is
+   completely untouched regardless of markup. */
+.row-avatar { display: none; }
+
 @media (max-width: 768px) {
   .bottom-nav {
     display: flex;
@@ -3261,9 +3267,16 @@ button:disabled { background: #f3f4f6; color: #9ca3af; cursor: not-allowed; }
    PAGE TRANSITION
    ════════════════════════════════════════ */
 .page-fade-in { animation: page-fade-in 0.18s ease; }
+/* opacity-only (no transform) — a `transform` on this wrapper, even a
+   completed/no-op `translateY(0)`, makes it the containing block for any
+   `position: fixed` descendant (e.g. .btn-fab-mobile), so a fixed element
+   scrolls away with the page instead of staying pinned to the viewport.
+   Observed live: this page's wrapper stayed mid-animation (transform
+   not reverting to none) far longer than the 0.18s duration, so this
+   isn't just a theoretical edge case. */
 @keyframes page-fade-in {
-  from { opacity: 0; transform: translateY(4px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; }
+  to   { opacity: 1; }
 }
 
 /* ════════════════════════════════════════
@@ -3442,4 +3455,145 @@ button:disabled { background: #f3f4f6; color: #9ca3af; cursor: not-allowed; }
   }
   .bottom-nav-label { font-family: var(--m-display-font); }
   .bottom-nav-item.active { color: var(--m-accent); }
+
+  /* ── Dashboard page ── */
+  .dash-stat-card {
+    background: var(--m-surface);
+    border-color: var(--m-line);
+  }
+  .dash-stat-card.dash-stat-highlight {
+    background: var(--m-surface);
+    border-color: var(--m-line);
+  }
+  .dash-stat-label { color: var(--m-text-lo); }
+  .dash-stat-highlight .dash-stat-label { color: var(--m-text-lo); }
+  .dash-stat-value {
+    font-family: var(--m-display-font);
+    color: var(--m-text-hi);
+  }
+  .dash-stat-highlight .dash-stat-value { color: var(--m-accent); }
+
+  .dash-panel {
+    background: var(--m-surface);
+    border-color: var(--m-line);
+  }
+  .dash-panel-title {
+    font-family: var(--m-display-font);
+    color: var(--m-text-hi);
+  }
+  .dash-empty { color: var(--m-text-lo); }
+
+  .dash-panel-alert {
+    background: var(--m-warn-soft);
+    border-color: var(--m-warn);
+    box-shadow: none;
+  }
+  .dash-panel-alert .dash-panel-title { color: var(--m-warn); }
+  .dash-list-row-link:hover { background: rgba(224, 177, 58, 0.24); }
+
+  .dash-list-row { border-bottom-color: var(--m-line); }
+  .dash-list-code { color: var(--m-text-hi); }
+  .dash-list-name { color: var(--m-text-lo); }
+  .dash-amount {
+    font-family: var(--m-display-font);
+    color: var(--m-accent);
+  }
+
+  .dash-qty-badge {
+    color: var(--m-warn);
+    background: var(--m-warn-soft);
+    border-color: var(--m-warn);
+  }
+  .dash-qty-badge.zero {
+    color: var(--m-bad);
+    background: var(--m-bad-soft);
+    border-color: var(--m-bad);
+  }
+  .dash-qty-badge.sold {
+    color: var(--m-good);
+    background: var(--m-good-soft);
+    border-color: var(--m-good);
+  }
+  .dash-qty-badge.visit {
+    color: var(--m-info);
+    background: var(--m-info-soft);
+    border-color: var(--m-info);
+  }
+
+  .dash-rank-grid .dash-list-row { border-bottom-color: var(--m-line); }
+  .dash-rank-badge {
+    background: var(--m-accent);
+    color: var(--m-accent-ink);
+  }
+
+  .dash-trend-value { color: var(--m-text-lo); }
+  .dash-trend-bar { background: var(--m-accent); }
+  .dash-trend-label { color: var(--m-text-lo); }
+
+  .dash-quicklink-btn {
+    background: var(--m-accent);
+    color: var(--m-accent-ink);
+  }
+  .dash-quicklink-btn:hover {
+    background: var(--m-accent);
+    opacity: 0.9;
+  }
+
+  /* ── row avatar — initials chip before customer/vehicle-owner names
+     (CustomerManagementPage / VehicleManagementPage) ── */
+  .row-name-cell {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .row-avatar {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: rgba(46, 230, 201, 0.16); /* --m-accent tinted */
+    color: var(--m-accent);
+    font-family: var(--m-display-font);
+    font-weight: 700;
+    font-size: 0.78rem;
+  }
+
+  /* ── floating "+" action button (QuotationListPage/ReceiptListPage's
+     create button) — same element/handler as the in-header button, just
+     pinned to the corner as a circle on mobile. Positioned above
+     .bottom-nav (which reserves 76px via body:has(.bottom-nav) .container
+     padding-bottom above). Text stays in the DOM (font-size: 0) so screen
+     readers still announce the full label; a "+" glyph is drawn visually
+     via ::before. */
+  .btn-fab-mobile {
+    position: fixed;
+    right: 16px;
+    bottom: calc(88px + env(safe-area-inset-bottom, 0px));
+    z-index: 60;
+    width: 56px;
+    height: 56px;
+    padding: 0;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0;
+    background: var(--m-accent);
+    color: var(--m-accent-ink);
+    box-shadow: 0 8px 24px -4px rgba(46, 230, 201, 0.55), 0 0 0 1px rgba(46, 230, 201, 0.25);
+  }
+  .btn-fab-mobile:hover {
+    background: var(--m-accent);
+    opacity: 0.92;
+  }
+  .btn-fab-mobile::before {
+    content: '+';
+    font-family: var(--m-display-font);
+    font-size: 28px;
+    font-weight: 700;
+    line-height: 1;
+  }
 }

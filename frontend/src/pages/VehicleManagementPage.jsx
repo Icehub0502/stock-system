@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import client from '../api/client';
+import { getNameInitials } from '../utils/format';
 
 export default function VehicleManagementPage() {
   const [vehicles, setVehicles] = useState([]);
@@ -161,7 +162,12 @@ export default function VehicleManagementPage() {
                 );
               }).map((vehicle) => (
                 <tr key={vehicle.id}>
-                  <td data-label="ลูกค้า">{vehicle.customer_name} ({vehicle.customer_code})</td>
+                  <td data-label="ลูกค้า">
+                    <span className="row-name-cell">
+                      <span className="row-avatar" aria-hidden="true">{getNameInitials(vehicle.customer_name)}</span>
+                      {vehicle.customer_name} ({vehicle.customer_code})
+                    </span>
+                  </td>
                   <td data-label="ยี่ห้อ/รุ่น">{vehicle.brand} {vehicle.model}</td>
                   <td data-label="ทะเบียน">{vehicle.license_plate || '-'}</td>
                   <td data-label="ไมล์">{vehicle.mileage ?? 0}</td>

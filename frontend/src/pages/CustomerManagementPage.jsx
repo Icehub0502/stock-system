@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import client from '../api/client';
+import { getNameInitials } from '../utils/format';
 
 export default function CustomerManagementPage() {
   const [customers, setCustomers] = useState([]);
@@ -132,7 +133,12 @@ export default function CustomerManagementPage() {
               {customers.map((customer) => (
                 <tr key={customer.id}>
                   <td data-label="รหัสลูกค้า">{customer.customer_code}</td>
-                  <td data-label="ชื่อลูกค้า">{customer.customer_name}</td>
+                  <td data-label="ชื่อลูกค้า">
+                    <span className="row-name-cell">
+                      <span className="row-avatar" aria-hidden="true">{getNameInitials(customer.customer_name)}</span>
+                      {customer.customer_name}
+                    </span>
+                  </td>
                   <td data-label="โทรศัพท์">{customer.phone || '-'}</td>
                   <td className="actions" data-label="จัดการ">
                     <button onClick={() => openEdit(customer)}>แก้ไข</button>

@@ -208,7 +208,7 @@ export default function QuotationListPage() {
             onChange={(e) => setSearch(e.target.value)}
           />
           <button
-            className="btn btn-primary"
+            className="btn btn-primary btn-fab-mobile"
             onClick={() => {
               setEditingQuotation(null);
               setShowFormModal(true);

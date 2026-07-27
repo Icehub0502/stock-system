@@ -95,7 +95,7 @@ export default function ReceiptListPage() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
-          <button className="btn btn-primary" onClick={() => setShowFormModal(true)}>
+          <button className="btn btn-primary btn-fab-mobile" onClick={() => setShowFormModal(true)}>
             + สร้างบิลใหม่
           </button>
         </div>
