@@ -3356,11 +3356,41 @@ button:disabled { background: #f3f4f6; color: #9ca3af; cursor: not-allowed; }
   }
 
   /* ── card list (quotations/receipts/customers/vehicles/service items/
-     warranties/daily summary — all share .quotation-table) ── */
+     warranties/daily summary — all share .quotation-table) ──
+     The card's visible surface is each <td> (not the <tr>) — desktop's
+     zebra-striping/row-state rules paint their OWN background directly on
+     <td> (nth-child(even), .is-selected-row, .row-just-approved — some
+     with !important), which sits on top of and hides a plain `tr`
+     background. Every one of those <td> rules must be re-pointed at the
+     dark surface here too, or rows alternate between the intended dark
+     card and the untouched light desktop background depending on which
+     state/index a given row happens to have. */
   .quotation-table tbody tr {
     background: var(--m-surface);
     border-color: var(--m-line);
     box-shadow: 0 8px 20px -12px rgba(0, 0, 0, 0.6);
+  }
+  .quotation-table tbody tr td,
+  .quotation-table tbody tr:nth-child(even) td,
+  .quotation-table tbody tr.is-selected-row td {
+    background: var(--m-surface);
+  }
+  .quotation-table tbody tr.row-just-approved td {
+    background: var(--m-good-soft) !important;
+  }
+  .quotation-table tbody tr.row-scheduled-today td {
+    background: var(--m-warn-soft) !important;
+    border-top-color: var(--m-warn);
+    border-bottom-color: var(--m-warn);
+  }
+  .quotation-table tr:hover td {
+    background: var(--m-line);
+  }
+  .quotation-table tr.date-group-header-row td {
+    background: var(--m-ink) !important;
+    color: var(--m-text-hi);
+    border-top-color: var(--m-line);
+    border-bottom-color: var(--m-line);
   }
   .quotation-table td {
     border-bottom-color: var(--m-line);
