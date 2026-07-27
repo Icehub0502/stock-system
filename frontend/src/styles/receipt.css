@@ -1862,4 +1862,11 @@
   .autocomplete-item.is-active {
     background: var(--m-line);
   }
+
+  /* This file loads after app.css, so its own `.quotation-header .subtitle`
+     (plain #6b7280) wins over app.css's mobile override at equal
+     specificity — same class of bug as .receipt-modal-card above. */
+  .quotation-header .subtitle {
+    color: var(--m-text-lo);
+  }
 }

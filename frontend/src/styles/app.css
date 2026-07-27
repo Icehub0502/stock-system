@@ -3700,4 +3700,39 @@ button:disabled { background: #f3f4f6; color: #9ca3af; cursor: not-allowed; }
   .modal-card .info-card-title {
     color: var(--m-text-hi);
   }
+
+  /* ── page shell (.quotation-page/.quotation-header) — shared by every
+     list page (quotations, receipts, customers, vehicles, dashboard, etc.)
+     This is the outer canvas + the white title/search "hero" card at the
+     top of each page — missed in the first pass, so the page still looked
+     mostly white/unchanged despite the cards below it being dark. ── */
+  .quotation-page {
+    background: var(--m-ink);
+  }
+  .quotation-header {
+    background: var(--m-surface);
+    border: 1px solid var(--m-line);
+    box-shadow: none;
+  }
+  .quotation-header h1 {
+    color: var(--m-text-hi);
+    font-family: var(--m-display-font);
+  }
+  .quotation-header p,
+  .quotation-header .subtitle {
+    color: var(--m-text-lo);
+  }
+  .search-input {
+    background: var(--m-ink);
+    border-color: var(--m-line);
+    color: var(--m-text-hi);
+  }
+  .search-input:focus {
+    border-color: var(--m-accent);
+    box-shadow: 0 0 0 3px rgba(46, 230, 201, 0.18);
+  }
+  .quotation-table-wrap {
+    background: transparent;
+    box-shadow: none;
+  }
 }
