@@ -1,0 +1,10 @@
+{
+  "appId": "com.champpower.stock",
+  "appName": "ChamppowerSPK",
+  "webDir": "dist",
+  "server": {
+    "hostname": "localhost",
+    "androidScheme": "https",
+    "iosScheme": "https"
+  }
+}
