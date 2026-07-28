@@ -3480,6 +3480,47 @@ button:disabled { background: #f3f4f6; color: #9ca3af; cursor: not-allowed; }
     opacity: 0.9;
   }
 
+  /* ── row action buttons (แก้ไข/พิมพ์/อนุมัติ/วันที่) — these use
+     .btn-icon-small, NOT .btn, so the .btn rules above never touched
+     them. Desktop gives them `background: transparent; color: #374151`
+     (dark grey), which on a dark card renders as dark-grey-on-dark:
+     technically present, practically unreadable. ── */
+  .btn-icon-small {
+    background: var(--m-ink);
+    border-color: var(--m-line);
+    color: var(--m-text-hi);
+  }
+  .btn-icon-small:hover {
+    background: var(--m-line);
+    border-color: var(--m-accent);
+  }
+  /* "พิมพ์แล้ว" state — light pastel green on desktop; same meaning,
+     dark-surface treatment here (matches .status-badge-success). */
+  .btn-icon-small.btn-printed {
+    background: var(--m-good-soft);
+    border-color: var(--m-good);
+    color: var(--m-good);
+  }
+  .btn-icon-small.btn-printed:hover {
+    background: var(--m-good-soft);
+    border-color: var(--m-good);
+  }
+
+  /* ── status cell — the 3 badges (สถานะ/แจ้งซ่อม/ลายเซ็น) are
+     inline-block siblings inside a flex <td> with `white-space: nowrap`,
+     so they laid out as one un-wrappable row and ran off the right edge
+     of the card (the 3rd badge was visibly cut in half). Let them wrap
+     onto extra right-aligned lines instead. ── */
+  .quotation-table td[data-label="สถานะ"] {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    column-gap: 8px;
+    row-gap: 6px;
+  }
+  .quotation-table td[data-label="สถานะ"]::before {
+    margin-right: auto;
+  }
+
   /* ── bottom nav — recolor to match, was generic dark+amber ── */
   .bottom-nav {
     background: var(--m-ink);
