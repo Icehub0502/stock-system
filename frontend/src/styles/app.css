@@ -3349,23 +3349,32 @@ button:disabled { background: #f3f4f6; color: #9ca3af; cursor: not-allowed; }
    query matches, without needing !important anywhere.
    ════════════════════════════════════════════════════════════════════ */
 @media (max-width: 768px) {
+  /* Owner asked for mobile to go back to matching the desktop web's own
+     colors instead of the dark/teal theme — every component below still
+     reads through these tokens (that's the whole point of using them),
+     so re-pointing the palette here reverts colors everywhere at once
+     without touching ~500 lines of individual component rules.
+     Structure/layout/motion (card layout, FAB, bottom nav, animations)
+     is unaffected, only appearance changes. Values match the existing
+     desktop palette used elsewhere in this file: body background,
+     primary button color, status badge colors, focus ring colors. */
   :root {
-    --m-ink: #0c1117;
-    --m-surface: #141b23;
-    --m-line: #223038;
-    --m-text-hi: #eaf6f4;
-    --m-text-lo: #7d97a0;
-    --m-accent: #2ee6c9;
-    --m-accent-ink: #04211d;
-    --m-good: #35d19b;
-    --m-good-soft: rgba(53, 209, 155, 0.16);
-    --m-warn: #e0b13a;
-    --m-warn-soft: rgba(224, 177, 58, 0.16);
-    --m-bad: #ff5d6c;
-    --m-bad-soft: rgba(255, 93, 108, 0.16);
-    --m-info: #4fa8ff;
-    --m-info-soft: rgba(79, 168, 255, 0.16);
-    --m-display-font: 'Chakra Petch', 'Sarabun', Arial, sans-serif;
+    --m-ink: #f4f5f7;
+    --m-surface: #ffffff;
+    --m-line: #e5e7eb;
+    --m-text-hi: #111827;
+    --m-text-lo: #6b7280;
+    --m-accent: #111111;
+    --m-accent-ink: #ffffff;
+    --m-good: #059669;
+    --m-good-soft: #d1fae5;
+    --m-warn: #b45309;
+    --m-warn-soft: #fef3c7;
+    --m-bad: #b91c1c;
+    --m-bad-soft: #fee2e2;
+    --m-info: #1d4ed8;
+    --m-info-soft: #dbeafe;
+    --m-display-font: 'Sarabun', Arial, sans-serif;
   }
 
   /* ── card list (quotations/receipts/customers/vehicles/service items/
@@ -3627,7 +3636,7 @@ button:disabled { background: #f3f4f6; color: #9ca3af; cursor: not-allowed; }
     width: 36px;
     height: 36px;
     border-radius: 50%;
-    background: rgba(46, 230, 201, 0.16); /* --m-accent tinted */
+    background: rgba(17, 17, 17, 0.06); /* --m-accent tinted */
     color: var(--m-accent);
     font-family: var(--m-display-font);
     font-weight: 700;
@@ -3656,7 +3665,7 @@ button:disabled { background: #f3f4f6; color: #9ca3af; cursor: not-allowed; }
     font-size: 0;
     background: var(--m-accent);
     color: var(--m-accent-ink);
-    box-shadow: 0 8px 24px -4px rgba(46, 230, 201, 0.55), 0 0 0 1px rgba(46, 230, 201, 0.25);
+    box-shadow: 0 8px 24px -4px rgba(0, 0, 0, 0.35);
   }
   .btn-fab-mobile:hover {
     background: var(--m-accent);
@@ -3727,7 +3736,7 @@ button:disabled { background: #f3f4f6; color: #9ca3af; cursor: not-allowed; }
   .modal-form select:focus,
   .modal-form textarea:focus {
     border-color: var(--m-accent);
-    box-shadow: 0 0 0 3px rgba(46, 230, 201, 0.18);
+    box-shadow: 0 0 0 3px rgba(17, 17, 17, 0.15);
   }
 
   /* ── WarrantySection's card (rendered inside quotation/receipt forms) —
@@ -3770,7 +3779,7 @@ button:disabled { background: #f3f4f6; color: #9ca3af; cursor: not-allowed; }
   }
   .search-input:focus {
     border-color: var(--m-accent);
-    box-shadow: 0 0 0 3px rgba(46, 230, 201, 0.18);
+    box-shadow: 0 0 0 3px rgba(17, 17, 17, 0.15);
   }
   .quotation-table-wrap {
     background: transparent;

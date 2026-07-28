@@ -155,7 +155,7 @@
   }
   .rnf2-input:focus {
     border-color: var(--m-accent);
-    box-shadow: 0 0 0 3px rgba(46, 230, 201, 0.18);
+    box-shadow: 0 0 0 3px rgba(17, 17, 17, 0.15);
   }
   .rnf2-vcard {
     background: var(--m-surface);
@@ -178,7 +178,7 @@
   }
   .rnf2-item.on {
     border-color: var(--m-accent);
-    background: rgba(46, 230, 201, 0.12);
+    background: rgba(17, 17, 17, 0.06);
     box-shadow: 0 0 0 1px var(--m-accent) inset;
   }
   .rnf2-item-label { color: var(--m-text-hi); }
@@ -202,7 +202,7 @@
   }
   .rnf2-chip.on {
     border-color: var(--m-accent);
-    background: rgba(46, 230, 201, 0.12);
+    background: rgba(17, 17, 17, 0.06);
     box-shadow: 0 0 0 1px var(--m-accent) inset;
   }
   .rnf2-check-sm {
