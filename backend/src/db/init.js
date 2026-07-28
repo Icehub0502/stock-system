@@ -492,6 +492,36 @@ async function initDatabase() {
   // เก็บค่า config ทั่วไปแบบ key-value สำหรับ LINE bot เช่น group id ที่จะใช้ push
   // ข้อความเชิงรุก (proactive) หา — บันทึกอัตโนมัติครั้งแรกที่มีข้อความจากกลุ่มนั้น
   // เข้ามา (ดู lineWebhook.routes.js) ไม่ต้องตั้งค่าเอง ใช้ตารางแยกแทนเพิ่มคอลัมน์
+  // แคตตาล็อกราคาอะไหล่ตามยี่ห้อ+รุ่นรถ สำหรับฟีเจอร์เสนอราคา — เลือก
+  // ยี่ห้อ → รุ่น → อะไหล่ แล้วราคาเด้งขึ้นมาเอง (ดู quotePartPrices.routes.js)
+  // แยกจากตาราง products เดิม (ต้นทุนภายใน ไม่มีคอลัมน์รุ่นรถ) โดยตั้งใจ กัน
+  // ปนกับข้อมูลต้นทุนที่มีอยู่แล้ว image_data เก็บเป็น base64 data URI ตรงๆ
+  // แบบเดียวกับ customer_signature (ระบบนี้ยังไม่มี file-upload pipeline)
+  await conn.query(`
+    CREATE TABLE IF NOT EXISTS quote_part_prices (
+      id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+      brand VARCHAR(100) NOT NULL,
+      model VARCHAR(100) NOT NULL,
+      part_name VARCHAR(255) NOT NULL,
+      description VARCHAR(500) DEFAULT NULL,
+      price DECIMAL(10,2) NOT NULL DEFAULT 0,
+      image_data LONGTEXT DEFAULT NULL,
+      is_active TINYINT(1) NOT NULL DEFAULT 1,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      INDEX idx_quote_part_brand_model (brand, model)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  // staff_signature/staff_name: ลายเซ็นฝั่ง "ผู้เสนอราคา" (พนักงาน) คู่กับ
+  // customer_signature ที่มีอยู่แล้ว (ลายเซ็นลูกค้า) — เก็บเป็น base64 PNG
+  // data URI แบบเดียวกัน วาดสดผ่าน SignatureModal ตัวเดิม
+  await conn.query(`
+    ALTER TABLE quotations
+    ADD COLUMN staff_signature LONGTEXT DEFAULT NULL,
+    ADD COLUMN staff_name VARCHAR(100) DEFAULT NULL
+  `).catch(ignoreIfAlreadyApplied);
+
   // ในตารางอื่นเพราะเป็น config ระดับระบบ ไม่ผูกกับ entity ไหนโดยเฉพาะ
   await conn.query(`
     CREATE TABLE IF NOT EXISTS app_settings (

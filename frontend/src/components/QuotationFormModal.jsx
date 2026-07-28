@@ -42,6 +42,12 @@ export default function QuotationFormModal({ quotation, onClose, onSuccess, onDe
   const [depositDate, setDepositDate] = useState('');
   const [items, setItems] = useState([{ ...defaultItem }]);
   const [warranties, setWarranties] = useState([]);
+  const [partBrands, setPartBrands] = useState([]);
+  const [partModels, setPartModels] = useState([]);
+  const [partBrand, setPartBrand] = useState('');
+  const [partModel, setPartModel] = useState('');
+  const [partCards, setPartCards] = useState([]);
+  const [partCardsLoading, setPartCardsLoading] = useState(false);
   const [rackWarrantyId, setRackWarrantyId] = useState('');
   const [ballJointWarrantyId, setBallJointWarrantyId] = useState('');
   const [otherWarrantyId, setOtherWarrantyId] = useState('');
@@ -91,6 +97,9 @@ export default function QuotationFormModal({ quotation, onClose, onSuccess, onDe
     setDepositAmount('');
     setDepositDate('');
     setItems([{ ...defaultItem }]);
+    setPartBrand('');
+    setPartModel('');
+    setPartCards([]);
     setRackWarrantyId('');
     setBallJointWarrantyId('');
     setOtherWarrantyId('');
@@ -107,6 +116,57 @@ export default function QuotationFormModal({ quotation, onClose, onSuccess, onDe
       .then((res) => setWarranties((res.data.data || []).filter((w) => w.is_active)))
       .catch((err) => console.error('Error loading warranties:', err));
   }, []);
+
+  useEffect(() => {
+    client.get('/quote-parts/brands')
+      .then((res) => setPartBrands(res.data.data || []))
+      .catch((err) => console.error('Error loading part brands:', err));
+  }, []);
+
+  useEffect(() => {
+    if (!partBrand) {
+      setPartModels([]);
+      setPartModel('');
+      return;
+    }
+    client.get('/quote-parts/models', { params: { brand: partBrand } })
+      .then((res) => setPartModels(res.data.data || []))
+      .catch((err) => console.error('Error loading part models:', err));
+  }, [partBrand]);
+
+  useEffect(() => {
+    if (!partBrand || !partModel) {
+      setPartCards([]);
+      return;
+    }
+    setPartCardsLoading(true);
+    client.get('/quote-parts/parts', { params: { brand: partBrand, model: partModel } })
+      .then((res) => setPartCards(res.data.data || []))
+      .catch((err) => console.error('Error loading part cards:', err))
+      .finally(() => setPartCardsLoading(false));
+  }, [partBrand, partModel]);
+
+  // เพิ่มอะไหล่จากการ์ดเข้ารายการ — ถ้าแถวสุดท้ายยังว่างอยู่ (ยังไม่ได้กรอกชื่อ)
+  // ใช้แถวนั้นแทนที่จะเพิ่มแถวใหม่ กันแถวว่างค้างอยู่เปล่าๆ ด้านล่าง
+  const addPartCardToItems = (part) => {
+    setItems((prev) => {
+      const newRow = {
+        ...defaultItem,
+        product_name: part.part_name,
+        unit_price: String(part.price ?? 0),
+        quantity: 1,
+        amount: Number(part.price || 0),
+      };
+      const lastIndex = prev.length - 1;
+      if (prev.length > 0 && !prev[lastIndex].product_name?.trim()) {
+        const next = [...prev];
+        next[lastIndex] = newRow;
+        return next;
+      }
+      return [...prev, newRow];
+    });
+    setFieldErrors((prev) => ({ ...prev, items: null }));
+  };
 
   const handleRackWarrantyChange = (id) => {
     setRackWarrantyId(id);
@@ -158,6 +218,9 @@ export default function QuotationFormModal({ quotation, onClose, onSuccess, onDe
         amount: Number(item.quantity ?? 0) * Number(item.unit_price ?? 0),
       }));
       setItems(loadedItems);
+      setPartBrand('');
+      setPartModel('');
+      setPartCards([]);
 
       // ตั้งค่าเริ่มต้นของ dropdown ประกันให้ตรงกับข้อมูลที่บันทึกไว้แล้วในรายการ —
       // ดึงแคตตาล็อกสดใหม่ตรงนี้ (แทนที่จะพึ่ง state `warranties` ที่โหลดจาก effect
@@ -712,6 +775,64 @@ export default function QuotationFormModal({ quotation, onClose, onSuccess, onDe
                   onNewVehicleFieldChange={handleNewVehicleFieldChange}
                   onMileageChange={handleMileageChange}
                 />
+              </div>
+
+              <div className="info-card">
+                <div className="info-card-title">เลือกอะไหล่จากราคาตามรุ่นรถ</div>
+                <div className="qp-picker">
+                  <div className="qp-picker-selects">
+                    <div className="form-group">
+                      <label>ยี่ห้อรถ</label>
+                      <select value={partBrand} onChange={(e) => setPartBrand(e.target.value)}>
+                        <option value="">-- เลือกยี่ห้อ --</option>
+                        {partBrands.map((b) => (
+                          <option key={b} value={b}>{b}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="form-group">
+                      <label>รุ่นรถ</label>
+                      <select value={partModel} onChange={(e) => setPartModel(e.target.value)} disabled={!partBrand}>
+                        <option value="">-- เลือกรุ่น --</option>
+                        {partModels.map((m) => (
+                          <option key={m} value={m}>{m}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  {partCardsLoading ? (
+                    <div className="loading">กำลังโหลดรายการอะไหล่...</div>
+                  ) : partBrand && partModel && partCards.length === 0 ? (
+                    <div className="empty-message">ยังไม่มีราคาอะไหล่สำหรับ {partBrand} {partModel}</div>
+                  ) : partCards.length > 0 ? (
+                    <div className="qp-picker-grid">
+                      {partCards.map((part) => (
+                        <div key={part.id} className="qp-picker-card">
+                          <div className="qp-picker-card-image">
+                            {part.image_data ? (
+                              <img src={part.image_data} alt={part.part_name} />
+                            ) : (
+                              <div className="qp-picker-card-noimage">ไม่มีรูป</div>
+                            )}
+                          </div>
+                          <div className="qp-picker-card-body">
+                            <div className="qp-picker-card-name">{part.part_name}</div>
+                            {part.description && <div className="qp-picker-card-desc">{part.description}</div>}
+                            <div className="qp-picker-card-price">฿{formatMoney(part.price)}</div>
+                          </div>
+                          <button
+                            type="button"
+                            className="btn btn-primary qp-picker-card-add"
+                            onClick={() => addPartCardToItems(part)}
+                          >
+                            + เพิ่มรายการ
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
               </div>
 
               <ItemTable

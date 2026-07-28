@@ -54,6 +54,7 @@ const serviceItemsRoutes = require('./routes/service-items.routes');
 const warrantiesRoutes = require('./routes/warranties.routes');
 const repairNoticesRoutes = require('./routes/repairNotices.routes');
 const lineWebhookRoutes = require('./routes/lineWebhook.routes');
+const quotePartPricesRoutes = require('./routes/quotePartPrices.routes');
 
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 const FRONTEND_DIST = path.join(__dirname, '..', '..', 'frontend', 'dist');
@@ -115,7 +116,10 @@ function createApp() {
   app.use(cors(corsOptions));
   // เก็บ raw body ไว้ด้วย — LINE webhook ต้องใช้ตรวจลายเซ็น HMAC (X-Line-Signature)
   // ซึ่งคำนวณจาก body ดิบก่อน parse (ดู routes/lineWebhook.routes.js)
+  // limit ยกจาก default 100kb — รูปอะไหล่ในแคตตาล็อกเสนอราคา (quote_part_prices.
+  // image_data) ส่งเป็น base64 data URI ตรงๆ เหมือนลายเซ็น อาจเกิน 100kb ได้
   app.use(express.json({
+    limit: '5mb',
     verify: (req, res, buf) => { req.rawBody = buf; }
   }));
   // บีบอัด response ด้วย gzip/deflate (JSON API + frontend bundle) — วางไว้หลัง
@@ -138,6 +142,7 @@ function createApp() {
   app.use('/api/warranties', warrantiesRoutes);
   app.use('/api/repair-notices', repairNoticesRoutes);
   app.use('/api/line', lineWebhookRoutes);
+  app.use('/api/quote-parts', quotePartPricesRoutes);
 
   app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
   app.get('/api/landing-images', (req, res) => {

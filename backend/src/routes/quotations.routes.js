@@ -816,6 +816,32 @@ router.patch('/:id/signature', async (req, res) => {
   }
 });
 
+// PATCH - Save the staff (seller)'s signature — mirrors /:id/signature above,
+// which is the customer's. Both are captured live on the shop's
+// tablet/phone at the counter before confirming the quotation.
+router.patch('/:id/staff-signature', async (req, res) => {
+  const { id } = req.params;
+  const { signature, staff_name } = req.body || {};
+
+  if (!signature || !signature.startsWith('data:image/')) {
+    return res.status(400).json({ error: 'ข้อมูลลายเซ็นไม่ถูกต้อง' });
+  }
+
+  try {
+    const [result] = await pool.execute(
+      'UPDATE quotations SET staff_signature = ?, staff_name = ? WHERE id = ?',
+      [signature, staff_name?.trim() || null, id]
+    );
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: 'ไม่พบใบเสนอราคา' });
+    }
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Error saving staff signature:', err);
+    res.status(500).json({ error: 'บันทึกลายเซ็นไม่สำเร็จ' });
+  }
+});
+
 // DELETE - Delete quotation
 router.delete('/:id', async (req, res) => {
   const { id } = req.params;

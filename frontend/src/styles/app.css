@@ -2399,6 +2399,7 @@ button:disabled { background: #f3f4f6; color: #9ca3af; cursor: not-allowed; }
 
 .print-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 10px;
 }
 
@@ -4236,4 +4237,176 @@ body:has(.modal-backdrop) .page-fade-in {
   .bottom-nav-item.active .bottom-nav-icon {
     transform: translateY(-2px);
   }
+}
+
+/* ── Quote part price catalog: management page card grid ── */
+.qpp-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+.qpp-card {
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.qpp-card-image {
+  aspect-ratio: 4 / 3;
+  background: #f3f4f6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.qpp-card-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.qpp-card-noimage {
+  color: #9ca3af;
+  font-size: 0.8rem;
+}
+
+.qpp-card-body {
+  padding: 10px 12px;
+  flex: 1;
+}
+
+.qpp-card-brand {
+  font-size: 0.75rem;
+  color: #6b7280;
+  font-weight: 600;
+}
+
+.qpp-card-name {
+  font-size: 0.95rem;
+  font-weight: 700;
+  margin-top: 2px;
+}
+
+.qpp-card-desc {
+  font-size: 0.8rem;
+  color: #6b7280;
+  margin-top: 2px;
+}
+
+.qpp-card-price {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #059669;
+  margin-top: 6px;
+}
+
+.qpp-card-actions {
+  display: flex;
+  gap: 8px;
+  padding: 10px 12px;
+  border-top: 1px solid #f3f4f6;
+}
+
+.qpp-card-actions button {
+  flex: 1;
+}
+
+.qpp-image-preview {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.qpp-image-preview img {
+  width: 72px;
+  height: 72px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+}
+
+/* ── Quote part picker inside QuotationFormModal: brand/model selects +
+   card grid of parts with an "add" button ── */
+.qp-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.qp-picker-selects {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.qp-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 12px;
+  max-height: 420px;
+  overflow-y: auto;
+  padding: 2px;
+}
+
+.qp-picker-card {
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.qp-picker-card-image {
+  aspect-ratio: 4 / 3;
+  background: #f3f4f6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.qp-picker-card-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.qp-picker-card-noimage {
+  color: #9ca3af;
+  font-size: 0.72rem;
+}
+
+.qp-picker-card-body {
+  padding: 8px 10px;
+  flex: 1;
+}
+
+.qp-picker-card-name {
+  font-size: 0.85rem;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.qp-picker-card-desc {
+  font-size: 0.72rem;
+  color: #6b7280;
+  margin-top: 2px;
+}
+
+.qp-picker-card-price {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #059669;
+  margin-top: 4px;
+}
+
+.qp-picker-card-add {
+  margin: 0 10px 10px;
 }

@@ -4,6 +4,7 @@ import QuotationPrintTemplate from "./QuotationPrintTemplate";
 import PrintPortal from "./PrintPortal";
 import SignatureModal from "./SignatureModal";
 import useFitToWidth from "../hooks/useFitToWidth";
+import { buildLineQuoteText, copyTextToClipboard } from "../utils/lineQuoteText";
 
 export default function QuotationPrintModal({ quotation, onClose, onPrinted }) {
   const [detail, setDetail] = useState(quotation);
@@ -14,10 +15,27 @@ export default function QuotationPrintModal({ quotation, onClose, onPrinted }) {
   // เซ็นเอกสารย้ายมาไว้ในหน้าพิมพ์แทนปุ่มแยกในตารางหลัก — เซ็นแล้วเห็นผลทันทีในตัวอย่าง
   // ก่อนพิมพ์จริง (เหมาะกับ flow จริง: ให้ลูกค้าเซ็นตอนจะพิมพ์เอกสารให้)
   const [showSignature, setShowSignature] = useState(false);
+  const [showStaffSignature, setShowStaffSignature] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const handleCopyLineText = async () => {
+    const ok = await copyTextToClipboard(buildLineQuoteText(detail));
+    if (!ok) {
+      alert('คัดลอกข้อความไม่สำเร็จ กรุณาลองใหม่อีกครั้ง');
+      return;
+    }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2500);
+  };
 
   const handleSaveSignature = async (dataUrl) => {
     await client.patch(`/quotations/${quotation.id}/signature`, { signature: dataUrl });
     setDetail((prev) => ({ ...prev, customer_signature: dataUrl }));
+  };
+
+  const handleSaveStaffSignature = async (dataUrl) => {
+    await client.patch(`/quotations/${quotation.id}/staff-signature`, { signature: dataUrl });
+    setDetail((prev) => ({ ...prev, staff_signature: dataUrl }));
   };
 
   useEffect(() => {
@@ -85,6 +103,8 @@ export default function QuotationPrintModal({ quotation, onClose, onPrinted }) {
     items: detail.items || [],
     remark: detail.remark,
     customer_signature: detail.customer_signature,
+    staff_signature: detail.staff_signature,
+    staff_name: detail.staff_name,
     deposit_amount: detail.deposit_amount,
     deposit_date: detail.deposit_date,
   };
@@ -95,6 +115,12 @@ export default function QuotationPrintModal({ quotation, onClose, onPrinted }) {
         <div className="modal-header print-header">
           <h2>ตัวอย่างการพิมพ์</h2>
           <div className="print-actions">
+            <button className="btn btn-secondary" onClick={handleCopyLineText}>
+              {copied ? '✅ คัดลอกแล้ว' : '📋 คัดลอกข้อความ'}
+            </button>
+            <button className="btn btn-secondary" onClick={() => setShowStaffSignature(true)}>
+              {detail.staff_signature ? '✓ ผู้เสนอราคาเซ็นแล้ว (แก้ไข)' : 'เซ็นผู้เสนอราคา'}
+            </button>
             <button className="btn btn-secondary" onClick={() => setShowSignature(true)}>
               {detail.customer_signature ? '✓ เซ็นแล้ว (แก้ไข)' : 'เซ็นเอกสาร'}
             </button>
@@ -129,6 +155,14 @@ export default function QuotationPrintModal({ quotation, onClose, onPrinted }) {
           subtitle="ให้ลูกค้าเซ็นชื่อยืนยันในกรอบด้านล่าง"
           onSave={handleSaveSignature}
           onClose={() => setShowSignature(false)}
+        />
+      )}
+      {showStaffSignature && (
+        <SignatureModal
+          title="เซ็นชื่อผู้เสนอราคา"
+          subtitle="พนักงานผู้เสนอราคาเซ็นชื่อยืนยันในกรอบด้านล่าง"
+          onSave={handleSaveStaffSignature}
+          onClose={() => setShowStaffSignature(false)}
         />
       )}
     </div>

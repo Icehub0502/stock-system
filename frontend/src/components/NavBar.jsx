@@ -31,6 +31,7 @@ const NAV_CATEGORIES = [
     items: [
       { to: "/receipt-list", label: "ใบเสร็จรับเงิน" },
       { to: "/quotations", label: "ใบเสนอราคา" },
+      { to: "/quote-parts", label: "ราคาอะไหล่ตามรุ่นรถ" },
       { to: "/daily-summary", label: "สรุปยอดขายรายวัน" },
     ],
   },

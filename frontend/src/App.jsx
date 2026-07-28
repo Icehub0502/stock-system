@@ -24,6 +24,7 @@ const VehicleManagementPage = lazy(() => import("./pages/VehicleManagementPage")
 const ServiceItemManagementPage = lazy(() => import("./pages/ServiceItemManagementPage"));
 const WarrantyManagementPage = lazy(() => import("./pages/WarrantyManagementPage"));
 const ProductCostPage = lazy(() => import("./pages/ProductCostPage"));
+const QuotePartPriceManagementPage = lazy(() => import("./pages/QuotePartPriceManagementPage"));
 const WingArmDashboard = lazy(() => import("./pages/WingArmDashboard"));
 const DailySalesSummaryPage = lazy(() => import("./pages/DailySalesSummaryPage"));
 const RepairNoticeListPage = lazy(() => import("./pages/RepairNoticeListPage"));
@@ -154,6 +155,14 @@ function AppRoutes() {
             element={
               <ProtectedRoute roles={["office"]}>
                 <QuotationListPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/quote-parts"
+            element={
+              <ProtectedRoute roles={["office"]}>
+                <QuotePartPriceManagementPage />
               </ProtectedRoute>
             }
           />
