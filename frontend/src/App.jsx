@@ -25,6 +25,7 @@ const ServiceItemManagementPage = lazy(() => import("./pages/ServiceItemManageme
 const WarrantyManagementPage = lazy(() => import("./pages/WarrantyManagementPage"));
 const ProductCostPage = lazy(() => import("./pages/ProductCostPage"));
 const QuotePartPriceManagementPage = lazy(() => import("./pages/QuotePartPriceManagementPage"));
+const PartsCatalogKioskPage = lazy(() => import("./pages/PartsCatalogKioskPage"));
 const WingArmDashboard = lazy(() => import("./pages/WingArmDashboard"));
 const DailySalesSummaryPage = lazy(() => import("./pages/DailySalesSummaryPage"));
 const RepairNoticeListPage = lazy(() => import("./pages/RepairNoticeListPage"));
@@ -42,10 +43,13 @@ function Home() {
 
 function AppRoutes() {
   const location = useLocation();
+  // หน้ารายการอะไหล่บนแท็บเล็ตใช้เต็มจอแบบแอป — ซ่อนแถบเมนูบน/ล่างและ
+  // ยกเลิก padding ของ .container เพื่อให้เนื้อหาเต็มพื้นที่จริง ๆ
+  const isKiosk = location.pathname.startsWith("/catalog");
   return (
     <>
-      <NavBar />
-      <div className="container">
+      {!isKiosk && <NavBar />}
+      <div className={isKiosk ? "" : "container"}>
         {/* key={pathname} forces this subtree to remount on navigation, which
             both retriggers the fade-in animation and gives Suspense a fresh
             boundary per page instead of reusing the previous page's. */}
@@ -167,6 +171,14 @@ function AppRoutes() {
             }
           />
           <Route
+            path="/catalog"
+            element={
+              <ProtectedRoute roles={["office", "technician"]}>
+                <PartsCatalogKioskPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
             path="/daily-summary"
             element={
               <ProtectedRoute roles={["office"]}>
@@ -202,7 +214,7 @@ function AppRoutes() {
         </Suspense>
         </div>
       </div>
-      <BottomNav />
+      {!isKiosk && <BottomNav />}
     </>
   );
 }
