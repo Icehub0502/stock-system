@@ -1,13 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-
-// Matches the brand list detectBrand() in productCostRoutes.js looks for,
-// so a brand typed here lines up with the same car-brand filter/detection
-// used on the product-costs page.
-const CAR_BRANDS = [
-  'Toyota', 'Honda', 'Nissan', 'Isuzu', 'Mitsubishi', 'Mazda', 'Ford',
-  'Chevrolet', 'Suzuki', 'Subaru', 'BMW', 'Mercedes-Benz', 'Volkswagen',
-  'Lexus', 'Hyundai', 'Kia', 'Volvo', 'MG', 'Proton', 'Haval', 'Range Rover',
-];
+import { CAR_BRANDS } from '../utils/carBrands';
 
 export default function CarBrandAutocomplete({ value, onChange, placeholder }) {
   const [open, setOpen] = useState(false);

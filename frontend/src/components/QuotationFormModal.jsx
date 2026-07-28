@@ -22,7 +22,11 @@ const defaultItem = {
   amount: 0,
 };
 
-export default function QuotationFormModal({ quotation, onClose, onSuccess, onDelete }) {
+// initialItems/initialVehicle: ใช้เมื่อสร้างใบใหม่จากภายนอก (เช่น
+// PartsCatalogKioskPage ที่ให้เซลติ๊กเลือกอะไหล่+ราคาไว้ล่วงหน้าแล้ว) เพื่อ
+// เติมรายการ/ยี่ห้อ-รุ่นให้เลยแทนที่จะเริ่มจากแถวว่างเปล่า — ไม่มีผลตอนแก้ไข
+// ใบเดิม (quotation.id) เพราะ loadQuotation จะโหลดข้อมูลจริงทับอยู่แล้ว
+export default function QuotationFormModal({ quotation, onClose, onSuccess, onDelete, initialItems, initialVehicle }) {
   const [quotationNo, setQuotationNo] = useState('');
   const [quotationDate, setQuotationDate] = useState(todayStr());
   const [customerQuery, setCustomerQuery] = useState('');
@@ -89,14 +93,29 @@ export default function QuotationFormModal({ quotation, onClose, onSuccess, onDe
     setVehicles([]);
     setVehicleId('');
     setVehicleMode('new');
-    setNewVehicle({ brand: '', model: '', color: '', license_plate: '' });
+    setNewVehicle({
+      brand: initialVehicle?.brand || '',
+      model: initialVehicle?.model || '',
+      color: '',
+      license_plate: '',
+    });
     setMileage('0');
     setRemark('');
     setQueueNo('');
     setSymptom('');
     setDepositAmount('');
     setDepositDate('');
-    setItems([{ ...defaultItem }]);
+    setItems(
+      initialItems && initialItems.length > 0
+        ? initialItems.map((item) => ({
+            ...defaultItem,
+            product_name: item.product_name || '',
+            quantity: item.quantity ?? 1,
+            unit_price: item.unit_price ?? '',
+            amount: Number(item.quantity ?? 1) * Number(item.unit_price ?? 0),
+          }))
+        : [{ ...defaultItem }]
+    );
     setPartBrand('');
     setPartModel('');
     setPartCards([]);

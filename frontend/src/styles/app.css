@@ -677,9 +677,22 @@ button:disabled { background: #f3f4f6; color: #9ca3af; cursor: not-allowed; }
   animation: toast-fade-in 0.15s ease;
 }
 
-@media (max-width: 768px) {
+/* "ไม่ใช่ Desktop" = จอแคบ (≤1024px, ครอบคลุมแท็บเล็ตแนวตั้งด้วย) หรือเป็น
+   อุปกรณ์สัมผัส (ไม่มี hover จริง + ตัวชี้หยาบ) ไม่ว่าจอจะกว้างแค่ไหนก็ตาม —
+   ครอบคลุมแท็บเล็ต 11" แนวนอนที่กว้างเกิน 1024px ด้วย (เดิมใช้แค่ 768px ทำให้
+   แท็บเล็ตยังเห็น navbar แบบเดสก์ท็อปอยู่) ใช้คู่กับ @media (min-width: 1025px)
+   and (hover: hover), (min-width: 1025px) and (pointer: fine) ด้านล่างซึ่งเป็น
+   ส่วนกลับกันพอดี (De Morgan's) — ยังคงพฤติกรรมเดิมไว้เป็นหลัก แค่ขยายขอบเขต
+   ให้ครอบคลุมแท็บเล็ตด้วย */
+@media (max-width: 1024px), (hover: none) and (pointer: coarse) {
   .navbar { padding: 0 14px; padding-top: env(safe-area-inset-top, 0px); }
   .navbar-hamburger { display: block; }
+  /* เอา navbar ออกทั้งแถบ (โลโก้/หัวข้อ/ปุ่มแฮมเบอร์เกอร์) ให้เมนูด้านล่าง
+     (BottomNav) ทำหน้าที่แทนทั้งหมด — ปุ่ม "เมนู" ใน BottomNav ยังเปิด drawer
+     นี้ได้เหมือนเดิมผ่าน custom event 'open-nav-drawer' (ดู NavBar.jsx) เพราะ
+     .navbar-links/.navbar-drawer-backdrop เป็น position:fixed ไม่ขึ้นกับว่า
+     .navbar-brand จะแสดงผลอยู่หรือไม่ */
+  .navbar-brand { display: none; }
 
   /* Slide-in drawer instead of an inline accordion that pushes page content
      down — reads as a native app nav drawer, and doesn't shove the page's
@@ -729,7 +742,9 @@ button:disabled { background: #f3f4f6; color: #9ca3af; cursor: not-allowed; }
   .navbar-standalone-link { width: 100%; padding: 12px 0; border-bottom: 1px solid #2a2a2a; }
 }
 
-@media (min-width: 769px) {
+/* ส่วนกลับของ query "ไม่ใช่ Desktop" ด้านบนพอดี (De Morgan's) — เดสก์ท็อปจริง
+   เท่านั้น (จอกว้าง ≥1025px และมีเมาส์/hover จริง) ถึงจะเห็น navbar แบบเดิม */
+@media (min-width: 1025px) and (hover: hover), (min-width: 1025px) and (pointer: fine) {
   .navbar { flex-direction: row; align-items: center; padding: 0 20px; }
   .navbar-brand { padding: 12px 0; width: auto; margin-right: 24px; }
 
@@ -3231,7 +3246,7 @@ button:disabled { background: #f3f4f6; color: #9ca3af; cursor: not-allowed; }
    completely untouched regardless of markup. */
 .row-avatar { display: none; }
 
-@media (max-width: 768px) {
+@media (max-width: 1024px), (hover: none) and (pointer: coarse) {
   .bottom-nav {
     display: flex;
     position: fixed;
@@ -3364,13 +3379,14 @@ body:has(.modal-backdrop) .page-fade-in {
 
 /* ════════════════════════════════════════════════════════════════════
    MOBILE/TABLET THEME — dark, high-tech accent palette
-   Scoped entirely inside @media (max-width: 768px): desktop keeps its
-   existing look untouched. Placed at the very end of the file on purpose
-   so these rules win the cascade over the earlier same-specificity
-   desktop rules (.status-badge-*, .btn-primary, etc.) whenever the media
-   query matches, without needing !important anywhere.
+   Scoped inside the same "ไม่ใช่ Desktop" query as the navbar/bottom-nav
+   switch above (≤1024px OR touch-primary device) — เดสก์ท็อปจริงเท่านั้น
+   ที่ยังเห็นสีเดิม. Placed at the very end of the file on purpose so these
+   rules win the cascade over the earlier same-specificity desktop rules
+   (.status-badge-*, .btn-primary, etc.) whenever the media query matches,
+   without needing !important anywhere.
    ════════════════════════════════════════════════════════════════════ */
-@media (max-width: 768px) {
+@media (max-width: 1024px), (hover: none) and (pointer: coarse) {
   /* Owner asked for mobile to go back to matching the desktop web's own
      colors instead of the dark/teal theme — every component below still
      reads through these tokens (that's the whole point of using them),
@@ -4137,7 +4153,8 @@ body:has(.modal-backdrop) .page-fade-in {
   /* ── tap feedback — buttons/cards shrink slightly on touch, like a
      native control, instead of the flat instant-click feel of a web
      page. Scoped to :active only, so it never fires from a mouse hover
-     lingering (this whole rollout only ever applies ≤768px anyway). ── */
+     lingering (this whole rollout only ever applies to the non-desktop
+     query above anyway). ── */
   .btn,
   .qbtn,
   .btn-icon-small,
@@ -4584,13 +4601,87 @@ body:has(.modal-backdrop) .page-fade-in {
   height: 100%;
 }
 
+.kiosk-brand-badge-logo {
+  background: #fff;
+  overflow: hidden;
+}
+
+.kiosk-brand-badge-logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  padding: 8px;
+  box-sizing: border-box;
+}
+
 .kiosk-part {
+  position: relative;
   display: flex;
   flex-direction: column;
   background: #1b1e24;
-  border: 1px solid #2b2e36;
+  border: 2px solid #2b2e36;
   border-radius: 18px;
   overflow: hidden;
+  cursor: pointer;
+  transition: border-color 0.15s ease, transform 0.1s ease;
+}
+
+.kiosk-part:active {
+  transform: scale(0.98);
+}
+
+/* ติ๊กเลือกแล้ว — เน้นด้วยกรอบสีเหลือง (สีเดียวกับ active step/CTA ทั้งหน้า) */
+.kiosk-part-selected {
+  border-color: #fbbf24;
+  box-shadow: 0 0 0 1px #fbbf24;
+}
+
+.kiosk-part-check {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #fbbf24;
+  color: #0f1115;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 0.95rem;
+  z-index: 2;
+}
+
+.kiosk-part-qty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 0 14px 14px;
+}
+
+.kiosk-part-qty button {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: 1px solid #33363f;
+  background: #22242b;
+  color: #f4f4f5;
+  font-size: 1.2rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.kiosk-part-qty button:active {
+  background: #2e313a;
+}
+
+.kiosk-part-qty span {
+  min-width: 24px;
+  text-align: center;
+  font-weight: 700;
+  font-size: 1.05rem;
 }
 
 .kiosk-part-image {
@@ -4646,6 +4737,70 @@ body:has(.modal-backdrop) .page-fade-in {
 
 .kiosk-message-error {
   color: #fca5a5;
+}
+
+.kiosk-success-banner {
+  flex-shrink: 0;
+  padding: 10px 20px;
+  background: #14532d;
+  color: #bbf7d0;
+  font-weight: 700;
+  text-align: center;
+  font-size: 0.9rem;
+}
+
+/* กันเนื้อหาแถวสุดท้ายถูกแถบตะกร้าด้านล่างบัง */
+.kiosk-body-with-cart {
+  padding-bottom: 100px;
+}
+
+.kiosk-cart-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 20px calc(14px + env(safe-area-inset-bottom, 0px));
+  background: #16181d;
+  border-top: 1px solid #2b2e36;
+  box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.35);
+}
+
+.kiosk-cart-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.kiosk-cart-count {
+  font-size: 0.85rem;
+  color: #a1a1aa;
+}
+
+.kiosk-cart-total {
+  font-size: 1.3rem;
+  font-weight: 800;
+  color: #4ade80;
+}
+
+.kiosk-cart-cta {
+  flex-shrink: 0;
+  padding: 14px 24px;
+  border-radius: 14px;
+  border: none;
+  background: #fbbf24;
+  color: #0f1115;
+  font-size: 1.05rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.kiosk-cart-cta:active {
+  background: #f59e0b;
 }
 
 /* จอแคบ (แท็บเล็ตแนวตั้ง/มือถือ) — ลดขนาด header ลงให้เหลือพื้นที่คอนเทนต์ */
