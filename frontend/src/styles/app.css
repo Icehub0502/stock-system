@@ -395,7 +395,14 @@ button:disabled { background: #f3f4f6; color: #9ca3af; cursor: not-allowed; }
   align-items: center;
   justify-content: center;
   padding: 16px;
-  z-index: 50;
+  /* Must sit above .navbar (55) and .bottom-nav (55). At 50 the sticky
+     navbar drew on top of every dialog that uses this backdrop, covering
+     the modal's own header — on a landscape tablet (short viewport, so
+     the modal is tall) that meant the ✕ close and พิมพ์ buttons sat
+     underneath the navbar and couldn't be tapped at all.
+     .pcp-modal-overlay (100) was already above the navbar, which is why
+     only this shared backdrop showed the problem. */
+  z-index: 80;
 }
 
 .modal-body {
@@ -3277,6 +3284,20 @@ button:disabled { background: #f3f4f6; color: #9ca3af; cursor: not-allowed; }
 @keyframes page-fade-in {
   from { opacity: 0; }
   to   { opacity: 1; }
+}
+/* Modals render *inside* this wrapper. While the fade is mid-flight the
+   wrapper's opacity is < 1, which creates a stacking context — and a
+   stacking context traps every descendant, so a `position: fixed` modal
+   can no longer out-stack the sticky .navbar (z-index 55) no matter how
+   high its own z-index is. Verified by hit-testing the print dialog's ✕
+   button: with the wrapper at opacity 0 the navbar won every sample
+   point; forcing opacity to 1 handed all of them back to the modal.
+   The window is only ~0.18s, but a dialog opened inside it would render
+   underneath the navbar, so drop the fade entirely whenever a modal is
+   on screen. (`:has()` is already relied on elsewhere in this file.) */
+body:has(.modal-backdrop) .page-fade-in {
+  animation: none;
+  opacity: 1;
 }
 
 /* ════════════════════════════════════════
