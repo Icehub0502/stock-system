@@ -38,23 +38,6 @@ export default function PartsCatalogKioskPage() {
   const [model, setModel] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  // หน้านี้ตั้งใจให้ใช้เฉพาะบนแท็บเล็ต/ไอแพด — เช็คด้วย matchMedia แทน CSS
-  // ล้วน ๆ เพื่อขึ้นข้อความอธิบายให้ชัดว่าทำไมถึงไม่แสดงผล แทนที่จะว่างเปล่าเฉย ๆ
-  const [isTablet, setIsTablet] = useState(true);
-
-  useEffect(() => {
-    const mq = window.matchMedia('(min-width: 700px) and (max-width: 1400px)');
-    const sync = () => setIsTablet(mq.matches);
-    sync();
-    // ฟังทั้ง change ของ media query และ resize ของหน้าต่าง — บนแท็บเล็ตบางรุ่น
-    // การหมุนจอ/แถบเบราว์เซอร์ยุบ-ขยาย ทำให้ขนาดเปลี่ยนโดยที่ change ไม่ยิงเสมอไป
-    mq.addEventListener('change', sync);
-    window.addEventListener('resize', sync);
-    return () => {
-      mq.removeEventListener('change', sync);
-      window.removeEventListener('resize', sync);
-    };
-  }, []);
 
   useEffect(() => {
     client.get('/quote-parts/brands')
@@ -107,16 +90,6 @@ export default function PartsCatalogKioskPage() {
       setModels([]);
     }
   };
-
-  if (!isTablet) {
-    return (
-      <div className="kiosk-gate">
-        <img className="kiosk-gate-logo" src={champpowerLogo} alt="Champ Power" />
-        <h1>หน้านี้สำหรับแท็บเล็ตเท่านั้น</h1>
-        <p>กรุณาเปิดหน้ารายการอะไหล่นี้บนแท็บเล็ตหรือ iPad (เช่น Huawei MatePad SE 11)</p>
-      </div>
-    );
-  }
 
   const step = model ? 3 : brand ? 2 : 1;
 
