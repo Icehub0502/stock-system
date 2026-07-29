@@ -8,17 +8,25 @@ const emptyForm = { brand: '', model: '', part_name: '', description: '', price:
 export default function QuotePartPriceManagementPage() {
   const [parts, setParts] = useState([]);
   const [search, setSearch] = useState('');
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(emptyForm);
   const [imageBusy, setImageBusy] = useState(false);
+
   // ยี่ห้อ/รุ่นรถให้เลือกจากแคตตาล็อกอ้างอิง (ตาราง vehicle_models ที่นำเข้าจาก
   // Excel) แทนการพิมพ์เอง กันสะกดไม่ตรงกับที่หน้าคีออส (/catalog) ใช้ค้นหา ซึ่ง
   // จะทำให้ราคาที่กรอกไว้หาไม่เจอเงียบๆ
   const [brandOptions, setBrandOptions] = useState([]);
-  const [modelOptions, setModelOptions] = useState([]);
+  const [formModelOptions, setFormModelOptions] = useState([]);
+
+  // ตัวกรองยี่ห้อ/รุ่นสำหรับดูรายการ — แยกจาก form (ที่ใช้ตอนเพิ่ม/แก้ไข) เพราะ
+  // ตอนนี้มีอะไหล่เตรียมไว้ให้ทุกรุ่นรถแล้ว (รุ่นละ ~134 รายการ x 534 รุ่น) ต้อง
+  // เลือกรุ่นก่อนถึงจะโหลดรายการมาแสดง ไม่งั้นจะพยายามโหลดหลายหมื่นรายการทีเดียว
+  const [filterBrand, setFilterBrand] = useState('');
+  const [filterModel, setFilterModel] = useState('');
+  const [filterModelOptions, setFilterModelOptions] = useState([]);
 
   useEffect(() => {
     client.get('/vehicle-models/brands')
@@ -28,18 +36,41 @@ export default function QuotePartPriceManagementPage() {
 
   useEffect(() => {
     if (!form.brand) {
-      setModelOptions([]);
+      setFormModelOptions([]);
       return;
     }
     client.get('/vehicle-models/models', { params: { brand: form.brand } })
-      .then((res) => setModelOptions(res.data.data || []))
+      .then((res) => setFormModelOptions(res.data.data || []))
       .catch((err) => console.error('Error loading vehicle models:', err));
   }, [form.brand]);
 
+  useEffect(() => {
+    if (!filterBrand) {
+      setFilterModelOptions([]);
+      setFilterModel('');
+      return;
+    }
+    client.get('/vehicle-models/models', { params: { brand: filterBrand } })
+      .then((res) => setFilterModelOptions(res.data.data || []))
+      .catch((err) => console.error('Error loading vehicle models:', err));
+  }, [filterBrand]);
+
+  // ต้องเลือกยี่ห้อ+รุ่น หรือพิมพ์คำค้นหา อย่างใดอย่างหนึ่งก่อน ถึงจะโหลดรายการ —
+  // ไม่โหลดทุกอย่างมาเปล่าๆ ตั้งแต่เข้าหน้า (ตอนนี้มีข้อมูลหลักหมื่นแถว)
   const fetchParts = async () => {
+    if (!(filterBrand && filterModel) && !search.trim()) {
+      setParts([]);
+      return;
+    }
     try {
       setLoading(true);
-      const res = await client.get('/quote-parts', { params: { search } });
+      setError('');
+      const params = { search };
+      if (filterBrand && filterModel) {
+        params.brand = filterBrand;
+        params.model = filterModel;
+      }
+      const res = await client.get('/quote-parts', { params });
       setParts(res.data.data || []);
     } catch (err) {
       console.error('Error loading quote part prices:', err);
@@ -52,11 +83,14 @@ export default function QuotePartPriceManagementPage() {
   useEffect(() => {
     const timer = setTimeout(fetchParts, 300);
     return () => clearTimeout(timer);
-  }, [search]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search, filterBrand, filterModel]);
+
+  const needsPriceCount = parts.filter((p) => p.needs_price).length;
 
   const openAdd = () => {
     setEditing(null);
-    setForm(emptyForm);
+    setForm({ ...emptyForm, brand: filterBrand, model: filterModel });
     setShowModal(true);
     setError('');
   };
@@ -141,9 +175,36 @@ export default function QuotePartPriceManagementPage() {
       <div className="quotation-header">
         <div>
           <h1>จัดการราคาอะไหล่ตามรุ่นรถ</h1>
-          <p className="subtitle">กรอกราคาอะไหล่แยกตามยี่ห้อ+รุ่นรถ พร้อมรูปประกอบ ใช้เลือกตอนสร้างใบเสนอราคา</p>
+          <p className="subtitle">เลือกยี่ห้อ+รุ่นรถเพื่อดู/แก้ไขราคาอะไหล่ หรือค้นหาข้ามรุ่นได้เลย</p>
         </div>
         <div className="quotation-actions">
+          <button className="btn btn-primary" onClick={openAdd}>
+            + เพิ่มรายการ
+          </button>
+        </div>
+      </div>
+
+      <div className="qpp-filter-bar">
+        <div className="form-group">
+          <label>ยี่ห้อรถ</label>
+          <select value={filterBrand} onChange={(e) => setFilterBrand(e.target.value)}>
+            <option value="">-- ทุกยี่ห้อ --</option>
+            {brandOptions.map((b) => (
+              <option key={b} value={b}>{b}</option>
+            ))}
+          </select>
+        </div>
+        <div className="form-group">
+          <label>รุ่นรถ</label>
+          <select value={filterModel} onChange={(e) => setFilterModel(e.target.value)} disabled={!filterBrand}>
+            <option value="">-- เลือกรุ่น --</option>
+            {filterModelOptions.map((m) => (
+              <option key={m.label} value={m.label}>{m.label}</option>
+            ))}
+          </select>
+        </div>
+        <div className="form-group qpp-filter-search">
+          <label>หรือค้นหาข้ามรุ่น</label>
           <input
             type="text"
             className="search-input"
@@ -151,20 +212,29 @@ export default function QuotePartPriceManagementPage() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
-          <button className="btn btn-primary" onClick={openAdd}>
-            + เพิ่มรายการ
-          </button>
         </div>
       </div>
+
+      {filterBrand && filterModel && parts.length > 0 && (
+        <div className={`qpp-progress ${needsPriceCount > 0 ? 'qpp-progress-warning' : 'qpp-progress-done'}`}>
+          {needsPriceCount > 0
+            ? `⚠️ ยังไม่ตั้งราคา ${needsPriceCount} จาก ${parts.length} รายการของรุ่นนี้`
+            : `✅ ตั้งราคาครบทั้ง ${parts.length} รายการของรุ่นนี้แล้ว`}
+        </div>
+      )}
+
       {error && !showModal && <div className="error-message">{error}</div>}
+
       {loading ? (
         <div className="loading">กำลังโหลด...</div>
+      ) : !(filterBrand && filterModel) && !search.trim() ? (
+        <div className="empty-message">เลือกยี่ห้อ+รุ่นรถ หรือพิมพ์คำค้นหาด้านบน เพื่อดูรายการอะไหล่</div>
       ) : parts.length === 0 ? (
-        <div className="empty-message">ยังไม่มีรายการราคาอะไหล่</div>
+        <div className="empty-message">ไม่พบรายการ</div>
       ) : (
         <div className="qpp-grid">
           {parts.map((part) => (
-            <div key={part.id} className="qpp-card">
+            <div key={part.id} className={`qpp-card ${part.needs_price ? 'qpp-card-needs-price' : ''}`}>
               <div className="qpp-card-image">
                 {part.image_data ? (
                   <img src={part.image_data} alt={part.part_name} />
@@ -176,7 +246,11 @@ export default function QuotePartPriceManagementPage() {
                 <div className="qpp-card-brand">{part.brand} · {part.model}</div>
                 <div className="qpp-card-name">{part.part_name}</div>
                 {part.description && <div className="qpp-card-desc">{part.description}</div>}
-                <div className="qpp-card-price">฿{formatMoney(part.price)}</div>
+                {part.needs_price ? (
+                  <div className="qpp-card-needs-price-badge">⚠️ ยังไม่ตั้งราคา</div>
+                ) : (
+                  <div className="qpp-card-price">฿{formatMoney(part.price)}</div>
+                )}
               </div>
               <div className="qpp-card-actions">
                 <button onClick={() => openEdit(part)}>แก้ไข</button>
@@ -223,10 +297,10 @@ export default function QuotePartPriceManagementPage() {
                   required
                 >
                   <option value="">-- เลือกรุ่น --</option>
-                  {form.model && !modelOptions.some((m) => m.label === form.model) && (
+                  {form.model && !formModelOptions.some((m) => m.label === form.model) && (
                     <option value={form.model}>{form.model}</option>
                   )}
-                  {modelOptions.map((m) => (
+                  {formModelOptions.map((m) => (
                     <option key={m.label} value={m.label}>{m.label}</option>
                   ))}
                 </select>

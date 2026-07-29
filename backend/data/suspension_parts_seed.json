@@ -1,0 +1,1074 @@
+[
+  {
+    "category": "1. โช้คอัพ + อุปกรณ์โช้ค",
+    "part_name_th": "โช้คอัพหน้า",
+    "part_name_en": "Front Shock Absorber",
+    "applies_sedan": "✓",
+    "applies_pickup": "✓",
+    "notes": "เก๋งส่วนใหญ่เป็นแบบสตรัท (รวมสปริงในตัว) กระบะแยกโช้คกับสปริง"
+  },
+  {
+    "category": "1. โช้คอัพ + อุปกรณ์โช้ค",
+    "part_name_th": "โช้คอัพหลัง",
+    "part_name_en": "Rear Shock Absorber",
+    "applies_sedan": "✓",
+    "applies_pickup": "✓",
+    "notes": "กระบะมักเป็นแบบกระบอกเดี่ยว ทนกว่า รับโหลดมากกว่า"
+  },
+  {
+    "category": "1. โช้คอัพ + อุปกรณ์โช้ค",
+    "part_name_th": "ชุดสตรัทหน้าครบชุด (โช้ค+สปริง+เบ้า)",
+    "part_name_en": "Front Strut Assembly / Complete Strut",
+    "applies_sedan": "✓",
+    "applies_pickup": "บางรุ่น",
+    "notes": "เก๋ง/SUV แม็คเฟอร์สัน กระบะบางรุ่นใช้แบบคอยล์โอเวอร์"
+  },
+  {
+    "category": "1. โช้คอัพ + อุปกรณ์โช้ค",
+    "part_name_th": "เบ้าโช้คหน้า (แท่นโช้คบน)",
+    "part_name_en": "Front Strut Mount / Top Mount",
+    "applies_sedan": "✓",
+    "applies_pickup": "✓",
+    "notes": "อะไหล่ที่เสียบ่อยในเก๋ง มักมาพร้อมลูกปืน"
+  },
+  {
+    "category": "1. โช้คอัพ + อุปกรณ์โช้ค",
+    "part_name_th": "ลูกปืนเบ้าโช้ค",
+    "part_name_en": "Strut Bearing / Mount Bearing",
+    "applies_sedan": "✓",
+    "applies_pickup": "บางรุ่น",
+    "notes": "มีเฉพาะช่วงล่างแบบสตรัทที่โช้คหมุนตามพวงมาลัย"
+  },
+  {
+    "category": "1. โช้คอัพ + อุปกรณ์โช้ค",
+    "part_name_th": "เบ้าโช้คหลัง",
+    "part_name_en": "Rear Shock Mount",
+    "applies_sedan": "✓",
+    "applies_pickup": "✓",
+    "notes": "เก๋งมักเป็นยางแท่น กระบะเป็นบูชหูโช้ค"
+  },
+  {
+    "category": "1. โช้คอัพ + อุปกรณ์โช้ค",
+    "part_name_th": "บูชหูโช้ค บน/ล่าง",
+    "part_name_en": "Shock Absorber Bushing",
+    "applies_sedan": "บางรุ่น",
+    "applies_pickup": "✓",
+    "notes": "กระบะเสียบ่อย โดยเฉพาะรถบรรทุกหนัก"
+  },
+  {
+    "category": "1. โช้คอัพ + อุปกรณ์โช้ค",
+    "part_name_th": "ยางกันฝุ่นโช้ค",
+    "part_name_en": "Shock Dust Boot / Dust Cover",
+    "applies_sedan": "✓",
+    "applies_pickup": "✓",
+    "notes": "ป้องกันฝุ่นเข้าแกนโช้ค ถ้าขาดโช้คพังเร็ว"
+  },
+  {
+    "category": "1. โช้คอัพ + อุปกรณ์โช้ค",
+    "part_name_th": "ยางกันกระแทก (ยางตุ๊กตา)",
+    "part_name_en": "Bump Stop / Bump Rubber",
+    "applies_sedan": "✓",
+    "applies_pickup": "✓",
+    "notes": "เก๋งมักเป็นโฟม PU กระบะเป็นยางตัน"
+  },
+  {
+    "category": "1. โช้คอัพ + อุปกรณ์โช้ค",
+    "part_name_th": "ยางรองสปริงบน",
+    "part_name_en": "Upper Spring Seat / Insulator",
+    "applies_sedan": "✓",
+    "applies_pickup": "✓",
+    "notes": null
+  },
+  {
+    "category": "1. โช้คอัพ + อุปกรณ์โช้ค",
+    "part_name_th": "ยางรองสปริงล่าง",
+    "part_name_en": "Lower Spring Seat / Insulator",
+    "applies_sedan": "✓",
+    "applies_pickup": "✓",
+    "notes": null
+  },
+  {
+    "category": "1. โช้คอัพ + อุปกรณ์โช้ค",
+    "part_name_th": "สปริงคอยล์หน้า",
+    "part_name_en": "Front Coil Spring",
+    "applies_sedan": "✓",
+    "applies_pickup": "✓",
+    "notes": "กระบะรุ่นใหม่ใช้คอยล์หน้าทั้งหมดแล้ว"
+  },
+  {
+    "category": "1. โช้คอัพ + อุปกรณ์โช้ค",
+    "part_name_th": "สปริงคอยล์หลัง",
+    "part_name_en": "Rear Coil Spring",
+    "applies_sedan": "✓",
+    "applies_pickup": "บางรุ่น",
+    "notes": "กระบะทั่วไปใช้แหนบ แต่ PPV (Fortuner/MU-X/Everest) ใช้คอยล์"
+  },
+  {
+    "category": "1. โช้คอัพ + อุปกรณ์โช้ค",
+    "part_name_th": "ทอร์ชั่นบาร์ (สปริงบิด)",
+    "part_name_en": "Torsion Bar",
+    "applies_sedan": "-",
+    "applies_pickup": "บางรุ่น",
+    "notes": "เฉพาะกระบะรุ่นเก่า เช่น Hilux Tiger, Vigo รุ่นแรก, D-Max เจน 1, Strada"
+  },
+  {
+    "category": "1. โช้คอัพ + อุปกรณ์โช้ค",
+    "part_name_th": "ตัวปรับทอร์ชั่นบาร์",
+    "part_name_en": "Torsion Bar Adjuster",
+    "applies_sedan": "-",
+    "applies_pickup": "บางรุ่น",
+    "notes": "ใช้ปรับความสูงหน้ารถในกระบะทอร์ชั่นบาร์"
+  },
+  {
+    "category": "1. โช้คอัพ + อุปกรณ์โช้ค",
+    "part_name_th": "น็อตยึดโช้คบน/ล่าง",
+    "part_name_en": "Shock Mounting Bolt/Nut",
+    "applies_sedan": "✓",
+    "applies_pickup": "✓",
+    "notes": "ควรเปลี่ยนใหม่ทุกครั้งที่ถอด"
+  },
+  {
+    "category": "2. ช่วงล่างหน้า",
+    "part_name_th": "ปีกนกล่างหน้า",
+    "part_name_en": "Front Lower Control Arm / Wishbone",
+    "applies_sedan": "✓",
+    "applies_pickup": "✓",
+    "notes": "เก๋งบางรุ่นแยกเป็น 2 ชิ้น (Honda, Mercedes, BMW)"
+  },
+  {
+    "category": "2. ช่วงล่างหน้า",
+    "part_name_th": "ปีกนกบนหน้า",
+    "part_name_en": "Front Upper Control Arm / A-Arm",
+    "applies_sedan": "บางรุ่น",
+    "applies_pickup": "✓",
+    "notes": "กระบะ/PPV มีทุกคัน เก๋งมีเฉพาะแบบปีกนกคู่ (BMW, Mercedes, Lexus)"
+  },
+  {
+    "category": "2. ช่วงล่างหน้า",
+    "part_name_th": "บูชปีกนกล่าง (ตัวเล็ก)",
+    "part_name_en": "Lower Arm Bushing (Small)",
+    "applies_sedan": "✓",
+    "applies_pickup": "✓",
+    "notes": "เสียบ่อยที่สุดในช่วงล่าง มีเสียงกุกกักตอนตกหลุม"
+  },
+  {
+    "category": "2. ช่วงล่างหน้า",
+    "part_name_th": "บูชปีกนกล่าง (ตัวใหญ่)",
+    "part_name_en": "Lower Arm Bushing (Large)",
+    "applies_sedan": "✓",
+    "applies_pickup": "✓",
+    "notes": "บางรุ่นเป็นแบบน้ำมัน (Hydraulic bush) ราคาสูงกว่า"
+  },
+  {
+    "category": "2. ช่วงล่างหน้า",
+    "part_name_th": "บูชปีกนกบน",
+    "part_name_en": "Upper Arm Bushing",
+    "applies_sedan": "บางรุ่น",
+    "applies_pickup": "✓",
+    "notes": null
+  },
+  {
+    "category": "2. ช่วงล่างหน้า",
+    "part_name_th": "ลูกหมากปีกนกล่าง",
+    "part_name_en": "Lower Ball Joint",
+    "applies_sedan": "✓",
+    "applies_pickup": "✓",
+    "notes": "บางรุ่นเปลี่ยนแยกได้ บางรุ่นต้องยกปีกนกทั้งชุด (Honda, Mazda ยุคใหม่)"
+  },
+  {
+    "category": "2. ช่วงล่างหน้า",
+    "part_name_th": "ลูกหมากปีกนกบน",
+    "part_name_en": "Upper Ball Joint",
+    "applies_sedan": "บางรุ่น",
+    "applies_pickup": "✓",
+    "notes": "กระบะ/PPV มีทุกคัน"
+  },
+  {
+    "category": "2. ช่วงล่างหน้า",
+    "part_name_th": "คอม้า / ดุมล้อหน้า (ตัวเสื้อ)",
+    "part_name_en": "Steering Knuckle / Spindle",
+    "applies_sedan": "✓",
+    "applies_pickup": "✓",
+    "notes": "เปลี่ยนเมื่อชนหรือรูลูกหมากหลวม"
+  },
+  {
+    "category": "2. ช่วงล่างหน้า",
+    "part_name_th": "เหล็กกันโคลงหน้า",
+    "part_name_en": "Front Stabilizer Bar / Anti-Roll Bar",
+    "applies_sedan": "✓",
+    "applies_pickup": "✓",
+    "notes": "รุ่นสปอร์ตมักหนากว่ารุ่นปกติ"
+  },
+  {
+    "category": "2. ช่วงล่างหน้า",
+    "part_name_th": "บูชเหล็กกันโคลงหน้า",
+    "part_name_en": "Front Stabilizer Bushing",
+    "applies_sedan": "✓",
+    "applies_pickup": "✓",
+    "notes": "เสียบ่อย ทำให้มีเสียงดังตอนเลี้ยว/ตกหลุม"
+  },
+  {
+    "category": "2. ช่วงล่างหน้า",
+    "part_name_th": "ลูกหมากกันโคลงหน้า",
+    "part_name_en": "Front Stabilizer Link / Sway Bar Link",
+    "applies_sedan": "✓",
+    "applies_pickup": "✓",
+    "notes": "อะไหล่ที่เสียบ่อยและเปลี่ยนง่ายที่สุด"
+  },
+  {
+    "category": "2. ช่วงล่างหน้า",
+    "part_name_th": "ซับเฟรมหน้า (แชสซีส์ย่อย)",
+    "part_name_en": "Front Subframe / Crossmember",
+    "applies_sedan": "✓",
+    "applies_pickup": "บางรุ่น",
+    "notes": "เก๋งใช้เกือบทุกรุ่น กระบะแชสซีส์แยกไม่มี"
+  },
+  {
+    "category": "2. ช่วงล่างหน้า",
+    "part_name_th": "บูชซับเฟรม",
+    "part_name_en": "Subframe Bushing",
+    "applies_sedan": "✓",
+    "applies_pickup": "บางรุ่น",
+    "notes": null
+  },
+  {
+    "category": "2. ช่วงล่างหน้า",
+    "part_name_th": "น็อตปรับแคมเบอร์",
+    "part_name_en": "Camber Bolt / Adjusting Bolt",
+    "applies_sedan": "✓",
+    "applies_pickup": "บางรุ่น",
+    "notes": "ใช้ตอนตั้งศูนย์ บางรุ่นต้องใช้ตัวปรับพิเศษ"
+  },
+  {
+    "category": "2. ช่วงล่างหน้า",
+    "part_name_th": "แผ่นชิมปรับศูนย์ล้อ",
+    "part_name_en": "Alignment Shim",
+    "applies_sedan": "-",
+    "applies_pickup": "บางรุ่น",
+    "notes": "กระบะ/PPV แบบปีกนกคู่รุ่นเก่าใช้ชิมปรับแคมเบอร์/แคสเตอร์"
+  },
+  {
+    "category": "3. ช่วงล่างหลัง (เก๋ง/SUV)",
+    "part_name_th": "คานบิดหลัง (ทอร์ชั่นบีม)",
+    "part_name_en": "Rear Torsion Beam Axle",
+    "applies_sedan": "✓",
+    "applies_pickup": "-",
+    "notes": "อีโคคาร์/B-segment เช่น Yaris, City, Almera, Mirage"
+  },
+  {
+    "category": "3. ช่วงล่างหลัง (เก๋ง/SUV)",
+    "part_name_th": "บูชคานหลัง",
+    "part_name_en": "Trailing Arm / Beam Bushing",
+    "applies_sedan": "✓",
+    "applies_pickup": "-",
+    "notes": "เสียแล้วรถส่ายท้าย ต้องอัดบูชใหม่หรือเปลี่ยนคานทั้งชุด"
+  },
+  {
+    "category": "3. ช่วงล่างหลัง (เก๋ง/SUV)",
+    "part_name_th": "ปีกนกหลังล่าง",
+    "part_name_en": "Rear Lower Control Arm",
+    "applies_sedan": "✓",
+    "applies_pickup": "-",
+    "notes": "รถมัลติลิงค์ เช่น Civic, Corolla Altis, CX-5, BMW, Mercedes"
+  },
+  {
+    "category": "3. ช่วงล่างหลัง (เก๋ง/SUV)",
+    "part_name_th": "ปีกนกหลังบน",
+    "part_name_en": "Rear Upper Control Arm",
+    "applies_sedan": "✓",
+    "applies_pickup": "-",
+    "notes": null
+  },
+  {
+    "category": "3. ช่วงล่างหลัง (เก๋ง/SUV)",
+    "part_name_th": "แขนปรับโทว์หลัง",
+    "part_name_en": "Rear Toe Link / Toe Control Arm",
+    "applies_sedan": "✓",
+    "applies_pickup": "-",
+    "notes": "ปรับตั้งศูนย์ล้อหลังได้ ถ้าคดต้องเปลี่ยน"
+  },
+  {
+    "category": "3. ช่วงล่างหลัง (เก๋ง/SUV)",
+    "part_name_th": "แขนปรับแคมเบอร์หลัง",
+    "part_name_en": "Rear Camber Arm",
+    "applies_sedan": "✓",
+    "applies_pickup": "-",
+    "notes": null
+  },
+  {
+    "category": "3. ช่วงล่างหลัง (เก๋ง/SUV)",
+    "part_name_th": "เทรลลิ่งอาร์มหลัง",
+    "part_name_en": "Rear Trailing Arm",
+    "applies_sedan": "✓",
+    "applies_pickup": "-",
+    "notes": null
+  },
+  {
+    "category": "3. ช่วงล่างหลัง (เก๋ง/SUV)",
+    "part_name_th": "บูชปีกนกหลัง (ทุกจุด)",
+    "part_name_en": "Rear Arm Bushings",
+    "applies_sedan": "✓",
+    "applies_pickup": "-",
+    "notes": "BMW/Mercedes มีจุดบูชเยอะกว่ารถญี่ปุ่นมาก (4-5 แขนต่อข้าง)"
+  },
+  {
+    "category": "3. ช่วงล่างหลัง (เก๋ง/SUV)",
+    "part_name_th": "ลูกหมากปีกนกหลัง",
+    "part_name_en": "Rear Ball Joint",
+    "applies_sedan": "บางรุ่น",
+    "applies_pickup": "-",
+    "notes": "รถยุโรประดับบนมักมีลูกหมากหลังหลายจุด"
+  },
+  {
+    "category": "3. ช่วงล่างหลัง (เก๋ง/SUV)",
+    "part_name_th": "เหล็กกันโคลงหลัง",
+    "part_name_en": "Rear Stabilizer Bar",
+    "applies_sedan": "บางรุ่น",
+    "applies_pickup": "บางรุ่น",
+    "notes": "ไม่มีในรถเล็กบางรุ่น"
+  },
+  {
+    "category": "3. ช่วงล่างหลัง (เก๋ง/SUV)",
+    "part_name_th": "บูชเหล็กกันโคลงหลัง",
+    "part_name_en": "Rear Stabilizer Bushing",
+    "applies_sedan": "บางรุ่น",
+    "applies_pickup": "บางรุ่น",
+    "notes": null
+  },
+  {
+    "category": "3. ช่วงล่างหลัง (เก๋ง/SUV)",
+    "part_name_th": "ลูกหมากกันโคลงหลัง",
+    "part_name_en": "Rear Stabilizer Link",
+    "applies_sedan": "บางรุ่น",
+    "applies_pickup": "บางรุ่น",
+    "notes": null
+  },
+  {
+    "category": "3. ช่วงล่างหลัง (เก๋ง/SUV)",
+    "part_name_th": "ซับเฟรมหลัง",
+    "part_name_en": "Rear Subframe",
+    "applies_sedan": "✓",
+    "applies_pickup": "-",
+    "notes": null
+  },
+  {
+    "category": "3. ช่วงล่างหลัง (เก๋ง/SUV)",
+    "part_name_th": "บูชซับเฟรมหลัง",
+    "part_name_en": "Rear Subframe Bushing",
+    "applies_sedan": "✓",
+    "applies_pickup": "-",
+    "notes": null
+  },
+  {
+    "category": "4. ช่วงล่างหลัง (กระบะ/PPV)",
+    "part_name_th": "แหนบหลัง (ทั้งชุด)",
+    "part_name_en": "Rear Leaf Spring Assembly",
+    "applies_sedan": "-",
+    "applies_pickup": "✓",
+    "notes": "จำนวนแผ่นต่างกันตามรุ่น/พิกัดบรรทุก (3-7 แผ่น)"
+  },
+  {
+    "category": "4. ช่วงล่างหลัง (กระบะ/PPV)",
+    "part_name_th": "แผ่นแหนบหลัก",
+    "part_name_en": "Main Leaf",
+    "applies_sedan": "-",
+    "applies_pickup": "✓",
+    "notes": "แผ่นบนสุดที่มีหูแหนบ 2 ข้าง"
+  },
+  {
+    "category": "4. ช่วงล่างหลัง (กระบะ/PPV)",
+    "part_name_th": "แผ่นแหนบเสริม",
+    "part_name_en": "Auxiliary / Helper Leaf",
+    "applies_sedan": "-",
+    "applies_pickup": "✓",
+    "notes": "เพิ่มความสามารถบรรทุก แต่ทำให้แข็งกระด้างขึ้น"
+  },
+  {
+    "category": "4. ช่วงล่างหลัง (กระบะ/PPV)",
+    "part_name_th": "ปลอกแหนบ / บูชแหนบ",
+    "part_name_en": "Leaf Spring Bushing",
+    "applies_sedan": "-",
+    "applies_pickup": "✓",
+    "notes": "มีทั้งแบบยางและบูชทองเหลือง"
+  },
+  {
+    "category": "4. ช่วงล่างหลัง (กระบะ/PPV)",
+    "part_name_th": "สลักแหนบ",
+    "part_name_en": "Spring Pin / Shackle Pin",
+    "applies_sedan": "-",
+    "applies_pickup": "✓",
+    "notes": "ต้องอัดจาระบีสม่ำเสมอ ไม่งั้นสึกเร็ว"
+  },
+  {
+    "category": "4. ช่วงล่างหลัง (กระบะ/PPV)",
+    "part_name_th": "โตงเตงแหนบ (สาแหรก)",
+    "part_name_en": "Spring Shackle",
+    "applies_sedan": "-",
+    "applies_pickup": "✓",
+    "notes": "มีแบบ 2 สลักและ 3 สลัก แบบ 3 สลักรับน้ำหนักดีกว่า"
+  },
+  {
+    "category": "4. ช่วงล่างหลัง (กระบะ/PPV)",
+    "part_name_th": "ยูโบลท์ (สายรัดแหนบ)",
+    "part_name_en": "U-Bolt",
+    "applies_sedan": "-",
+    "applies_pickup": "✓",
+    "notes": "ควรเปลี่ยนใหม่เมื่อถอดแหนบ ห้ามใช้ซ้ำ"
+  },
+  {
+    "category": "4. ช่วงล่างหลัง (กระบะ/PPV)",
+    "part_name_th": "สะดือแหนบ",
+    "part_name_en": "Center Bolt",
+    "applies_sedan": "-",
+    "applies_pickup": "✓",
+    "notes": "ถ้าขาดแหนบจะเลื่อน ทำให้เพลาเบี้ยว"
+  },
+  {
+    "category": "4. ช่วงล่างหลัง (กระบะ/PPV)",
+    "part_name_th": "กิ๊บรัดแหนบ",
+    "part_name_en": "Spring Clip / Clamp",
+    "applies_sedan": "-",
+    "applies_pickup": "✓",
+    "notes": null
+  },
+  {
+    "category": "4. ช่วงล่างหลัง (กระบะ/PPV)",
+    "part_name_th": "ยางกันกระแทกหลัง (ยางตุ๊กตา)",
+    "part_name_en": "Rear Bump Stop",
+    "applies_sedan": "✓",
+    "applies_pickup": "✓",
+    "notes": null
+  },
+  {
+    "category": "4. ช่วงล่างหลัง (กระบะ/PPV)",
+    "part_name_th": "แขนยึดเพลาหลัง (คันบังคับ)",
+    "part_name_en": "Rear Trailing / Lateral Link",
+    "applies_sedan": "-",
+    "applies_pickup": "บางรุ่น",
+    "notes": "PPV คอยล์หลัง เช่น Fortuner, MU-X, Everest, Terra, Pajero Sport"
+  },
+  {
+    "category": "4. ช่วงล่างหลัง (กระบะ/PPV)",
+    "part_name_th": "แพนฮาร์ดร็อด (คันยึดขวาง)",
+    "part_name_en": "Panhard Rod / Lateral Rod",
+    "applies_sedan": "-",
+    "applies_pickup": "บางรุ่น",
+    "notes": "ใช้ในรถคอยล์หลังเพลาแข็ง"
+  },
+  {
+    "category": "4. ช่วงล่างหลัง (กระบะ/PPV)",
+    "part_name_th": "บูชแขนยึดเพลาหลัง",
+    "part_name_en": "Trailing Link Bushing",
+    "applies_sedan": "-",
+    "applies_pickup": "บางรุ่น",
+    "notes": null
+  },
+  {
+    "category": "5. ระบบล้อ / ดุม / ลูกปืน",
+    "part_name_th": "ลูกปืนล้อหน้า",
+    "part_name_en": "Front Wheel Bearing",
+    "applies_sedan": "✓",
+    "applies_pickup": "✓",
+    "notes": "เก๋งมักเป็นชุดสำเร็จ (Hub Unit) กระบะรุ่นเก่าเป็นลูกปืนเม็ดเรียวใน-นอก แยกชิ้น"
+  },
+  {
+    "category": "5. ระบบล้อ / ดุม / ลูกปืน",
+    "part_name_th": "ลูกปืนล้อหลัง",
+    "part_name_en": "Rear Wheel Bearing",
+    "applies_sedan": "✓",
+    "applies_pickup": "✓",
+    "notes": null
+  },
+  {
+    "category": "5. ระบบล้อ / ดุม / ลูกปืน",
+    "part_name_th": "ชุดดุมล้อพร้อมลูกปืน",
+    "part_name_en": "Hub Bearing Assembly / Hub Unit",
+    "applies_sedan": "✓",
+    "applies_pickup": "บางรุ่น",
+    "notes": "รถใหม่ส่วนใหญ่ต้องเปลี่ยนทั้งชุด แยกลูกปืนไม่ได้"
+  },
+  {
+    "category": "5. ระบบล้อ / ดุม / ลูกปืน",
+    "part_name_th": "ดุมล้อหน้า",
+    "part_name_en": "Front Wheel Hub",
+    "applies_sedan": "✓",
+    "applies_pickup": "✓",
+    "notes": null
+  },
+  {
+    "category": "5. ระบบล้อ / ดุม / ลูกปืน",
+    "part_name_th": "ดุมล้อหลัง",
+    "part_name_en": "Rear Wheel Hub",
+    "applies_sedan": "✓",
+    "applies_pickup": "✓",
+    "notes": null
+  },
+  {
+    "category": "5. ระบบล้อ / ดุม / ลูกปืน",
+    "part_name_th": "สตัดล้อ (น็อตล้อตัวผู้)",
+    "part_name_en": "Wheel Stud",
+    "applies_sedan": "✓",
+    "applies_pickup": "✓",
+    "notes": "ขนาดเกลียวต่างกันตามยี่ห้อ (M12x1.5 ญี่ปุ่น / M14x1.5 ยุโรป)"
+  },
+  {
+    "category": "5. ระบบล้อ / ดุม / ลูกปืน",
+    "part_name_th": "น็อตล้อ",
+    "part_name_en": "Wheel Nut / Lug Nut",
+    "applies_sedan": "✓",
+    "applies_pickup": "✓",
+    "notes": "ทรงหัวน็อตต่างกัน (กรวย/ทรงกลม/แหวนลอย) ใส่ผิดล้อหลวม"
+  },
+  {
+    "category": "5. ระบบล้อ / ดุม / ลูกปืน",
+    "part_name_th": "โบลท์ล้อ (แบบสกรู)",
+    "part_name_en": "Wheel Bolt",
+    "applies_sedan": "บางรุ่น",
+    "applies_pickup": "-",
+    "notes": "รถยุโรป (BMW, Mercedes, VW, Audi) ใช้แบบสกรูแทนสตัด"
+  },
+  {
+    "category": "5. ระบบล้อ / ดุม / ลูกปืน",
+    "part_name_th": "ซีลดุมล้อ",
+    "part_name_en": "Hub Oil Seal",
+    "applies_sedan": "บางรุ่น",
+    "applies_pickup": "✓",
+    "notes": null
+  },
+  {
+    "category": "5. ระบบล้อ / ดุม / ลูกปืน",
+    "part_name_th": "ฝาครอบดุมล้อ",
+    "part_name_en": "Hub Cap / Dust Cap",
+    "applies_sedan": "✓",
+    "applies_pickup": "✓",
+    "notes": null
+  },
+  {
+    "category": "5. ระบบล้อ / ดุม / ลูกปืน",
+    "part_name_th": "ล้อแม็ก",
+    "part_name_en": "Alloy Wheel",
+    "applies_sedan": "✓",
+    "applies_pickup": "✓",
+    "notes": "PCD และ Offset ต่างกันตามยี่ห้อ ต้องเช็คก่อนสลับ"
+  },
+  {
+    "category": "5. ระบบล้อ / ดุม / ลูกปืน",
+    "part_name_th": "ล้อกระทะ (เหล็ก)",
+    "part_name_en": "Steel Wheel",
+    "applies_sedan": "✓",
+    "applies_pickup": "✓",
+    "notes": null
+  },
+  {
+    "category": "5. ระบบล้อ / ดุม / ลูกปืน",
+    "part_name_th": "ยางรถยนต์",
+    "part_name_en": "Tire",
+    "applies_sedan": "✓",
+    "applies_pickup": "✓",
+    "notes": null
+  },
+  {
+    "category": "5. ระบบล้อ / ดุม / ลูกปืน",
+    "part_name_th": "จุ๊บลม",
+    "part_name_en": "Valve Stem",
+    "applies_sedan": "✓",
+    "applies_pickup": "✓",
+    "notes": null
+  },
+  {
+    "category": "5. ระบบล้อ / ดุม / ลูกปืน",
+    "part_name_th": "เซ็นเซอร์วัดลมยาง TPMS",
+    "part_name_en": "TPMS Sensor",
+    "applies_sedan": "บางรุ่น",
+    "applies_pickup": "บางรุ่น",
+    "notes": "รถใหม่/รถยุโรปมีเกือบทุกรุ่น ต้องรีเซ็ตค่าหลังเปลี่ยนยาง"
+  },
+  {
+    "category": "5. ระบบล้อ / ดุม / ลูกปืน",
+    "part_name_th": "ตะกั่วถ่วงล้อ",
+    "part_name_en": "Wheel Balance Weight",
+    "applies_sedan": "✓",
+    "applies_pickup": "✓",
+    "notes": "มีแบบตอกและแบบกาว ล้อแม็กใช้แบบกาว"
+  },
+  {
+    "category": "5. ระบบล้อ / ดุม / ลูกปืน",
+    "part_name_th": "แหวนรองล้อ (สเปเซอร์)",
+    "part_name_en": "Wheel Spacer / Hub Ring",
+    "applies_sedan": "บางรุ่น",
+    "applies_pickup": "บางรุ่น",
+    "notes": "ใช้เมื่อใส่ล้อต่างยี่ห้อ"
+  },
+  {
+    "category": "6. เพลา / เฟืองท้าย",
+    "part_name_th": "เพลาขับหน้า (ซ้าย/ขวา)",
+    "part_name_en": "Front Drive Shaft / CV Axle",
+    "applies_sedan": "✓",
+    "applies_pickup": "บางรุ่น",
+    "notes": "เก๋งขับหน้ามีทุกคัน กระบะมีเฉพาะรุ่น 4WD"
+  },
+  {
+    "category": "6. เพลา / เฟืองท้าย",
+    "part_name_th": "หัวเพลาด้านนอก",
+    "part_name_en": "Outer CV Joint",
+    "applies_sedan": "✓",
+    "applies_pickup": "บางรุ่น",
+    "notes": null
+  },
+  {
+    "category": "6. เพลา / เฟืองท้าย",
+    "part_name_th": "หัวเพลาด้านใน",
+    "part_name_en": "Inner CV Joint / Tripod",
+    "applies_sedan": "✓",
+    "applies_pickup": "บางรุ่น",
+    "notes": null
+  },
+  {
+    "category": "6. เพลา / เฟืองท้าย",
+    "part_name_th": "ยางหุ้มเพลาด้านนอก",
+    "part_name_en": "Outer CV Boot",
+    "applies_sedan": "✓",
+    "applies_pickup": "บางรุ่น",
+    "notes": "ถ้าขาดต้องรีบเปลี่ยน ไม่งั้นหัวเพลาพัง"
+  },
+  {
+    "category": "6. เพลา / เฟืองท้าย",
+    "part_name_th": "ยางหุ้มเพลาด้านใน",
+    "part_name_en": "Inner CV Boot",
+    "applies_sedan": "✓",
+    "applies_pickup": "บางรุ่น",
+    "notes": null
+  },
+  {
+    "category": "6. เพลา / เฟืองท้าย",
+    "part_name_th": "เพลาข้างหลัง",
+    "part_name_en": "Rear Axle Shaft",
+    "applies_sedan": "-",
+    "applies_pickup": "✓",
+    "notes": "รถขับหลังเพลาแข็ง"
+  },
+  {
+    "category": "6. เพลา / เฟืองท้าย",
+    "part_name_th": "ซีลเพลาข้าง",
+    "part_name_en": "Axle Oil Seal",
+    "applies_sedan": "บางรุ่น",
+    "applies_pickup": "✓",
+    "notes": null
+  },
+  {
+    "category": "6. เพลา / เฟืองท้าย",
+    "part_name_th": "เพลากลาง",
+    "part_name_en": "Propeller Shaft / Drive Shaft",
+    "applies_sedan": "-",
+    "applies_pickup": "✓",
+    "notes": "รถขับหลัง/4WD มีทุกคัน"
+  },
+  {
+    "category": "6. เพลา / เฟืองท้าย",
+    "part_name_th": "กากบาท (ยอยเพลากลาง)",
+    "part_name_en": "Universal Joint / U-Joint",
+    "applies_sedan": "-",
+    "applies_pickup": "✓",
+    "notes": "เสียแล้วรถสั่นตอนออกตัว/ถอนคันเร่ง"
+  },
+  {
+    "category": "6. เพลา / เฟืองท้าย",
+    "part_name_th": "ตุ๊กตาเพลากลาง",
+    "part_name_en": "Center Support Bearing",
+    "applies_sedan": "-",
+    "applies_pickup": "✓",
+    "notes": "ในเพลากลางแบบ 2 ท่อน"
+  },
+  {
+    "category": "6. เพลา / เฟืองท้าย",
+    "part_name_th": "เฟืองท้าย (ชุด)",
+    "part_name_en": "Rear Differential",
+    "applies_sedan": "-",
+    "applies_pickup": "✓",
+    "notes": null
+  },
+  {
+    "category": "6. เพลา / เฟืองท้าย",
+    "part_name_th": "ลูกปืนเฟืองท้าย",
+    "part_name_en": "Differential Bearing",
+    "applies_sedan": "-",
+    "applies_pickup": "✓",
+    "notes": null
+  },
+  {
+    "category": "6. เพลา / เฟืองท้าย",
+    "part_name_th": "ซีลเฟืองท้าย",
+    "part_name_en": "Differential Pinion Seal",
+    "applies_sedan": "-",
+    "applies_pickup": "✓",
+    "notes": null
+  },
+  {
+    "category": "6. เพลา / เฟืองท้าย",
+    "part_name_th": "เฟืองท้ายหน้า",
+    "part_name_en": "Front Differential",
+    "applies_sedan": "-",
+    "applies_pickup": "บางรุ่น",
+    "notes": "เฉพาะรุ่น 4WD"
+  },
+  {
+    "category": "6. เพลา / เฟืองท้าย",
+    "part_name_th": "ฟรีวีลฮับ",
+    "part_name_en": "Free-Wheel Hub / Locking Hub",
+    "applies_sedan": "-",
+    "applies_pickup": "บางรุ่น",
+    "notes": "กระบะ 4WD รุ่นเก่า มีทั้งแบบมือหมุนและอัตโนมัติ"
+  },
+  {
+    "category": "6. เพลา / เฟืองท้าย",
+    "part_name_th": "กล่องทรานสเฟอร์",
+    "part_name_en": "Transfer Case",
+    "applies_sedan": "-",
+    "applies_pickup": "บางรุ่น",
+    "notes": "เฉพาะรุ่น 4WD"
+  },
+  {
+    "category": "7. ระบบพวงมาลัย",
+    "part_name_th": "แร็คพวงมาลัย (ทั้งชุด)",
+    "part_name_en": "Steering Rack / Rack & Pinion",
+    "applies_sedan": "✓",
+    "applies_pickup": "✓",
+    "notes": "มีทั้งแบบไฮดรอลิกและไฟฟ้า (EPS)"
+  },
+  {
+    "category": "7. ระบบพวงมาลัย",
+    "part_name_th": "ลูกหมากแร็ค (ปลายแร็คใน)",
+    "part_name_en": "Inner Tie Rod / Rack End",
+    "applies_sedan": "✓",
+    "applies_pickup": "✓",
+    "notes": "เสียแล้วพวงมาลัยหลวม มีระยะฟรี"
+  },
+  {
+    "category": "7. ระบบพวงมาลัย",
+    "part_name_th": "ลูกหมากคันชัก (ปลายแร็คนอก)",
+    "part_name_en": "Outer Tie Rod End",
+    "applies_sedan": "✓",
+    "applies_pickup": "✓",
+    "notes": "อะไหล่เสียบ่อย มีผลกับศูนย์ล้อโดยตรง"
+  },
+  {
+    "category": "7. ระบบพวงมาลัย",
+    "part_name_th": "ยางกันฝุ่นแร็ค",
+    "part_name_en": "Steering Rack Boot",
+    "applies_sedan": "✓",
+    "applies_pickup": "✓",
+    "notes": "ถ้าขาดฝุ่น/น้ำเข้าแร็คพัง"
+  },
+  {
+    "category": "7. ระบบพวงมาลัย",
+    "part_name_th": "คันส่ง (คันชักกลาง)",
+    "part_name_en": "Drag Link / Center Link",
+    "applies_sedan": "-",
+    "applies_pickup": "บางรุ่น",
+    "notes": "กระบะรุ่นเก่าที่ใช้กระปุกพวงมาลัย"
+  },
+  {
+    "category": "7. ระบบพวงมาลัย",
+    "part_name_th": "ลูกหมากคันส่งกลาง",
+    "part_name_en": "Idler Arm",
+    "applies_sedan": "-",
+    "applies_pickup": "บางรุ่น",
+    "notes": "กระบะ/รถตู้รุ่นเก่า"
+  },
+  {
+    "category": "7. ระบบพวงมาลัย",
+    "part_name_th": "ลูกหมากพิทแมนอาร์ม",
+    "part_name_en": "Pitman Arm",
+    "applies_sedan": "-",
+    "applies_pickup": "บางรุ่น",
+    "notes": null
+  },
+  {
+    "category": "7. ระบบพวงมาลัย",
+    "part_name_th": "กระปุกพวงมาลัย",
+    "part_name_en": "Steering Gearbox (Recirculating Ball)",
+    "applies_sedan": "-",
+    "applies_pickup": "บางรุ่น",
+    "notes": "กระบะรุ่นเก่า เช่น Tiger, Vigo รุ่นแรก, D-Max เจน 1"
+  },
+  {
+    "category": "7. ระบบพวงมาลัย",
+    "part_name_th": "ปั๊มพาวเวอร์",
+    "part_name_en": "Power Steering Pump",
+    "applies_sedan": "บางรุ่น",
+    "applies_pickup": "✓",
+    "notes": "รถใหม่หลายรุ่นเปลี่ยนเป็น EPS ไฟฟ้าแล้ว ไม่มีปั๊ม"
+  },
+  {
+    "category": "7. ระบบพวงมาลัย",
+    "part_name_th": "มอเตอร์ EPS",
+    "part_name_en": "Electric Power Steering Motor",
+    "applies_sedan": "✓",
+    "applies_pickup": "บางรุ่น",
+    "notes": "รถใหม่เกือบทุกรุ่น ซ่อมยาก มักต้องเปลี่ยนทั้งชุด"
+  },
+  {
+    "category": "7. ระบบพวงมาลัย",
+    "part_name_th": "สายพาวเวอร์ (ท่อแรงดันสูง/ต่ำ)",
+    "part_name_en": "Power Steering Hose",
+    "applies_sedan": "บางรุ่น",
+    "applies_pickup": "✓",
+    "notes": null
+  },
+  {
+    "category": "7. ระบบพวงมาลัย",
+    "part_name_th": "กระปุกน้ำมันพาวเวอร์",
+    "part_name_en": "Power Steering Reservoir",
+    "applies_sedan": "บางรุ่น",
+    "applies_pickup": "✓",
+    "notes": null
+  },
+  {
+    "category": "7. ระบบพวงมาลัย",
+    "part_name_th": "คอพวงมาลัย",
+    "part_name_en": "Steering Column",
+    "applies_sedan": "✓",
+    "applies_pickup": "✓",
+    "notes": null
+  },
+  {
+    "category": "7. ระบบพวงมาลัย",
+    "part_name_th": "ยอยพวงมาลัย",
+    "part_name_en": "Steering U-Joint / Universal Joint",
+    "applies_sedan": "✓",
+    "applies_pickup": "✓",
+    "notes": "เสียแล้วพวงมาลัยมีเสียงและสะดุด"
+  },
+  {
+    "category": "8. ระบบเบรก (ในระบบล้อ)",
+    "part_name_th": "จานเบรกหน้า",
+    "part_name_en": "Front Brake Disc / Rotor",
+    "applies_sedan": "✓",
+    "applies_pickup": "✓",
+    "notes": "มีทั้งแบบตัน แบบมีครีบระบายความร้อน และเจาะรู/เซาะร่อง"
+  },
+  {
+    "category": "8. ระบบเบรก (ในระบบล้อ)",
+    "part_name_th": "จานเบรกหลัง",
+    "part_name_en": "Rear Brake Disc / Rotor",
+    "applies_sedan": "✓",
+    "applies_pickup": "บางรุ่น",
+    "notes": "กระบะหลายรุ่นยังใช้ดรัมเบรกหลัง"
+  },
+  {
+    "category": "8. ระบบเบรก (ในระบบล้อ)",
+    "part_name_th": "ผ้าเบรกหน้า",
+    "part_name_en": "Front Brake Pad",
+    "applies_sedan": "✓",
+    "applies_pickup": "✓",
+    "notes": null
+  },
+  {
+    "category": "8. ระบบเบรก (ในระบบล้อ)",
+    "part_name_th": "ผ้าเบรกหลัง",
+    "part_name_en": "Rear Brake Pad",
+    "applies_sedan": "✓",
+    "applies_pickup": "บางรุ่น",
+    "notes": null
+  },
+  {
+    "category": "8. ระบบเบรก (ในระบบล้อ)",
+    "part_name_th": "คาลิปเปอร์เบรกหน้า",
+    "part_name_en": "Front Brake Caliper",
+    "applies_sedan": "✓",
+    "applies_pickup": "✓",
+    "notes": "รุ่นสปอร์ตบางรุ่นใช้ Brembo หลายลูกสูบ"
+  },
+  {
+    "category": "8. ระบบเบรก (ในระบบล้อ)",
+    "part_name_th": "คาลิปเปอร์เบรกหลัง",
+    "part_name_en": "Rear Brake Caliper",
+    "applies_sedan": "✓",
+    "applies_pickup": "บางรุ่น",
+    "notes": null
+  },
+  {
+    "category": "8. ระบบเบรก (ในระบบล้อ)",
+    "part_name_th": "ชุดซ่อมคาลิปเปอร์",
+    "part_name_en": "Caliper Repair Kit",
+    "applies_sedan": "✓",
+    "applies_pickup": "✓",
+    "notes": "ลูกยางกันฝุ่น + ซีลลูกสูบ"
+  },
+  {
+    "category": "8. ระบบเบรก (ในระบบล้อ)",
+    "part_name_th": "สลักคาลิปเปอร์ (ปิ้นเบรก)",
+    "part_name_en": "Caliper Slide Pin",
+    "applies_sedan": "✓",
+    "applies_pickup": "✓",
+    "notes": "ต้องอัดจาระบีทนความร้อน ถ้าฝืดผ้าเบรกกินไม่เท่ากัน"
+  },
+  {
+    "category": "8. ระบบเบรก (ในระบบล้อ)",
+    "part_name_th": "จานดุม / ดรัมเบรกหลัง",
+    "part_name_en": "Rear Brake Drum",
+    "applies_sedan": "-",
+    "applies_pickup": "✓",
+    "notes": "กระบะส่วนใหญ่ยังใช้ดรัมหลัง"
+  },
+  {
+    "category": "8. ระบบเบรก (ในระบบล้อ)",
+    "part_name_th": "ก้ามเบรก (ผ้าเบรกดรัม)",
+    "part_name_en": "Brake Shoe",
+    "applies_sedan": "บางรุ่น",
+    "applies_pickup": "✓",
+    "notes": null
+  },
+  {
+    "category": "8. ระบบเบรก (ในระบบล้อ)",
+    "part_name_th": "กระบอกเบรกล้อหลัง",
+    "part_name_en": "Wheel Cylinder",
+    "applies_sedan": "บางรุ่น",
+    "applies_pickup": "✓",
+    "notes": null
+  },
+  {
+    "category": "8. ระบบเบรก (ในระบบล้อ)",
+    "part_name_th": "ชุดสปริงก้ามเบรก",
+    "part_name_en": "Brake Shoe Spring Kit",
+    "applies_sedan": "บางรุ่น",
+    "applies_pickup": "✓",
+    "notes": null
+  },
+  {
+    "category": "8. ระบบเบรก (ในระบบล้อ)",
+    "part_name_th": "สายอ่อนเบรก",
+    "part_name_en": "Brake Hose",
+    "applies_sedan": "✓",
+    "applies_pickup": "✓",
+    "notes": "ควรเปลี่ยนทุก 5-7 ปี เสื่อมสภาพตามอายุ"
+  },
+  {
+    "category": "8. ระบบเบรก (ในระบบล้อ)",
+    "part_name_th": "เซ็นเซอร์ ABS",
+    "part_name_en": "ABS Wheel Speed Sensor",
+    "applies_sedan": "✓",
+    "applies_pickup": "✓",
+    "notes": "อยู่ที่ดุมล้อ เสียแล้วไฟ ABS ขึ้น"
+  },
+  {
+    "category": "8. ระบบเบรก (ในระบบล้อ)",
+    "part_name_th": "วงแหวน ABS (เฟือง ABS)",
+    "part_name_en": "ABS Tone Ring / Reluctor Ring",
+    "applies_sedan": "✓",
+    "applies_pickup": "✓",
+    "notes": "บางรุ่นฝังในลูกปืนล้อ ต้องเปลี่ยนทั้งชุด"
+  },
+  {
+    "category": "8. ระบบเบรก (ในระบบล้อ)",
+    "part_name_th": "แม่ปั๊มเบรก",
+    "part_name_en": "Brake Master Cylinder",
+    "applies_sedan": "✓",
+    "applies_pickup": "✓",
+    "notes": null
+  },
+  {
+    "category": "8. ระบบเบรก (ในระบบล้อ)",
+    "part_name_th": "หม้อลมเบรก",
+    "part_name_en": "Brake Booster",
+    "applies_sedan": "✓",
+    "applies_pickup": "✓",
+    "notes": null
+  },
+  {
+    "category": "8. ระบบเบรก (ในระบบล้อ)",
+    "part_name_th": "สายเบรกมือ",
+    "part_name_en": "Handbrake / Parking Brake Cable",
+    "applies_sedan": "✓",
+    "applies_pickup": "✓",
+    "notes": "รถใหม่หลายรุ่นเป็นเบรกมือไฟฟ้า (EPB) ไม่มีสาย"
+  },
+  {
+    "category": "8. ระบบเบรก (ในระบบล้อ)",
+    "part_name_th": "มอเตอร์เบรกมือไฟฟ้า",
+    "part_name_en": "Electric Parking Brake (EPB) Motor",
+    "applies_sedan": "บางรุ่น",
+    "applies_pickup": "บางรุ่น",
+    "notes": "รถใหม่ ต้องใช้เครื่องมือสแกนถอย/ตั้งลูกสูบ"
+  },
+  {
+    "category": "9. ช่วงล่างพิเศษ (ถุงลม/ไฟฟ้า)",
+    "part_name_th": "ถุงลมช่วงล่าง (สปริงถุงลม)",
+    "part_name_en": "Air Spring / Air Bag",
+    "applies_sedan": "บางรุ่น",
+    "applies_pickup": "บางรุ่น",
+    "notes": "BMW X5/X7, Mercedes GLE/GLS/S-Class, Range Rover, Audi Q7, Porsche Cayenne"
+  },
+  {
+    "category": "9. ช่วงล่างพิเศษ (ถุงลม/ไฟฟ้า)",
+    "part_name_th": "คอมเพรสเซอร์ถุงลม",
+    "part_name_en": "Air Suspension Compressor",
+    "applies_sedan": "บางรุ่น",
+    "applies_pickup": "บางรุ่น",
+    "notes": "อะไหล่ราคาสูง เสียบ่อยเมื่อถุงลมรั่ว (ทำงานหนักเกิน)"
+  },
+  {
+    "category": "9. ช่วงล่างพิเศษ (ถุงลม/ไฟฟ้า)",
+    "part_name_th": "วาล์วบล็อกถุงลม",
+    "part_name_en": "Air Suspension Valve Block",
+    "applies_sedan": "บางรุ่น",
+    "applies_pickup": "บางรุ่น",
+    "notes": null
+  },
+  {
+    "category": "9. ช่วงล่างพิเศษ (ถุงลม/ไฟฟ้า)",
+    "part_name_th": "ถังพักลม",
+    "part_name_en": "Air Reservoir Tank",
+    "applies_sedan": "บางรุ่น",
+    "applies_pickup": "บางรุ่น",
+    "notes": null
+  },
+  {
+    "category": "9. ช่วงล่างพิเศษ (ถุงลม/ไฟฟ้า)",
+    "part_name_th": "เซ็นเซอร์ระดับความสูงรถ",
+    "part_name_en": "Ride Height Sensor",
+    "applies_sedan": "บางรุ่น",
+    "applies_pickup": "บางรุ่น",
+    "notes": "ต้องคาลิเบรตหลังเปลี่ยน"
+  },
+  {
+    "category": "9. ช่วงล่างพิเศษ (ถุงลม/ไฟฟ้า)",
+    "part_name_th": "โช้คอัพปรับความหนืดไฟฟ้า",
+    "part_name_en": "Adaptive / Electronic Damper",
+    "applies_sedan": "บางรุ่น",
+    "applies_pickup": "บางรุ่น",
+    "notes": "BMW (Adaptive M), Mercedes (Airmatic), Ford Ranger Raptor (FOX Live Valve)"
+  },
+  {
+    "category": "9. ช่วงล่างพิเศษ (ถุงลม/ไฟฟ้า)",
+    "part_name_th": "โซลินอยด์วาล์วโช้ค",
+    "part_name_en": "Damper Solenoid Valve",
+    "applies_sedan": "บางรุ่น",
+    "applies_pickup": "บางรุ่น",
+    "notes": null
+  },
+  {
+    "category": "9. ช่วงล่างพิเศษ (ถุงลม/ไฟฟ้า)",
+    "part_name_th": "กล่องควบคุมช่วงล่าง",
+    "part_name_en": "Suspension Control Module / ECU",
+    "applies_sedan": "บางรุ่น",
+    "applies_pickup": "บางรุ่น",
+    "notes": "ต้องเขียนโปรแกรมหลังเปลี่ยน"
+  },
+  {
+    "category": "9. ช่วงล่างพิเศษ (ถุงลม/ไฟฟ้า)",
+    "part_name_th": "เหล็กกันโคลงไฟฟ้า",
+    "part_name_en": "Active Anti-Roll Bar",
+    "applies_sedan": "บางรุ่น",
+    "applies_pickup": "-",
+    "notes": "รถหรูระดับบน เช่น Mercedes S-Class, BMW ซีรีส์ 7, Range Rover"
+  },
+  {
+    "category": "9. ช่วงล่างพิเศษ (ถุงลม/ไฟฟ้า)",
+    "part_name_th": "สายไฟชุดช่วงล่าง",
+    "part_name_en": "Suspension Wiring Harness",
+    "applies_sedan": "บางรุ่น",
+    "applies_pickup": "บางรุ่น",
+    "notes": null
+  }
+]

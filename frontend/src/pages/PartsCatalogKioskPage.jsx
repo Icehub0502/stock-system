@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import client from '../api/client';
 import champpowerLogo from '../image/champpower-logo.jpg';
 import { formatMoney } from '../utils/format';
@@ -54,6 +55,10 @@ function CarIcon() {
 }
 
 export default function PartsCatalogKioskPage() {
+  // หน้านี้ซ่อน NavBar/BottomNav ทั้งคู่ (เต็มจอแบบแอป — ดู App.jsx isKiosk) จึง
+  // ต้องมีปุ่มกลับหน้าหลักในตัวเอง ไม่งั้นออกจากหน้านี้ไม่ได้เลยถ้าไม่กดปุ่ม back
+  // ของเบราว์เซอร์ (ซึ่งบนแท็บเล็ตคีออสมักไม่มีให้กดด้วย)
+  const navigate = useNavigate();
   // step ปัจจุบันอนุมานจากค่าที่เลือกไว้ ไม่เก็บเป็น state แยก กันสองค่าหลุดจากกัน
   const [brands, setBrands] = useState([]);
   const [models, setModels] = useState([]);
@@ -134,7 +139,10 @@ export default function PartsCatalogKioskPage() {
     }
   };
 
+  // ห้ามเลือกอะไหล่ที่ยังไม่ตั้งราคาจริง (needs_price = แถวที่สร้างอัตโนมัติไว้
+  // ล่วงหน้าให้ทุกรุ่นรถ ราคาเริ่มต้น 0) — กันเสนอราคา 0 บาทให้ลูกค้าจริงโดยไม่ตั้งใจ
   const togglePart = (part) => {
+    if (part.needs_price) return;
     setSelectedParts((prev) => {
       const key = String(part.id);
       if (prev[key]) {
@@ -194,6 +202,9 @@ export default function PartsCatalogKioskPage() {
     <div className="kiosk">
       <header className="kiosk-header">
         <div className="kiosk-header-left">
+          <button type="button" className="kiosk-home" onClick={() => navigate('/')} aria-label="กลับหน้าหลัก">
+            🏠
+          </button>
           {step > 1 && (
             <button type="button" className="kiosk-back" onClick={goBack} aria-label="ย้อนกลับ">
               ‹
@@ -266,7 +277,7 @@ export default function PartsCatalogKioskPage() {
               return (
                 <article
                   key={part.id}
-                  className={`kiosk-part ${selected ? 'kiosk-part-selected' : ''}`}
+                  className={`kiosk-part ${selected ? 'kiosk-part-selected' : ''} ${part.needs_price ? 'kiosk-part-needs-price' : ''}`}
                   onClick={() => togglePart(part)}
                   role="button"
                   tabIndex={0}
@@ -283,7 +294,11 @@ export default function PartsCatalogKioskPage() {
                     <div className="kiosk-part-name">{part.part_name}</div>
                     {part.description && <div className="kiosk-part-desc">{part.description}</div>}
                   </div>
-                  <div className="kiosk-part-price">฿{formatMoney(part.price)}</div>
+                  {part.needs_price ? (
+                    <div className="kiosk-part-needs-price-label">ยังไม่ตั้งราคา</div>
+                  ) : (
+                    <div className="kiosk-part-price">฿{formatMoney(part.price)}</div>
+                  )}
 
                   {selected && (
                     <div className="kiosk-part-qty" onClick={(e) => e.stopPropagation()}>

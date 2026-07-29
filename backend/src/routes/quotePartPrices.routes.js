@@ -42,7 +42,7 @@ router.get('/parts', async (req, res) => {
   if (!brand || !model) return res.status(400).json({ error: 'กรุณาระบุยี่ห้อและรุ่นรถ' });
   try {
     const [rows] = await pool.execute(
-      `SELECT id, brand, model, part_name, description, price, image_data
+      `SELECT id, brand, model, part_name, description, price, image_data, needs_price
        FROM quote_part_prices
        WHERE is_active = 1 AND brand = ? AND model = ?
        ORDER BY part_name ASC`,
@@ -109,9 +109,12 @@ router.put('/:id', async (req, res) => {
     return res.status(400).json({ error: 'กรุณากรอกยี่ห้อ รุ่นรถ และชื่ออะไหล่ให้ครบถ้วน' });
   }
   try {
+    // แก้ไข/บันทึกผ่านหน้านี้ = ออฟฟิศตั้งใจยืนยันราคาแล้ว (ไม่ว่าจะเป็นแถวที่พิมพ์
+    // เองแต่แรก หรือแถวที่ import_quote_parts_for_all_models.js สร้างราคา 0 ให้ไว้
+    // ก่อน) เคลียร์ needs_price ทิ้งเสมอ กันค้างสถานะ "ยังไม่ตั้งราคา" ทั้งที่แก้แล้ว
     const [result] = await pool.execute(
       `UPDATE quote_part_prices
-       SET brand = ?, model = ?, part_name = ?, description = ?, price = ?, image_data = ?, is_active = ?
+       SET brand = ?, model = ?, part_name = ?, description = ?, price = ?, image_data = ?, is_active = ?, needs_price = 0
        WHERE id = ?`,
       [
         brand.trim(),

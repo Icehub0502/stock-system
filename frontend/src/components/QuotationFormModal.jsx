@@ -838,14 +838,22 @@ export default function QuotationFormModal({ quotation, onClose, onSuccess, onDe
                           <div className="qp-picker-card-body">
                             <div className="qp-picker-card-name">{part.part_name}</div>
                             {part.description && <div className="qp-picker-card-desc">{part.description}</div>}
-                            <div className="qp-picker-card-price">฿{formatMoney(part.price)}</div>
+                            {part.needs_price ? (
+                              <div className="qp-picker-card-needs-price">ยังไม่ตั้งราคา</div>
+                            ) : (
+                              <div className="qp-picker-card-price">฿{formatMoney(part.price)}</div>
+                            )}
                           </div>
+                          {/* แถวที่ยังไม่ตั้งราคาจริง (needs_price) ห้ามเพิ่มเข้ารายการ —
+                              กันเสนอราคา 0 บาทให้ลูกค้าจริงโดยไม่ตั้งใจ ไปตั้งราคาที่
+                              เมนู "ราคาอะไหล่ตามรุ่นรถ" ก่อน */}
                           <button
                             type="button"
                             className="btn btn-primary qp-picker-card-add"
                             onClick={() => addPartCardToItems(part)}
+                            disabled={part.needs_price}
                           >
-                            + เพิ่มรายการ
+                            {part.needs_price ? 'ยังไม่มีราคา' : '+ เพิ่มรายการ'}
                           </button>
                         </div>
                       ))}

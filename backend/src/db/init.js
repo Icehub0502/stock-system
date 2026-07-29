@@ -513,6 +513,24 @@ async function initDatabase() {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
 
+  // uniq_quote_part กัน import_quote_parts_for_all_models.js สร้างแถวซ้ำถ้ารันซ้ำ
+  // (ใช้ INSERT IGNORE ยึดคีย์นี้) — ปลอดภัยที่จะรันซ้ำทุกครั้งที่บูตแบบ
+  // ignoreIfAlreadyApplied เพราะถ้ามีข้อมูลซ้ำอยู่ก่อนแล้ว (ไม่ควรมี แต่กันไว้)
+  // จะได้ error คนละแบบ (ER_DUP_ENTRY) ซึ่งไม่ควรเงียบไว้ ต้องแก้ข้อมูลก่อน
+  await conn.query(`
+    ALTER TABLE quote_part_prices
+    ADD UNIQUE KEY uniq_quote_part (brand, model, part_name)
+  `).catch(ignoreIfAlreadyApplied);
+
+  // needs_price: แถวที่ import_quote_parts_for_all_models.js สร้างให้อัตโนมัติ
+  // ทุกรุ่นรถ (ราคาเริ่มต้น 0 เพราะไม่มีราคาจริงในไฟล์ต้นทาง) ใช้ flag นี้เตือน
+  // หน้าคีออส/หน้าจัดการไม่ให้เผลอเสนอราคา 0 บาทให้ลูกค้าจริงก่อนแก้ราคา — แถวที่
+  // ออฟฟิศพิมพ์ราคาเองจากหน้าเว็บ (POST /quote-parts ปกติ) จะไม่ติด flag นี้
+  await conn.query(`
+    ALTER TABLE quote_part_prices
+    ADD COLUMN needs_price TINYINT(1) NOT NULL DEFAULT 0
+  `).catch(ignoreIfAlreadyApplied);
+
   // แคตตาล็อกอ้างอิงยี่ห้อ+รุ่นรถมาตรฐาน (นำเข้าจากไฟล์ Excel ที่เจ้าของร้าน
   // เตรียมมา — ดู backend/scripts/import_vehicle_models.js) ใช้เป็นตัวเลือก
   // ยี่ห้อ/รุ่นในหน้าเสนอราคา (ทั้งตอนเลือกยี่ห้อ→รุ่นในหน้าคีออส และตอนกรอกราคา
