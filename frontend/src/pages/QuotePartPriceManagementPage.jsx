@@ -14,6 +14,27 @@ export default function QuotePartPriceManagementPage() {
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(emptyForm);
   const [imageBusy, setImageBusy] = useState(false);
+  // ยี่ห้อ/รุ่นรถให้เลือกจากแคตตาล็อกอ้างอิง (ตาราง vehicle_models ที่นำเข้าจาก
+  // Excel) แทนการพิมพ์เอง กันสะกดไม่ตรงกับที่หน้าคีออส (/catalog) ใช้ค้นหา ซึ่ง
+  // จะทำให้ราคาที่กรอกไว้หาไม่เจอเงียบๆ
+  const [brandOptions, setBrandOptions] = useState([]);
+  const [modelOptions, setModelOptions] = useState([]);
+
+  useEffect(() => {
+    client.get('/vehicle-models/brands')
+      .then((res) => setBrandOptions(res.data.data || []))
+      .catch((err) => console.error('Error loading vehicle brands:', err));
+  }, []);
+
+  useEffect(() => {
+    if (!form.brand) {
+      setModelOptions([]);
+      return;
+    }
+    client.get('/vehicle-models/models', { params: { brand: form.brand } })
+      .then((res) => setModelOptions(res.data.data || []))
+      .catch((err) => console.error('Error loading vehicle models:', err));
+  }, [form.brand]);
 
   const fetchParts = async () => {
     try {
@@ -177,23 +198,38 @@ export default function QuotePartPriceManagementPage() {
             <form onSubmit={saveForm} className="modal-form">
               <div className="form-group">
                 <label>ยี่ห้อรถ</label>
-                <input
-                  type="text"
+                <select
                   value={form.brand}
-                  onChange={(e) => setForm({ ...form, brand: e.target.value })}
-                  placeholder="เช่น Honda"
+                  onChange={(e) => setForm({ ...form, brand: e.target.value, model: '' })}
                   required
-                />
+                >
+                  <option value="">-- เลือกยี่ห้อ --</option>
+                  {/* ค่าเดิมของรายการที่กำลังแก้ไข อาจไม่อยู่ในแคตตาล็อก (เช่น
+                      ยี่ห้อสะกดเองไว้ก่อนมีแคตตาล็อกนี้) — แทรกไว้กันหาย */}
+                  {form.brand && !brandOptions.includes(form.brand) && (
+                    <option value={form.brand}>{form.brand}</option>
+                  )}
+                  {brandOptions.map((b) => (
+                    <option key={b} value={b}>{b}</option>
+                  ))}
+                </select>
               </div>
               <div className="form-group">
                 <label>รุ่นรถ</label>
-                <input
-                  type="text"
+                <select
                   value={form.model}
                   onChange={(e) => setForm({ ...form, model: e.target.value })}
-                  placeholder="เช่น BRIO"
+                  disabled={!form.brand}
                   required
-                />
+                >
+                  <option value="">-- เลือกรุ่น --</option>
+                  {form.model && !modelOptions.some((m) => m.label === form.model) && (
+                    <option value={form.model}>{form.model}</option>
+                  )}
+                  {modelOptions.map((m) => (
+                    <option key={m.label} value={m.label}>{m.label}</option>
+                  ))}
+                </select>
               </div>
               <div className="form-group">
                 <label>ชื่ออะไหล่</label>

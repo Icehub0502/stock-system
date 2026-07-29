@@ -513,6 +513,25 @@ async function initDatabase() {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
 
+  // แคตตาล็อกอ้างอิงยี่ห้อ+รุ่นรถมาตรฐาน (นำเข้าจากไฟล์ Excel ที่เจ้าของร้าน
+  // เตรียมมา — ดู backend/scripts/import_vehicle_models.js) ใช้เป็นตัวเลือก
+  // ยี่ห้อ/รุ่นในหน้าเสนอราคา (ทั้งตอนเลือกยี่ห้อ→รุ่นในหน้าคีออส และตอนกรอกราคา
+  // อะไหล่ในหน้าจัดการ) แทนการพิมพ์เอง กันข้อความยี่ห้อ/รุ่นสะกดไม่ตรงกันระหว่าง
+  // สองหน้า ซึ่งจะทำให้ค้นหาราคาอะไหล่ไม่เจอ — ตารางนี้เป็นข้อมูลอ้างอิงล้วนๆ
+  // ไม่ผูก FK กับ quote_part_prices (ซึ่งเก็บ brand/model เป็น snapshot ข้อความ
+  // ธรรมดา ไม่ใช่ FK) เพราะราคาที่กรอกไปแล้วต้องไม่หายไปแม้จะแก้/ลบรายการอ้างอิงนี้
+  await conn.query(`
+    CREATE TABLE IF NOT EXISTS vehicle_models (
+      id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+      brand VARCHAR(100) NOT NULL,
+      model VARCHAR(150) NOT NULL,
+      year_range VARCHAR(50) DEFAULT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE KEY uniq_vehicle_model (brand, model, year_range),
+      INDEX idx_vehicle_model_brand (brand)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
   // staff_signature/staff_name: ลายเซ็นฝั่ง "ผู้เสนอราคา" (พนักงาน) คู่กับ
   // customer_signature ที่มีอยู่แล้ว (ลายเซ็นลูกค้า) — เก็บเป็น base64 PNG
   // data URI แบบเดียวกัน วาดสดผ่าน SignatureModal ตัวเดิม

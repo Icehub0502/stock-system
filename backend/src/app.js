@@ -55,6 +55,7 @@ const warrantiesRoutes = require('./routes/warranties.routes');
 const repairNoticesRoutes = require('./routes/repairNotices.routes');
 const lineWebhookRoutes = require('./routes/lineWebhook.routes');
 const quotePartPricesRoutes = require('./routes/quotePartPrices.routes');
+const vehicleModelsRoutes = require('./routes/vehicleModels.routes');
 
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 const FRONTEND_DIST = path.join(__dirname, '..', '..', 'frontend', 'dist');
@@ -143,6 +144,7 @@ function createApp() {
   app.use('/api/repair-notices', repairNoticesRoutes);
   app.use('/api/line', lineWebhookRoutes);
   app.use('/api/quote-parts', quotePartPricesRoutes);
+  app.use('/api/vehicle-models', vehicleModelsRoutes);
 
   app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
   app.get('/api/landing-images', (req, res) => {

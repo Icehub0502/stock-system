@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import client from '../api/client';
 import champpowerLogo from '../image/champpower-logo.jpg';
 import { formatMoney } from '../utils/format';
-import { CAR_BRANDS, brandLogoSlug } from '../utils/carBrands';
+import { brandLogoSlug } from '../utils/carBrands';
 import QuotationFormModal from '../components/QuotationFormModal';
 
 // สีประจำแท็บยี่ห้อ — ใช้เป็น fallback เมื่อยังไม่มีไฟล์โลโก้จริงของยี่ห้อนั้น
@@ -55,11 +55,16 @@ function CarIcon() {
 
 export default function PartsCatalogKioskPage() {
   // step ปัจจุบันอนุมานจากค่าที่เลือกไว้ ไม่เก็บเป็น state แยก กันสองค่าหลุดจากกัน
+  const [brands, setBrands] = useState([]);
   const [models, setModels] = useState([]);
   const [parts, setParts] = useState([]);
   const [brand, setBrand] = useState('');
   const [model, setModel] = useState('');
-  const [loading, setLoading] = useState(false);
+  // ชื่อรุ่นล้วนๆ ไม่มีช่วงปีต่อท้าย — เก็บแยกจาก `model` (ซึ่งเป็น label รวมปี
+  // ใช้ค้นราคาอะไหล่) เพราะตอนส่งต่อไปตั้งค่ารถของลูกค้าในใบเสนอราคา ควรได้แค่
+  // ชื่อรุ่นเฉยๆ (เช่น "BRIO") ไม่ใช่ทั้งก้อน "BRIO (2011-2018)"
+  const [modelPlain, setModelPlain] = useState('');
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   // ตะกร้าที่เซลติ๊กเลือกไว้ — เก็บตาม part.id กันเลือกซ้ำเพิ่มเป็นบรรทัดใหม่
   // (ติ๊กซ้ำ = ปรับจำนวนแทน) คีย์ด้วย string เพราะมาจาก part.id ตัวเลขจาก DB
@@ -67,11 +72,19 @@ export default function PartsCatalogKioskPage() {
   const [showQuoteForm, setShowQuoteForm] = useState(false);
   const [justCreated, setJustCreated] = useState(false);
 
-  // หน้านี้แสดงยี่ห้อรถทั้งหมดทันทีเสมอ (รายการมาตรฐานเดียวกับที่ใช้กรอกยี่ห้อ
-  // รถลูกค้าทั้งระบบ — ดู utils/carBrands.js) ไม่ต้องรอ /quote-parts/brands
-  // ตอบกลับก่อนถึงจะขึ้น — ถ้ายี่ห้อไหนยังไม่มีรุ่น/ราคาเลย ขั้นถัดไปจะขึ้นข้อความ
-  // แจ้งเฉยๆ ไม่ error
-  const brands = CAR_BRANDS;
+  // รายชื่อยี่ห้อรถทั้งหมด — มาจากแคตตาล็อกอ้างอิงยี่ห้อ+รุ่นรถที่นำเข้าไว้
+  // (backend/scripts/import_vehicle_models.js, ตาราง vehicle_models) แทนการพึ่ง
+  // /quote-parts/brands ซึ่งจะโชว์เฉพาะยี่ห้อที่มีคนกรอกราคาอะไหล่ไปแล้วเท่านั้น —
+  // ต้องเลือกยี่ห้อ/รุ่นได้ล่วงหน้าไม่ว่าจะมีราคาแล้วหรือยัง
+  useEffect(() => {
+    client.get('/vehicle-models/brands')
+      .then((res) => setBrands(res.data.data || []))
+      .catch((err) => {
+        console.error('Error loading brands:', err);
+        setError('โหลดรายการยี่ห้อไม่สำเร็จ');
+      })
+      .finally(() => setLoading(false));
+  }, []);
 
   const selectBrand = async (selected) => {
     setBrand(selected);
@@ -81,7 +94,7 @@ export default function PartsCatalogKioskPage() {
     setLoading(true);
     setError('');
     try {
-      const res = await client.get('/quote-parts/models', { params: { brand: selected } });
+      const res = await client.get('/vehicle-models/models', { params: { brand: selected } });
       setModels(res.data.data || []);
     } catch (err) {
       console.error('Error loading models:', err);
@@ -91,12 +104,16 @@ export default function PartsCatalogKioskPage() {
     }
   };
 
-  const selectModel = async (selected) => {
-    setModel(selected);
+  // modelOption.label รวมช่วงปีไว้แล้ว (เช่น "Vios / Yaris Ativ (2002-ปัจจุบัน)")
+  // — ใช้ label นี้เป็นค่า "รุ่นรถ" ตอนค้นราคาอะไหล่ด้วย ให้ตรงกับที่หน้าจัดการ
+  // ราคาอะไหล่บันทึกไว้ (เลือกจากแคตตาล็อกเดียวกัน ไม่พิมพ์เอง)
+  const selectModel = async (modelOption) => {
+    setModel(modelOption.label);
+    setModelPlain(modelOption.model);
     setLoading(true);
     setError('');
     try {
-      const res = await client.get('/quote-parts/parts', { params: { brand, model: selected } });
+      const res = await client.get('/quote-parts/parts', { params: { brand, model: modelOption.label } });
       setParts(res.data.data || []);
     } catch (err) {
       console.error('Error loading parts:', err);
@@ -109,6 +126,7 @@ export default function PartsCatalogKioskPage() {
   const goBack = () => {
     if (model) {
       setModel('');
+      setModelPlain('');
       setParts([]);
     } else if (brand) {
       setBrand('');
@@ -158,6 +176,7 @@ export default function PartsCatalogKioskPage() {
     setSelectedParts({});
     setBrand('');
     setModel('');
+    setModelPlain('');
     setModels([]);
     setParts([]);
     setJustCreated(true);
@@ -222,20 +241,18 @@ export default function PartsCatalogKioskPage() {
           </div>
         ) : step === 2 ? (
           models.length === 0 ? (
-            <div className="kiosk-message">
-              ยังไม่มีรุ่นรถของยี่ห้อ {brand} — เพิ่มได้ที่เมนู "ราคาอะไหล่ตามรุ่นรถ"
-            </div>
+            <div className="kiosk-message">ไม่พบรุ่นรถของยี่ห้อ {brand} ในแคตตาล็อก</div>
           ) : (
             <div className="kiosk-grid kiosk-grid-model">
               {models.map((m) => (
                 <button
                   type="button"
-                  key={m}
+                  key={m.label}
                   className="kiosk-tile kiosk-tile-model"
                   onClick={() => selectModel(m)}
                 >
                   <span className="kiosk-model-icon"><CarIcon /></span>
-                  <span className="kiosk-tile-label">{m}</span>
+                  <span className="kiosk-tile-label">{m.label}</span>
                 </button>
               ))}
             </div>
@@ -302,7 +319,7 @@ export default function PartsCatalogKioskPage() {
             quantity: it.quantity,
             unit_price: it.price,
           }))}
-          initialVehicle={{ brand, model }}
+          initialVehicle={{ brand, model: modelPlain }}
           onClose={() => setShowQuoteForm(false)}
           onSuccess={handleQuoteSuccess}
         />

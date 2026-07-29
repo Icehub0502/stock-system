@@ -1,0 +1,2672 @@
+[
+  {
+    "brand": "Toyota",
+    "model": "Vios / Yaris Ativ",
+    "year_range": "2002-ปัจจุบัน"
+  },
+  {
+    "brand": "Toyota",
+    "model": "Yaris Ativ GR Sport",
+    "year_range": "2022-ปัจจุบัน"
+  },
+  {
+    "brand": "Toyota",
+    "model": "Yaris (แฮทช์แบ็ก)",
+    "year_range": "2006-ปัจจุบัน"
+  },
+  {
+    "brand": "Toyota",
+    "model": "Yaris Cross",
+    "year_range": "2020-ปัจจุบัน"
+  },
+  {
+    "brand": "Toyota",
+    "model": "Yaris Cross GR Sport",
+    "year_range": "2023-ปัจจุบัน"
+  },
+  {
+    "brand": "Toyota",
+    "model": "Soluna",
+    "year_range": "1997-2003"
+  },
+  {
+    "brand": "Toyota",
+    "model": "Corolla Altis",
+    "year_range": "2001-ปัจจุบัน"
+  },
+  {
+    "brand": "Toyota",
+    "model": "Corolla Altis GR Sport",
+    "year_range": "2020-ปัจจุบัน"
+  },
+  {
+    "brand": "Toyota",
+    "model": "Corolla Cross",
+    "year_range": "2020-ปัจจุบัน"
+  },
+  {
+    "brand": "Toyota",
+    "model": "Corolla Cross GR Sport",
+    "year_range": "2022-ปัจจุบัน"
+  },
+  {
+    "brand": "Toyota",
+    "model": "Corona / Corona Premio",
+    "year_range": "1990s-2001"
+  },
+  {
+    "brand": "Toyota",
+    "model": "Camry",
+    "year_range": "1993-ปัจจุบัน"
+  },
+  {
+    "brand": "Toyota",
+    "model": "Camry Hybrid",
+    "year_range": "2009-ปัจจุบัน"
+  },
+  {
+    "brand": "Toyota",
+    "model": "Camry GR Sport",
+    "year_range": "2022-ปัจจุบัน"
+  },
+  {
+    "brand": "Toyota",
+    "model": "C-HR",
+    "year_range": "2018-ปัจจุบัน"
+  },
+  {
+    "brand": "Toyota",
+    "model": "Hilux Tiger",
+    "year_range": "1998-2004"
+  },
+  {
+    "brand": "Toyota",
+    "model": "Hilux Vigo",
+    "year_range": "2004-2015"
+  },
+  {
+    "brand": "Toyota",
+    "model": "Hilux Revo",
+    "year_range": "2015-ปัจจุบัน"
+  },
+  {
+    "brand": "Toyota",
+    "model": "Hilux Revo GR Sport",
+    "year_range": "2022-ปัจจุบัน"
+  },
+  {
+    "brand": "Toyota",
+    "model": "Hilux Champ",
+    "year_range": "2023-ปัจจุบัน"
+  },
+  {
+    "brand": "Toyota",
+    "model": "Fortuner",
+    "year_range": "2005-ปัจจุบัน"
+  },
+  {
+    "brand": "Toyota",
+    "model": "Fortuner GR Sport",
+    "year_range": "2021-ปัจจุบัน"
+  },
+  {
+    "brand": "Toyota",
+    "model": "Innova",
+    "year_range": "2005-2022"
+  },
+  {
+    "brand": "Toyota",
+    "model": "Innova Zenix",
+    "year_range": "2023-ปัจจุบัน"
+  },
+  {
+    "brand": "Toyota",
+    "model": "Avanza",
+    "year_range": "2004-2022"
+  },
+  {
+    "brand": "Toyota",
+    "model": "Veloz",
+    "year_range": "2021-ปัจจุบัน"
+  },
+  {
+    "brand": "Toyota",
+    "model": "Sienta",
+    "year_range": "2016-ปัจจุบัน"
+  },
+  {
+    "brand": "Toyota",
+    "model": "Wish",
+    "year_range": "2003-2012"
+  },
+  {
+    "brand": "Toyota",
+    "model": "Alphard",
+    "year_range": "2008-ปัจจุบัน"
+  },
+  {
+    "brand": "Toyota",
+    "model": "Vellfire",
+    "year_range": "2015-ปัจจุบัน"
+  },
+  {
+    "brand": "Toyota",
+    "model": "Majesty",
+    "year_range": "2019-ปัจจุบัน"
+  },
+  {
+    "brand": "Toyota",
+    "model": "Commuter / Hiace",
+    "year_range": "1990s-ปัจจุบัน"
+  },
+  {
+    "brand": "Toyota",
+    "model": "Previa",
+    "year_range": "1990s-2006"
+  },
+  {
+    "brand": "Toyota",
+    "model": "Land Cruiser 200",
+    "year_range": "2008-2021"
+  },
+  {
+    "brand": "Toyota",
+    "model": "Land Cruiser 300",
+    "year_range": "2021-ปัจจุบัน"
+  },
+  {
+    "brand": "Toyota",
+    "model": "Land Cruiser Prado",
+    "year_range": "2003-ปัจจุบัน"
+  },
+  {
+    "brand": "Toyota",
+    "model": "GR Yaris",
+    "year_range": "2020-ปัจจุบัน"
+  },
+  {
+    "brand": "Toyota",
+    "model": "GR86",
+    "year_range": "2022-ปัจจุบัน"
+  },
+  {
+    "brand": "Toyota",
+    "model": "GR Supra",
+    "year_range": "2019-ปัจจุบัน"
+  },
+  {
+    "brand": "Toyota",
+    "model": "86",
+    "year_range": "2012-2021"
+  },
+  {
+    "brand": "Toyota",
+    "model": "bZ4X",
+    "year_range": "2023-ปัจจุบัน"
+  },
+  {
+    "brand": "Toyota",
+    "model": "Sprinter",
+    "year_range": "1990s-2002"
+  },
+  {
+    "brand": "Honda",
+    "model": "City",
+    "year_range": "1996-ปัจจุบัน"
+  },
+  {
+    "brand": "Honda",
+    "model": "City RS / Turbo RS",
+    "year_range": "2020-ปัจจุบัน"
+  },
+  {
+    "brand": "Honda",
+    "model": "City Hatchback",
+    "year_range": "2021-ปัจจุบัน"
+  },
+  {
+    "brand": "Honda",
+    "model": "City Hatchback RS",
+    "year_range": "2021-ปัจจุบัน"
+  },
+  {
+    "brand": "Honda",
+    "model": "City e:HEV",
+    "year_range": "2020-ปัจจุบัน"
+  },
+  {
+    "brand": "Honda",
+    "model": "Civic Dimension",
+    "year_range": "2000-2005"
+  },
+  {
+    "brand": "Honda",
+    "model": "Civic FD",
+    "year_range": "2005-2011"
+  },
+  {
+    "brand": "Honda",
+    "model": "Civic FB",
+    "year_range": "2011-2015"
+  },
+  {
+    "brand": "Honda",
+    "model": "Civic FC",
+    "year_range": "2016-2021"
+  },
+  {
+    "brand": "Honda",
+    "model": "Civic FE (เจนปัจจุบัน)",
+    "year_range": "2021-ปัจจุบัน"
+  },
+  {
+    "brand": "Honda",
+    "model": "Civic RS / e:HEV RS",
+    "year_range": "2022-ปัจจุบัน"
+  },
+  {
+    "brand": "Honda",
+    "model": "Civic Type R",
+    "year_range": "2016-ปัจจุบัน"
+  },
+  {
+    "brand": "Honda",
+    "model": "Civic Hatchback",
+    "year_range": "2017-ปัจจุบัน"
+  },
+  {
+    "brand": "Honda",
+    "model": "Accord",
+    "year_range": "1998-ปัจจุบัน"
+  },
+  {
+    "brand": "Honda",
+    "model": "Accord e:HEV",
+    "year_range": "2019-ปัจจุบัน"
+  },
+  {
+    "brand": "Honda",
+    "model": "Jazz / Fit",
+    "year_range": "2003-2021"
+  },
+  {
+    "brand": "Honda",
+    "model": "Brio",
+    "year_range": "2011-2016"
+  },
+  {
+    "brand": "Honda",
+    "model": "Brio Amaze",
+    "year_range": "2011-2016"
+  },
+  {
+    "brand": "Honda",
+    "model": "HR-V",
+    "year_range": "2014-ปัจจุบัน"
+  },
+  {
+    "brand": "Honda",
+    "model": "HR-V RS / e:HEV RS",
+    "year_range": "2021-ปัจจุบัน"
+  },
+  {
+    "brand": "Honda",
+    "model": "CR-V",
+    "year_range": "1997-ปัจจุบัน"
+  },
+  {
+    "brand": "Honda",
+    "model": "CR-V e:HEV RS",
+    "year_range": "2023-ปัจจุบัน"
+  },
+  {
+    "brand": "Honda",
+    "model": "BR-V",
+    "year_range": "2016-ปัจจุบัน"
+  },
+  {
+    "brand": "Honda",
+    "model": "WR-V",
+    "year_range": "2022-ปัจจุบัน"
+  },
+  {
+    "brand": "Honda",
+    "model": "Mobilio",
+    "year_range": "2014-2019"
+  },
+  {
+    "brand": "Honda",
+    "model": "Freed",
+    "year_range": "2009-2016"
+  },
+  {
+    "brand": "Honda",
+    "model": "Stream",
+    "year_range": "2001-2013"
+  },
+  {
+    "brand": "Honda",
+    "model": "Odyssey",
+    "year_range": "2000s-2021"
+  },
+  {
+    "brand": "Honda",
+    "model": "e:N1",
+    "year_range": "2024-ปัจจุบัน"
+  },
+  {
+    "brand": "Isuzu",
+    "model": "TFR (Dragon Eyes/Power)",
+    "year_range": "1990s-2002"
+  },
+  {
+    "brand": "Isuzu",
+    "model": "D-Max (เจน 1)",
+    "year_range": "2002-2011"
+  },
+  {
+    "brand": "Isuzu",
+    "model": "D-Max (เจน 2)",
+    "year_range": "2011-2019"
+  },
+  {
+    "brand": "Isuzu",
+    "model": "D-Max (เจน 3)",
+    "year_range": "2019-ปัจจุบัน"
+  },
+  {
+    "brand": "Isuzu",
+    "model": "D-Max V-Cross",
+    "year_range": "2012-ปัจจุบัน"
+  },
+  {
+    "brand": "Isuzu",
+    "model": "D-Max X-Series",
+    "year_range": "2016-ปัจจุบัน"
+  },
+  {
+    "brand": "Isuzu",
+    "model": "D-Max Spark (ตอนเดียว)",
+    "year_range": "2019-ปัจจุบัน"
+  },
+  {
+    "brand": "Isuzu",
+    "model": "D-Max Hi-Lander (แค็บ)",
+    "year_range": "2019-ปัจจุบัน"
+  },
+  {
+    "brand": "Isuzu",
+    "model": "MU-7",
+    "year_range": "2004-2013"
+  },
+  {
+    "brand": "Isuzu",
+    "model": "MU-X (เจน 1)",
+    "year_range": "2013-2020"
+  },
+  {
+    "brand": "Isuzu",
+    "model": "MU-X (เจน 2)",
+    "year_range": "2021-ปัจจุบัน"
+  },
+  {
+    "brand": "Nissan",
+    "model": "Sunny Neo",
+    "year_range": "2000-2006"
+  },
+  {
+    "brand": "Nissan",
+    "model": "Tiida",
+    "year_range": "2006-2013"
+  },
+  {
+    "brand": "Nissan",
+    "model": "March",
+    "year_range": "2010-2019"
+  },
+  {
+    "brand": "Nissan",
+    "model": "Note",
+    "year_range": "2017-2021"
+  },
+  {
+    "brand": "Nissan",
+    "model": "Almera (เจน 1)",
+    "year_range": "2011-2019"
+  },
+  {
+    "brand": "Nissan",
+    "model": "Almera (เจน 2 เทอร์โบ)",
+    "year_range": "2019-ปัจจุบัน"
+  },
+  {
+    "brand": "Nissan",
+    "model": "Almera Sportech",
+    "year_range": "2021-ปัจจุบัน"
+  },
+  {
+    "brand": "Nissan",
+    "model": "Juke",
+    "year_range": "2015-2019"
+  },
+  {
+    "brand": "Nissan",
+    "model": "Kicks e-Power",
+    "year_range": "2020-ปัจจุบัน"
+  },
+  {
+    "brand": "Nissan",
+    "model": "Cefiro",
+    "year_range": "1990s-2003"
+  },
+  {
+    "brand": "Nissan",
+    "model": "Teana",
+    "year_range": "2004-2020"
+  },
+  {
+    "brand": "Nissan",
+    "model": "Sylphy",
+    "year_range": "2012-2020"
+  },
+  {
+    "brand": "Nissan",
+    "model": "X-Trail (เจน 1-2)",
+    "year_range": "2001-2013"
+  },
+  {
+    "brand": "Nissan",
+    "model": "X-Trail e-Power (เจน 4)",
+    "year_range": "2023-ปัจจุบัน"
+  },
+  {
+    "brand": "Nissan",
+    "model": "Frontier / Navara D22",
+    "year_range": "1997-2007"
+  },
+  {
+    "brand": "Nissan",
+    "model": "Navara D40",
+    "year_range": "2007-2014"
+  },
+  {
+    "brand": "Nissan",
+    "model": "Navara NP300",
+    "year_range": "2014-2021"
+  },
+  {
+    "brand": "Nissan",
+    "model": "Navara (โฉมปัจจุบัน)",
+    "year_range": "2021-ปัจจุบัน"
+  },
+  {
+    "brand": "Nissan",
+    "model": "Navara Pro-4X",
+    "year_range": "2021-ปัจจุบัน"
+  },
+  {
+    "brand": "Nissan",
+    "model": "Terra",
+    "year_range": "2018-ปัจจุบัน"
+  },
+  {
+    "brand": "Nissan",
+    "model": "Leaf",
+    "year_range": "2019-ปัจจุบัน"
+  },
+  {
+    "brand": "Nissan",
+    "model": "Urvan (รถตู้)",
+    "year_range": "2000s-ปัจจุบัน"
+  },
+  {
+    "brand": "Nissan",
+    "model": "GT-R",
+    "year_range": "2010s-2020s"
+  },
+  {
+    "brand": "Mitsubishi",
+    "model": "Lancer",
+    "year_range": "1990s-2010"
+  },
+  {
+    "brand": "Mitsubishi",
+    "model": "Lancer EX",
+    "year_range": "2010-2017"
+  },
+  {
+    "brand": "Mitsubishi",
+    "model": "Lancer Ralliart",
+    "year_range": "2008-2013"
+  },
+  {
+    "brand": "Mitsubishi",
+    "model": "Mirage (เจน 1)",
+    "year_range": "2012-2019"
+  },
+  {
+    "brand": "Mitsubishi",
+    "model": "Mirage (เจน 2)",
+    "year_range": "2020-ปัจจุบัน"
+  },
+  {
+    "brand": "Mitsubishi",
+    "model": "Attrage (เจน 1)",
+    "year_range": "2013-2019"
+  },
+  {
+    "brand": "Mitsubishi",
+    "model": "Attrage (เจน 2)",
+    "year_range": "2020-ปัจจุบัน"
+  },
+  {
+    "brand": "Mitsubishi",
+    "model": "Space Wagon",
+    "year_range": "1990s-2004"
+  },
+  {
+    "brand": "Mitsubishi",
+    "model": "Xpander",
+    "year_range": "2018-ปัจจุบัน"
+  },
+  {
+    "brand": "Mitsubishi",
+    "model": "Xpander Cross",
+    "year_range": "2020-ปัจจุบัน"
+  },
+  {
+    "brand": "Mitsubishi",
+    "model": "Xpander HEV",
+    "year_range": "2024-ปัจจุบัน"
+  },
+  {
+    "brand": "Mitsubishi",
+    "model": "Strada",
+    "year_range": "2002-2005"
+  },
+  {
+    "brand": "Mitsubishi",
+    "model": "Triton (เจน 1-2)",
+    "year_range": "2005-2014"
+  },
+  {
+    "brand": "Mitsubishi",
+    "model": "Triton (เจน 3)",
+    "year_range": "2015-2023"
+  },
+  {
+    "brand": "Mitsubishi",
+    "model": "Triton (เจน 4)",
+    "year_range": "2024-ปัจจุบัน"
+  },
+  {
+    "brand": "Mitsubishi",
+    "model": "Triton Athlete",
+    "year_range": "2024-ปัจจุบัน"
+  },
+  {
+    "brand": "Mitsubishi",
+    "model": "Pajero Sport (เจน 1)",
+    "year_range": "2008-2015"
+  },
+  {
+    "brand": "Mitsubishi",
+    "model": "Pajero Sport (เจน 2)",
+    "year_range": "2015-ปัจจุบัน"
+  },
+  {
+    "brand": "Mitsubishi",
+    "model": "Pajero Sport GT Premium",
+    "year_range": "2019-ปัจจุบัน"
+  },
+  {
+    "brand": "Mitsubishi",
+    "model": "Outlander PHEV",
+    "year_range": "2023-ปัจจุบัน"
+  },
+  {
+    "brand": "Mitsubishi",
+    "model": "Xforce",
+    "year_range": "2024-ปัจจุบัน"
+  },
+  {
+    "brand": "Mitsubishi",
+    "model": "Xforce HEV",
+    "year_range": "2025-ปัจจุบัน"
+  },
+  {
+    "brand": "Mazda",
+    "model": "323 / Protege",
+    "year_range": "1990s-2003"
+  },
+  {
+    "brand": "Mazda",
+    "model": "626",
+    "year_range": "1990s-2002"
+  },
+  {
+    "brand": "Mazda",
+    "model": "Mazda2 (เจน 1)",
+    "year_range": "2007-2014"
+  },
+  {
+    "brand": "Mazda",
+    "model": "Mazda2 (เจน 2/Skyactiv)",
+    "year_range": "2014-ปัจจุบัน"
+  },
+  {
+    "brand": "Mazda",
+    "model": "Mazda2 SP Sports",
+    "year_range": "2015-ปัจจุบัน"
+  },
+  {
+    "brand": "Mazda",
+    "model": "Mazda3 (เจน 1-2)",
+    "year_range": "2004-2014"
+  },
+  {
+    "brand": "Mazda",
+    "model": "Mazda3 (เจน 3)",
+    "year_range": "2014-2019"
+  },
+  {
+    "brand": "Mazda",
+    "model": "Mazda3 (เจน 4/Skyactiv)",
+    "year_range": "2019-ปัจจุบัน"
+  },
+  {
+    "brand": "Mazda",
+    "model": "Mazda3 SP Sports",
+    "year_range": "2019-ปัจจุบัน"
+  },
+  {
+    "brand": "Mazda",
+    "model": "Mazda3 SP Carbon Edition",
+    "year_range": "2022-ปัจจุบัน"
+  },
+  {
+    "brand": "Mazda",
+    "model": "Mazda6",
+    "year_range": "2003-2018"
+  },
+  {
+    "brand": "Mazda",
+    "model": "Mazda6e (EV)",
+    "year_range": "2026-ปัจจุบัน"
+  },
+  {
+    "brand": "Mazda",
+    "model": "CX-3",
+    "year_range": "2016-ปัจจุบัน"
+  },
+  {
+    "brand": "Mazda",
+    "model": "CX-30",
+    "year_range": "2020-ปัจจุบัน"
+  },
+  {
+    "brand": "Mazda",
+    "model": "CX-5",
+    "year_range": "2013-ปัจจุบัน"
+  },
+  {
+    "brand": "Mazda",
+    "model": "CX-8",
+    "year_range": "2019-ปัจจุบัน"
+  },
+  {
+    "brand": "Mazda",
+    "model": "CX-60",
+    "year_range": "2023-ปัจจุบัน"
+  },
+  {
+    "brand": "Mazda",
+    "model": "BT-50 (เจน 1)",
+    "year_range": "2006-2011"
+  },
+  {
+    "brand": "Mazda",
+    "model": "BT-50 Pro",
+    "year_range": "2012-2020"
+  },
+  {
+    "brand": "Mazda",
+    "model": "BT-50 (เจน 3)",
+    "year_range": "2021-ปัจจุบัน"
+  },
+  {
+    "brand": "Mazda",
+    "model": "MX-5",
+    "year_range": "2000s-ปัจจุบัน"
+  },
+  {
+    "brand": "Suzuki",
+    "model": "Caribian",
+    "year_range": "1990s-2000s"
+  },
+  {
+    "brand": "Suzuki",
+    "model": "Vitara / Escudo",
+    "year_range": "1990s-2000s"
+  },
+  {
+    "brand": "Suzuki",
+    "model": "Swift (เจน 1 อีโคคาร์)",
+    "year_range": "2012-2017"
+  },
+  {
+    "brand": "Suzuki",
+    "model": "Swift (เจน 2)",
+    "year_range": "2018-ปัจจุบัน"
+  },
+  {
+    "brand": "Suzuki",
+    "model": "Swift Sport",
+    "year_range": "2018-2022"
+  },
+  {
+    "brand": "Suzuki",
+    "model": "Ciaz",
+    "year_range": "2015-2022"
+  },
+  {
+    "brand": "Suzuki",
+    "model": "Celerio",
+    "year_range": "2015-2020"
+  },
+  {
+    "brand": "Suzuki",
+    "model": "Ertiga",
+    "year_range": "2013-2019"
+  },
+  {
+    "brand": "Suzuki",
+    "model": "XL7",
+    "year_range": "2020-ปัจจุบัน"
+  },
+  {
+    "brand": "Suzuki",
+    "model": "Jimny",
+    "year_range": "2019-ปัจจุบัน"
+  },
+  {
+    "brand": "Suzuki",
+    "model": "Jimny 5 ประตู",
+    "year_range": "2024-ปัจจุบัน"
+  },
+  {
+    "brand": "Suzuki",
+    "model": "Carry",
+    "year_range": "2007-ปัจจุบัน"
+  },
+  {
+    "brand": "Ford",
+    "model": "Laser",
+    "year_range": "1990s-2002"
+  },
+  {
+    "brand": "Ford",
+    "model": "Ranger (เจน 1-2)",
+    "year_range": "1999-2011"
+  },
+  {
+    "brand": "Ford",
+    "model": "Ranger T6",
+    "year_range": "2012-2018"
+  },
+  {
+    "brand": "Ford",
+    "model": "Ranger (เจน 3/T6.2)",
+    "year_range": "2022-ปัจจุบัน"
+  },
+  {
+    "brand": "Ford",
+    "model": "Ranger Raptor",
+    "year_range": "2018-ปัจจุบัน"
+  },
+  {
+    "brand": "Ford",
+    "model": "Ranger Wildtrak",
+    "year_range": "2012-ปัจจุบัน"
+  },
+  {
+    "brand": "Ford",
+    "model": "Ranger Stormtrak",
+    "year_range": "2023-ปัจจุบัน"
+  },
+  {
+    "brand": "Ford",
+    "model": "Everest (เจน 1)",
+    "year_range": "2003-2015"
+  },
+  {
+    "brand": "Ford",
+    "model": "Everest (เจน 2)",
+    "year_range": "2015-2022"
+  },
+  {
+    "brand": "Ford",
+    "model": "Everest (เจน 3)",
+    "year_range": "2022-ปัจจุบัน"
+  },
+  {
+    "brand": "Ford",
+    "model": "Everest Platinum",
+    "year_range": "2023-ปัจจุบัน"
+  },
+  {
+    "brand": "Ford",
+    "model": "Focus",
+    "year_range": "2005-2018"
+  },
+  {
+    "brand": "Ford",
+    "model": "Fiesta",
+    "year_range": "2010-2015"
+  },
+  {
+    "brand": "Ford",
+    "model": "Escape",
+    "year_range": "2000s-2012"
+  },
+  {
+    "brand": "Ford",
+    "model": "Territory",
+    "year_range": "2020-ปัจจุบัน"
+  },
+  {
+    "brand": "Ford",
+    "model": "Mustang",
+    "year_range": "2015-ปัจจุบัน"
+  },
+  {
+    "brand": "Chevrolet",
+    "model": "Optra",
+    "year_range": "2003-2011"
+  },
+  {
+    "brand": "Chevrolet",
+    "model": "Aveo",
+    "year_range": "2003-2019"
+  },
+  {
+    "brand": "Chevrolet",
+    "model": "Sonic",
+    "year_range": "2011-2019"
+  },
+  {
+    "brand": "Chevrolet",
+    "model": "Cruze",
+    "year_range": "2009-2018"
+  },
+  {
+    "brand": "Chevrolet",
+    "model": "Colorado",
+    "year_range": "2004-2020"
+  },
+  {
+    "brand": "Chevrolet",
+    "model": "Trailblazer",
+    "year_range": "2012-2020"
+  },
+  {
+    "brand": "Chevrolet",
+    "model": "Captiva",
+    "year_range": "2006-2020"
+  },
+  {
+    "brand": "Chevrolet",
+    "model": "Zafira",
+    "year_range": "2000s"
+  },
+  {
+    "brand": "Hyundai",
+    "model": "Atos",
+    "year_range": "1990s-2007"
+  },
+  {
+    "brand": "Hyundai",
+    "model": "Getz",
+    "year_range": "2003-2011"
+  },
+  {
+    "brand": "Hyundai",
+    "model": "Accent",
+    "year_range": "2000s-2016"
+  },
+  {
+    "brand": "Hyundai",
+    "model": "Elantra",
+    "year_range": "2000s-2010s"
+  },
+  {
+    "brand": "Hyundai",
+    "model": "Tucson",
+    "year_range": "2000s-2010s"
+  },
+  {
+    "brand": "Hyundai",
+    "model": "Santa Fe",
+    "year_range": "2000s-2010s"
+  },
+  {
+    "brand": "Hyundai",
+    "model": "H-1 / Grand Starex",
+    "year_range": "2000s-2020s"
+  },
+  {
+    "brand": "Hyundai",
+    "model": "Staria",
+    "year_range": "2021-ปัจจุบัน"
+  },
+  {
+    "brand": "Hyundai",
+    "model": "Creta",
+    "year_range": "2022-ปัจจุบัน"
+  },
+  {
+    "brand": "Hyundai",
+    "model": "Ioniq 5",
+    "year_range": "2022-ปัจจุบัน"
+  },
+  {
+    "brand": "Hyundai",
+    "model": "Ioniq 6",
+    "year_range": "2023-ปัจจุบัน"
+  },
+  {
+    "brand": "Kia",
+    "model": "Picanto",
+    "year_range": "2000s-2010s"
+  },
+  {
+    "brand": "Kia",
+    "model": "Cerato",
+    "year_range": "2000s-2010s"
+  },
+  {
+    "brand": "Kia",
+    "model": "Sorento",
+    "year_range": "2000s-2010s"
+  },
+  {
+    "brand": "Kia",
+    "model": "Grand Carnival",
+    "year_range": "2007-2020"
+  },
+  {
+    "brand": "Kia",
+    "model": "Carnival",
+    "year_range": "2021-ปัจจุบัน"
+  },
+  {
+    "brand": "Kia",
+    "model": "Sportage",
+    "year_range": "2021-ปัจจุบัน"
+  },
+  {
+    "brand": "Kia",
+    "model": "EV6",
+    "year_range": "2022-ปัจจุบัน"
+  },
+  {
+    "brand": "Kia",
+    "model": "EV9",
+    "year_range": "2023-ปัจจุบัน"
+  },
+  {
+    "brand": "Subaru",
+    "model": "Impreza",
+    "year_range": "2000s-2018"
+  },
+  {
+    "brand": "Subaru",
+    "model": "XV / Crosstrek",
+    "year_range": "2012-ปัจจุบัน"
+  },
+  {
+    "brand": "Subaru",
+    "model": "Forester (รุ่นเก่า)",
+    "year_range": "2000s-2018"
+  },
+  {
+    "brand": "Subaru",
+    "model": "Forester (เจนปัจจุบัน)",
+    "year_range": "2019-ปัจจุบัน"
+  },
+  {
+    "brand": "Subaru",
+    "model": "Outback",
+    "year_range": "2000s-2010s"
+  },
+  {
+    "brand": "Subaru",
+    "model": "Levorg",
+    "year_range": "2015-2020"
+  },
+  {
+    "brand": "Subaru",
+    "model": "BRZ",
+    "year_range": "2012-ปัจจุบัน"
+  },
+  {
+    "brand": "Subaru",
+    "model": "WRX",
+    "year_range": "2014-ปัจจุบัน"
+  },
+  {
+    "brand": "Subaru",
+    "model": "WRX STI",
+    "year_range": "2014-2021"
+  },
+  {
+    "brand": "BMW",
+    "model": "ซีรีส์ 1 (1 Series)",
+    "year_range": "2004-2019"
+  },
+  {
+    "brand": "BMW",
+    "model": "ซีรีส์ 2 Active Tourer",
+    "year_range": "2015-ปัจจุบัน"
+  },
+  {
+    "brand": "BMW",
+    "model": "ซีรีส์ 2 Gran Coupe",
+    "year_range": "2020-ปัจจุบัน"
+  },
+  {
+    "brand": "BMW",
+    "model": "ซีรีส์ 2 Coupe",
+    "year_range": "2014-ปัจจุบัน"
+  },
+  {
+    "brand": "BMW",
+    "model": "ซีรีส์ 3 (E46)",
+    "year_range": "1998-2005"
+  },
+  {
+    "brand": "BMW",
+    "model": "ซีรีส์ 3 (E90)",
+    "year_range": "2005-2012"
+  },
+  {
+    "brand": "BMW",
+    "model": "ซีรีส์ 3 (F30)",
+    "year_range": "2012-2019"
+  },
+  {
+    "brand": "BMW",
+    "model": "ซีรีส์ 3 (G20)",
+    "year_range": "2019-ปัจจุบัน"
+  },
+  {
+    "brand": "BMW",
+    "model": "ซีรีส์ 4 Coupe / Gran Coupe",
+    "year_range": "2014-ปัจจุบัน"
+  },
+  {
+    "brand": "BMW",
+    "model": "ซีรีส์ 5 (E60)",
+    "year_range": "2003-2010"
+  },
+  {
+    "brand": "BMW",
+    "model": "ซีรีส์ 5 (F10)",
+    "year_range": "2010-2017"
+  },
+  {
+    "brand": "BMW",
+    "model": "ซีรีส์ 5 (G30)",
+    "year_range": "2017-2023"
+  },
+  {
+    "brand": "BMW",
+    "model": "ซีรีส์ 5 (G60)",
+    "year_range": "2024-ปัจจุบัน"
+  },
+  {
+    "brand": "BMW",
+    "model": "ซีรีส์ 6 Gran Turismo",
+    "year_range": "2017-2023"
+  },
+  {
+    "brand": "BMW",
+    "model": "ซีรีส์ 7 (G11)",
+    "year_range": "2015-2022"
+  },
+  {
+    "brand": "BMW",
+    "model": "ซีรีส์ 7 (G70)",
+    "year_range": "2022-ปัจจุบัน"
+  },
+  {
+    "brand": "BMW",
+    "model": "ซีรีส์ 8",
+    "year_range": "2018-ปัจจุบัน"
+  },
+  {
+    "brand": "BMW",
+    "model": "X1 (E84)",
+    "year_range": "2009-2015"
+  },
+  {
+    "brand": "BMW",
+    "model": "X1 (F48)",
+    "year_range": "2015-2022"
+  },
+  {
+    "brand": "BMW",
+    "model": "X1 (U11)",
+    "year_range": "2023-ปัจจุบัน"
+  },
+  {
+    "brand": "BMW",
+    "model": "X2",
+    "year_range": "2018-ปัจจุบัน"
+  },
+  {
+    "brand": "BMW",
+    "model": "X3 (F25)",
+    "year_range": "2011-2017"
+  },
+  {
+    "brand": "BMW",
+    "model": "X3 (G01)",
+    "year_range": "2018-2024"
+  },
+  {
+    "brand": "BMW",
+    "model": "X3 (G45)",
+    "year_range": "2025-ปัจจุบัน"
+  },
+  {
+    "brand": "BMW",
+    "model": "X4",
+    "year_range": "2015-2025"
+  },
+  {
+    "brand": "BMW",
+    "model": "X5 (F15)",
+    "year_range": "2013-2018"
+  },
+  {
+    "brand": "BMW",
+    "model": "X5 (G05)",
+    "year_range": "2019-ปัจจุบัน"
+  },
+  {
+    "brand": "BMW",
+    "model": "X6",
+    "year_range": "2010-ปัจจุบัน"
+  },
+  {
+    "brand": "BMW",
+    "model": "X7",
+    "year_range": "2019-ปัจจุบัน"
+  },
+  {
+    "brand": "BMW",
+    "model": "Z4",
+    "year_range": "2003-ปัจจุบัน"
+  },
+  {
+    "brand": "BMW",
+    "model": "M2",
+    "year_range": "2016-ปัจจุบัน"
+  },
+  {
+    "brand": "BMW",
+    "model": "M3",
+    "year_range": "2010s-ปัจจุบัน"
+  },
+  {
+    "brand": "BMW",
+    "model": "M4",
+    "year_range": "2014-ปัจจุบัน"
+  },
+  {
+    "brand": "BMW",
+    "model": "M5",
+    "year_range": "2010s-ปัจจุบัน"
+  },
+  {
+    "brand": "BMW",
+    "model": "XM",
+    "year_range": "2023-ปัจจุบัน"
+  },
+  {
+    "brand": "BMW",
+    "model": "i3",
+    "year_range": "2014-2022"
+  },
+  {
+    "brand": "BMW",
+    "model": "i4",
+    "year_range": "2022-ปัจจุบัน"
+  },
+  {
+    "brand": "BMW",
+    "model": "i5",
+    "year_range": "2024-ปัจจุบัน"
+  },
+  {
+    "brand": "BMW",
+    "model": "i7",
+    "year_range": "2023-ปัจจุบัน"
+  },
+  {
+    "brand": "BMW",
+    "model": "i8",
+    "year_range": "2015-2020"
+  },
+  {
+    "brand": "BMW",
+    "model": "iX",
+    "year_range": "2022-ปัจจุบัน"
+  },
+  {
+    "brand": "BMW",
+    "model": "iX1 / iX1 LWB",
+    "year_range": "2023-ปัจจุบัน"
+  },
+  {
+    "brand": "BMW",
+    "model": "iX2",
+    "year_range": "2024-ปัจจุบัน"
+  },
+  {
+    "brand": "BMW",
+    "model": "iX3",
+    "year_range": "2021-ปัจจุบัน"
+  },
+  {
+    "brand": "Mercedes-Benz",
+    "model": "A-Class (W176)",
+    "year_range": "2013-2018"
+  },
+  {
+    "brand": "Mercedes-Benz",
+    "model": "A-Class (W177)",
+    "year_range": "2019-ปัจจุบัน"
+  },
+  {
+    "brand": "Mercedes-Benz",
+    "model": "B-Class",
+    "year_range": "2006-2010s"
+  },
+  {
+    "brand": "Mercedes-Benz",
+    "model": "C-Class (W203)",
+    "year_range": "2000-2007"
+  },
+  {
+    "brand": "Mercedes-Benz",
+    "model": "C-Class (W204)",
+    "year_range": "2007-2014"
+  },
+  {
+    "brand": "Mercedes-Benz",
+    "model": "C-Class (W205)",
+    "year_range": "2014-2021"
+  },
+  {
+    "brand": "Mercedes-Benz",
+    "model": "C-Class (W206)",
+    "year_range": "2022-ปัจจุบัน"
+  },
+  {
+    "brand": "Mercedes-Benz",
+    "model": "CLA-Class",
+    "year_range": "2013-ปัจจุบัน"
+  },
+  {
+    "brand": "Mercedes-Benz",
+    "model": "CLE-Class",
+    "year_range": "2024-ปัจจุบัน"
+  },
+  {
+    "brand": "Mercedes-Benz",
+    "model": "CLS-Class",
+    "year_range": "2005-2023"
+  },
+  {
+    "brand": "Mercedes-Benz",
+    "model": "E-Class (W211)",
+    "year_range": "2002-2009"
+  },
+  {
+    "brand": "Mercedes-Benz",
+    "model": "E-Class (W212)",
+    "year_range": "2009-2016"
+  },
+  {
+    "brand": "Mercedes-Benz",
+    "model": "E-Class (W213)",
+    "year_range": "2016-2023"
+  },
+  {
+    "brand": "Mercedes-Benz",
+    "model": "E-Class (W214)",
+    "year_range": "2024-ปัจจุบัน"
+  },
+  {
+    "brand": "Mercedes-Benz",
+    "model": "S-Class (W221)",
+    "year_range": "2005-2013"
+  },
+  {
+    "brand": "Mercedes-Benz",
+    "model": "S-Class (W222)",
+    "year_range": "2013-2020"
+  },
+  {
+    "brand": "Mercedes-Benz",
+    "model": "S-Class (W223)",
+    "year_range": "2021-ปัจจุบัน"
+  },
+  {
+    "brand": "Mercedes-Benz",
+    "model": "Maybach S-Class",
+    "year_range": "2015-ปัจจุบัน"
+  },
+  {
+    "brand": "Mercedes-Benz",
+    "model": "GLA-Class",
+    "year_range": "2014-ปัจจุบัน"
+  },
+  {
+    "brand": "Mercedes-Benz",
+    "model": "GLB-Class",
+    "year_range": "2020-ปัจจุบัน"
+  },
+  {
+    "brand": "Mercedes-Benz",
+    "model": "GLC-Class (X253)",
+    "year_range": "2016-2022"
+  },
+  {
+    "brand": "Mercedes-Benz",
+    "model": "GLC-Class (X254)",
+    "year_range": "2023-ปัจจุบัน"
+  },
+  {
+    "brand": "Mercedes-Benz",
+    "model": "GLE-Class",
+    "year_range": "2016-ปัจจุบัน"
+  },
+  {
+    "brand": "Mercedes-Benz",
+    "model": "GLS-Class",
+    "year_range": "2016-ปัจจุบัน"
+  },
+  {
+    "brand": "Mercedes-Benz",
+    "model": "G-Class",
+    "year_range": "2000s-ปัจจุบัน"
+  },
+  {
+    "brand": "Mercedes-Benz",
+    "model": "SL-Class",
+    "year_range": "2000s-ปัจจุบัน"
+  },
+  {
+    "brand": "Mercedes-Benz",
+    "model": "SLC / SLK",
+    "year_range": "2000s-2020"
+  },
+  {
+    "brand": "Mercedes-Benz",
+    "model": "AMG GT",
+    "year_range": "2015-ปัจจุบัน"
+  },
+  {
+    "brand": "Mercedes-Benz",
+    "model": "V-Class",
+    "year_range": "2015-ปัจจุบัน"
+  },
+  {
+    "brand": "Mercedes-Benz",
+    "model": "Vito",
+    "year_range": "2000s-ปัจจุบัน"
+  },
+  {
+    "brand": "Mercedes-Benz",
+    "model": "EQA",
+    "year_range": "2021-ปัจจุบัน"
+  },
+  {
+    "brand": "Mercedes-Benz",
+    "model": "EQB",
+    "year_range": "2022-ปัจจุบัน"
+  },
+  {
+    "brand": "Mercedes-Benz",
+    "model": "EQC",
+    "year_range": "2019-2023"
+  },
+  {
+    "brand": "Mercedes-Benz",
+    "model": "EQE เก๋ง / EQE SUV",
+    "year_range": "2022-ปัจจุบัน"
+  },
+  {
+    "brand": "Mercedes-Benz",
+    "model": "EQS เก๋ง / EQS SUV",
+    "year_range": "2021-ปัจจุบัน"
+  },
+  {
+    "brand": "Mercedes-Benz",
+    "model": "CLA 250+ EV",
+    "year_range": "2026-ปัจจุบัน"
+  },
+  {
+    "brand": "Audi",
+    "model": "A1",
+    "year_range": "2010s"
+  },
+  {
+    "brand": "Audi",
+    "model": "A3",
+    "year_range": "2000s-ปัจจุบัน"
+  },
+  {
+    "brand": "Audi",
+    "model": "A4",
+    "year_range": "2000s-ปัจจุบัน"
+  },
+  {
+    "brand": "Audi",
+    "model": "A5",
+    "year_range": "2008-ปัจจุบัน"
+  },
+  {
+    "brand": "Audi",
+    "model": "A6",
+    "year_range": "2000s-ปัจจุบัน"
+  },
+  {
+    "brand": "Audi",
+    "model": "A7",
+    "year_range": "2011-ปัจจุบัน"
+  },
+  {
+    "brand": "Audi",
+    "model": "A8",
+    "year_range": "2000s-ปัจจุบัน"
+  },
+  {
+    "brand": "Audi",
+    "model": "Q2",
+    "year_range": "2018-ปัจจุบัน"
+  },
+  {
+    "brand": "Audi",
+    "model": "Q3",
+    "year_range": "2012-ปัจจุบัน"
+  },
+  {
+    "brand": "Audi",
+    "model": "Q5",
+    "year_range": "2009-ปัจจุบัน"
+  },
+  {
+    "brand": "Audi",
+    "model": "Q7",
+    "year_range": "2006-ปัจจุบัน"
+  },
+  {
+    "brand": "Audi",
+    "model": "Q8",
+    "year_range": "2019-ปัจจุบัน"
+  },
+  {
+    "brand": "Audi",
+    "model": "TT",
+    "year_range": "2000s-2020s"
+  },
+  {
+    "brand": "Audi",
+    "model": "e-tron / Q8 e-tron",
+    "year_range": "2020-ปัจจุบัน"
+  },
+  {
+    "brand": "Audi",
+    "model": "e-tron GT",
+    "year_range": "2021-ปัจจุบัน"
+  },
+  {
+    "brand": "Audi",
+    "model": "RS / S รุ่นสมรรถนะสูง",
+    "year_range": "2000s-ปัจจุบัน"
+  },
+  {
+    "brand": "Lexus",
+    "model": "IS",
+    "year_range": "2000s-ปัจจุบัน"
+  },
+  {
+    "brand": "Lexus",
+    "model": "ES",
+    "year_range": "2000s-ปัจจุบัน"
+  },
+  {
+    "brand": "Lexus",
+    "model": "GS",
+    "year_range": "2000s-2020"
+  },
+  {
+    "brand": "Lexus",
+    "model": "LS",
+    "year_range": "2000s-ปัจจุบัน"
+  },
+  {
+    "brand": "Lexus",
+    "model": "CT200h",
+    "year_range": "2011-2020"
+  },
+  {
+    "brand": "Lexus",
+    "model": "UX / UX300e",
+    "year_range": "2019-ปัจจุบัน"
+  },
+  {
+    "brand": "Lexus",
+    "model": "NX",
+    "year_range": "2015-ปัจจุบัน"
+  },
+  {
+    "brand": "Lexus",
+    "model": "RX",
+    "year_range": "2000s-ปัจจุบัน"
+  },
+  {
+    "brand": "Lexus",
+    "model": "LX",
+    "year_range": "2000s-ปัจจุบัน"
+  },
+  {
+    "brand": "Lexus",
+    "model": "GX",
+    "year_range": "2000s-ปัจจุบัน"
+  },
+  {
+    "brand": "Lexus",
+    "model": "LM",
+    "year_range": "2020-ปัจจุบัน"
+  },
+  {
+    "brand": "Lexus",
+    "model": "LBX",
+    "year_range": "2024-ปัจจุบัน"
+  },
+  {
+    "brand": "Lexus",
+    "model": "RZ",
+    "year_range": "2023-ปัจจุบัน"
+  },
+  {
+    "brand": "Lexus",
+    "model": "RC / RC F",
+    "year_range": "2015-2020s"
+  },
+  {
+    "brand": "Lexus",
+    "model": "LC",
+    "year_range": "2017-ปัจจุบัน"
+  },
+  {
+    "brand": "Volvo",
+    "model": "S60",
+    "year_range": "2000s-ปัจจุบัน"
+  },
+  {
+    "brand": "Volvo",
+    "model": "S80",
+    "year_range": "2000s-2016"
+  },
+  {
+    "brand": "Volvo",
+    "model": "S90",
+    "year_range": "2016-ปัจจุบัน"
+  },
+  {
+    "brand": "Volvo",
+    "model": "V40",
+    "year_range": "2013-2019"
+  },
+  {
+    "brand": "Volvo",
+    "model": "V60",
+    "year_range": "2010s-ปัจจุบัน"
+  },
+  {
+    "brand": "Volvo",
+    "model": "XC40",
+    "year_range": "2018-ปัจจุบัน"
+  },
+  {
+    "brand": "Volvo",
+    "model": "XC60",
+    "year_range": "2009-ปัจจุบัน"
+  },
+  {
+    "brand": "Volvo",
+    "model": "XC90",
+    "year_range": "2003-ปัจจุบัน"
+  },
+  {
+    "brand": "Volvo",
+    "model": "C40 Recharge / EC40",
+    "year_range": "2022-ปัจจุบัน"
+  },
+  {
+    "brand": "Volvo",
+    "model": "EX30",
+    "year_range": "2024-ปัจจุบัน"
+  },
+  {
+    "brand": "Volvo",
+    "model": "EX40",
+    "year_range": "2025-ปัจจุบัน"
+  },
+  {
+    "brand": "Volvo",
+    "model": "EX90",
+    "year_range": "2024-ปัจจุบัน"
+  },
+  {
+    "brand": "Volvo",
+    "model": "Polestar Engineered (S60/XC60)",
+    "year_range": "2020-ปัจจุบัน"
+  },
+  {
+    "brand": "Porsche",
+    "model": "911 (996/997/991/992)",
+    "year_range": "2000s-ปัจจุบัน"
+  },
+  {
+    "brand": "Porsche",
+    "model": "Boxster / 718 Boxster",
+    "year_range": "2000s-ปัจจุบัน"
+  },
+  {
+    "brand": "Porsche",
+    "model": "Cayman / 718 Cayman",
+    "year_range": "2006-ปัจจุบัน"
+  },
+  {
+    "brand": "Porsche",
+    "model": "Panamera",
+    "year_range": "2010-ปัจจุบัน"
+  },
+  {
+    "brand": "Porsche",
+    "model": "Macan",
+    "year_range": "2014-ปัจจุบัน"
+  },
+  {
+    "brand": "Porsche",
+    "model": "Cayenne",
+    "year_range": "2003-ปัจจุบัน"
+  },
+  {
+    "brand": "Porsche",
+    "model": "Taycan",
+    "year_range": "2020-ปัจจุบัน"
+  },
+  {
+    "brand": "Land Rover",
+    "model": "Defender (รุ่นเก่า)",
+    "year_range": "2000s-2016"
+  },
+  {
+    "brand": "Land Rover",
+    "model": "Defender (รุ่นใหม่)",
+    "year_range": "2020-ปัจจุบัน"
+  },
+  {
+    "brand": "Land Rover",
+    "model": "Discovery",
+    "year_range": "2000s-ปัจจุบัน"
+  },
+  {
+    "brand": "Land Rover",
+    "model": "Discovery Sport",
+    "year_range": "2015-ปัจจุบัน"
+  },
+  {
+    "brand": "Land Rover",
+    "model": "Freelander",
+    "year_range": "2000s-2014"
+  },
+  {
+    "brand": "Land Rover",
+    "model": "Range Rover",
+    "year_range": "2000s-ปัจจุบัน"
+  },
+  {
+    "brand": "Land Rover",
+    "model": "Range Rover Sport",
+    "year_range": "2005-ปัจจุบัน"
+  },
+  {
+    "brand": "Land Rover",
+    "model": "Range Rover Velar",
+    "year_range": "2017-ปัจจุบัน"
+  },
+  {
+    "brand": "Land Rover",
+    "model": "Range Rover Evoque",
+    "year_range": "2011-ปัจจุบัน"
+  },
+  {
+    "brand": "Jaguar",
+    "model": "XE",
+    "year_range": "2015-2020s"
+  },
+  {
+    "brand": "Jaguar",
+    "model": "XF",
+    "year_range": "2008-2020s"
+  },
+  {
+    "brand": "Jaguar",
+    "model": "XJ",
+    "year_range": "2000s-2019"
+  },
+  {
+    "brand": "Jaguar",
+    "model": "F-Type",
+    "year_range": "2013-2020s"
+  },
+  {
+    "brand": "Jaguar",
+    "model": "F-Pace",
+    "year_range": "2016-ปัจจุบัน"
+  },
+  {
+    "brand": "Jaguar",
+    "model": "E-Pace",
+    "year_range": "2018-ปัจจุบัน"
+  },
+  {
+    "brand": "Jaguar",
+    "model": "I-Pace",
+    "year_range": "2019-ปัจจุบัน"
+  },
+  {
+    "brand": "Mini",
+    "model": "Cooper / Cooper S (R50-R56)",
+    "year_range": "2002-2013"
+  },
+  {
+    "brand": "Mini",
+    "model": "Cooper (F56)",
+    "year_range": "2014-2023"
+  },
+  {
+    "brand": "Mini",
+    "model": "Cooper (J01/F66)",
+    "year_range": "2024-ปัจจุบัน"
+  },
+  {
+    "brand": "Mini",
+    "model": "Cooper SE (ไฟฟ้า)",
+    "year_range": "2020-ปัจจุบัน"
+  },
+  {
+    "brand": "Mini",
+    "model": "Countryman",
+    "year_range": "2011-ปัจจุบัน"
+  },
+  {
+    "brand": "Mini",
+    "model": "Clubman",
+    "year_range": "2008-2023"
+  },
+  {
+    "brand": "Mini",
+    "model": "Paceman",
+    "year_range": "2013-2016"
+  },
+  {
+    "brand": "Mini",
+    "model": "John Cooper Works (JCW)",
+    "year_range": "2000s-ปัจจุบัน"
+  },
+  {
+    "brand": "Volkswagen",
+    "model": "Golf",
+    "year_range": "2000s-2018"
+  },
+  {
+    "brand": "Volkswagen",
+    "model": "Polo",
+    "year_range": "2000s-2010s"
+  },
+  {
+    "brand": "Volkswagen",
+    "model": "Passat",
+    "year_range": "2000s-2018"
+  },
+  {
+    "brand": "Volkswagen",
+    "model": "Beetle",
+    "year_range": "2000s-2019"
+  },
+  {
+    "brand": "Volkswagen",
+    "model": "Tiguan",
+    "year_range": "2010s"
+  },
+  {
+    "brand": "Volkswagen",
+    "model": "Touareg",
+    "year_range": "2005-ปัจจุบัน"
+  },
+  {
+    "brand": "Volkswagen",
+    "model": "Caravelle",
+    "year_range": "2000s-2010s"
+  },
+  {
+    "brand": "Peugeot",
+    "model": "206 / 207",
+    "year_range": "2000s-2010s"
+  },
+  {
+    "brand": "Peugeot",
+    "model": "308",
+    "year_range": "2010s"
+  },
+  {
+    "brand": "Peugeot",
+    "model": "2008",
+    "year_range": "2021-ปัจจุบัน"
+  },
+  {
+    "brand": "Peugeot",
+    "model": "3008",
+    "year_range": "2018-ปัจจุบัน"
+  },
+  {
+    "brand": "Peugeot",
+    "model": "5008",
+    "year_range": "2018-ปัจจุบัน"
+  },
+  {
+    "brand": "Peugeot",
+    "model": "408",
+    "year_range": "2023-ปัจจุบัน"
+  },
+  {
+    "brand": "Peugeot",
+    "model": "Traveller",
+    "year_range": "2018-ปัจจุบัน"
+  },
+  {
+    "brand": "Jeep",
+    "model": "Compass",
+    "year_range": "2018-ปัจจุบัน"
+  },
+  {
+    "brand": "Jeep",
+    "model": "Wrangler",
+    "year_range": "2007-ปัจจุบัน"
+  },
+  {
+    "brand": "Jeep",
+    "model": "Grand Cherokee",
+    "year_range": "2000s-2020s"
+  },
+  {
+    "brand": "Jeep",
+    "model": "Cherokee",
+    "year_range": "2000s-2010s"
+  },
+  {
+    "brand": "MG",
+    "model": "MG3",
+    "year_range": "2015-2022"
+  },
+  {
+    "brand": "MG",
+    "model": "MG5",
+    "year_range": "2015-ปัจจุบัน"
+  },
+  {
+    "brand": "MG",
+    "model": "MG6",
+    "year_range": "2014-2019"
+  },
+  {
+    "brand": "MG",
+    "model": "ZS",
+    "year_range": "2017-ปัจจุบัน"
+  },
+  {
+    "brand": "MG",
+    "model": "ZS EV",
+    "year_range": "2019-ปัจจุบัน"
+  },
+  {
+    "brand": "MG",
+    "model": "HS",
+    "year_range": "2019-ปัจจุบัน"
+  },
+  {
+    "brand": "MG",
+    "model": "HS PHEV",
+    "year_range": "2021-ปัจจุบัน"
+  },
+  {
+    "brand": "MG",
+    "model": "VS HEV",
+    "year_range": "2023-ปัจจุบัน"
+  },
+  {
+    "brand": "MG",
+    "model": "Extender (กระบะ)",
+    "year_range": "2019-ปัจจุบัน"
+  },
+  {
+    "brand": "MG",
+    "model": "EP / EP Plus",
+    "year_range": "2019-ปัจจุบัน"
+  },
+  {
+    "brand": "MG",
+    "model": "MG4 Electric",
+    "year_range": "2023-ปัจจุบัน"
+  },
+  {
+    "brand": "MG",
+    "model": "MGS5 EV",
+    "year_range": "2025-ปัจจุบัน"
+  },
+  {
+    "brand": "MG",
+    "model": "Cyberster",
+    "year_range": "2024-ปัจจุบัน"
+  },
+  {
+    "brand": "MG",
+    "model": "Maxus 7 / Maxus 9",
+    "year_range": "2023-ปัจจุบัน"
+  },
+  {
+    "brand": "MG",
+    "model": "IM5 / IM6",
+    "year_range": "2025-ปัจจุบัน"
+  },
+  {
+    "brand": "BYD",
+    "model": "Atto 1",
+    "year_range": "2026-ปัจจุบัน"
+  },
+  {
+    "brand": "BYD",
+    "model": "Atto 2",
+    "year_range": "2026-ปัจจุบัน"
+  },
+  {
+    "brand": "BYD",
+    "model": "Atto 3",
+    "year_range": "2022-ปัจจุบัน"
+  },
+  {
+    "brand": "BYD",
+    "model": "Dolphin",
+    "year_range": "2023-ปัจจุบัน"
+  },
+  {
+    "brand": "BYD",
+    "model": "Seal",
+    "year_range": "2023-ปัจจุบัน"
+  },
+  {
+    "brand": "BYD",
+    "model": "Seal 5 DM-i",
+    "year_range": "2024-ปัจจุบัน"
+  },
+  {
+    "brand": "BYD",
+    "model": "Seal 6",
+    "year_range": "2026-ปัจจุบัน"
+  },
+  {
+    "brand": "BYD",
+    "model": "Sealion 5 DM-i",
+    "year_range": "2026-ปัจจุบัน"
+  },
+  {
+    "brand": "BYD",
+    "model": "Sealion 6 DM-i",
+    "year_range": "2024-ปัจจุบัน"
+  },
+  {
+    "brand": "BYD",
+    "model": "Sealion 7",
+    "year_range": "2024-ปัจจุบัน"
+  },
+  {
+    "brand": "BYD",
+    "model": "M6",
+    "year_range": "2024-ปัจจุบัน"
+  },
+  {
+    "brand": "BYD",
+    "model": "e6",
+    "year_range": "2022-ปัจจุบัน"
+  },
+  {
+    "brand": "BYD",
+    "model": "T3 (รถตู้ไฟฟ้า)",
+    "year_range": "2022-ปัจจุบัน"
+  },
+  {
+    "brand": "Denza",
+    "model": "D9",
+    "year_range": "2024-ปัจจุบัน"
+  },
+  {
+    "brand": "GWM Haval",
+    "model": "H6",
+    "year_range": "2021-ปัจจุบัน"
+  },
+  {
+    "brand": "GWM Haval",
+    "model": "H6 HEV",
+    "year_range": "2021-ปัจจุบัน"
+  },
+  {
+    "brand": "GWM Haval",
+    "model": "H6 PHEV",
+    "year_range": "2022-ปัจจุบัน"
+  },
+  {
+    "brand": "GWM Haval",
+    "model": "Jolion",
+    "year_range": "2021-ปัจจุบัน"
+  },
+  {
+    "brand": "GWM Haval",
+    "model": "Jolion HEV",
+    "year_range": "2021-ปัจจุบัน"
+  },
+  {
+    "brand": "GWM ORA",
+    "model": "Good Cat",
+    "year_range": "2021-ปัจจุบัน"
+  },
+  {
+    "brand": "GWM ORA",
+    "model": "Good Cat GT",
+    "year_range": "2022-ปัจจุบัน"
+  },
+  {
+    "brand": "GWM ORA",
+    "model": "07",
+    "year_range": "2024-ปัจจุบัน"
+  },
+  {
+    "brand": "GWM Tank",
+    "model": "Tank 300 (Diesel/HEV)",
+    "year_range": "2023-ปัจจุบัน"
+  },
+  {
+    "brand": "GWM Tank",
+    "model": "Tank 500 HEV",
+    "year_range": "2023-ปัจจุบัน"
+  },
+  {
+    "brand": "GWM Poer",
+    "model": "Poer (กระบะ)",
+    "year_range": "2023-ปัจจุบัน"
+  },
+  {
+    "brand": "GWM WEY",
+    "model": "WEY (รุ่นนำเข้า)",
+    "year_range": "2020s-ปัจจุบัน"
+  },
+  {
+    "brand": "Changan",
+    "model": "Lumin",
+    "year_range": "2024-ปัจจุบัน"
+  },
+  {
+    "brand": "Changan",
+    "model": "CS55 Plus",
+    "year_range": "2024-ปัจจุบัน"
+  },
+  {
+    "brand": "Changan",
+    "model": "Hunter (กระบะ)",
+    "year_range": "2024-ปัจจุบัน"
+  },
+  {
+    "brand": "Deepal",
+    "model": "S07",
+    "year_range": "2024-ปัจจุบัน"
+  },
+  {
+    "brand": "Deepal",
+    "model": "L07",
+    "year_range": "2024-ปัจจุบัน"
+  },
+  {
+    "brand": "Deepal",
+    "model": "S05",
+    "year_range": "2025-ปัจจุบัน"
+  },
+  {
+    "brand": "NEVO",
+    "model": "Q05 (คาดเปิดตัว)",
+    "year_range": "2026-ปัจจุบัน"
+  },
+  {
+    "brand": "Omoda",
+    "model": "C5",
+    "year_range": "2023-ปัจจุบัน"
+  },
+  {
+    "brand": "Omoda",
+    "model": "C5 EV",
+    "year_range": "2023-ปัจจุบัน"
+  },
+  {
+    "brand": "Omoda",
+    "model": "C7",
+    "year_range": "2025-ปัจจุบัน"
+  },
+  {
+    "brand": "Omoda",
+    "model": "C9",
+    "year_range": "2024-ปัจจุบัน"
+  },
+  {
+    "brand": "Jaecoo",
+    "model": "J6",
+    "year_range": "2025-ปัจจุบัน"
+  },
+  {
+    "brand": "Jaecoo",
+    "model": "J7",
+    "year_range": "2024-ปัจจุบัน"
+  },
+  {
+    "brand": "Jaecoo",
+    "model": "J8",
+    "year_range": "2025-ปัจจุบัน"
+  },
+  {
+    "brand": "Jaecoo",
+    "model": "6T REEV",
+    "year_range": "2026-ปัจจุบัน"
+  },
+  {
+    "brand": "Chery",
+    "model": "Tiggo",
+    "year_range": "2020s-ปัจจุบัน"
+  },
+  {
+    "brand": "Chery",
+    "model": "Chery Q (EV)",
+    "year_range": "2026-ปัจจุบัน"
+  },
+  {
+    "brand": "Neta",
+    "model": "V / V-II",
+    "year_range": "2022-ปัจจุบัน"
+  },
+  {
+    "brand": "Neta",
+    "model": "X",
+    "year_range": "2023-ปัจจุบัน"
+  },
+  {
+    "brand": "Neta",
+    "model": "S",
+    "year_range": "2024-ปัจจุบัน"
+  },
+  {
+    "brand": "Aion",
+    "model": "Y Plus",
+    "year_range": "2023-ปัจจุบัน"
+  },
+  {
+    "brand": "Aion",
+    "model": "ES",
+    "year_range": "2024-ปัจจุบัน"
+  },
+  {
+    "brand": "Aion",
+    "model": "V",
+    "year_range": "2025-ปัจจุบัน"
+  },
+  {
+    "brand": "Aion",
+    "model": "UT",
+    "year_range": "2026-ปัจจุบัน"
+  },
+  {
+    "brand": "Geely",
+    "model": "EX2",
+    "year_range": "2026-ปัจจุบัน"
+  },
+  {
+    "brand": "Geely",
+    "model": "EX5",
+    "year_range": "2025-ปัจจุบัน"
+  },
+  {
+    "brand": "Geely",
+    "model": "Starray",
+    "year_range": "2025-ปัจจุบัน"
+  },
+  {
+    "brand": "Zeekr",
+    "model": "X",
+    "year_range": "2024-ปัจจุบัน"
+  },
+  {
+    "brand": "Zeekr",
+    "model": "001",
+    "year_range": "2024-ปัจจุบัน"
+  },
+  {
+    "brand": "Zeekr",
+    "model": "009",
+    "year_range": "2024-ปัจจุบัน"
+  },
+  {
+    "brand": "Zeekr",
+    "model": "7X",
+    "year_range": "2025-ปัจจุบัน"
+  },
+  {
+    "brand": "Xpeng",
+    "model": "G6",
+    "year_range": "2024-ปัจจุบัน"
+  },
+  {
+    "brand": "Xpeng",
+    "model": "X9",
+    "year_range": "2024-ปัจจุบัน"
+  },
+  {
+    "brand": "Xpeng",
+    "model": "G9",
+    "year_range": "2024-ปัจจุบัน"
+  },
+  {
+    "brand": "Leapmotor",
+    "model": "C10",
+    "year_range": "2025-ปัจจุบัน"
+  },
+  {
+    "brand": "Leapmotor",
+    "model": "B10",
+    "year_range": "2025-ปัจจุบัน"
+  },
+  {
+    "brand": "Leapmotor",
+    "model": "T03",
+    "year_range": "2025-ปัจจุบัน"
+  },
+  {
+    "brand": "Wuling",
+    "model": "Air ev",
+    "year_range": "2023-ปัจจุบัน"
+  },
+  {
+    "brand": "Wuling",
+    "model": "Binguo",
+    "year_range": "2025-ปัจจุบัน"
+  },
+  {
+    "brand": "Wuling",
+    "model": "Cloud EV",
+    "year_range": "2025-ปัจจุบัน"
+  },
+  {
+    "brand": "Hongqi",
+    "model": "E-HS9",
+    "year_range": "2023-ปัจจุบัน"
+  },
+  {
+    "brand": "Hongqi",
+    "model": "H9",
+    "year_range": "2023-ปัจจุบัน"
+  },
+  {
+    "brand": "Hongqi",
+    "model": "HS5",
+    "year_range": "2024-ปัจจุบัน"
+  },
+  {
+    "brand": "Forthing",
+    "model": "Friday EV",
+    "year_range": "2026-ปัจจุบัน"
+  },
+  {
+    "brand": "Forthing",
+    "model": "Thunder",
+    "year_range": "2024-ปัจจุบัน"
+  },
+  {
+    "brand": "BAW",
+    "model": "M8",
+    "year_range": "2026-ปัจจุบัน"
+  },
+  {
+    "brand": "CP Foton",
+    "model": "eView Connect",
+    "year_range": "2026-ปัจจุบัน"
+  },
+  {
+    "brand": "CP Foton",
+    "model": "Tunland (กระบะ)",
+    "year_range": "2024-ปัจจุบัน"
+  },
+  {
+    "brand": "DFSK",
+    "model": "Glory 580",
+    "year_range": "2020s-ปัจจุบัน"
+  },
+  {
+    "brand": "DFSK",
+    "model": "รถตู้/รถเพื่อการพาณิชย์",
+    "year_range": "2010s-ปัจจุบัน"
+  },
+  {
+    "brand": "AVATR",
+    "model": "11 / 12",
+    "year_range": "2025-ปัจจุบัน"
+  },
+  {
+    "brand": "Riddara",
+    "model": "RD6 (กระบะไฟฟ้า)",
+    "year_range": "2024-ปัจจุบัน"
+  },
+  {
+    "brand": "Firefly",
+    "model": "Firefly EV",
+    "year_range": "2026-ปัจจุบัน"
+  },
+  {
+    "brand": "Juneyao",
+    "model": "รุ่นนำเข้า",
+    "year_range": "2025-ปัจจุบัน"
+  },
+  {
+    "brand": "King Long",
+    "model": "รถตู้/รถบัส",
+    "year_range": "2010s-ปัจจุบัน"
+  },
+  {
+    "brand": "MINE",
+    "model": "MINE Mobility SPA1",
+    "year_range": "2019-ปัจจุบัน"
+  },
+  {
+    "brand": "Volt",
+    "model": "City EV",
+    "year_range": "2020s-ปัจจุบัน"
+  },
+  {
+    "brand": "Neomor",
+    "model": "รุ่นนำเข้า",
+    "year_range": "2026-ปัจจุบัน"
+  },
+  {
+    "brand": "NEXTEM",
+    "model": "รุ่นนำเข้า",
+    "year_range": "2026-ปัจจุบัน"
+  },
+  {
+    "brand": "Tesla",
+    "model": "Model 3",
+    "year_range": "2023-ปัจจุบัน"
+  },
+  {
+    "brand": "Tesla",
+    "model": "Model Y",
+    "year_range": "2023-ปัจจุบัน"
+  },
+  {
+    "brand": "Tesla",
+    "model": "Model S (นำเข้าอิสระ)",
+    "year_range": "2010s-ปัจจุบัน"
+  },
+  {
+    "brand": "Tesla",
+    "model": "Model X (นำเข้าอิสระ)",
+    "year_range": "2010s-ปัจจุบัน"
+  },
+  {
+    "brand": "Ferrari",
+    "model": "F430 / 458 / 488 / F8",
+    "year_range": "2000s-2020s"
+  },
+  {
+    "brand": "Ferrari",
+    "model": "296 GTB / GTS",
+    "year_range": "2022-ปัจจุบัน"
+  },
+  {
+    "brand": "Ferrari",
+    "model": "Roma",
+    "year_range": "2021-ปัจจุบัน"
+  },
+  {
+    "brand": "Ferrari",
+    "model": "Purosangue",
+    "year_range": "2023-ปัจจุบัน"
+  },
+  {
+    "brand": "Ferrari",
+    "model": "SF90",
+    "year_range": "2020-ปัจจุบัน"
+  },
+  {
+    "brand": "Ferrari",
+    "model": "812 Superfast",
+    "year_range": "2018-2020s"
+  },
+  {
+    "brand": "Ferrari",
+    "model": "Luce",
+    "year_range": "2026-ปัจจุบัน"
+  },
+  {
+    "brand": "Lamborghini",
+    "model": "Gallardo",
+    "year_range": "2003-2013"
+  },
+  {
+    "brand": "Lamborghini",
+    "model": "Huracán",
+    "year_range": "2014-ปัจจุบัน"
+  },
+  {
+    "brand": "Lamborghini",
+    "model": "Aventador",
+    "year_range": "2011-2022"
+  },
+  {
+    "brand": "Lamborghini",
+    "model": "Revuelto",
+    "year_range": "2024-ปัจจุบัน"
+  },
+  {
+    "brand": "Lamborghini",
+    "model": "Urus",
+    "year_range": "2018-ปัจจุบัน"
+  },
+  {
+    "brand": "Aston Martin",
+    "model": "Vantage",
+    "year_range": "2000s-ปัจจุบัน"
+  },
+  {
+    "brand": "Aston Martin",
+    "model": "DB11 / DB12",
+    "year_range": "2017-ปัจจุบัน"
+  },
+  {
+    "brand": "Aston Martin",
+    "model": "DBX",
+    "year_range": "2020-ปัจจุบัน"
+  },
+  {
+    "brand": "Aston Martin",
+    "model": "DBS",
+    "year_range": "2010s-2020s"
+  },
+  {
+    "brand": "Bentley",
+    "model": "Continental GT",
+    "year_range": "2003-ปัจจุบัน"
+  },
+  {
+    "brand": "Bentley",
+    "model": "Flying Spur",
+    "year_range": "2005-ปัจจุบัน"
+  },
+  {
+    "brand": "Bentley",
+    "model": "Bentayga",
+    "year_range": "2016-ปัจจุบัน"
+  },
+  {
+    "brand": "Bentley",
+    "model": "Mulsanne",
+    "year_range": "2010-2020"
+  },
+  {
+    "brand": "Rolls-Royce",
+    "model": "Phantom",
+    "year_range": "2003-ปัจจุบัน"
+  },
+  {
+    "brand": "Rolls-Royce",
+    "model": "Ghost",
+    "year_range": "2010-ปัจจุบัน"
+  },
+  {
+    "brand": "Rolls-Royce",
+    "model": "Wraith",
+    "year_range": "2013-2023"
+  },
+  {
+    "brand": "Rolls-Royce",
+    "model": "Dawn",
+    "year_range": "2016-2023"
+  },
+  {
+    "brand": "Rolls-Royce",
+    "model": "Cullinan",
+    "year_range": "2018-ปัจจุบัน"
+  },
+  {
+    "brand": "Rolls-Royce",
+    "model": "Spectre",
+    "year_range": "2024-ปัจจุบัน"
+  },
+  {
+    "brand": "McLaren",
+    "model": "570S / 600LT",
+    "year_range": "2015-2021"
+  },
+  {
+    "brand": "McLaren",
+    "model": "720S / 750S",
+    "year_range": "2017-ปัจจุบัน"
+  },
+  {
+    "brand": "McLaren",
+    "model": "Artura",
+    "year_range": "2022-ปัจจุบัน"
+  },
+  {
+    "brand": "McLaren",
+    "model": "GT",
+    "year_range": "2019-2020s"
+  },
+  {
+    "brand": "Maserati",
+    "model": "Ghibli",
+    "year_range": "2014-2020s"
+  },
+  {
+    "brand": "Maserati",
+    "model": "Quattroporte",
+    "year_range": "2000s-2020s"
+  },
+  {
+    "brand": "Maserati",
+    "model": "Levante",
+    "year_range": "2017-ปัจจุบัน"
+  },
+  {
+    "brand": "Maserati",
+    "model": "Grecale",
+    "year_range": "2023-ปัจจุบัน"
+  },
+  {
+    "brand": "Maserati",
+    "model": "GranTurismo",
+    "year_range": "2008-ปัจจุบัน"
+  },
+  {
+    "brand": "Lotus",
+    "model": "Emira",
+    "year_range": "2022-ปัจจุบัน"
+  },
+  {
+    "brand": "Lotus",
+    "model": "Eletre",
+    "year_range": "2024-ปัจจุบัน"
+  },
+  {
+    "brand": "Lotus",
+    "model": "Evora / Exige (รุ่นเก่า)",
+    "year_range": "2000s-2010s"
+  },
+  {
+    "brand": "Koenigsegg",
+    "model": "รุ่นสั่งพิเศษ (ผลิตจำกัด)",
+    "year_range": "2010s-ปัจจุบัน"
+  },
+  {
+    "brand": "Thairung",
+    "model": "Transformer",
+    "year_range": "2010s-ปัจจุบัน"
+  },
+  {
+    "brand": "Thairung",
+    "model": "Adventure",
+    "year_range": "2000s-2010s"
+  },
+  {
+    "brand": "Tata",
+    "model": "Xenon (กระบะ)",
+    "year_range": "2008-2010s"
+  },
+  {
+    "brand": "Tata",
+    "model": "Super Ace",
+    "year_range": "2010s"
+  },
+  {
+    "brand": "Proton",
+    "model": "Wira",
+    "year_range": "1990s-2000s"
+  },
+  {
+    "brand": "Proton",
+    "model": "Saga",
+    "year_range": "1990s-2000s"
+  }
+]
