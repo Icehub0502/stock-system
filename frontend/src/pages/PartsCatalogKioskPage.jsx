@@ -34,6 +34,12 @@ function CarIcon() {
   );
 }
 
+let discountIdSeq = 0;
+function nextDiscountId() {
+  discountIdSeq += 1;
+  return `d${discountIdSeq}`;
+}
+
 export default function PartsCatalogKioskPage() {
   // หน้านี้ซ่อน NavBar/BottomNav ทั้งคู่ (เต็มจอแบบแอป — ดู App.jsx isKiosk) จึง
   // ต้องมีปุ่มกลับหน้าหลักในตัวเอง ไม่งั้นออกจากหน้านี้ไม่ได้เลยถ้าไม่กดปุ่ม back
@@ -52,8 +58,12 @@ export default function PartsCatalogKioskPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   // ตะกร้าที่เซลติ๊กเลือกไว้ — เก็บตาม part.id กันเลือกซ้ำเพิ่มเป็นบรรทัดใหม่
-  // (ติ๊กซ้ำ = ปรับจำนวนแทน) คีย์ด้วย string เพราะมาจาก part.id ตัวเลขจาก DB
+  // (ติ๊กซ้ำ = ปรับจำนวนแทน) คีย์ด้วย string เพราะมาจาก part.id ตัวเลขจาก DB —
+  // unitPrice เป็นราคาที่พนักงานพิมพ์เอง (ไม่ใช่ราคาตั้งต้นจากแคตตาล็อกโดยตรง แม้
+  // จะเติมราคาแคตตาล็อกมาให้เป็นค่าเริ่มต้นถ้ามีก็ตาม) แก้ไขได้เสมอในตะกร้า
   const [selectedParts, setSelectedParts] = useState({});
+  const [discounts, setDiscounts] = useState([]);
+  const [showCart, setShowCart] = useState(false);
   const [showQuoteForm, setShowQuoteForm] = useState(false);
   const [justCreated, setJustCreated] = useState(false);
 
@@ -119,10 +129,10 @@ export default function PartsCatalogKioskPage() {
     }
   };
 
-  // ห้ามเลือกอะไหล่ที่ยังไม่ตั้งราคาจริง (needs_price = แถวที่สร้างอัตโนมัติไว้
-  // ล่วงหน้าให้ทุกรุ่นรถ ราคาเริ่มต้น 0) — กันเสนอราคา 0 บาทให้ลูกค้าจริงโดยไม่ตั้งใจ
+  // จิ้มเลือก/ถอนอะไหล่ได้เสมอ ไม่ว่าจะมีราคาแนะนำจากแคตตาล็อกหรือยัง — ราคาที่ใช้
+  // คิดยอดจริงคือ unitPrice ที่พนักงานพิมพ์เอง (เติมราคาแคตตาล็อกมาให้เป็นจุดเริ่มต้น
+  // ถ้ามี ไม่งั้นเว้นว่างให้พิมพ์เอง) แก้ไขได้ในตะกร้าตลอดก่อนสร้างใบเสนอราคาจริง
   const togglePart = (part) => {
-    if (part.needs_price) return;
     setSelectedParts((prev) => {
       const key = String(part.id);
       if (prev[key]) {
@@ -130,7 +140,14 @@ export default function PartsCatalogKioskPage() {
         delete next[key];
         return next;
       }
-      return { ...prev, [key]: { ...part, quantity: 1 } };
+      return {
+        ...prev,
+        [key]: {
+          ...part,
+          quantity: 1,
+          unitPrice: Number(part.price) > 0 ? String(part.price) : '',
+        },
+      };
     });
   };
 
@@ -149,19 +166,51 @@ export default function PartsCatalogKioskPage() {
     });
   };
 
+  const updateItemPrice = (id, value) => {
+    setSelectedParts((prev) => {
+      const key = String(id);
+      if (!prev[key]) return prev;
+      return { ...prev, [key]: { ...prev[key], unitPrice: value } };
+    });
+  };
+
+  const removeItem = (id) => {
+    setSelectedParts((prev) => {
+      const next = { ...prev };
+      delete next[String(id)];
+      return next;
+    });
+  };
+
+  const addDiscount = () => {
+    setDiscounts((prev) => [...prev, { id: nextDiscountId(), label: 'ส่วนลด', amount: '' }]);
+  };
+
+  const updateDiscount = (id, field, value) => {
+    setDiscounts((prev) => prev.map((d) => (d.id === id ? { ...d, [field]: value } : d)));
+  };
+
+  const removeDiscount = (id) => {
+    setDiscounts((prev) => prev.filter((d) => d.id !== id));
+  };
+
   const cartItems = useMemo(() => Object.values(selectedParts), [selectedParts]);
   const cartCount = cartItems.reduce((sum, it) => sum + it.quantity, 0);
-  const cartTotal = cartItems.reduce((sum, it) => sum + it.quantity * Number(it.price || 0), 0);
+  const cartSubtotal = cartItems.reduce((sum, it) => sum + it.quantity * Number(it.unitPrice || 0), 0);
+  const discountTotal = discounts.reduce((sum, d) => sum + Number(d.amount || 0), 0);
+  const cartTotal = Math.max(0, cartSubtotal - discountTotal);
 
   const openQuoteForm = () => {
     if (cartItems.length === 0) return;
     setJustCreated(false);
+    setShowCart(false);
     setShowQuoteForm(true);
   };
 
   const handleQuoteSuccess = () => {
     setShowQuoteForm(false);
     setSelectedParts({});
+    setDiscounts([]);
     setBrand('');
     setModel('');
     setModelPlain('');
@@ -177,6 +226,23 @@ export default function PartsCatalogKioskPage() {
   }, [justCreated]);
 
   const step = model ? 3 : brand ? 2 : 1;
+
+  // รายการที่ส่งต่อไปสร้างใบเสนอราคาจริง — ส่วนลดแต่ละรายการแปลงเป็นบรรทัดราคา
+  // ติดลบ (ใช้กลไกคำนวณยอดรวมเดิมของใบเสนอราคา ไม่ต้องเพิ่มคอลัมน์ discount ใหม่)
+  const initialItems = [
+    ...cartItems.map((it) => ({
+      product_name: it.part_name,
+      quantity: it.quantity,
+      unit_price: Number(it.unitPrice) || 0,
+    })),
+    ...discounts
+      .filter((d) => Number(d.amount) > 0)
+      .map((d) => ({
+        product_name: d.label?.trim() || 'ส่วนลด',
+        quantity: 1,
+        unit_price: -Math.abs(Number(d.amount)),
+      })),
+  ];
 
   return (
     <div className="kiosk">
@@ -257,7 +323,7 @@ export default function PartsCatalogKioskPage() {
               return (
                 <article
                   key={part.id}
-                  className={`kiosk-part ${selected ? 'kiosk-part-selected' : ''} ${part.needs_price ? 'kiosk-part-needs-price' : ''}`}
+                  className={`kiosk-part ${selected ? 'kiosk-part-selected' : ''}`}
                   onClick={() => togglePart(part)}
                   role="button"
                   tabIndex={0}
@@ -274,10 +340,10 @@ export default function PartsCatalogKioskPage() {
                     <div className="kiosk-part-name">{part.part_name}</div>
                     {part.description && <div className="kiosk-part-desc">{part.description}</div>}
                   </div>
-                  {part.needs_price ? (
-                    <div className="kiosk-part-needs-price-label">ยังไม่ตั้งราคา</div>
-                  ) : (
+                  {Number(part.price) > 0 ? (
                     <div className="kiosk-part-price">฿{formatMoney(part.price)}</div>
+                  ) : (
+                    <div className="kiosk-part-needs-price-label">พิมพ์ราคาเอง</div>
                   )}
 
                   {selected && (
@@ -296,24 +362,126 @@ export default function PartsCatalogKioskPage() {
 
       {cartItems.length > 0 && step === 3 && (
         <div className="kiosk-cart-bar">
-          <div className="kiosk-cart-summary">
+          <button type="button" className="kiosk-cart-summary" onClick={() => setShowCart(true)}>
             <span className="kiosk-cart-count">เลือกแล้ว {cartCount} ชิ้น</span>
             <span className="kiosk-cart-total">฿{formatMoney(cartTotal)}</span>
-          </div>
-          <button type="button" className="kiosk-cart-cta" onClick={openQuoteForm}>
-            สร้างใบเสนอราคา →
           </button>
+          <button type="button" className="kiosk-cart-cta" onClick={() => setShowCart(true)}>
+            ตรวจสอบรายการ →
+          </button>
+        </div>
+      )}
+
+      {showCart && (
+        <div className="modal-backdrop" onClick={() => setShowCart(false)}>
+          <div className="modal-card medium kiosk-cart-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>รายการที่เลือก</h2>
+              <button className="btn-close" onClick={() => setShowCart(false)}>✕</button>
+            </div>
+
+            <div className="kiosk-cart-list">
+              {cartItems.map((it) => (
+                <div key={it.id} className="kiosk-cart-line">
+                  <div className="kiosk-cart-line-thumb">
+                    {it.image_data ? <img src={it.image_data} alt={it.part_name} /> : <span>ไม่มีรูป</span>}
+                  </div>
+                  <div className="kiosk-cart-line-info">
+                    <div className="kiosk-cart-line-name">{it.part_name}</div>
+                    <div className="kiosk-cart-line-controls">
+                      <div className="kiosk-cart-line-qty">
+                        <button type="button" onClick={() => changeQty(it, -1)} aria-label="ลดจำนวน">−</button>
+                        <span>{it.quantity}</span>
+                        <button type="button" onClick={() => changeQty(it, 1)} aria-label="เพิ่มจำนวน">+</button>
+                      </div>
+                      <div className="kiosk-cart-line-price">
+                        <span>฿</span>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          placeholder="ราคา/ชิ้น"
+                          value={it.unitPrice}
+                          onChange={(e) => updateItemPrice(it.id, e.target.value)}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  <div className="kiosk-cart-line-total">
+                    ฿{formatMoney(it.quantity * Number(it.unitPrice || 0))}
+                  </div>
+                  <button type="button" className="kiosk-cart-line-remove" onClick={() => removeItem(it.id)} aria-label="ลบรายการ">
+                    ✕
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            <div className="kiosk-discount-section">
+              <div className="kiosk-discount-header">
+                <span>ส่วนลด</span>
+                <button type="button" className="btn btn-secondary" onClick={addDiscount}>+ เพิ่มส่วนลด</button>
+              </div>
+              {discounts.map((d) => (
+                <div key={d.id} className="kiosk-discount-row">
+                  <input
+                    type="text"
+                    className="kiosk-discount-label"
+                    placeholder="เช่น ส่วนลดลูกค้าประจำ"
+                    value={d.label}
+                    onChange={(e) => updateDiscount(d.id, 'label', e.target.value)}
+                  />
+                  <div className="kiosk-discount-amount">
+                    <span>฿</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      placeholder="0.00"
+                      value={d.amount}
+                      onChange={(e) => updateDiscount(d.id, 'amount', e.target.value)}
+                    />
+                  </div>
+                  <button type="button" className="kiosk-cart-line-remove" onClick={() => removeDiscount(d.id)} aria-label="ลบส่วนลด">
+                    ✕
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            <div className="kiosk-cart-totals">
+              <div>
+                <span>ยอดรวม</span>
+                <span>฿{formatMoney(cartSubtotal)}</span>
+              </div>
+              {discountTotal > 0 && (
+                <div className="kiosk-cart-totals-discount">
+                  <span>ส่วนลดรวม</span>
+                  <span>-฿{formatMoney(discountTotal)}</span>
+                </div>
+              )}
+              <div className="kiosk-cart-totals-grand">
+                <span>ยอดสุทธิ</span>
+                <span>฿{formatMoney(cartTotal)}</span>
+              </div>
+            </div>
+
+            <div className="modal-actions">
+              <button type="button" className="btn btn-primary" onClick={openQuoteForm}>
+                สร้างใบเสนอราคา →
+              </button>
+              <button type="button" className="btn btn-secondary" onClick={() => setShowCart(false)}>
+                เลือกอะไหล่เพิ่ม
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
       {showQuoteForm && (
         <QuotationFormModal
           quotation={null}
-          initialItems={cartItems.map((it) => ({
-            product_name: it.part_name,
-            quantity: it.quantity,
-            unit_price: it.price,
-          }))}
+          initialItems={initialItems}
           initialVehicle={{ brand, model: modelPlain }}
           onClose={() => setShowQuoteForm(false)}
           onSuccess={handleQuoteSuccess}

@@ -4856,13 +4856,7 @@ body:has(.modal-backdrop) .page-fade-in {
   color: #4ade80;
 }
 
-/* ยังไม่ตั้งราคาจริง — กันเลือกเสนอราคา 0 บาทให้ลูกค้าจริงโดยไม่ตั้งใจ (ดู
-   togglePart ใน PartsCatalogKioskPage.jsx ที่บล็อกการเลือกการ์ดนี้จริงๆ) */
-.kiosk-part-needs-price {
-  cursor: not-allowed;
-  opacity: 0.72;
-}
-
+/* ยังไม่มีราคาแนะนำจากแคตตาล็อก — เลือกได้ปกติ พนักงานพิมพ์ราคาเองในตะกร้า */
 .kiosk-part-needs-price-label {
   padding: 10px 14px 14px;
   font-size: 0.9rem;
@@ -4915,7 +4909,13 @@ body:has(.modal-backdrop) .page-fade-in {
 .kiosk-cart-summary {
   display: flex;
   flex-direction: column;
+  align-items: flex-start;
   gap: 2px;
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font-family: inherit;
 }
 
 .kiosk-cart-count {
@@ -4943,6 +4943,199 @@ body:has(.modal-backdrop) .page-fade-in {
 
 .kiosk-cart-cta:active {
   background: #f59e0b;
+}
+
+/* ── ตะกร้าตรวจสอบรายการ (โมดัลแบบเดียวกับที่อื่นในระบบ — .modal-backdrop/
+   .modal-card สีอ่อนของเดิม อ่านตัวเลขง่ายกว่าธีมมืดของหน้าคีออส) ── */
+.kiosk-cart-modal {
+  max-height: 88vh;
+  overflow-y: auto;
+}
+
+.kiosk-cart-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 4px 20px;
+}
+
+.kiosk-cart-line {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+}
+
+.kiosk-cart-line-thumb {
+  flex-shrink: 0;
+  width: 52px;
+  height: 52px;
+  border-radius: 8px;
+  background: #f3f4f6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  font-size: 0.65rem;
+  color: #9ca3af;
+  text-align: center;
+}
+
+.kiosk-cart-line-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.kiosk-cart-line-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.kiosk-cart-line-name {
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+
+.kiosk-cart-line-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.kiosk-cart-line-qty {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.kiosk-cart-line-qty button {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  border: 1px solid #d1d5db;
+  background: #f9fafb;
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.kiosk-cart-line-qty span {
+  min-width: 20px;
+  text-align: center;
+  font-weight: 700;
+}
+
+.kiosk-cart-line-price {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 600;
+  color: #6b7280;
+}
+
+.kiosk-cart-line-price input {
+  width: 90px;
+  padding: 6px 8px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 0.95rem;
+}
+
+.kiosk-cart-line-total {
+  flex-shrink: 0;
+  min-width: 84px;
+  text-align: right;
+  font-weight: 800;
+  color: #059669;
+}
+
+.kiosk-cart-line-remove {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: none;
+  background: #fee2e2;
+  color: #b91c1c;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.kiosk-discount-section {
+  margin: 16px 20px 0;
+  padding-top: 14px;
+  border-top: 1px dashed #e5e7eb;
+}
+
+.kiosk-discount-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  font-weight: 700;
+}
+
+.kiosk-discount-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.kiosk-discount-label {
+  flex: 1;
+  padding: 8px 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 0.9rem;
+}
+
+.kiosk-discount-amount {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: #6b7280;
+  font-weight: 600;
+}
+
+.kiosk-discount-amount input {
+  width: 100px;
+  padding: 8px 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 0.9rem;
+}
+
+.kiosk-cart-totals {
+  margin: 16px 20px 0;
+  padding-top: 14px;
+  border-top: 1px solid #e5e7eb;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.kiosk-cart-totals > div {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.95rem;
+}
+
+.kiosk-cart-totals-discount {
+  color: #b91c1c;
+}
+
+.kiosk-cart-totals-grand {
+  font-size: 1.2rem;
+  font-weight: 800;
+  color: #059669;
 }
 
 /* จอแคบ (แท็บเล็ตแนวตั้ง/มือถือ) — ลดขนาด header ลงให้เหลือพื้นที่คอนเทนต์ */
