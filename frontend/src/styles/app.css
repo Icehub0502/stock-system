@@ -4620,7 +4620,8 @@ body:has(.modal-backdrop) .page-fade-in {
 }
 
 .kiosk-grid-brand {
-  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 14px;
 }
 
 .kiosk-grid-model {
@@ -4639,13 +4640,13 @@ body:has(.modal-backdrop) .page-fade-in {
   gap: 12px;
   min-height: 150px;
   padding: 18px 14px;
-  background: #1b1e24;
-  border: 1px solid #2b2e36;
+  background: linear-gradient(160deg, #1c1f26 0%, #14161b 100%);
+  border: 1px solid rgba(255, 255, 255, 0.07);
   border-radius: 18px;
   color: #f4f4f5;
   font-family: inherit;
   cursor: pointer;
-  transition: border-color 0.15s ease, transform 0.1s ease;
+  transition: border-color 0.2s ease, transform 0.12s ease, box-shadow 0.2s ease;
 }
 
 .kiosk-tile:active {
@@ -4661,19 +4662,6 @@ body:has(.modal-backdrop) .page-fade-in {
   word-break: break-word;
 }
 
-.kiosk-brand-badge {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 68px;
-  height: 68px;
-  border-radius: 50%;
-  color: #fff;
-  font-size: 1.5rem;
-  font-weight: 800;
-  letter-spacing: 0.5px;
-}
-
 .kiosk-model-icon {
   color: #fbbf24;
   width: 56px;
@@ -4685,8 +4673,64 @@ body:has(.modal-backdrop) .page-fade-in {
   height: 100%;
 }
 
+/* ── ยี่ห้อรถ: ดีไซน์เรียบหรู เน้นตัวอักษรล้วน ไม่มีไอคอนวงกลมสีสัน ── */
+.kiosk-tile-brand {
+  position: relative;
+  gap: 0;
+  min-height: 108px;
+  padding: 22px 16px 20px;
+  border-color: rgba(255, 255, 255, 0.06);
+  overflow: hidden;
+}
+
+/* เส้นบางๆ ด้านบน — จุดเด่นเดียวที่อนุญาตให้มีสี (โทนทอง/เหลืองอำพันเดิมของหน้า)
+   จางไว้ก่อน แล้วสว่างเต็มที่ตอนกด ให้ความรู้สึก "ถูกออกแบบ" แบบละเอียด ไม่ฉูดฉาด */
+.kiosk-tile-brand::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 28px;
+  height: 2px;
+  background: #fbbf24;
+  opacity: 0.35;
+  transition: width 0.22s ease, opacity 0.22s ease;
+}
+
+.kiosk-tile-brand:hover,
+.kiosk-tile-brand:active {
+  border-color: rgba(251, 191, 36, 0.45);
+  box-shadow: 0 0 0 1px rgba(251, 191, 36, 0.18), 0 10px 28px rgba(0, 0, 0, 0.4);
+}
+
+.kiosk-tile-brand:hover::before,
+.kiosk-tile-brand:active::before {
+  width: 56px;
+  opacity: 1;
+}
+
+.kiosk-tile-brand .kiosk-tile-label {
+  font-family: 'Chakra Petch', 'Sarabun', sans-serif;
+  font-size: 1.12rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #f4f4f5;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+
+/* กรอบโลโก้จริง (ถ้ามีวางไฟล์ไว้ใน public/brand-logos/) — ชิปสี่เหลี่ยมมุมมน
+   โทนอ่อนนวล ไม่ใช่วงกลมขาวสดจ้า ให้เข้ากับธีมมืดหรูของทั้งหน้า */
 .kiosk-brand-badge-logo {
-  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  margin-bottom: 10px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.92);
   overflow: hidden;
 }
 

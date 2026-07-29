@@ -6,38 +6,18 @@ import { formatMoney } from '../utils/format';
 import { brandLogoSlug } from '../utils/carBrands';
 import QuotationFormModal from '../components/QuotationFormModal';
 
-// สีประจำแท็บยี่ห้อ — ใช้เป็น fallback เมื่อยังไม่มีไฟล์โลโก้จริงของยี่ห้อนั้น
-// (วางไฟล์โลโก้ไว้ที่ frontend/public/brand-logos/<slug>.png แล้วจะขึ้นแทนอัตโนมัติ
-// ไม่ต้องแก้โค้ด — ดู BrandLogo ด้านล่าง)
-const BRAND_COLORS = [
-  '#e11d48', '#2563eb', '#059669', '#d97706', '#7c3aed',
-  '#0891b2', '#be123c', '#4338ca', '#65a30d', '#c2410c',
-];
-
-function brandInitials(brand) {
-  const trimmed = (brand || '').trim();
-  if (!trimmed) return '?';
-  const words = trimmed.split(/[\s-]+/).filter(Boolean);
-  if (words.length >= 2) return (words[0][0] + words[1][0]).toUpperCase();
-  return trimmed.slice(0, 2).toUpperCase();
-}
-
 // ลองโหลดไฟล์โลโก้จริงจาก /brand-logos/<slug>.png ก่อน — ถ้าไม่มีไฟล์ (404/error)
-// ค่อย fallback เป็นตัวอักษรย่อบนพื้นสี กันหน้าโล่งเปล่าระหว่างรอใส่โลโก้จริง
-function BrandLogo({ brand, colorIndex }) {
+// ไม่แสดงอะไรเลย ปล่อยให้ชื่อยี่ห้อ (kiosk-tile-label) เป็นตัวเด่นแทน (ดีไซน์แบบ
+// เรียบหรู เน้นตัวอักษรล้วน แทนไอคอนวงกลมสีสันฉูดฉาด — วางไฟล์โลโก้จริงเพิ่มได้
+// ทีหลังโดยไม่ต้องแก้โค้ด)
+function BrandLogo({ brand }) {
   const [failed, setFailed] = useState(false);
   const slug = brandLogoSlug(brand);
 
-  if (failed || !slug) {
-    return (
-      <span className="kiosk-brand-badge" style={{ background: BRAND_COLORS[colorIndex % BRAND_COLORS.length] }}>
-        {brandInitials(brand)}
-      </span>
-    );
-  }
+  if (failed || !slug) return null;
 
   return (
-    <span className="kiosk-brand-badge kiosk-brand-badge-logo">
+    <span className="kiosk-brand-badge-logo">
       <img src={`/brand-logos/${slug}.png`} alt={brand} onError={() => setFailed(true)} />
     </span>
   );
@@ -238,14 +218,14 @@ export default function PartsCatalogKioskPage() {
           <div className="kiosk-message">กำลังโหลด...</div>
         ) : step === 1 ? (
           <div className="kiosk-grid kiosk-grid-brand">
-            {brands.map((b, idx) => (
+            {brands.map((b) => (
               <button
                 type="button"
                 key={b}
                 className="kiosk-tile kiosk-tile-brand"
                 onClick={() => selectBrand(b)}
               >
-                <BrandLogo brand={b} colorIndex={idx} />
+                <BrandLogo brand={b} />
                 <span className="kiosk-tile-label">{b}</span>
               </button>
             ))}
