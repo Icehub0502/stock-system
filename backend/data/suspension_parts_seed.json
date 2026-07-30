@@ -209,6 +209,14 @@
   },
   {
     "category": "2. ช่วงล่างหน้า",
+    "part_name_th": "ยางรัดกันโคลงหน้า",
+    "part_name_en": "Front Sway Bar Bracket Clamp Rubber",
+    "applies_sedan": "✓",
+    "applies_pickup": "✓",
+    "notes": "รายการเพิ่มเติมตามที่ร้านแจ้ง — คนละชิ้นกับบูชเหล็กกันโคลง"
+  },
+  {
+    "category": "2. ช่วงล่างหน้า",
     "part_name_th": "ลูกหมากกันโคลงหน้า",
     "part_name_en": "Front Stabilizer Link / Sway Bar Link",
     "applies_sedan": "✓",
@@ -334,6 +342,14 @@
     "applies_sedan": "บางรุ่น",
     "applies_pickup": "บางรุ่น",
     "notes": null
+  },
+  {
+    "category": "3. ช่วงล่างหลัง (เก๋ง/SUV)",
+    "part_name_th": "ยางรัดกันโคลงหลัง",
+    "part_name_en": "Rear Sway Bar Bracket Clamp Rubber",
+    "applies_sedan": "บางรุ่น",
+    "applies_pickup": "บางรุ่น",
+    "notes": "รายการเพิ่มเติมตามที่ร้านแจ้ง — คนละชิ้นกับบูชเหล็กกันโคลง"
   },
   {
     "category": "3. ช่วงล่างหลัง (เก๋ง/SUV)",
