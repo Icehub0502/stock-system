@@ -4856,12 +4856,50 @@ body:has(.modal-backdrop) .page-fade-in {
   color: #4ade80;
 }
 
-/* ยังไม่มีราคาแนะนำจากแคตตาล็อก — เลือกได้ปกติ พนักงานพิมพ์ราคาเองในตะกร้า */
-.kiosk-part-needs-price-label {
-  padding: 10px 14px 14px;
-  font-size: 0.9rem;
-  font-weight: 700;
-  color: #fbbf24;
+/* ชุดโปร — การ์ดในกริดเดียวกับอะไหล่เดี่ยว แต่มีป้าย "ชุดโปร" แยกให้เห็นชัด */
+.kiosk-part-set {
+  border-color: rgba(251, 191, 36, 0.3);
+}
+
+.kiosk-part-set-badge {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: #fbbf24;
+  color: #0f1115;
+  font-size: 0.72rem;
+  font-weight: 800;
+  z-index: 2;
+}
+
+/* ── แถบตัวกรองหมวดหมู่ (เหนือกริดอะไหล่) ── */
+.kiosk-category-bar {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 14px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.kiosk-category-chip {
+  flex-shrink: 0;
+  padding: 8px 16px;
+  border-radius: 999px;
+  border: 1px solid #2b2e36;
+  background: #1b1e24;
+  color: #d4d4d8;
+  font-size: 0.85rem;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.kiosk-category-chip.active {
+  background: #fbbf24;
+  border-color: #fbbf24;
+  color: #0f1115;
 }
 
 .kiosk-message {
@@ -5140,6 +5178,30 @@ body:has(.modal-backdrop) .page-fade-in {
   font-size: 1.2rem;
   font-weight: 800;
   color: #059669;
+}
+
+/* ── ขั้นตอนเชื่อมลูกค้า/รถ (ขั้นที่ 0) — ใช้ CustomerSection/VehicleSection
+   เดิม (ออกแบบมาสำหรับพื้นหลังขาว) วางบนพื้นหลังมืดของหน้าคีออสตรงๆ ไม่ได้ ต้อง
+   ห่อด้วยแผงสีอ่อนแล้วรีเซ็ตสีตัวหนังสือเอง เหมือน .kiosk-cart-modal ด้านบน
+   (ไม่งั้นตัวหนังสือที่ไม่ได้กำหนดสีเฉพาะจะขาวบนขาว มองไม่เห็น) ── */
+.kiosk-customer-step {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 20px;
+  background: #fff;
+  border-radius: 18px;
+  color: #111827;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.kiosk-customer-next {
+  width: 100%;
+  padding: 16px;
+  font-size: 1.05rem;
+  font-weight: 800;
+  border-radius: 14px;
 }
 
 /* จอแคบ (แท็บเล็ตแนวตั้ง/มือถือ) — ลดขนาด header ลงให้เหลือพื้นที่คอนเทนต์ */

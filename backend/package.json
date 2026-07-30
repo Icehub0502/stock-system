@@ -9,6 +9,7 @@
     "init-db": "node src/db/init.js",
     "import-vehicle-models": "node scripts/import_vehicle_models.js",
     "import-quote-parts-all-models": "node scripts/import_quote_parts_for_all_models.js",
+    "backfill-part-categories": "node scripts/backfill_part_categories.js",
     "test": "jest --runInBand"
   },
   "dependencies": {

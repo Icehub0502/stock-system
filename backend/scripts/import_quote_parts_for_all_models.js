@@ -34,7 +34,7 @@ const path = require('path');
         const description = p.part_name_en
           ? `${p.part_name_en}${p.notes ? ` — ${p.notes}` : ''}`
           : (p.notes || null);
-        rows.push([m.brand, modelLabel, p.part_name_th, description, 0, 1]);
+        rows.push([m.brand, modelLabel, p.part_name_th, description, 0, 1, p.category || null]);
       }
     }
 
@@ -47,7 +47,7 @@ const path = require('path');
       const batch = rows.slice(i, i + BATCH_SIZE);
       const [result] = await conn.query(
         `INSERT IGNORE INTO quote_part_prices
-         (brand, model, part_name, description, price, needs_price)
+         (brand, model, part_name, description, price, needs_price, category)
          VALUES ?`,
         [batch]
       );

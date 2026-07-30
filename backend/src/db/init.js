@@ -531,6 +531,24 @@ async function initDatabase() {
     ADD COLUMN needs_price TINYINT(1) NOT NULL DEFAULT 0
   `).catch(ignoreIfAlreadyApplied);
 
+  // category: หมวดหมู่อะไหล่ (เช่น "1. โช้คอัพ + อุปกรณ์โช้ค") จาก
+  // suspension_parts_seed.json — ใช้ทำตัวกรองหมวดหมู่ในหน้าคีออสตอนเลือกอะไหล่
+  // (ยังไม่มีตอนสร้างตารางครั้งแรก ต้อง backfill ย้อนหลังด้วย
+  // backend/scripts/backfill_part_categories.js สำหรับแถวที่ import ไปแล้ว)
+  await conn.query(`
+    ALTER TABLE quote_part_prices
+    ADD COLUMN category VARCHAR(150) DEFAULT NULL
+  `).catch(ignoreIfAlreadyApplied);
+
+  // idx_quote_part_part_name: UNIQUE KEY (brand, model, part_name) ที่มีอยู่แล้ว
+  // ใช้กับคำค้น "WHERE part_name = ?" เดี่ยวๆ ไม่ได้ (part_name ไม่ใช่คอลัมน์แรก
+  // ของ index) ทำให้ import_part_images.js/backfill_part_categories.js (รันทีละ
+  // part_name ข้ามทุกรุ่นรถ) ต้อง full scan ทั้งตารางทุกครั้ง ช้ามากเมื่อมี ~7 หมื่นแถว
+  await conn.query(`
+    ALTER TABLE quote_part_prices
+    ADD INDEX idx_quote_part_part_name (part_name)
+  `).catch(ignoreIfAlreadyApplied);
+
   // แคตตาล็อกอ้างอิงยี่ห้อ+รุ่นรถมาตรฐาน (นำเข้าจากไฟล์ Excel ที่เจ้าของร้าน
   // เตรียมมา — ดู backend/scripts/import_vehicle_models.js) ใช้เป็นตัวเลือก
   // ยี่ห้อ/รุ่นในหน้าเสนอราคา (ทั้งตอนเลือกยี่ห้อ→รุ่นในหน้าคีออส และตอนกรอกราคา

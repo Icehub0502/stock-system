@@ -42,7 +42,7 @@ router.get('/parts', async (req, res) => {
   if (!brand || !model) return res.status(400).json({ error: 'กรุณาระบุยี่ห้อและรุ่นรถ' });
   try {
     const [rows] = await pool.execute(
-      `SELECT id, brand, model, part_name, description, price, image_data, needs_price
+      `SELECT id, brand, model, part_name, description, price, image_data, needs_price, category
        FROM quote_part_prices
        WHERE is_active = 1 AND brand = ? AND model = ?
        ORDER BY part_name ASC`,
