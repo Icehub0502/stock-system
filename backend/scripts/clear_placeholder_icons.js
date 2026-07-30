@@ -31,10 +31,17 @@ function alias(norm) {
   const parts = JSON.parse(
     fs.readFileSync(path.join(__dirname, '..', 'data', 'suspension_parts_seed.json'), 'utf8')
   );
+  // โฟลเดอร์นี้เป็นไฟล์อ้างอิงชั่วคราวบนเครื่อง dev เท่านั้น ไม่ได้ commit ขึ้น git
+  // (รูปจริงที่ deploy จริง ๆ อยู่ที่ frontend/public/part-images/ แล้ว) ถ้าไม่พบ
+  // โฟลเดอร์นี้ (เช่นตอนรันบน production) ห้ามเดินหน้าต่อ เพราะจะเข้าใจผิดว่า
+  // "ทุกชิ้นยังเป็นไอคอนภาพวาด" แล้วลบ image_data ของรูปจริงที่ import ไปแล้วทิ้งหมด
+  // (เคยเกิดขึ้นจริงมาแล้วรอบหนึ่ง ต้องกู้คืนด้วยมือ)
   const newPhotoDir = path.join(__dirname, '..', '..', 'frontend', 'src', 'image', 'รูปอะไหล่รายชิ้น');
-  const newPhotoFiles = fs.existsSync(newPhotoDir)
-    ? fs.readdirSync(newPhotoDir).filter((f) => f.toLowerCase().endsWith('.png'))
-    : [];
+  if (!fs.existsSync(newPhotoDir)) {
+    console.error(`ไม่พบโฟลเดอร์อ้างอิง ${newPhotoDir} — หยุดทำงาน (สคริปต์นี้รันได้เฉพาะบนเครื่องที่มีโฟลเดอร์รูปต้นฉบับเท่านั้น)`);
+    process.exit(1);
+  }
+  const newPhotoFiles = fs.readdirSync(newPhotoDir).filter((f) => f.toLowerCase().endsWith('.png'));
 
   const realPhotoNames = new Set();
   for (const file of newPhotoFiles) {
