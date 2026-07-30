@@ -4,7 +4,6 @@ import client from '../api/client';
 import champpowerLogo from '../image/champpower-logo.jpg';
 import { formatMoney, todayStr } from '../utils/format';
 import { brandLogoSlug } from '../utils/carBrands';
-import QuotationFormModal from '../components/QuotationFormModal';
 import QuotationPrintModal from '../components/QuotationPrintModal';
 
 // ลองโหลดไฟล์โลโก้จริงจาก /brand-logos/<slug>.png ก่อน — ถ้าไม่มีไฟล์ (404/error)
@@ -77,9 +76,10 @@ export default function PartsCatalogKioskPage() {
   const [selectedParts, setSelectedParts] = useState({});
   const [discounts, setDiscounts] = useState([]);
   const [showCart, setShowCart] = useState(false);
-  const [showQuoteForm, setShowQuoteForm] = useState(false);
   const [showPrintModal, setShowPrintModal] = useState(false);
   const [justCreated, setJustCreated] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState('');
 
   const fetchTodaysQuotations = () => {
     setQueueLoading(true);
@@ -294,13 +294,6 @@ export default function PartsCatalogKioskPage() {
   const discountTotal = discounts.reduce((sum, d) => sum + Number(d.amount || 0), 0);
   const cartTotal = Math.max(0, cartSubtotal - discountTotal);
 
-  const openQuoteForm = () => {
-    if (cartItems.length === 0) return;
-    setJustCreated(false);
-    setShowCart(false);
-    setShowQuoteForm(true);
-  };
-
   const resetToQueue = () => {
     setSelectedParts({});
     setDiscounts([]);
@@ -313,13 +306,46 @@ export default function PartsCatalogKioskPage() {
     fetchTodaysQuotations();
   };
 
-  // บันทึกใบเสนอราคาสำเร็จแล้ว — เด้งไปหน้าปริ้น/เซ็นเอกสารทันที ให้ลูกค้าเซ็น
-  // หน้างานได้เลยโดยไม่ต้องไปเปิดหาที่หน้ารายการใบเสนอราคาเอง (ยังไม่รีเซ็ตกลับไป
-  // หน้าคิวตอนนี้ เพราะ QuotationPrintModal ยังต้องใช้ selectedQuotation.id อยู่ —
-  // ค่อยรีเซ็ตตอนปิดหน้าต่างปริ้นแทน ดู closePrintModal ด้านล่าง)
-  const handleQuoteSuccess = () => {
-    setShowQuoteForm(false);
-    setShowPrintModal(true);
+  // บันทึกใบเสนอราคาให้อัตโนมัติทันทีที่กด (ไม่ต้องผ่านฟอร์มแก้ไขแบบเต็ม เพราะ
+  // ข้อมูลลูกค้า/รถ/วันที่มีอยู่แล้วในใบที่เลือกจากคิว) — ยิง PUT ตรงๆ เอารายการ
+  // เดิมที่มี (ถ้ามี) มาต่อกับอะไหล่+ส่วนลดที่เพิ่งเลือก แล้วเด้งไปหน้าปริ้น/เซ็น
+  // เอกสารทันที ให้ลูกค้าเซ็นหน้างานได้เลย
+  const submitQuotation = async () => {
+    if (cartItems.length === 0 || !selectedQuotation) return;
+    setSubmitting(true);
+    setSubmitError('');
+    try {
+      const detailRes = await client.get(`/quotations/${selectedQuotation.id}`);
+      const detail = detailRes.data.data;
+      const existingItems = (detail.items || []).map((it) => ({
+        product_name: it.product_name,
+        quantity: it.quantity,
+        unit_price: it.unit_price,
+        warranty_name: it.warranty_name || null,
+        warranty_year: it.warranty_year || 0,
+        warranty_month: it.warranty_month || 0,
+        warranty_km: it.warranty_km || 0,
+      }));
+      await client.put(`/quotations/${selectedQuotation.id}`, {
+        customer_id: detail.customer_id,
+        vehicle_id: detail.vehicle_id,
+        quotation_date: detail.quotation_date,
+        mileage: detail.mileage,
+        remark: detail.remark,
+        queue_no: detail.queue_no,
+        symptom: detail.symptom,
+        deposit_amount: detail.deposit_amount,
+        deposit_date: detail.deposit_date,
+        items: [...existingItems, ...newLineItems],
+      });
+      setShowCart(false);
+      setShowPrintModal(true);
+    } catch (err) {
+      console.error('Error submitting quotation:', err);
+      setSubmitError(err.response?.data?.error || 'สร้างใบเสนอราคาไม่สำเร็จ');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const closePrintModal = () => {
@@ -338,7 +364,7 @@ export default function PartsCatalogKioskPage() {
 
   // รายการที่ส่งต่อไปสร้างใบเสนอราคาจริง — ส่วนลดแต่ละรายการแปลงเป็นบรรทัดราคา
   // ติดลบ (ใช้กลไกคำนวณยอดรวมเดิมของใบเสนอราคา ไม่ต้องเพิ่มคอลัมน์ discount ใหม่)
-  const initialItems = [
+  const newLineItems = [
     ...cartItems.map((it) => ({
       product_name: it.part_name,
       quantity: it.quantity,
@@ -654,25 +680,18 @@ export default function PartsCatalogKioskPage() {
               </div>
             </div>
 
+            {submitError && <div className="error-message">{submitError}</div>}
+
             <div className="modal-actions">
-              <button type="button" className="btn btn-primary" onClick={openQuoteForm}>
-                สร้างใบเสนอราคา →
+              <button type="button" className="btn btn-primary" onClick={submitQuotation} disabled={submitting}>
+                {submitting ? 'กำลังบันทึก...' : 'สร้างใบเสนอราคา →'}
               </button>
-              <button type="button" className="btn btn-secondary" onClick={() => setShowCart(false)}>
+              <button type="button" className="btn btn-secondary" onClick={() => setShowCart(false)} disabled={submitting}>
                 เลือกอะไหล่เพิ่ม
               </button>
             </div>
           </div>
         </div>
-      )}
-
-      {showQuoteForm && selectedQuotation && (
-        <QuotationFormModal
-          quotation={{ id: selectedQuotation.id }}
-          initialItems={initialItems}
-          onClose={() => setShowQuoteForm(false)}
-          onSuccess={handleQuoteSuccess}
-        />
       )}
 
       {showPrintModal && selectedQuotation && (
