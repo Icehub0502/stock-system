@@ -5180,28 +5180,84 @@ body:has(.modal-backdrop) .page-fade-in {
   color: #059669;
 }
 
-/* ── ขั้นตอนเชื่อมลูกค้า/รถ (ขั้นที่ 0) — ใช้ CustomerSection/VehicleSection
-   เดิม (ออกแบบมาสำหรับพื้นหลังขาว) วางบนพื้นหลังมืดของหน้าคีออสตรงๆ ไม่ได้ ต้อง
-   ห่อด้วยแผงสีอ่อนแล้วรีเซ็ตสีตัวหนังสือเอง เหมือน .kiosk-cart-modal ด้านบน
-   (ไม่งั้นตัวหนังสือที่ไม่ได้กำหนดสีเฉพาะจะขาวบนขาว มองไม่เห็น) ── */
-.kiosk-customer-step {
-  max-width: 720px;
-  margin: 0 auto;
-  padding: 20px;
-  background: #fff;
-  border-radius: 18px;
-  color: #111827;
+/* ── ขั้นที่ 0: เลือกคิว/ลูกค้าของวันนี้ — การ์ดคิวสไตล์เดียวกับการ์ดยี่ห้อ/รุ่น
+   (เข้าธีมมืด+ทองของทั้งหน้า) แทนฟอร์มกรอกข้อมูลลูกค้า เพราะใบเสนอราคาถูกสร้าง
+   ไว้ล่วงหน้าแล้วจากคิวไลน์/หน้างาน ── */
+.kiosk-queue-toolbar {
   display: flex;
-  flex-direction: column;
-  gap: 16px;
+  justify-content: flex-end;
+  margin-bottom: 14px;
 }
 
-.kiosk-customer-next {
-  width: 100%;
-  padding: 16px;
-  font-size: 1.05rem;
+.kiosk-queue-refresh-wrap {
+  margin-top: 14px;
+}
+
+.kiosk-grid-queue {
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+}
+
+.kiosk-queue-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 18px 16px;
+  background: linear-gradient(160deg, #1c1f26 0%, #14161b 100%);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 18px;
+  color: #f4f4f5;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.2s ease, transform 0.12s ease, box-shadow 0.2s ease;
+}
+
+.kiosk-queue-card:hover,
+.kiosk-queue-card:active {
+  border-color: rgba(251, 191, 36, 0.45);
+  box-shadow: 0 0 0 1px rgba(251, 191, 36, 0.18), 0 10px 28px rgba(0, 0, 0, 0.4);
+}
+
+.kiosk-queue-card:active {
+  transform: scale(0.98);
+}
+
+.kiosk-queue-badge {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #fbbf24;
+  color: #0f1115;
   font-weight: 800;
-  border-radius: 14px;
+  font-size: 0.8rem;
+}
+
+.kiosk-queue-name {
+  font-size: 1.1rem;
+  font-weight: 700;
+  margin-top: 4px;
+}
+
+.kiosk-queue-vehicle {
+  font-size: 0.9rem;
+  color: #d4d4d8;
+}
+
+.kiosk-queue-plate {
+  font-size: 0.8rem;
+  color: #a1a1aa;
+}
+
+.kiosk-queue-status {
+  margin-top: 8px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #4ade80;
+}
+
+.kiosk-queue-status-empty {
+  color: #fbbf24;
 }
 
 /* จอแคบ (แท็บเล็ตแนวตั้ง/มือถือ) — ลดขนาด header ลงให้เหลือพื้นที่คอนเทนต์ */

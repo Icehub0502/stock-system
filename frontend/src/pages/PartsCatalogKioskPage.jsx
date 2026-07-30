@@ -2,10 +2,8 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import client from '../api/client';
 import champpowerLogo from '../image/champpower-logo.jpg';
-import { formatMoney } from '../utils/format';
+import { formatMoney, todayStr } from '../utils/format';
 import { brandLogoSlug } from '../utils/carBrands';
-import CustomerSection from '../components/CustomerSection';
-import VehicleSection from '../components/VehicleSection';
 import QuotationFormModal from '../components/QuotationFormModal';
 
 // ลองโหลดไฟล์โลโก้จริงจาก /brand-logos/<slug>.png ก่อน — ถ้าไม่มีไฟล์ (404/error)
@@ -48,28 +46,19 @@ function itemKey(item) {
   return `${item.kind}-${item.id}`;
 }
 
-const emptyNewCustomer = { customer_name: '', phone: '' };
-const emptyNewVehicle = { brand: '', model: '', color: '', license_plate: '' };
-
 export default function PartsCatalogKioskPage() {
   // หน้านี้ซ่อน NavBar/BottomNav ทั้งคู่ (เต็มจอแบบแอป — ดู App.jsx isKiosk) จึง
   // ต้องมีปุ่มกลับหน้าหลักในตัวเอง ไม่งั้นออกจากหน้านี้ไม่ได้เลยถ้าไม่กดปุ่ม back
   // ของเบราว์เซอร์ (ซึ่งบนแท็บเล็ตคีออสมักไม่มีให้กดด้วย)
   const navigate = useNavigate();
 
-  // ── ขั้นที่ 0: เชื่อมกับลูกค้า/รถที่รับมา (ต้องทำก่อนเลือกยี่ห้อรถเสมอ) ──
-  const [customerDone, setCustomerDone] = useState(false);
-  const [customerStepError, setCustomerStepError] = useState('');
-  const [customerQuery, setCustomerQuery] = useState('');
-  const [customerResults, setCustomerResults] = useState([]);
-  const [customer, setCustomer] = useState(null);
-  const [customerMode, setCustomerMode] = useState('new');
-  const [newCustomer, setNewCustomer] = useState(emptyNewCustomer);
-  const [vehicles, setVehicles] = useState([]);
-  const [vehicleMode, setVehicleMode] = useState('new');
-  const [vehicleId, setVehicleId] = useState('');
-  const [newVehicle, setNewVehicle] = useState(emptyNewVehicle);
-  const [mileage, setMileage] = useState('0');
+  // ── ขั้นที่ 0: เลือกคิว/ลูกค้าของวันนี้ ── ใบเสนอราคาถูกสร้างไว้ล่วงหน้าแล้ว
+  // (ลูกค้าเข้าคิวผ่านไลน์/หน้างาน มีชื่อลูกค้า+รถอยู่แล้ว แต่ยังไม่มีรายการอะไหล่)
+  // เซลมาเลือกคิวของลูกค้าที่จะเสนอราคาให้ แทนที่จะกรอกข้อมูลลูกค้าเองใหม่
+  const [todaysQuotations, setTodaysQuotations] = useState([]);
+  const [queueLoading, setQueueLoading] = useState(true);
+  const [queueError, setQueueError] = useState('');
+  const [selectedQuotation, setSelectedQuotation] = useState(null);
 
   // step ปัจจุบันอนุมานจากค่าที่เลือกไว้ ไม่เก็บเป็น state แยก กันสองค่าหลุดจากกัน
   const [brands, setBrands] = useState([]);
@@ -79,10 +68,7 @@ export default function PartsCatalogKioskPage() {
   const [categoryFilter, setCategoryFilter] = useState('');
   const [brand, setBrand] = useState('');
   const [model, setModel] = useState('');
-  // ชื่อรุ่นล้วนๆ ไม่มีช่วงปีต่อท้าย — ใช้ตอนบราวส์แคตตาล็อกอะไหล่เท่านั้น (ไม่ใช่
-  // รุ่นรถจริงของลูกค้า ซึ่งมาจากขั้นตอนลูกค้า/รถด้านบนแล้ว)
-  const [modelPlain, setModelPlain] = useState('');
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   // ตะกร้าที่เซลติ๊กเลือกไว้ — เก็บตาม itemKey() กันเลือกซ้ำเพิ่มเป็นบรรทัดใหม่
   // (ติ๊กซ้ำ = ปรับจำนวนแทน) unitPrice เป็นราคาที่พนักงานพิมพ์เอง (ไม่ใช่ราคาตั้งต้น
@@ -92,6 +78,39 @@ export default function PartsCatalogKioskPage() {
   const [showCart, setShowCart] = useState(false);
   const [showQuoteForm, setShowQuoteForm] = useState(false);
   const [justCreated, setJustCreated] = useState(false);
+
+  const fetchTodaysQuotations = () => {
+    setQueueLoading(true);
+    setQueueError('');
+    client.get('/quotations')
+      .then((res) => {
+        const today = todayStr();
+        const rows = (res.data.data || []).filter((q) => {
+          if (q.quotation_date !== today) return false;
+          // ตัดใบที่จบงานไปแล้ว (อนุมัติ+แปลงเป็นใบเสร็จ หรือปิดบิลแล้ว) ออก —
+          // เหลือไว้แต่คิวที่ยังรอเสนอราคาให้ลูกค้าอยู่
+          if (q.status === 'approved' && q.converted_receipt_id) return false;
+          if (q.closed_at) return false;
+          return true;
+        });
+        rows.sort((a, b) => {
+          const qa = Number(a.queue_no) || 0;
+          const qb = Number(b.queue_no) || 0;
+          if (qa !== qb) return qa - qb;
+          return new Date(a.created_at) - new Date(b.created_at);
+        });
+        setTodaysQuotations(rows);
+      })
+      .catch((err) => {
+        console.error('Error loading today\'s quotations:', err);
+        setQueueError('โหลดรายการคิววันนี้ไม่สำเร็จ');
+      })
+      .finally(() => setQueueLoading(false));
+  };
+
+  useEffect(() => {
+    fetchTodaysQuotations();
+  }, []);
 
   // รายชื่อยี่ห้อรถทั้งหมด — มาจากแคตตาล็อกอ้างอิงยี่ห้อ+รุ่นรถที่นำเข้าไว้
   // (backend/scripts/import_vehicle_models.js, ตาราง vehicle_models) แทนการพึ่ง
@@ -103,8 +122,7 @@ export default function PartsCatalogKioskPage() {
       .catch((err) => {
         console.error('Error loading brands:', err);
         setError('โหลดรายการยี่ห้อไม่สำเร็จ');
-      })
-      .finally(() => setLoading(false));
+      });
   }, []);
 
   // ชุดโปร (เช่น "ชุดโปรช่วงล่างเก๋ง") — เพิ่มเป็นการ์ดเลือกได้เหมือนอะไหล่เดี่ยว
@@ -115,121 +133,8 @@ export default function PartsCatalogKioskPage() {
       .catch((err) => console.error('Error loading service item sets:', err));
   }, []);
 
-  // ── ขั้นตอนลูกค้า/รถ ──
-  const searchCustomer = async (query) => {
-    if (!query) {
-      setCustomerResults([]);
-      return;
-    }
-    try {
-      const res = await client.get('/receipts/customers', { params: { search: query } });
-      setCustomerResults(res.data.data || []);
-    } catch (err) {
-      console.error('Error searching customers:', err);
-    }
-  };
-
-  const handleCustomerQueryChange = (value) => {
-    setCustomerMode('existing');
-    setCustomerQuery(value);
-    setCustomer(null);
-    setCustomerResults([]);
-    if (value) searchCustomer(value);
-  };
-
-  const handleNewCustomerInput = (field, value) => {
-    setCustomerMode('new');
-    setCustomer(null);
-    setCustomerQuery('');
-    setCustomerResults([]);
-    setNewCustomer((prev) => ({ ...prev, [field]: value }));
-  };
-
-  const handleCustomerSelect = (selected) => {
-    setCustomer(selected);
-    setCustomerMode('existing');
-    setCustomerQuery(selected.customer_name);
-    setCustomerResults([]);
-    setNewCustomer(emptyNewCustomer);
-  };
-
-  const handleCustomerModeChange = (mode) => {
-    if (mode === 'existing') {
-      setCustomerMode('existing');
-      setNewCustomer(emptyNewCustomer);
-      setCustomerQuery('');
-      setCustomerResults([]);
-    } else {
-      setCustomerMode('new');
-      setCustomer(null);
-      setCustomerQuery('');
-      setCustomerResults([]);
-    }
-  };
-
-  useEffect(() => {
-    if (!customer?.id) {
-      setVehicles([]);
-      setVehicleId('');
-      setVehicleMode('new');
-      return;
-    }
-    client.get(`/receipts/customers/${customer.id}/vehicles`)
-      .then((res) => {
-        const list = res.data.data || [];
-        setVehicles(list);
-        if (list.length > 0) {
-          setVehicleMode('existing');
-          setVehicleId(list[0].id.toString());
-          setMileage(String(list[0].mileage ?? 0));
-        } else {
-          setVehicleMode('new');
-          setVehicleId('');
-        }
-      })
-      .catch((err) => {
-        console.error('Error loading vehicles:', err);
-        setVehicles([]);
-        setVehicleMode('new');
-        setVehicleId('');
-      });
-  }, [customer]);
-
-  const handleVehicleSelect = (value) => {
-    if (value === 'new') {
-      setVehicleMode('new');
-      setVehicleId('');
-      return;
-    }
-    setVehicleMode('existing');
-    setVehicleId(value);
-    const selected = vehicles.find((v) => v.id.toString() === value);
-    if (selected) setMileage(String(selected.mileage ?? 0));
-  };
-
-  const handleVehicleModeChange = (mode) => setVehicleMode(mode);
-  const handleNewVehicleFieldChange = (field, value) => setNewVehicle((prev) => ({ ...prev, [field]: value }));
-  const handleMileageChange = (value) => setMileage(value);
-
-  const confirmCustomerStep = () => {
-    if (customerMode === 'existing' && !customer?.id) {
-      setCustomerStepError('กรุณาเลือกลูกค้าก่อน');
-      return;
-    }
-    if (customerMode === 'new' && !newCustomer.customer_name.trim()) {
-      setCustomerStepError('กรุณากรอกชื่อลูกค้าใหม่');
-      return;
-    }
-    if (vehicleMode === 'existing' && !vehicleId) {
-      setCustomerStepError('กรุณาเลือกรถของลูกค้า');
-      return;
-    }
-    if (vehicleMode === 'new' && (!newVehicle.brand.trim() || !newVehicle.model.trim())) {
-      setCustomerStepError('กรุณากรอกยี่ห้อและรุ่นรถ');
-      return;
-    }
-    setCustomerStepError('');
-    setCustomerDone(true);
+  const selectQueueEntry = (q) => {
+    setSelectedQuotation(q);
   };
 
   // ── ขั้นตอนเลือกยี่ห้อ → รุ่น → อะไหล่ (แคตตาล็อกอ้างอิง ไม่ใช่รถลูกค้าโดยตรง) ──
@@ -257,7 +162,6 @@ export default function PartsCatalogKioskPage() {
   // ราคาอะไหล่บันทึกไว้ (เลือกจากแคตตาล็อกเดียวกัน ไม่พิมพ์เอง)
   const selectModel = async (modelOption) => {
     setModel(modelOption.label);
-    setModelPlain(modelOption.model);
     setCategoryFilter('');
     setLoading(true);
     setError('');
@@ -275,14 +179,14 @@ export default function PartsCatalogKioskPage() {
   const goBack = () => {
     if (model) {
       setModel('');
-      setModelPlain('');
       setParts([]);
       setCategoryFilter('');
     } else if (brand) {
       setBrand('');
       setModels([]);
-    } else if (customerDone) {
-      setCustomerDone(false);
+    } else if (selectedQuotation) {
+      setSelectedQuotation(null);
+      fetchTodaysQuotations();
     }
   };
 
@@ -395,28 +299,21 @@ export default function PartsCatalogKioskPage() {
     setShowQuoteForm(true);
   };
 
-  const handleQuoteSuccess = () => {
-    setShowQuoteForm(false);
+  const resetToQueue = () => {
     setSelectedParts({});
     setDiscounts([]);
     setBrand('');
     setModel('');
-    setModelPlain('');
     setModels([]);
     setParts([]);
     setCategoryFilter('');
-    // กลับไปเริ่มที่ขั้นตอนลูกค้า/รถใหม่ทั้งหมด — ใบถัดไปมักเป็นลูกค้าคนละคน
-    setCustomerDone(false);
-    setCustomer(null);
-    setCustomerMode('new');
-    setCustomerQuery('');
-    setCustomerResults([]);
-    setNewCustomer(emptyNewCustomer);
-    setVehicles([]);
-    setVehicleMode('new');
-    setVehicleId('');
-    setNewVehicle(emptyNewVehicle);
-    setMileage('0');
+    setSelectedQuotation(null);
+    fetchTodaysQuotations();
+  };
+
+  const handleQuoteSuccess = () => {
+    setShowQuoteForm(false);
+    resetToQueue();
     setJustCreated(true);
   };
 
@@ -426,7 +323,7 @@ export default function PartsCatalogKioskPage() {
     return () => clearTimeout(timer);
   }, [justCreated]);
 
-  const step = !customerDone ? 0 : model ? 3 : brand ? 2 : 1;
+  const step = !selectedQuotation ? 0 : model ? 3 : brand ? 2 : 1;
 
   // รายการที่ส่งต่อไปสร้างใบเสนอราคาจริง — ส่วนลดแต่ละรายการแปลงเป็นบรรทัดราคา
   // ติดลบ (ใช้กลไกคำนวณยอดรวมเดิมของใบเสนอราคา ไม่ต้องเพิ่มคอลัมน์ discount ใหม่)
@@ -445,22 +342,6 @@ export default function PartsCatalogKioskPage() {
       })),
   ];
 
-  // ลูกค้า/รถที่เลือกไว้ในขั้นที่ 0 ส่งต่อเข้าใบเสนอราคาโดยตรง — ไม่ต้องให้เซลกรอก
-  // ข้อมูลลูกค้าซ้ำอีกรอบในฟอร์มสุดท้าย (ต่างจาก brand/modelPlain ด้านบนซึ่งเป็นแค่
-  // ตัวช่วยค้นราคาอะไหล่ ไม่ใช่รถจริงของลูกค้า)
-  const initialCustomerForQuote = customerMode === 'existing'
-    ? (customer ? { id: customer.id, customer_name: customer.customer_name, phone: customer.phone } : null)
-    : { customer_name: newCustomer.customer_name.trim(), phone: newCustomer.phone.trim() };
-  const initialVehicleForQuote = vehicleMode === 'new'
-    ? {
-        brand: newVehicle.brand.trim(),
-        model: newVehicle.model.trim(),
-        color: newVehicle.color.trim(),
-        license_plate: newVehicle.license_plate.trim(),
-        mileage: Number(mileage) || 0,
-      }
-    : undefined;
-
   return (
     <div className="kiosk">
       <header className="kiosk-header">
@@ -477,15 +358,21 @@ export default function PartsCatalogKioskPage() {
           <div>
             <div className="kiosk-title">เสนอราคาอะไหล่</div>
             <div className="kiosk-crumb">
-              {step === 0 && 'เชื่อมลูกค้า/รถที่รับมา'}
-              {step === 1 && 'เลือกยี่ห้อรถ'}
-              {step === 2 && `${brand} · เลือกรุ่นรถ`}
-              {step === 3 && `${brand} · ${model}`}
+              {step === 0 && 'เลือกคิว/ลูกค้าวันนี้'}
+              {step > 0 && selectedQuotation && (
+                <>
+                  {selectedQuotation.queue_no ? `คิว ${selectedQuotation.queue_no} · ` : ''}
+                  {selectedQuotation.customer_name}
+                  {step === 1 && ' · เลือกยี่ห้อรถ'}
+                  {step === 2 && ` · ${brand} · เลือกรุ่นรถ`}
+                  {step === 3 && ` · ${brand} · ${model}`}
+                </>
+              )}
             </div>
           </div>
         </div>
         <ol className="kiosk-steps">
-          <li className={step >= 0 ? 'active' : ''}>ลูกค้า</li>
+          <li className={step >= 0 ? 'active' : ''}>คิว</li>
           <li className={step >= 1 ? 'active' : ''}>ยี่ห้อ</li>
           <li className={step >= 2 ? 'active' : ''}>รุ่น</li>
           <li className={step >= 3 ? 'active' : ''}>เลือกอะไหล่</li>
@@ -498,36 +385,49 @@ export default function PartsCatalogKioskPage() {
 
       {step === 0 ? (
         <main className="kiosk-body">
-          <div className="kiosk-customer-step">
-            {customerStepError && <div className="error-message">{customerStepError}</div>}
-            <CustomerSection
-              customerMode={customerMode}
-              customerQuery={customerQuery}
-              customerResults={customerResults}
-              customer={customer}
-              newCustomer={newCustomer}
-              fieldErrors={{}}
-              onCustomerQueryChange={handleCustomerQueryChange}
-              onNewCustomerInput={handleNewCustomerInput}
-              onCustomerSelect={handleCustomerSelect}
-              onCustomerModeChange={handleCustomerModeChange}
-            />
-            <VehicleSection
-              vehicles={vehicles}
-              vehicleMode={vehicleMode}
-              vehicleId={vehicleId}
-              newVehicle={newVehicle}
-              mileage={mileage}
-              fieldErrors={{}}
-              onVehicleSelect={handleVehicleSelect}
-              onVehicleModeChange={handleVehicleModeChange}
-              onNewVehicleFieldChange={handleNewVehicleFieldChange}
-              onMileageChange={handleMileageChange}
-            />
-            <button type="button" className="btn btn-primary kiosk-customer-next" onClick={confirmCustomerStep}>
-              ถัดไป: เลือกยี่ห้อรถ →
-            </button>
-          </div>
+          {queueError && <div className="kiosk-message kiosk-message-error">{queueError}</div>}
+          {queueLoading ? (
+            <div className="kiosk-message">กำลังโหลด...</div>
+          ) : todaysQuotations.length === 0 ? (
+            <div className="kiosk-message">
+              วันนี้ยังไม่มีคิวที่รอเสนอราคา
+              <div className="kiosk-queue-refresh-wrap">
+                <button type="button" className="btn btn-secondary" onClick={fetchTodaysQuotations}>
+                  ⟳ โหลดใหม่
+                </button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="kiosk-queue-toolbar">
+                <button type="button" className="btn btn-secondary" onClick={fetchTodaysQuotations}>
+                  ⟳ โหลดใหม่
+                </button>
+              </div>
+              <div className="kiosk-grid kiosk-grid-queue">
+                {todaysQuotations.map((q) => (
+                  <button
+                    type="button"
+                    key={q.id}
+                    className="kiosk-queue-card"
+                    onClick={() => selectQueueEntry(q)}
+                  >
+                    <span className="kiosk-queue-badge">
+                      {q.queue_no ? `คิว ${q.queue_no}` : q.quotation_no}
+                    </span>
+                    <span className="kiosk-queue-name">{q.customer_name || 'ไม่ระบุชื่อ'}</span>
+                    <span className="kiosk-queue-vehicle">
+                      {[q.brand, q.model].filter(Boolean).join(' ') || 'ยังไม่ระบุรถ'}
+                    </span>
+                    {q.license_plate && <span className="kiosk-queue-plate">{q.license_plate}</span>}
+                    <span className={`kiosk-queue-status ${q.product_summary ? '' : 'kiosk-queue-status-empty'}`}>
+                      {q.product_summary ? 'มีรายการแล้ว — แตะเพื่อเพิ่ม' : 'ยังไม่มีรายการอะไหล่'}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
         </main>
       ) : (
         <main className={`kiosk-body ${cartItems.length > 0 && step === 3 ? 'kiosk-body-with-cart' : ''}`}>
@@ -755,13 +655,10 @@ export default function PartsCatalogKioskPage() {
         </div>
       )}
 
-      {showQuoteForm && (
+      {showQuoteForm && selectedQuotation && (
         <QuotationFormModal
-          quotation={null}
+          quotation={{ id: selectedQuotation.id }}
           initialItems={initialItems}
-          initialCustomer={initialCustomerForQuote}
-          initialVehicleId={vehicleMode === 'existing' ? vehicleId : null}
-          initialVehicle={initialVehicleForQuote}
           onClose={() => setShowQuoteForm(false)}
           onSuccess={handleQuoteSuccess}
         />

@@ -22,14 +22,12 @@ const defaultItem = {
   amount: 0,
 };
 
-// initialItems/initialVehicle/initialCustomer/initialVehicleId: ใช้เมื่อสร้าง
-// ใบใหม่จากภายนอก (เช่น PartsCatalogKioskPage ที่ให้เซลเลือกลูกค้า+รถ และติ๊ก
-// เลือกอะไหล่+ราคาไว้ล่วงหน้าแล้วในหน้าคีออส) เพื่อเติมข้อมูลให้เลยแทนที่จะเริ่ม
-// จากฟอร์มว่างเปล่า — initialCustomer มี id = ลูกค้าเดิม (โหมด existing), ไม่มี id
-// = ลูกค้าใหม่ (โหมด new, ใช้ customer_name/phone) initialVehicleId มีค่า = รถเดิม
-// ของลูกค้านั้น (โหมด existing) ไม่มีผลตอนแก้ไขใบเดิม (quotation.id) เพราะ
-// loadQuotation จะโหลดข้อมูลจริงทับอยู่แล้ว
-export default function QuotationFormModal({ quotation, onClose, onSuccess, onDelete, initialItems, initialVehicle, initialCustomer, initialVehicleId }) {
+// initialItems: ใช้เมื่อเติมรายการอะไหล่ที่เลือกไว้ล่วงหน้าแล้ว (เช่นจากหน้า
+// คีออส PartsCatalogKioskPage) เข้าไปในใบเสนอราคา — ใช้ได้ทั้งตอนสร้างใหม่
+// (quotation=null) และตอนแก้ไขใบที่มีอยู่แล้ว (quotation={id}, เช่นใบที่ระบบคิว
+// ไลน์สร้างลูกค้า/รถไว้ให้แล้วแต่ยังไม่มีรายการอะไหล่) ซึ่งจะถูกเติมต่อท้ายรายการ
+// เดิมที่โหลดมาจาก loadQuotation
+export default function QuotationFormModal({ quotation, onClose, onSuccess, onDelete, initialItems }) {
   const [quotationNo, setQuotationNo] = useState('');
   const [quotationDate, setQuotationDate] = useState(todayStr());
   const [customerQuery, setCustomerQuery] = useState('');
@@ -77,9 +75,6 @@ export default function QuotationFormModal({ quotation, onClose, onSuccess, onDe
   const customerSearchAbortRef = useRef(null);
   const productSearchAbortRef = useRef({});
   const vehicleLoadAbortRef = useRef(null);
-  // ดู resetForm/useEffect([customer]) ด้านล่าง — true เมื่อหน้าคีออสส่ง
-  // ลูกค้าเดิม + ข้อมูล "รถใหม่" มาพร้อมกัน (ไม่ใช่ initialVehicleId)
-  const kioskWantsNewVehicleRef = useRef(false);
 
   const fetchQuotationNo = async () => {
     try {
@@ -92,27 +87,15 @@ export default function QuotationFormModal({ quotation, onClose, onSuccess, onDe
 
   const resetForm = () => {
     setQuotationDate(todayStr());
-    // initialCustomer.id = ลูกค้าเดิมที่เลือกไว้แล้วจากหน้าคีออส — ตั้งเป็นโหมด
-    // existing ทันที ตัว useEffect ที่ฟัง [customer] ด้านล่างจะโหลดรถของลูกค้านี้
-    // เอง (และเลือก initialVehicleId ให้ถ้ามี ผ่าน loadVehicles(customer.id, vehicleId))
-    setCustomerQuery(initialCustomer?.id ? initialCustomer.customer_name || '' : '');
-    setCustomer(initialCustomer?.id ? { ...initialCustomer } : null);
-    setCustomerMode(initialCustomer?.id ? 'existing' : 'new');
-    setNewCustomer({
-      customer_name: initialCustomer?.id ? '' : (initialCustomer?.customer_name || ''),
-      phone: initialCustomer?.id ? '' : (initialCustomer?.phone || ''),
-    });
-    kioskWantsNewVehicleRef.current = !!(initialCustomer?.id && !initialVehicleId && initialVehicle?.brand);
+    setCustomerQuery('');
+    setCustomer(null);
+    setCustomerMode('new');
+    setNewCustomer({ customer_name: '', phone: '' });
     setVehicles([]);
-    setVehicleId(initialVehicleId ? String(initialVehicleId) : '');
-    setVehicleMode(initialVehicleId ? 'existing' : 'new');
-    setNewVehicle({
-      brand: initialVehicle?.brand || '',
-      model: initialVehicle?.model || '',
-      color: initialVehicle?.color || '',
-      license_plate: initialVehicle?.license_plate || '',
-    });
-    setMileage(initialVehicle?.mileage != null ? String(initialVehicle.mileage) : '0');
+    setVehicleId('');
+    setVehicleMode('new');
+    setNewVehicle({ brand: '', model: '', color: '', license_plate: '' });
+    setMileage('0');
     setRemark('');
     setQueueNo('');
     setSymptom('');
@@ -237,7 +220,7 @@ export default function QuotationFormModal({ quotation, onClose, onSuccess, onDe
       setVehicleMode(detail.vehicle_id ? 'existing' : 'new');
       setVehicleId(detail.vehicle_id?.toString() || '');
       setNewVehicle({ brand: '', model: '', color: '', license_plate: '' });
-      const loadedItems = (detail.items && detail.items.length > 0 ? detail.items : [{ ...defaultItem }]).map((item) => ({
+      const loadedItems = (detail.items || []).map((item) => ({
         product_id: item.product_id || null,
         product_name: item.product_name || '',
         category: item.category || '',
@@ -249,7 +232,20 @@ export default function QuotationFormModal({ quotation, onClose, onSuccess, onDe
         unit_price: item.unit_price ?? '',
         amount: Number(item.quantity ?? 0) * Number(item.unit_price ?? 0),
       }));
-      setItems(loadedItems);
+      // initialItems: อะไหล่ที่เลือกไว้ล่วงหน้าแล้ว (เช่นจากหน้าคีออส) — เติมต่อท้าย
+      // รายการเดิมที่โหลดมา กรณีปกติคือใบที่ระบบคิวไลน์สร้างลูกค้า/รถไว้ให้แล้วแต่
+      // ยังไม่มีรายการอะไหล่เลย (loadedItems ว่างเปล่า) จึงเท่ากับ = initialItems พอดี
+      const combinedItems = [
+        ...loadedItems,
+        ...(initialItems || []).map((item) => ({
+          ...defaultItem,
+          product_name: item.product_name || '',
+          quantity: item.quantity ?? 1,
+          unit_price: item.unit_price ?? '',
+          amount: Number(item.quantity ?? 1) * Number(item.unit_price ?? 0),
+        })),
+      ];
+      setItems(combinedItems.length > 0 ? combinedItems : [{ ...defaultItem }]);
       setPartBrand('');
       setPartModel('');
       setPartCards([]);
@@ -298,11 +294,7 @@ export default function QuotationFormModal({ quotation, onClose, onSuccess, onDe
 
   useEffect(() => {
     if (customer?.id) {
-      // kioskWantsNewVehicleRef: เซลเลือก "ลูกค้าเดิม" แต่ตั้งใจกรอก "รถใหม่" ไว้
-      // ในหน้าคีออส (initialVehicle มีข้อมูลแต่ไม่มี initialVehicleId) — ต้องยังคง
-      // โหมด/ข้อมูลรถใหม่ที่กรอกมาไว้ ไม่ให้ loadVehicles auto-switch ไปเลือกรถเดิม
-      // คันแรกของลูกค้าทับ (ยังคงดึงลิสต์รถมาโชว์ในดรอปดาวน์ให้สลับเองได้ตามปกติ)
-      loadVehicles(customer.id, vehicleId, !kioskWantsNewVehicleRef.current);
+      loadVehicles(customer.id, vehicleId);
     } else {
       setVehicles([]);
       setVehicleId('');
@@ -310,7 +302,7 @@ export default function QuotationFormModal({ quotation, onClose, onSuccess, onDe
     }
   }, [customer]);
 
-  const loadVehicles = async (customerId, selectedVehicleId = '', autoSelect = true) => {
+  const loadVehicles = async (customerId, selectedVehicleId = '') => {
     vehicleLoadAbortRef.current?.abort();
     const controller = new AbortController();
     vehicleLoadAbortRef.current = controller;
@@ -318,7 +310,6 @@ export default function QuotationFormModal({ quotation, onClose, onSuccess, onDe
       const response = await client.get(`/receipts/customers/${customerId}/vehicles`, { signal: controller.signal });
       const vehicleList = response.data.data || [];
       setVehicles(vehicleList);
-      if (!autoSelect) return;
       if (vehicleList.length > 0) {
         const selected = selectedVehicleId
           ? vehicleList.find((v) => v.id.toString() === selectedVehicleId)
