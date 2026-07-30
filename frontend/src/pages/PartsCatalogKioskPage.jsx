@@ -227,7 +227,48 @@ export default function PartsCatalogKioskPage() {
   // จิ้มเลือก/ถอนอะไหล่ได้เสมอ ไม่ว่าจะมีราคาแนะนำจากแคตตาล็อกหรือยัง — ราคาที่ใช้
   // คิดยอดจริงคือ unitPrice ที่พนักงานพิมพ์เอง (เติมราคาแคตตาล็อกมาให้เป็นจุดเริ่มต้น
   // ถ้ามี ไม่งั้นเว้นว่างให้พิมพ์เอง) แก้ไขได้ในตะกร้าตลอดก่อนสร้างใบเสนอราคาจริง
-  const togglePart = (part) => {
+  //
+  // "ชุดโปร" (kind === 'set') ไม่ใช่อะไหล่ชิ้นเดียว — จิ้มเลือกแล้วต้อง "กระเด้ง"
+  // ขยายเป็นรายการอะไหล่ย่อยของชุดนั้นทุกชิ้น (มาจาก service_item_components)
+  // ลงตะกร้าทีเดียว เหมือนพฤติกรรม expandSetIntoItems ใน QuotationFormModal.jsx
+  // ไม่ใช่เพิ่มเป็นบรรทัดเดียวชื่อ "ชุดโปร...” ราคาเว้นว่างให้พนักงานกรอกทีละชิ้น
+  const togglePart = async (part) => {
+    if (part.kind === 'set') {
+      const alreadyIn = Object.values(selectedParts).some((it) => it.setId === part.id);
+      if (alreadyIn) {
+        setSelectedParts((prev) => {
+          const next = { ...prev };
+          Object.keys(next).forEach((k) => {
+            if (next[k].setId === part.id) delete next[k];
+          });
+          return next;
+        });
+        return;
+      }
+      try {
+        const res = await client.get(`/service-items/${part.id}/components`);
+        const components = res.data.data || [];
+        const rows = components.length > 0 ? components : [{ component_name: part.part_name, default_qty: 1 }];
+        setSelectedParts((prev) => {
+          const next = { ...prev };
+          rows.forEach((comp, idx) => {
+            next[`set-${part.id}-comp-${idx}`] = {
+              kind: 'set-item',
+              setId: part.id,
+              part_name: comp.component_name,
+              image_data: null,
+              quantity: Number(comp.default_qty) > 0 ? Number(comp.default_qty) : 1,
+              unitPrice: '',
+            };
+          });
+          return next;
+        });
+      } catch (err) {
+        console.error('Error loading set components:', err);
+      }
+      return;
+    }
+
     setSelectedParts((prev) => {
       const key = itemKey(part);
       if (prev[key]) {
@@ -246,9 +287,8 @@ export default function PartsCatalogKioskPage() {
     });
   };
 
-  const changeQty = (part, delta) => {
+  const changeQty = (key, delta) => {
     setSelectedParts((prev) => {
-      const key = itemKey(part);
       const current = prev[key];
       if (!current) return prev;
       const nextQty = current.quantity + delta;
@@ -532,7 +572,9 @@ export default function PartsCatalogKioskPage() {
               <div className="kiosk-grid kiosk-grid-part">
                 {filteredItems.map((part) => {
                   const key = itemKey(part);
-                  const selected = selectedParts[key];
+                  const selected = part.kind === 'set'
+                    ? Object.values(selectedParts).some((it) => it.setId === part.id)
+                    : selectedParts[key];
                   return (
                     <article
                       key={key}
@@ -558,11 +600,11 @@ export default function PartsCatalogKioskPage() {
                         <div className="kiosk-part-price">฿{formatMoney(part.price)}</div>
                       )}
 
-                      {selected && (
+                      {selected && part.kind !== 'set' && (
                         <div className="kiosk-part-qty" onClick={(e) => e.stopPropagation()}>
-                          <button type="button" onClick={() => changeQty(part, -1)} aria-label="ลดจำนวน">−</button>
+                          <button type="button" onClick={() => changeQty(key, -1)} aria-label="ลดจำนวน">−</button>
                           <span>{selected.quantity}</span>
-                          <button type="button" onClick={() => changeQty(part, 1)} aria-label="เพิ่มจำนวน">+</button>
+                          <button type="button" onClick={() => changeQty(key, 1)} aria-label="เพิ่มจำนวน">+</button>
                         </div>
                       )}
                     </article>
@@ -604,9 +646,9 @@ export default function PartsCatalogKioskPage() {
                     <div className="kiosk-cart-line-name">{it.part_name}</div>
                     <div className="kiosk-cart-line-controls">
                       <div className="kiosk-cart-line-qty">
-                        <button type="button" onClick={() => changeQty(it, -1)} aria-label="ลดจำนวน">−</button>
+                        <button type="button" onClick={() => changeQty(it.key, -1)} aria-label="ลดจำนวน">−</button>
                         <span>{it.quantity}</span>
-                        <button type="button" onClick={() => changeQty(it, 1)} aria-label="เพิ่มจำนวน">+</button>
+                        <button type="button" onClick={() => changeQty(it.key, 1)} aria-label="เพิ่มจำนวน">+</button>
                       </div>
                       <div className="kiosk-cart-line-price">
                         <span>฿</span>

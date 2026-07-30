@@ -4819,12 +4819,13 @@ body:has(.modal-backdrop) .page-fade-in {
   align-items: center;
   justify-content: center;
   overflow: hidden;
+  padding: 10px;
 }
 
 .kiosk-part-image img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
 }
 
 .kiosk-part-noimage {
