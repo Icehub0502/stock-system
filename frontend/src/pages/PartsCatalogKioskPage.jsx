@@ -5,6 +5,7 @@ import champpowerLogo from '../image/champpower-logo.jpg';
 import { formatMoney, todayStr } from '../utils/format';
 import { brandLogoSlug } from '../utils/carBrands';
 import QuotationFormModal from '../components/QuotationFormModal';
+import QuotationPrintModal from '../components/QuotationPrintModal';
 
 // ลองโหลดไฟล์โลโก้จริงจาก /brand-logos/<slug>.png ก่อน — ถ้าไม่มีไฟล์ (404/error)
 // ไม่แสดงอะไรเลย ปล่อยให้ชื่อยี่ห้อ (kiosk-tile-label) เป็นตัวเด่นแทน (ดีไซน์แบบ
@@ -77,6 +78,7 @@ export default function PartsCatalogKioskPage() {
   const [discounts, setDiscounts] = useState([]);
   const [showCart, setShowCart] = useState(false);
   const [showQuoteForm, setShowQuoteForm] = useState(false);
+  const [showPrintModal, setShowPrintModal] = useState(false);
   const [justCreated, setJustCreated] = useState(false);
 
   const fetchTodaysQuotations = () => {
@@ -311,8 +313,17 @@ export default function PartsCatalogKioskPage() {
     fetchTodaysQuotations();
   };
 
+  // บันทึกใบเสนอราคาสำเร็จแล้ว — เด้งไปหน้าปริ้น/เซ็นเอกสารทันที ให้ลูกค้าเซ็น
+  // หน้างานได้เลยโดยไม่ต้องไปเปิดหาที่หน้ารายการใบเสนอราคาเอง (ยังไม่รีเซ็ตกลับไป
+  // หน้าคิวตอนนี้ เพราะ QuotationPrintModal ยังต้องใช้ selectedQuotation.id อยู่ —
+  // ค่อยรีเซ็ตตอนปิดหน้าต่างปริ้นแทน ดู closePrintModal ด้านล่าง)
   const handleQuoteSuccess = () => {
     setShowQuoteForm(false);
+    setShowPrintModal(true);
+  };
+
+  const closePrintModal = () => {
+    setShowPrintModal(false);
     resetToQueue();
     setJustCreated(true);
   };
@@ -661,6 +672,13 @@ export default function PartsCatalogKioskPage() {
           initialItems={initialItems}
           onClose={() => setShowQuoteForm(false)}
           onSuccess={handleQuoteSuccess}
+        />
+      )}
+
+      {showPrintModal && selectedQuotation && (
+        <QuotationPrintModal
+          quotation={{ id: selectedQuotation.id }}
+          onClose={closePrintModal}
         />
       )}
     </div>
