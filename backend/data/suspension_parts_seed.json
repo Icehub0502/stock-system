@@ -201,19 +201,11 @@
   },
   {
     "category": "2. ช่วงล่างหน้า",
-    "part_name_th": "บูชเหล็กกันโคลงหน้า",
-    "part_name_en": "Front Stabilizer Bushing",
-    "applies_sedan": "✓",
-    "applies_pickup": "✓",
-    "notes": "เสียบ่อย ทำให้มีเสียงดังตอนเลี้ยว/ตกหลุม"
-  },
-  {
-    "category": "2. ช่วงล่างหน้า",
     "part_name_th": "ยางรัดกันโคลงหน้า",
     "part_name_en": "Front Sway Bar Bracket Clamp Rubber",
     "applies_sedan": "✓",
     "applies_pickup": "✓",
-    "notes": "รายการเพิ่มเติมตามที่ร้านแจ้ง — คนละชิ้นกับบูชเหล็กกันโคลง"
+    "notes": "เสียบ่อย ทำให้มีเสียงดังตอนเลี้ยว/ตกหลุม"
   },
   {
     "category": "2. ช่วงล่างหน้า",
@@ -337,19 +329,11 @@
   },
   {
     "category": "3. ช่วงล่างหลัง (เก๋ง/SUV)",
-    "part_name_th": "บูชเหล็กกันโคลงหลัง",
-    "part_name_en": "Rear Stabilizer Bushing",
-    "applies_sedan": "บางรุ่น",
-    "applies_pickup": "บางรุ่น",
-    "notes": null
-  },
-  {
-    "category": "3. ช่วงล่างหลัง (เก๋ง/SUV)",
     "part_name_th": "ยางรัดกันโคลงหลัง",
     "part_name_en": "Rear Sway Bar Bracket Clamp Rubber",
     "applies_sedan": "บางรุ่น",
     "applies_pickup": "บางรุ่น",
-    "notes": "รายการเพิ่มเติมตามที่ร้านแจ้ง — คนละชิ้นกับบูชเหล็กกันโคลง"
+    "notes": null
   },
   {
     "category": "3. ช่วงล่างหลัง (เก๋ง/SUV)",
