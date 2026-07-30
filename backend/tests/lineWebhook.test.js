@@ -637,6 +637,45 @@ describe('POST /api/line/webhook', () => {
     expect(qB.requested_queue_no).toBe(queueNo); // เก็บเลขที่พิมพ์มาจริงไว้
   });
 
+  test('ลูกค้ามีใบเสนอราคา "นัดทำ" ค้างอยู่ (คนละวัน คนละเลขคิว) → วันที่นัดมาถึง ดึงใบเดิมมาใช้แทนเปิดใบใหม่ เปลี่ยนแค่เลขคิว/สถานะ ไม่แตะวันที่เดิม', async () => {
+    const uniq = Date.now().toString().slice(-7);
+    const phone = `079${uniq}`;
+    const oldQueueNo = `5${uniq}`; // เลขคิวตอนนัด (เมื่อวาน)
+    const newQueueNo = `6${uniq}`; // เลขคิวของวันนี้ (คนละเลข)
+
+    const first = await postWebhook(
+      eventsBody([messageEvent(`คิว:${oldQueueNo}\nชื่อลูกค้า:คุณนัดหมาย\nเบอร์โทร:${phone}\nทะเบียนรถ:9กฮ11\nรายการ:\nซ่อมแร็คตัวเดิม 18000`, `msg-scheduled1-${uniq}`)])
+    );
+    expect(first.body.created).toHaveLength(1);
+    const firstNo = first.body.created[0];
+    const [[q1]] = await pool.query('SELECT id, customer_id, quotation_date FROM quotations WHERE quotation_no=?', [firstNo]);
+    createdCustomerIds.push(q1.customer_id);
+
+    // จำลองสถานะ "นัดทำวันนี้" ที่ตั้งไว้จากหน้าเว็บ (สร้างเมื่อวาน นัดมาทำวันนี้)
+    const oldDate = '2000-01-01'; // วันที่ตายตัว ยืนยันว่าไม่ถูกแก้ไขหลังจากนี้
+    await pool.execute(
+      "UPDATE quotations SET quotation_date = ?, status = 'scheduled', scheduled_date = CURDATE() WHERE id = ?",
+      [oldDate, q1.id]
+    );
+
+    // วันนี้ลูกค้ามาตามนัด พนักงานพิมพ์คิวใหม่ของวันนี้ (คนละเลขกับตอนนัด)
+    const second = await postWebhook(
+      eventsBody([messageEvent(`คิว:${newQueueNo}\nชื่อลูกค้า:คุณนัดหมาย\nเบอร์โทร:${phone}\nทะเบียนรถ:9กฮ11`, `msg-scheduled2-${uniq}`)])
+    );
+    expect(second.body.created).toHaveLength(1);
+    expect(second.body.created[0]).toBe(firstNo); // ดึงใบเดิมมาใช้ ไม่เปิดใบใหม่
+
+    const [quotations] = await pool.query(
+      'SELECT id, queue_no, status, scheduled_date, quotation_date FROM quotations WHERE customer_id = ?',
+      [q1.customer_id]
+    );
+    expect(quotations).toHaveLength(1); // ยังมีใบเดียว ไม่ซ้อน
+    expect(quotations[0].queue_no).toBe(newQueueNo); // เปลี่ยนเป็นเลขคิวของวันนี้แล้ว
+    expect(quotations[0].status).toBe('pending'); // เอาสถานะ "นัดทำ" ออกแล้ว
+    expect(quotations[0].scheduled_date).toBeNull(); // เคลียร์วันนัดทิ้ง (มาแล้ว)
+    expect(new Date(quotations[0].quotation_date).toISOString().slice(0, 10)).toBe(oldDate); // ไม่แตะวันที่ใบเดิมเลย
+  });
+
   test('ใบเดิมเลยกำหนด 14 วัน (pending ค้างนาน) → ไม่ถือว่าเป็นการแก้ไข เปิดใบใหม่แทน', async () => {
     const uniq = Date.now().toString().slice(-7);
     const phone = `079${uniq}`;

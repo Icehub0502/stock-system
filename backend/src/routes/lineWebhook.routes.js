@@ -641,6 +641,26 @@ async function createQuotationFromQueue(parsed) {
       );
       if (rows.length > 0) existing = rows[0];
     }
+
+    // ไม่เจอด้วยเลขคิว (เลขคิววันนี้ย่อมไม่ตรงกับเลขคิวที่พิมพ์ไว้ตอนนัด ซึ่งเป็นคน
+    // ละวัน) แต่ลูกค้าคนนี้มีใบเสนอราคาที่ "นัดทำ" (status='scheduled') ค้างอยู่ →
+    // ถือว่าเป็นลูกค้าที่มาตามนัด ไม่ใช่งานใหม่ ดึงใบเดิมมาใช้แทนการเปิดใบซ้อน (จะ
+    // อัปเดตแค่เลขคิว/สถานะที่จุด UPDATE ด้านล่าง ไม่แตะวันที่ใบเดิม)
+    // จำกัดแค่ 1 ใบล่าสุด — ถ้าลูกค้ามีนัดค้างพร้อมกันมากกว่า 1 คัน (เช่น 2 คันนัด
+    // วันเดียวกัน) เคสนี้ยังจับคู่ผิดคันได้ ยอมรับเป็นข้อจำกัดที่รู้อยู่แล้ว
+    let matchedScheduled = false;
+    if (!existing) {
+      const [scheduledRows] = await conn.execute(
+        `SELECT id, quotation_no, status, converted_receipt_id, vehicle_id, deposit_amount FROM quotations
+         WHERE customer_id = ? AND status = 'scheduled' AND closed_at IS NULL
+         ORDER BY scheduled_date ASC, id DESC LIMIT 1`,
+        [customerId]
+      );
+      if (scheduledRows.length > 0) {
+        existing = scheduledRows[0];
+        matchedScheduled = true;
+      }
+    }
     const isUpdate = Boolean(existing);
 
     // รถ: กำลังแก้ไขใบเดิมที่ผูกรถไว้แล้ว (isUpdate && existing.vehicle_id != null)
@@ -805,11 +825,21 @@ async function createQuotationFromQueue(parsed) {
     if (isUpdate) {
       quotationId = existing.id;
       quotation_no = existing.quotation_no;
-      await conn.execute(
-        `UPDATE quotations SET vehicle_id = ?, mileage = COALESCE(?, mileage), remark = ?, product_summary = ?, total_amount = ?, symptom = ?, deposit_amount = COALESCE(?, deposit_amount), deposit_date = COALESCE(?, deposit_date)
-         WHERE id = ?`,
-        [vehicleId, parsed.mileage ?? null, parsed.remark || null, product_summary, total_amount, parsed.symptom || null, parsed.deposit_amount ?? null, parsed.deposit_date || null, quotationId]
-      );
+      if (matchedScheduled) {
+        // ลูกค้ามาตามนัดแล้ว — เปลี่ยนแค่เลขคิวเป็นของวันนี้ + เอาสถานะ "รอทำ"
+        // ออก (กลับเป็น pending ปกติ) ไม่แตะ quotation_date/วันที่ใบเดิมเลย
+        await conn.execute(
+          `UPDATE quotations SET vehicle_id = ?, mileage = COALESCE(?, mileage), remark = ?, product_summary = ?, total_amount = ?, symptom = ?, deposit_amount = COALESCE(?, deposit_amount), deposit_date = COALESCE(?, deposit_date), queue_no = ?, status = 'pending', scheduled_date = NULL
+           WHERE id = ?`,
+          [vehicleId, parsed.mileage ?? null, parsed.remark || null, product_summary, total_amount, parsed.symptom || null, parsed.deposit_amount ?? null, parsed.deposit_date || null, actualQueueNo || null, quotationId]
+        );
+      } else {
+        await conn.execute(
+          `UPDATE quotations SET vehicle_id = ?, mileage = COALESCE(?, mileage), remark = ?, product_summary = ?, total_amount = ?, symptom = ?, deposit_amount = COALESCE(?, deposit_amount), deposit_date = COALESCE(?, deposit_date)
+           WHERE id = ?`,
+          [vehicleId, parsed.mileage ?? null, parsed.remark || null, product_summary, total_amount, parsed.symptom || null, parsed.deposit_amount ?? null, parsed.deposit_date || null, quotationId]
+        );
+      }
       await conn.execute('DELETE FROM quotation_items WHERE quotation_id = ?', [quotationId]);
     } else {
       quotation_no = await generateQuotationNo(conn);
