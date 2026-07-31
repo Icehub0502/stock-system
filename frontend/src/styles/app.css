@@ -1692,6 +1692,19 @@ button:disabled { background: #f3f4f6; color: #9ca3af; cursor: not-allowed; }
   color: #1f2937;
 }
 
+/* Section divider used by AppointmentsPage to separate the "มีวันนัดหมาย"
+   and "ยังไม่ระบุวันนัดหมาย" tables — a lighter-weight heading than
+   .quotation-header h1 since it's a sub-section, not the page title. */
+.appointments-section-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #1f2937;
+  margin: 24px 0 12px;
+}
+.appointments-section-title:first-of-type {
+  margin-top: 20px;
+}
+
 .quotation-table-wrap {
   overflow-x: auto;
   border-radius: 16px;
