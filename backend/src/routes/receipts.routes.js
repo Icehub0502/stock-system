@@ -347,7 +347,7 @@ router.get('/monthly-summary', async (req, res) => {
               COUNT(DISTINCT customer_id) AS customer_count,
               SUM(total_amount) AS total_revenue
        FROM receipts
-       GROUP BY DATE_FORMAT(receipt_date, '%Y-%m')
+       GROUP BY DATE_FORMAT(receipt_date, '%Y-%m-01')
        ORDER BY month DESC`
     );
     res.json({ success: true, data: rows });
