@@ -67,7 +67,7 @@ function templateText({ queueNo, name, phone, plate, items = [], payment = {} })
     `ยอดรวม:${payment.statedTotal ?? ''}`,
     `มัดจำ:${payment.deposit ?? ''}`,
     `หมายเหตุ:${payment.remark ?? ''}`,
-    `ยอดที่ต้องชำระ:${payment.remainingBalance ?? ''}`,
+    `วันนัดหมาย:${payment.appointmentDate ?? ''}`,
     '',
     '<--ลูกค้าชำระเงิน-->',
     `ช่องทางการชำระ:${payment.method ?? ''}`,
@@ -755,17 +755,16 @@ describe('POST /api/line/webhook', () => {
     expect(text).not.toMatch(/ปิดบิล/);
   });
 
-  test('ยอดมัดจำ+ยอดค้างไม่ตรงกับยอดรวมที่แจ้งมา (depositMismatch) → ข้อความตอบมีคำเตือนเฉย ๆ ไม่บล็อกการปิดบิล', () => {
+  test('ยอดมัดจำมากกว่ายอดรวมที่แจ้งมา (depositMismatch) → ข้อความตอบมีคำเตือนเฉย ๆ ไม่บล็อกการปิดบิล', () => {
     const parsed = { queue_no: '1', customer_name: 'คุณเอ', license_plate: null, stated_total: null };
     const info = {
       quotation_no: 'IV000001', itemCount: 1, totalAmount: 10000, hasNote: false, isUpdate: false,
       paymentClosed: true, paymentReceiptNo: 'RC260718002', paymentAmount: 10000,
-      depositMismatch: { depositAmount: 2000, actual: 6000, expected: 10000 },
+      depositMismatch: { depositAmount: 12000, actual: 12000, expected: 10000 },
     };
     const text = lineWebhookRouter.buildSuccessReplyText(parsed, info);
-    expect(text).toMatch(/ไม่เท่ากับยอดรวม/);
-    expect(text).toContain('2,000');
-    expect(text).toContain('6,000');
+    expect(text).toMatch(/มากกว่ายอดรวมที่แจ้ง/);
+    expect(text).toContain('12,000');
     expect(text).toContain('10,000');
   });
 
@@ -992,9 +991,9 @@ describe('POST /api/line/webhook', () => {
   describe('เทมเพลตใหม่: พิมพ์ "คิว" ขอเทมเพลต + ส่งเทมเพลตที่กรอกแล้วปิดบิลอัตโนมัติ', () => {
     // ผูก checkDepositMismatch/computeReceiptAmount (mirror กติกาปิดบิล) เข้ากับผลจาก
     // parseLineQueueMessage จริง ๆ (ไม่ใช่ mock object) — พิสูจน์ว่า field ที่ parser
-    // คืนมา (remaining_balance/stated_total/deposit_amount) เดินผ่านกติกาในไฟล์นี้ได้
-    // ถูกต้องจริง ๆ ไม่ใช่แค่ทดสอบแยกแต่ละฟังก์ชันด้วย object ที่เขียนมือ — deposit_amount
-    // เป็นฟิลด์ first-class จาก label "มัดจำ:" แล้ว (ไม่ได้เดาจากข้อความในหมายเหตุอีกต่อไป)
+    // คืนมา (stated_total/deposit_amount) เดินผ่านกติกาในไฟล์นี้ได้ถูกต้องจริง ๆ ไม่ใช่
+    // แค่ทดสอบแยกแต่ละฟังก์ชันด้วย object ที่เขียนมือ — deposit_amount เป็นฟิลด์
+    // first-class จาก label "มัดจำ:" แล้ว (ไม่ได้เดาจากข้อความในหมายเหตุอีกต่อไป)
     test('checkDepositMismatch/computeReceiptAmount ต่อกับผลจาก parser จริง: มัดจำ+ยอดที่จ่ายเพิ่ม ตรงกับยอดรวม → ไม่มี mismatch, ยอดใบเสร็จ = มัดจำ+ยอดที่จ่ายเพิ่ม', () => {
       const parsed = parseLineQueueMessage(
         templateText({
@@ -1002,34 +1001,35 @@ describe('POST /api/line/webhook', () => {
           name: 'คุณมัดจำตรง',
           items: [{ name: 'แร็ค OEM', price: 10000 }],
           // มัดจำ 6000 ไว้ก่อน เหลือ 4000 — ตอนปิดบิลจ่ายส่วนที่เหลือ 4000 พอดี
-          payment: { statedTotal: 10000, remainingBalance: 4000, paidAmount: 4000, deposit: 6000 },
+          payment: { statedTotal: 10000, paidAmount: 4000, deposit: 6000 },
         })
       );
-      expect(parsed.remaining_balance).toBe(4000);
       expect(parsed.stated_total).toBe(10000);
       expect(parsed.deposit_amount).toBe(6000);
 
-      expect(lineWebhookRouter.checkDepositMismatch(parsed, parsed.deposit_amount)).toBeNull(); // 6000+4000=10000 ตรงกับยอดรวม
+      expect(lineWebhookRouter.checkDepositMismatch(parsed, parsed.deposit_amount)).toBeNull(); // มัดจำไม่เกินยอดรวม
       // สูตรใหม่: มัดจำ (6000) + ยอดที่ลูกค้าชำระเงินครั้งนี้ (4000) = 10000
       expect(lineWebhookRouter.computeReceiptAmount(parsed.deposit_amount, parsed.paid_amount, 10000)).toBe(10000);
     });
 
-    test('checkDepositMismatch ต่อกับผลจาก parser จริง: มัดจำ+ยอดค้าง ไม่ตรงกับยอดรวม → คืน mismatch พร้อมตัวเลขที่ถูกต้อง', () => {
+    // remaining_balance ไม่ใช่ฟิลด์ที่พิมพ์มาให้เทียบอีกต่อไป (ถูกแทนที่ด้วย "วันนัดหมาย")
+    // — checkDepositMismatch เหลือแค่กติกาเดียว: มัดจำมากกว่ายอดรวมที่แจ้งมาหรือไม่
+    test('checkDepositMismatch ต่อกับผลจาก parser จริง: มัดจำมากกว่ายอดรวมที่แจ้งมา → คืน mismatch พร้อมตัวเลขที่ถูกต้อง', () => {
       const parsed = parseLineQueueMessage(
         templateText({
           queueNo: '1',
           name: 'คุณมัดจำเพี้ยน',
           items: [{ name: 'แร็ค OEM', price: 10000 }],
-          // พิมพ์ยอดรวมผิด (10000) แต่มัดจำ 2000 + ยอดค้าง 5000 = 7000 ไม่เท่ากัน
-          payment: { statedTotal: 10000, remainingBalance: 5000, paidAmount: 2000, deposit: 2000 },
+          // พิมพ์ยอดรวมผิด (10000) แต่มัดจำ 12000 มากกว่ายอดรวมเสียอีก
+          payment: { statedTotal: 10000, deposit: 12000 },
         })
       );
-      expect(parsed.deposit_amount).toBe(2000);
+      expect(parsed.deposit_amount).toBe(12000);
       const mismatch = lineWebhookRouter.checkDepositMismatch(parsed, parsed.deposit_amount);
-      expect(mismatch).toEqual({ depositAmount: 2000, actual: 7000, expected: 10000 });
+      expect(mismatch).toEqual({ depositAmount: 12000, actual: 12000, expected: 10000 });
     });
 
-    test('computeReceiptAmount ต่อกับผลจาก parser จริง: ไม่มีมัดจำ (ยอดที่ต้องชำระ 0/ไม่กรอก) → ใช้ยอดที่ลูกค้าจ่ายจริง', () => {
+    test('computeReceiptAmount ต่อกับผลจาก parser จริง: ไม่มีมัดจำ → ใช้ยอดที่ลูกค้าจ่ายจริง', () => {
       const parsed = parseLineQueueMessage(
         templateText({
           queueNo: '1',
@@ -1038,7 +1038,7 @@ describe('POST /api/line/webhook', () => {
           payment: { paidAmount: 3000, method: 'เงินสด' },
         })
       );
-      expect(parsed.remaining_balance).toBeNull();
+      expect(parsed.deposit_amount).toBeNull();
       expect(lineWebhookRouter.computeReceiptAmount(parsed.deposit_amount, parsed.paid_amount, 3000)).toBe(3000);
     });
 
@@ -1061,12 +1061,12 @@ describe('POST /api/line/webhook', () => {
       expect(text).toContain('ชื่อ:');
       expect(text).toContain('เบอโทรศัพท์:');
       expect(text).toContain('<--สิ้นสุดรายการ-->');
-      expect(text).toContain('ยอดที่ต้องชำระ:');
+      expect(text).toContain('วันนัดหมาย:');
       expect(text).toContain('<--ลูกค้าชำระเงิน-->');
       expect(text).toContain('ช่องทางการชำระ (โอน/บัตรเครดิต/เงินสด/QRCode):');
       expect(text).toContain('ลูกค้าชำระเงิน (ยอดที่ได้รับจริง):');
-      // ยอดที่ต้องชำระ ต้องอยู่ก่อนเส้นแบ่งที่สอง ซึ่งอยู่ก่อนช่องทางการชำระ (ลำดับตกลงกับเจ้าของร้าน)
-      expect(text.indexOf('ยอดที่ต้องชำระ:')).toBeLessThan(text.indexOf('<--ลูกค้าชำระเงิน-->'));
+      // วันนัดหมาย ต้องอยู่ก่อนเส้นแบ่งที่สอง ซึ่งอยู่ก่อนช่องทางการชำระ (ลำดับตกลงกับเจ้าของร้าน)
+      expect(text.indexOf('วันนัดหมาย:')).toBeLessThan(text.indexOf('<--ลูกค้าชำระเงิน-->'));
       expect(text.indexOf('<--ลูกค้าชำระเงิน-->')).toBeLessThan(text.indexOf('ช่องทางการชำระ (โอน/บัตรเครดิต/เงินสด/QRCode):'));
     });
 

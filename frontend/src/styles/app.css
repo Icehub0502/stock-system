@@ -574,7 +574,8 @@ button:disabled { background: #f3f4f6; color: #9ca3af; cursor: not-allowed; }
     overflow: hidden;
   }
 
-  .quotation-table tr.date-group-header-row {
+  .quotation-table tr.date-group-header-row,
+  .quotation-table tr.month-group-header-row {
     border: none;
     margin-bottom: 6px;
   }
@@ -1692,6 +1693,35 @@ button:disabled { background: #f3f4f6; color: #9ca3af; cursor: not-allowed; }
   color: #1f2937;
 }
 
+/* View toggle on QuotationListPage — switches the table between the main
+   list and the "ลูกค้าที่ไม่ได้ทำ" (declined) list without leaving the page. */
+.quotation-view-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.btn-tab {
+  background: white;
+  border: 1px solid #e5e7eb;
+  color: #4b5563;
+  padding: 8px 16px;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-tab:hover {
+  border-color: #9ca3af;
+}
+
+.btn-tab-active {
+  background: #1f2937;
+  border-color: #1f2937;
+  color: white;
+}
+
 /* Section divider used by AppointmentsPage to separate the "มีวันนัดหมาย"
    and "ยังไม่ระบุวันนัดหมาย" tables — a lighter-weight heading than
    .quotation-header h1 since it's a sub-section, not the page title. */
@@ -1813,7 +1843,8 @@ button:disabled { background: #f3f4f6; color: #9ca3af; cursor: not-allowed; }
   background: #eef2ff;
 }
 
-.quotation-table tr.date-group-header-row td {
+.quotation-table tr.date-group-header-row td,
+.quotation-table tr.month-group-header-row td {
   background: #eef2f7 !important;
   color: #374151;
   font-weight: 700;
@@ -1826,6 +1857,21 @@ button:disabled { background: #f3f4f6; color: #9ca3af; cursor: not-allowed; }
 .date-group-count {
   font-weight: 500;
   color: #6b7280;
+}
+
+/* หัวข้อ "แฟ้ม" เดือนบนหน้าสรุปยอด — เดือนเก่ากว่าปัจจุบันเริ่มพับเก็บไว้ (ดู
+   DailySalesSummaryPage.jsx) ใช้สีพื้นอ่อนกว่า .date-group-header-row เล็กน้อยให้
+   ดูเหมือน "แฟ้ม" แยกจากหัวข้อกลุ่มวันปกติ แต่ยังอยู่ในโทนเดียวกัน */
+.quotation-table tr.month-group-header-row td {
+  background: #e0e7ff !important;
+  cursor: pointer;
+}
+
+.month-group-toggle {
+  display: inline-block;
+  width: 1em;
+  margin-right: 4px;
+  color: #4f46e5;
 }
 
 .quotation-table tr.clickable-row {
@@ -3465,6 +3511,15 @@ body:has(.modal-backdrop) .page-fade-in {
     border-top-color: var(--m-line);
     border-bottom-color: var(--m-line);
   }
+  .quotation-table tr.month-group-header-row td {
+    background: var(--m-surface) !important;
+    color: var(--m-text-hi);
+    border-top-color: var(--m-accent);
+    border-bottom-color: var(--m-line);
+  }
+  .month-group-toggle {
+    color: var(--m-accent);
+  }
   .quotation-table td {
     border-bottom-color: var(--m-line);
     color: var(--m-text-hi);
@@ -3822,6 +3877,16 @@ body:has(.modal-backdrop) .page-fade-in {
   .quotation-header p,
   .quotation-header .subtitle {
     color: var(--m-text-lo);
+  }
+  .btn-tab {
+    background: var(--m-surface);
+    border-color: var(--m-line);
+    color: var(--m-text-lo);
+  }
+  .btn-tab-active {
+    background: var(--m-accent);
+    border-color: var(--m-accent);
+    color: var(--m-ink);
   }
   .search-input {
     background: var(--m-ink);
@@ -4214,6 +4279,7 @@ body:has(.modal-backdrop) .page-fade-in {
     animation: m-card-rise 0.32s ease both;
   }
   .quotation-table tbody tr.date-group-header-row,
+  .quotation-table tbody tr.month-group-header-row,
   .pcp-table tbody tr:has(th) {
     animation: none;
   }

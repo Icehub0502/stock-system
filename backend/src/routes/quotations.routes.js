@@ -792,6 +792,27 @@ router.patch('/:id/no-date', async (req, res) => {
   }
 });
 
+// ลูกค้าขอใบเสนอราคาแล้วไม่ได้ทำจริง — สำนักงานกดปุ่ม "ลูกค้าไม่ได้ทำ" บนหน้า
+// รายการใบเสนอราคา แยกใบนี้ออกจากรายการหลัก/หน้านัดหมาย ไปอยู่ในหน้า "ลูกค้าที่
+// ไม่ได้ทำ" แทน (mirror รูปแบบเดียวกับ /no-date ด้านบน)
+router.patch('/:id/decline', async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const [result] = await pool.execute(
+      "UPDATE quotations SET status = 'declined', scheduled_date = NULL WHERE id = ?",
+      [id]
+    );
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: 'ไม่พบใบเสนอราคา' });
+    }
+    res.json({ success: true, message: 'บันทึกสถานะลูกค้าไม่ได้ทำสำเร็จ' });
+  } catch (err) {
+    console.error('Error marking quotation as declined:', err);
+    res.status(500).json({ error: 'บันทึกไม่สำเร็จ' });
+  }
+});
+
 // PATCH - Save the customer's signature (captured on a tablet/phone at the counter)
 router.patch('/:id/signature', async (req, res) => {
   const { id } = req.params;

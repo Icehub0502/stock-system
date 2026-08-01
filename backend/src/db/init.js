@@ -358,6 +358,15 @@ async function initDatabase() {
     MODIFY COLUMN status ENUM('pending','approved','scheduled','no_date') NOT NULL DEFAULT 'pending'
   `).catch(ignoreIfAlreadyApplied);
 
+  // เพิ่มค่า 'declined' ให้ status — ใช้เมื่อลูกค้าขอใบเสนอราคาแล้วไม่ได้ทำจริง
+  // (สำนักงานกดปุ่ม "ลูกค้าไม่ได้ทำ" บนหน้ารายการใบเสนอราคา) ต่างจาก 'no_date' ที่
+  // แปลว่ายังรอนัดหมายอยู่ — ใบที่ declined ถือว่าจบงานแล้ว (ไม่ทำต่อ) แต่เก็บไว้ดู
+  // ประวัติ ไม่ลบทิ้ง
+  await conn.query(`
+    ALTER TABLE quotations
+    MODIFY COLUMN status ENUM('pending','approved','scheduled','no_date','declined') NOT NULL DEFAULT 'pending'
+  `).catch(ignoreIfAlreadyApplied);
+
   // Mirrors receipts.printed_at — lets the list show a persisted "พิมพ์แล้ว"
   // state per quotation instead of forgetting as soon as the modal closes.
   await conn.query(`

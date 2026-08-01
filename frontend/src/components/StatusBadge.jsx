@@ -26,5 +26,8 @@ export default function StatusBadge({ status, scheduledDate, closedAt }) {
   if (status === 'no_date') {
     return <span className="status-badge status-badge-danger">⚠️ ไม่ระบุวันนัดหมาย</span>;
   }
+  if (status === 'declined') {
+    return <span className="status-badge status-badge-neutral">🚫 ลูกค้าไม่ได้ทำ</span>;
+  }
   return <span className="status-badge status-badge-neutral">⏳ รอดำเนินการ</span>;
 }

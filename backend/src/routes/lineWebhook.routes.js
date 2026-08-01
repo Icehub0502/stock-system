@@ -333,7 +333,7 @@ function buildQueueTemplateText(nextQueueNo) {
     'ยอดรวม:',
     'มัดจำ:',
     'วันที่มัดจำ:',
-    'ยอดที่ต้องชำระ:',
+    'วันนัดหมาย:',
     'หมายเหตุ:',
     '',
     '<--ลูกค้าชำระเงิน-->',
@@ -357,11 +357,11 @@ function formatDbDateThai(dateStr) {
 // label ว่างให้กรอก) ใช้ตอน push ข้อมูลอัปเดตกลับเข้ากลุ่มหลังออฟฟิศแก้ไขใบเสนอราคา/
 // รถ/ลูกค้าผ่านหน้าเว็บ (ดู pushQuotationUpdate ด้านล่าง) — ขึ้นต้นด้วยแบนเนอร์แจ้ง
 // เตือนคั่นบรรทัดว่างแล้วตามด้วยเทมเพลตจริงที่ขึ้นต้นด้วย "คิว N" ครบทุกส่วนเหมือน
-// เทมเพลตปกติทุกประการ (รวมยอดรวม/ยอดที่ต้องชำระ/ส่วนชำระเงิน) เพื่อให้พนักงาน
-// คัดลอกทั้งก้อนไปใช้ต่อได้เลยไม่ว่าจะแก้ไขข้อมูลต่อหรือปิดบิลเลยก็ตาม (ยอดรวมคำนวณ
-// จาก total_amount ที่บันทึกไว้จริงในใบเสนอราคา ไม่ใช่คำนวณจากรายการซ้ำ กันกรณี
-// ออฟฟิศปรับยอดรวมเองไว้ในเว็บไม่ตรงกับผลรวมรายการเป๊ะ ๆ — ยอดที่ต้องชำระคำนวณสด
-// จาก total_amount ลบมัดจำเสมอ ไม่ได้เก็บแยกไว้)
+// เทมเพลตปกติทุกประการ (รวมยอดรวม/วันนัดหมาย/ส่วนชำระเงิน) เพื่อให้พนักงานคัดลอกทั้ง
+// ก้อนไปใช้ต่อได้เลยไม่ว่าจะแก้ไขข้อมูลต่อหรือปิดบิลเลยก็ตาม (ยอดรวมคำนวณจาก
+// total_amount ที่บันทึกไว้จริงในใบเสนอราคา ไม่ใช่คำนวณจากรายการซ้ำ กันกรณีออฟฟิศ
+// ปรับยอดรวมเองไว้ในเว็บไม่ตรงกับผลรวมรายการเป๊ะ ๆ — วันนัดหมายมาจาก scheduled_date
+// เดียวกับที่หน้า "ลูกค้าที่นัดหมาย" ใช้ ไม่ใช่ฟิลด์แยกต่างหาก)
 function buildFilledTemplateText(data) {
   const banner = `🔄 ข้อมูลอัปเดตแล้ว (คิว ${data.queue_no}) — คัดลอกไปใช้แทนของเดิมได้เลย`;
   const itemLines = (data.items || []).map((it) => {
@@ -369,8 +369,6 @@ function buildFilledTemplateText(data) {
     return `${it.product_name} ${amount}`;
   });
   const totalAmount = Number(data.total_amount || 0);
-  const depositAmount = data.deposit_amount != null ? Number(data.deposit_amount) : 0;
-  const remaining = totalAmount - depositAmount;
   const template = [
     `คิว ${data.queue_no}`,
     `ชื่อ:${data.customer_name || ''}`,
@@ -388,7 +386,7 @@ function buildFilledTemplateText(data) {
     `ยอดรวม:${totalAmount}`,
     `มัดจำ:${data.deposit_amount != null ? data.deposit_amount : ''}`,
     `วันที่มัดจำ:${formatDbDateThai(data.deposit_date)}`,
-    `ยอดที่ต้องชำระ:${remaining}`,
+    `วันนัดหมาย:${data.status === 'scheduled' ? formatDbDateThai(data.scheduled_date) : ''}`,
     `หมายเหตุ:${data.remark || ''}`,
     '',
     '<--ลูกค้าชำระเงิน-->',
@@ -404,6 +402,7 @@ function buildFilledTemplateText(data) {
 async function fetchQuotationForPush(quotationId) {
   const [[q]] = await pool.query(
     `SELECT q.id, q.queue_no, q.closed_at, q.symptom, q.remark, q.deposit_amount, q.deposit_date, q.total_amount,
+            q.status, q.scheduled_date,
             c.customer_name, c.phone,
             v.brand, v.model, v.color, v.license_plate, v.mileage
      FROM quotations q
@@ -458,26 +457,21 @@ function computeReceiptAmount(depositAmount, paidAmount, fallbackTotal) {
 }
 
 // เตือนถ้ายอดมัดจำ (deposit_amount — ฟิลด์ first-class จาก label "มัดจำ:" ใน
-// parseLineQueueMessage.js ไม่ใช่การเดาจากข้อความในหมายเหตุอีกต่อไป) บวกยอดค้างที่
-// แจ้งมาไม่เท่ากับยอดรวมที่แจ้งมา — เตือนเฉย ๆ ไม่บล็อกการสร้างบิล (พนักงานพิมพ์เลข
-// ผิดกันได้ ให้เห็นแล้วไปแก้เองในแอป) รับ depositAmount แยกจาก parsed เพราะข้อความ
-// resend อาจไม่ได้พิมพ์มัดจำซ้ำ (COALESCE เก็บค่าจากใบเดิมไว้ — ดูจุด UPDATE quotations
-// ด้านบน) ต้องใช้ค่าที่จะถูกบันทึกจริงลงฐานข้อมูล ไม่ใช่แค่ค่าจากข้อความล่าสุด
+// parseLineQueueMessage.js ไม่ใช่การเดาจากข้อความในหมายเหตุอีกต่อไป) มากกว่ายอดรวม
+// ทั้งบิลที่แจ้งมา — เตือนเฉย ๆ ไม่บล็อกการสร้างบิล (พนักงานพิมพ์เลขผิดกันได้ ให้เห็น
+// แล้วไปแก้เองในแอป) รับ depositAmount แยกจาก parsed เพราะข้อความ resend อาจไม่ได้
+// พิมพ์มัดจำซ้ำ (COALESCE เก็บค่าจากใบเดิมไว้ — ดูจุด UPDATE quotations ด้านบน) ต้อง
+// ใช้ค่าที่จะถูกบันทึกจริงลงฐานข้อมูล ไม่ใช่แค่ค่าจากข้อความล่าสุด
+// (ยอดที่ต้องชำระ/remaining_balance ไม่ใช่ฟิลด์ที่พิมพ์มาให้เทียบอีกต่อไป — คำนวณ
+// สดจาก total_amount - deposit_amount แล้วให้บอทตอบกลับเองใน buildSuccessReplyText แทน)
 function checkDepositMismatch(parsed, depositAmount) {
   if (parsed.stated_total == null || depositAmount == null) return null;
-  // มัดจำมากกว่ายอดรวมทั้งบิล — เป็นไปได้ทางคณิตศาสตร์ (ยอดที่ต้องชำระจะติดลบ) แต่ใน
-  // ทางปฏิบัติมักเกิดจากพิมพ์ผิด ต้องเตือนไว้เสมอไม่ว่าจะพิมพ์ "ยอดที่ต้องชำระ" มาด้วย
-  // หรือไม่ก็ตาม (เดิมเช็คนี้ข้ามไปเงียบ ๆ ถ้าไม่มี remaining_balance เลย)
+  // มัดจำมากกว่ายอดรวมทั้งบิล — เป็นไปได้ทางคณิตศาสตร์ (ยอดค้างชำระจะติดลบ) แต่ในทาง
+  // ปฏิบัติมักเกิดจากพิมพ์ผิด
   if (depositAmount > parsed.stated_total) {
     return { depositAmount, actual: depositAmount, expected: parsed.stated_total };
   }
-  // ไม่ได้พิมพ์ "ยอดที่ต้องชำระ" มาเลย ไม่มีอะไรให้เช็คต่อ (เดิมเงื่อนไขนี้ยังกรอง
-  // remaining_balance <= 0 ทิ้งด้วย ทำให้เคสมัดจำเกินยอดรวม (ยอดที่ต้องชำระติดลบตาม
-  // ความจริง) ไม่ถูกตรวจสอบเลย — เอาเงื่อนไข <= 0 ออก เหลือแค่เช็คว่ามีค่าให้ตรวจ)
-  if (parsed.remaining_balance == null) return null;
-  const actual = depositAmount + parsed.remaining_balance;
-  if (actual === parsed.stated_total) return null;
-  return { depositAmount, actual, expected: parsed.stated_total };
+  return null;
 }
 
 // เลือกใช้เฉพาะตอนชื่อที่พิมพ์มาตรงกับสินค้าในแคตาล็อกแบบไม่มีข้อโต้แย้ง (ตัดช่องว่าง
@@ -819,6 +813,13 @@ async function createQuotationFromQueue(parsed) {
       }
     }
 
+    // วันนัดหมาย (parsed.appointment_date จาก label "วันนัดหมาย:" ในเทมเพลตมัดจำ —
+    // ดู PAYMENT_LABELS ใน parseLineQueueMessage.js) sync ตรงเข้า scheduled_date/
+    // status='scheduled' ของใบเสนอราคาเลย เป็นฟิลด์เดียวกับที่หน้า "ลูกค้าที่นัดหมาย"
+    // (AppointmentsPage.jsx) และปุ่ม "วันที่" บนหน้ารายการใช้ (PATCH /:id/schedule)
+    // ไม่ได้แยกฟิลด์ใหม่ต่างหาก — พิมพ์มาแล้วโผล่ในหน้านัดหมายทันทีโดยอัตโนมัติ
+    const hasAppointment = Boolean(parsed.appointment_date);
+
     let quotationId;
     let quotation_no;
     // isUpdate หาไว้แล้วก่อน vehicle resolution ด้านบน (ใช้ตัวแปรเดียวกันตลอดฟังก์ชัน)
@@ -827,26 +828,31 @@ async function createQuotationFromQueue(parsed) {
       quotation_no = existing.quotation_no;
       if (matchedScheduled) {
         // ลูกค้ามาตามนัดแล้ว — เปลี่ยนแค่เลขคิวเป็นของวันนี้ + เอาสถานะ "รอทำ"
-        // ออก (กลับเป็น pending ปกติ) ไม่แตะ quotation_date/วันที่ใบเดิมเลย
+        // ออก (กลับเป็น pending ปกติ) ไม่แตะ quotation_date/วันที่ใบเดิมเลย เว้นแต่
+        // ข้อความนี้พิมพ์ "วันนัดหมาย:" ใหม่มาด้วย (เช่นเลื่อนนัด) ก็ตั้งนัดใหม่แทน
         await conn.execute(
-          `UPDATE quotations SET vehicle_id = ?, mileage = COALESCE(?, mileage), remark = ?, product_summary = ?, total_amount = ?, symptom = ?, deposit_amount = COALESCE(?, deposit_amount), deposit_date = COALESCE(?, deposit_date), queue_no = ?, status = 'pending', scheduled_date = NULL
+          `UPDATE quotations SET vehicle_id = ?, mileage = COALESCE(?, mileage), remark = ?, product_summary = ?, total_amount = ?, symptom = ?, deposit_amount = COALESCE(?, deposit_amount), deposit_date = COALESCE(?, deposit_date), queue_no = ?, status = ?, scheduled_date = ?
            WHERE id = ?`,
-          [vehicleId, parsed.mileage ?? null, parsed.remark || null, product_summary, total_amount, parsed.symptom || null, parsed.deposit_amount ?? null, parsed.deposit_date || null, actualQueueNo || null, quotationId]
+          [vehicleId, parsed.mileage ?? null, parsed.remark || null, product_summary, total_amount, parsed.symptom || null, parsed.deposit_amount ?? null, parsed.deposit_date || null, actualQueueNo || null, hasAppointment ? 'scheduled' : 'pending', hasAppointment ? parsed.appointment_date : null, quotationId]
         );
       } else {
         await conn.execute(
-          `UPDATE quotations SET vehicle_id = ?, mileage = COALESCE(?, mileage), remark = ?, product_summary = ?, total_amount = ?, symptom = ?, deposit_amount = COALESCE(?, deposit_amount), deposit_date = COALESCE(?, deposit_date)
+          `UPDATE quotations SET vehicle_id = ?, mileage = COALESCE(?, mileage), remark = ?, product_summary = ?, total_amount = ?, symptom = ?, deposit_amount = COALESCE(?, deposit_amount), deposit_date = COALESCE(?, deposit_date)${hasAppointment ? ", status = 'scheduled', scheduled_date = ?" : ''}
            WHERE id = ?`,
-          [vehicleId, parsed.mileage ?? null, parsed.remark || null, product_summary, total_amount, parsed.symptom || null, parsed.deposit_amount ?? null, parsed.deposit_date || null, quotationId]
+          hasAppointment
+            ? [vehicleId, parsed.mileage ?? null, parsed.remark || null, product_summary, total_amount, parsed.symptom || null, parsed.deposit_amount ?? null, parsed.deposit_date || null, parsed.appointment_date, quotationId]
+            : [vehicleId, parsed.mileage ?? null, parsed.remark || null, product_summary, total_amount, parsed.symptom || null, parsed.deposit_amount ?? null, parsed.deposit_date || null, quotationId]
         );
       }
       await conn.execute('DELETE FROM quotation_items WHERE quotation_id = ?', [quotationId]);
     } else {
       quotation_no = await generateQuotationNo(conn);
       const [quotationResult] = await conn.execute(
-        `INSERT INTO quotations (quotation_no, quotation_date, customer_id, vehicle_id, mileage, remark, product_summary, total_amount, queue_no, requested_queue_no, symptom, deposit_amount, deposit_date)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [quotation_no, quotationDate, customerId, vehicleId, parsed.mileage ?? 0, parsed.remark || null, product_summary, total_amount, actualQueueNo || null, requestedQueueNo, parsed.symptom || null, parsed.deposit_amount ?? null, parsed.deposit_date || null]
+        `INSERT INTO quotations (quotation_no, quotation_date, customer_id, vehicle_id, mileage, remark, product_summary, total_amount, queue_no, requested_queue_no, symptom, deposit_amount, deposit_date${hasAppointment ? ', status, scheduled_date' : ''})
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?${hasAppointment ? ', ?, ?' : ''})`,
+        hasAppointment
+          ? [quotation_no, quotationDate, customerId, vehicleId, parsed.mileage ?? 0, parsed.remark || null, product_summary, total_amount, actualQueueNo || null, requestedQueueNo, parsed.symptom || null, parsed.deposit_amount ?? null, parsed.deposit_date || null, 'scheduled', parsed.appointment_date]
+          : [quotation_no, quotationDate, customerId, vehicleId, parsed.mileage ?? 0, parsed.remark || null, product_summary, total_amount, actualQueueNo || null, requestedQueueNo, parsed.symptom || null, parsed.deposit_amount ?? null, parsed.deposit_date || null]
       );
       quotationId = quotationResult.insertId;
     }
@@ -894,6 +900,15 @@ async function createQuotationFromQueue(parsed) {
     let paymentWarning = null; // 'no_items' | 'no_vehicle'
     let depositMismatch = null;
 
+    // ค่ามัดจำที่จะถูกบันทึกจริง (COALESCE เดียวกับจุด UPDATE quotations ด้านบน) —
+    // ข้อความอาจไม่ได้พิมพ์ "มัดจำ:" ซ้ำ ต้องย้อนไปใช้ค่าที่เคยบันทึกไว้ในใบเดิม คำนวณ
+    // ไว้ตรงนี้ (ไม่ใช่แค่ในเงื่อนไข paid_confirmed ด้านล่างอีกต่อไป) เพราะ
+    // buildSuccessReplyText ต้องใช้ค่านี้คำนวณ "เหลือชำระ" ให้ทุกข้อความที่มีมัดจำ
+    // ไม่ใช่แค่ตอนปิดบิล
+    const effectiveDepositAmount = parsed.deposit_amount != null
+      ? parsed.deposit_amount
+      : (existing && existing.deposit_amount != null ? Number(existing.deposit_amount) : null);
+
     if (parsed.paid_confirmed) {
       if (resolvedItems.length === 0) {
         // ไม่มีรายการสินค้าเลย — สร้างใบเสร็จไม่ได้ (receipts ต้องมี receipt_items
@@ -901,12 +916,6 @@ async function createQuotationFromQueue(parsed) {
         // ผ่าน ไม่ปิดบิล ไม่แตะ closed_at
         paymentWarning = 'no_items';
       } else {
-        // ค่ามัดจำที่จะถูกบันทึกจริง (COALESCE เดียวกับจุด UPDATE quotations ด้านบน) —
-        // ข้อความปิดบิลอาจไม่ได้พิมพ์ "มัดจำ:" ซ้ำ ต้องย้อนไปใช้ค่าที่เคยบันทึกไว้ในใบเดิม
-        // ต้องคำนวณก่อน computeReceiptAmount เพราะสูตรใหม่ต้องใช้ค่านี้ตรง ๆ
-        const effectiveDepositAmount = parsed.deposit_amount != null
-          ? parsed.deposit_amount
-          : (existing && existing.deposit_amount != null ? Number(existing.deposit_amount) : null);
         const fallbackTotal = parsed.stated_total != null ? parsed.stated_total : total_amount;
         paymentAmount = computeReceiptAmount(effectiveDepositAmount, parsed.paid_amount, fallbackTotal);
         depositMismatch = checkDepositMismatch(parsed, effectiveDepositAmount);
@@ -991,6 +1000,8 @@ async function createQuotationFromQueue(parsed) {
       syncedReceipt,
       reassignedFrom, // เลขคิวเดิมที่พิมพ์มา (มีค่าเฉพาะตอนถูกเปลี่ยนอัตโนมัติ)
       reassignedTo: reassignedFrom ? actualQueueNo : null,
+      depositAmount: effectiveDepositAmount, // ให้ buildSuccessReplyText คำนวณ "เหลือชำระ"
+      appointmentDate: hasAppointment ? parsed.appointment_date : null, // ให้ buildSuccessReplyText แจ้งยืนยันวันนัดหมาย
     };
   } catch (err) {
     if (conn) {
@@ -1177,7 +1188,7 @@ async function closeQuotationByQueue(parsed) {
 function buildSuccessReplyText(parsed, info) {
   const {
     quotation_no, itemCount, totalAmount, hasNote, isUpdate, syncedReceipt, reassignedFrom, reassignedTo,
-    paymentClosed, paymentReceiptNo, paymentAmount, paymentWarning, depositMismatch,
+    paymentClosed, paymentReceiptNo, paymentAmount, paymentWarning, depositMismatch, depositAmount, appointmentDate,
   } = info;
   const itemLine = itemCount > 0
     ? `รายการ ${itemCount} ชิ้น รวม ${totalAmount.toLocaleString()} บาท`
@@ -1208,14 +1219,27 @@ function buildSuccessReplyText(parsed, info) {
     : paymentWarning === 'no_vehicle'
       ? '\n⚠️ แจ้งชำระเงินมาแล้วแต่ยังไม่มีข้อมูลรถ สร้างใบเสร็จไม่ได้ กรุณาเพิ่มข้อมูลรถก่อน'
       : '';
-  // ยอดมัดจำ (deposit_amount) + ยอดค้างที่แจ้งมา ไม่เท่ากับยอดรวมที่แจ้งมา — เตือนเฉย ๆ
-  // ไม่บล็อกการปิดบิล (ดู checkDepositMismatch)
+  // ยอดมัดจำ (deposit_amount) มากกว่ายอดรวมที่แจ้งมา — เตือนเฉย ๆ ไม่บล็อกการสร้างบิล
+  // (ดู checkDepositMismatch)
   const depositMismatchLine = depositMismatch
-    ? `\n⚠️ ยอดมัดจำ (${depositMismatch.depositAmount.toLocaleString()} บาท) + ยอดค้าง ไม่เท่ากับยอดรวมที่แจ้ง (คำนวณได้ ${depositMismatch.actual.toLocaleString()} บาท แต่แจ้งยอดรวม ${depositMismatch.expected.toLocaleString()} บาท) กรุณาตรวจสอบ`
+    ? `\n⚠️ ยอดมัดจำ (${depositMismatch.depositAmount.toLocaleString()} บาท) มากกว่ายอดรวมที่แจ้ง (${depositMismatch.expected.toLocaleString()} บาท) กรุณาตรวจสอบ`
+    : '';
+  // มีมัดจำแล้วยังไม่ปิดบิล — บอทคำนวณ "เหลือชำระ" เองจาก total_amount - deposit_amount
+  // แทนที่จะให้พนักงานพิมพ์ "ยอดที่ต้องชำระ" เอง (เดิมเป็นฟิลด์ข้อความล้วน ไม่เคยถูก
+  // ตรวจสอบ/บันทึกจริง) ไม่แสดงถ้าปิดบิลไปแล้ว (paymentLine บอกยอดที่ปิดไปแทน) หรือ
+  // ไม่มีมัดจำเลย (ไม่มีอะไรให้ "เหลือ")
+  const remainingLine = !paymentClosed && depositAmount != null
+    ? `\n💵 เหลือชำระ ${(totalAmount - depositAmount).toLocaleString()} บาท`
+    : '';
+  // วันนัดหมาย (parsed.appointment_date) ถูก sync เข้า scheduled_date ของใบเสนอราคา
+  // แล้วอัตโนมัติ (ดู createQuotationFromQueue) — แจ้งยืนยันให้พนักงานเห็นชัด ๆ ว่า
+  // ขึ้นหน้า "ลูกค้าที่นัดหมาย" แล้ว
+  const appointmentLine = appointmentDate
+    ? `\n📅 บันทึกวันนัดหมาย ${new Date(appointmentDate).toLocaleDateString('th-TH')} แล้ว`
     : '';
   const verb = isUpdate ? 'แก้ไขใบเสนอราคา' : 'สร้างใบเสนอราคา';
   const displayQueueNo = reassignedTo || parsed.queue_no || '-';
-  return `✅ ${verb} ${quotation_no} แล้ว\nคิว ${displayQueueNo} · ${parsed.customer_name}${parsed.license_plate ? ` · ${parsed.license_plate}` : ''}\n${itemLine}${noteLine}${mismatchLine}${reassignLine}${syncedLine}${paymentLine}${paymentWarningLine}${depositMismatchLine}`;
+  return `✅ ${verb} ${quotation_no} แล้ว\nคิว ${displayQueueNo} · ${parsed.customer_name}${parsed.license_plate ? ` · ${parsed.license_plate}` : ''}\n${itemLine}${noteLine}${mismatchLine}${reassignLine}${syncedLine}${paymentLine}${paymentWarningLine}${depositMismatchLine}${remainingLine}${appointmentLine}`;
 }
 
 router.post('/webhook', async (req, res) => {

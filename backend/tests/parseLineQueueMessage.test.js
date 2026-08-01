@@ -438,7 +438,7 @@ describe('parseLineQueueMessage', () => {
           '<--สิ้นสุดรายการ-->',
           'ยอดรวม:5000',
           'หมายเหตุ:ลูกค้ารอรับรถ',
-          'ยอดที่ต้องชำระ:0',
+          'วันนัดหมาย:20/07/69',
           '',
           '<--ลูกค้าชำระเงิน-->',
           'ช่องทางการชำระ:เงินสด',
@@ -456,7 +456,7 @@ describe('parseLineQueueMessage', () => {
       expect(parsed.symptom).toBe('เช็คช่วงล่าง');
       expect(parsed.items).toEqual([{ name: 'แร็ค OEM', price: 5000 }]);
       expect(parsed.stated_total).toBe(5000);
-      expect(parsed.remaining_balance).toBe(0);
+      expect(parsed.appointment_date).toBe('2026-07-20');
       expect(parsed.payment_method).toBe('เงินสด');
       expect(parsed.paid_amount).toBe(5000);
       expect(parsed.paid_confirmed).toBe(true);
@@ -481,7 +481,7 @@ describe('parseLineQueueMessage', () => {
           '<--สิ้นสุดรายการ-->',
           'ยอดรวม:',
           'หมายเหตุ:',
-          'ยอดที่ต้องชำระ:',
+          'วันนัดหมาย:',
           '',
           '<--ลูกค้าชำระเงิน-->',
           'ช่องทางการชำระ:',
@@ -497,7 +497,7 @@ describe('parseLineQueueMessage', () => {
       expect(parsed.symptom).toBeNull();
       expect(parsed.items).toEqual([]);
       expect(parsed.stated_total).toBeNull();
-      expect(parsed.remaining_balance).toBeNull();
+      expect(parsed.appointment_date).toBeNull();
       expect(parsed.payment_method).toBeNull();
       expect(parsed.paid_amount).toBeNull();
       expect(parsed.paid_confirmed).toBe(false);
@@ -512,11 +512,11 @@ describe('parseLineQueueMessage', () => {
           'รายการ:',
           'แร็ค OEM 5000',
           '<--สิ้นสุดรายการ-->',
-          'ยอดที่ต้องชำระ:2000',
+          'วันนัดหมาย:15/08/69',
         ].join('\n')
       );
       expect(parsed.items).toEqual([{ name: 'แร็ค OEM', price: 5000 }]);
-      expect(parsed.remaining_balance).toBe(2000);
+      expect(parsed.appointment_date).toBe('2026-08-15');
     });
 
     test('เส้นแบ่งจัดหน้าที่สอง เป็นแค่ marker — label ฝั่งไหนของเส้นนี้ก็อ่านได้เหมือนกัน', () => {
@@ -574,12 +574,12 @@ describe('parseLineQueueMessage', () => {
           'รายการ:',
           '<--สิ้นสุดรายการ-->',
           'ยอดรวม:34,000',
-          'ยอดที่ต้องชำระ:2,000',
+          'มัดจำ:2,000',
           'ลูกค้าชำระเงิน:32,000',
         ].join('\n')
       );
       expect(parsed.stated_total).toBe(34000);
-      expect(parsed.remaining_balance).toBe(2000);
+      expect(parsed.deposit_amount).toBe(2000);
       expect(parsed.paid_amount).toBe(32000);
     });
 

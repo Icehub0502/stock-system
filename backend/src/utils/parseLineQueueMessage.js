@@ -21,7 +21,7 @@
 //   <--สิ้นสุดรายการ-->
 //   ยอดรวม:5000
 //   หมายเหตุ:ลูกค้ารอรับรถ
-//   ยอดที่ต้องชำระ:0
+//   วันนัดหมาย:20/07/69
 //
 //   <--ลูกค้าชำระเงิน-->
 //   ช่องทางการชำระ:เงินสด
@@ -57,10 +57,10 @@
 // "ชื่อ:"/"ชื่อลูกค้า:") — ผู้เรียก (LINE webhook) จะข้ามข้อความนั้นเงียบ ๆ เพราะใน
 // กลุ่มมีแชตเรื่องอื่นปนอยู่ (แชตทั่วไปไม่มีทางกรอก label ครบตามเทมเพลตอยู่แล้ว)
 //
-// ส่วนชำระเงิน (หลัง "<--สิ้นสุดรายการ-->"): ยอดรวม/หมายเหตุ/ยอดที่ต้องชำระ/
+// ส่วนชำระเงิน (หลัง "<--สิ้นสุดรายการ-->"): ยอดรวม/หมายเหตุ/วันนัดหมาย/
 // ช่องทางการชำระ/ลูกค้าชำระเงิน พาร์สเข้าฟิลด์ stated_total/remark/
-// remaining_balance/payment_method/paid_amount ตามลำดับ — "<--ลูกค้าชำระเงิน-->"
-// เป็นแค่เส้นแบ่งจัดหน้าเทมเพลตให้ดูง่าย (คั่นระหว่างยอดที่ต้องชำระกับช่องทาง
+// appointment_date/payment_method/paid_amount ตามลำดับ — "<--ลูกค้าชำระเงิน-->"
+// เป็นแค่เส้นแบ่งจัดหน้าเทมเพลตให้ดูง่าย (คั่นระหว่างวันนัดหมายกับช่องทาง
 // ชำระ) ไม่ใช่ label ข้อมูล พาร์สเลนเอนต์ — label ฝั่งไหนของเส้นนี้ก็อ่านได้เหมือนกัน
 // ("ลูกค้าชำระเงิน:" กรอกมาแล้วยังเป็นแค่ฟิลด์ยอดที่ลูกค้าจ่าย ไม่ปิดบิลเองอีกต่อไป)
 //
@@ -118,7 +118,12 @@ const OPTIONAL_LABEL_RE = new RegExp(`^(${Object.keys(OPTIONAL_LABELS).map(escap
 // ได้เพราะคนละ regex/section กันคนละที่ ไม่ชนกัน
 const PAYMENT_LABELS = {
   ยอดรวม: 'stated_total',
-  ยอดที่ต้องชำระ: 'remaining_balance',
+  // "ยอดที่ต้องชำระ" ถูกแทนที่ด้วย "วันนัดหมาย" แล้ว — ยอดค้างชำระคำนวณเองจาก
+  // total_amount - deposit_amount แล้วให้บอทตอบกลับในข้อความยืนยัน แทนที่จะให้
+  // พนักงานพิมพ์เลขเอง (ดู buildSuccessReplyText ใน lineWebhook.routes.js)
+  // "วันนัดหมาย:" ที่กรอกที่นี่จะถูก sync เข้า scheduled_date/status='scheduled'
+  // ของใบเสนอราคา ตัวเดียวกับที่หน้า "ลูกค้าที่นัดหมาย" ใช้ (ดู createQuotationFromQueue)
+  วันนัดหมาย: 'appointment_date',
   // เทมเพลตใหม่ใส่คำแนะนำในวงเล็บต่อท้าย label ให้พนักงานเห็นตัวเลือก/ความหมายชัด ๆ
   // (ดู buildQueueTemplateText/buildFilledTemplateText ใน lineWebhook.routes.js) —
   // ต้องเขียนตัวที่มีวงเล็บไว้ก่อนตัวเปล่าเสมอ (⚠️ กติกาเดียวกับ OPTIONAL_LABELS
@@ -212,9 +217,9 @@ function normalizePaymentMethod(raw) {
 function parsePaymentLabelValue(field, rawValue) {
   const value = rawValue.trim();
   if (field === 'payment_method') return value ? normalizePaymentMethod(value) : null;
-  if (field === 'deposit_date') return value ? parseThaiShortDate(value) : null;
+  if (field === 'deposit_date' || field === 'appointment_date') return value ? parseThaiShortDate(value) : null;
   if (field === 'remark') return value || null;
-  // ฟิลด์ตัวเลขที่เหลือ: stated_total, remaining_balance, paid_amount, deposit_amount
+  // ฟิลด์ตัวเลขที่เหลือ: stated_total, paid_amount, deposit_amount
   if (!value) return null;
   const digits = value.replace(/,/g, '').replace(/บาท/g, '').trim();
   const num = Number(digits);
@@ -228,7 +233,7 @@ function parsePaymentLabelValue(field, rawValue) {
 function parsePaymentSectionLines(lines) {
   const result = {
     stated_total: null,
-    remaining_balance: null,
+    appointment_date: null,
     payment_method: null,
     paid_amount: null,
     deposit_amount: null,
@@ -472,7 +477,6 @@ function parseLineQueueMessage(text) {
     stated_total: null,
     // ฟิลด์ใหม่จากส่วนชำระเงินของเทมเพลต (หลัง "<--สิ้นสุดรายการ-->") — ว่างเสมอ
     // (null) สำหรับข้อความแบบเดิมที่ไม่มีส่วนนี้ ไม่กระทบพฤติกรรมเดิมเลย
-    remaining_balance: null,
     payment_method: null,
     paid_amount: null,
     // มัดจำ (deposit) เป็นฟิลด์ first-class เหมือนกัน — มาจาก label "มัดจำ:"/
@@ -480,6 +484,9 @@ function parseLineQueueMessage(text) {
     // YYYY-MM-DD พร้อมเก็บลง DB แล้ว (แปลงจาก dd/mm/yy พ.ศ. ที่พิมพ์มา)
     deposit_amount: null,
     deposit_date: null,
+    // วันนัดหมาย (appointment_date) กรอกคู่กับมัดจำ — sync เข้า scheduled_date/
+    // status='scheduled' ของใบเสนอราคาใน createQuotationFromQueue (lineWebhook.routes.js)
+    appointment_date: null,
     // true เมื่อเจอวลีแจ้งจ่ายเงินแล้ว (PAID_PHRASE_RE) ที่บรรทัดไหนก็ได้ในข้อความ
     // — สัญญาณปิดบิลจริง (ดู lineWebhook.routes.js) ไม่ใช่แค่กรอก "ลูกค้าชำระเงิน:"
     paid_confirmed: false,
@@ -567,7 +574,7 @@ function parseLineQueueMessage(text) {
     if (paymentSectionLines.length > 0) {
       const payment = parsePaymentSectionLines(paymentSectionLines);
       if (payment.stated_total != null) result.stated_total = payment.stated_total;
-      result.remaining_balance = payment.remaining_balance;
+      result.appointment_date = payment.appointment_date;
       result.payment_method = payment.payment_method;
       result.paid_amount = payment.paid_amount;
       result.deposit_amount = payment.deposit_amount;

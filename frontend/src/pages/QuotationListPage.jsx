@@ -16,6 +16,9 @@ export default function QuotationListPage() {
   const [search, setSearch] = useState("");
   const [actioningId, setActioningId] = useState(null);
   const [justApprovedId, setJustApprovedId] = useState(null);
+  // 'active' = รายการหลัก (ซ่อนใบที่ลูกค้าไม่ได้ทำ), 'declined' = เฉพาะใบที่กด
+  // "ลูกค้าไม่ได้ทำ" ไว้ — สองมุมมองของ endpoint /quotations เดียวกัน ไม่ใช่หน้าแยก
+  const [viewMode, setViewMode] = useState('active');
 
   // Modals
   const [showFormModal, setShowFormModal] = useState(false);
@@ -42,11 +45,20 @@ export default function QuotationListPage() {
     fetchQuotations();
   }, []);
 
-  // Filter quotations
-  const filtered = quotations.filter(q =>
-    q.quotation_no.toLowerCase().includes(search.toLowerCase()) ||
-    q.customer_name?.toLowerCase().includes(search.toLowerCase())
+  // ใบที่ถูก decline ("ลูกค้าไม่ได้ทำ") ไม่โผล่ในรายการหลักอีกต่อไป — แยกไปดูใน
+  // มุมมอง viewMode === 'declined' แทน กันปนกับงานที่ยังทำอยู่จริง
+  const declinedCount = useMemo(
+    () => quotations.filter((q) => q.status === 'declined').length,
+    [quotations]
   );
+
+  // Filter quotations
+  const filtered = quotations
+    .filter((q) => (viewMode === 'declined' ? q.status === 'declined' : q.status !== 'declined'))
+    .filter(q =>
+      q.quotation_no.toLowerCase().includes(search.toLowerCase()) ||
+      q.customer_name?.toLowerCase().includes(search.toLowerCase())
+    );
 
   // Group by quotation_date (newest day first) so the list reads as one
   // set per day instead of one long scattered table — sort explicitly by
@@ -145,6 +157,19 @@ export default function QuotationListPage() {
     }
   };
 
+  const handleDecline = async (q) => {
+    if (!window.confirm(`ย้าย ${q.quotation_no} (${q.customer_name}) ไปหน้า "ลูกค้าที่ไม่ได้ทำ" หรือไม่?`)) return;
+    setActioningId(q.id);
+    try {
+      await client.patch(`/quotations/${q.id}/decline`);
+      setQuotations((prev) => prev.map((row) => (row.id === q.id ? { ...row, status: 'declined', scheduled_date: null } : row)));
+    } catch (err) {
+      alert(err.response?.data?.error || "บันทึกไม่สำเร็จ");
+    } finally {
+      setActioningId(null);
+    }
+  };
+
   const handleCloseConfirm = async ({ payment_method, paid_amount }) => {
     if (!closingQuotation) return;
     setActioningId(closingQuotation.id);
@@ -197,7 +222,22 @@ export default function QuotationListPage() {
 
       {error && <div className="error-message">{error}</div>}
 
-      {!loading && todayAppointments.length > 0 && (
+      <div className="quotation-view-tabs">
+        <button
+          className={`btn-tab ${viewMode === 'active' ? 'btn-tab-active' : ''}`}
+          onClick={() => setViewMode('active')}
+        >
+          รายการหลัก
+        </button>
+        <button
+          className={`btn-tab ${viewMode === 'declined' ? 'btn-tab-active' : ''}`}
+          onClick={() => setViewMode('declined')}
+        >
+          ลูกค้าที่ไม่ได้ทำ{declinedCount > 0 ? ` (${declinedCount})` : ''}
+        </button>
+      </div>
+
+      {!loading && viewMode === 'active' && todayAppointments.length > 0 && (
         <div className="today-appointment-banner">
           🔔 นัดหมายวันนี้ {todayAppointments.length} รายการ:{' '}
           {todayAppointments.map((q) => `${q.customer_name} (${q.quotation_no})`).join(', ')}
@@ -301,6 +341,15 @@ export default function QuotationListPage() {
                             >
                               วันที่
                             </button>
+                            {q.status !== 'declined' && (
+                              <button
+                                className="btn-icon-small btn-danger"
+                                onClick={() => handleDecline(q)}
+                                disabled={actioningId === q.id}
+                              >
+                                ลูกค้าไม่ได้ทำ
+                              </button>
+                            )}
                           </>
                         )}
                         {q.status === 'approved' && !q.closed_at && (

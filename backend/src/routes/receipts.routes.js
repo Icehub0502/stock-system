@@ -317,6 +317,8 @@ router.get('/top-customers', async (req, res) => {
 
 router.get('/daily-summary', async (req, res) => {
   try {
+    // ไม่ใส่ LIMIT อีกต่อไป — หน้าสรุปยอดฝั่งเว็บเก็บเดือนเก่าไว้เป็น "แฟ้ม" ย้อนหลัง
+    // ได้ไม่จำกัด (พับเก็บ ไม่ได้ลบทิ้ง) เดิม LIMIT 365 ตัดข้อมูลของปีก่อนหน้าออกไป
     const [rows] = await pool.execute(
       `SELECT DATE(receipt_date) AS date,
               COUNT(*) AS bill_count,
@@ -324,13 +326,34 @@ router.get('/daily-summary', async (req, res) => {
               SUM(total_amount) AS total_revenue
        FROM receipts
        GROUP BY DATE(receipt_date)
-       ORDER BY date DESC
-       LIMIT 365`
+       ORDER BY date DESC`
     );
     res.json({ success: true, data: rows });
   } catch (err) {
     console.error('Error loading daily summary:', err);
     res.status(500).json({ error: 'โหลดสรุปยอดรายวันไม่สำเร็จ' });
+  }
+});
+
+// สรุปยอดรายเดือน — ใช้แสดงหัวข้อ "แฟ้ม" ของแต่ละเดือนในหน้าสรุปยอด (จำนวนบิล/
+// ลูกค้า/ยอดขายรวมของทั้งเดือน) ต้องคำนวณ customer_count ที่นี่แยกจาก daily-summary
+// เพราะเอาผลรวมของแต่ละวันมาบวกกันไม่ได้ (ลูกค้าคนเดียวมาหลายวันในเดือนเดียวกันจะถูก
+// นับซ้ำ) — COUNT(DISTINCT customer_id) ต้อง group ระดับเดือนตรง ๆ เท่านั้น
+router.get('/monthly-summary', async (req, res) => {
+  try {
+    const [rows] = await pool.execute(
+      `SELECT DATE_FORMAT(receipt_date, '%Y-%m-01') AS month,
+              COUNT(*) AS bill_count,
+              COUNT(DISTINCT customer_id) AS customer_count,
+              SUM(total_amount) AS total_revenue
+       FROM receipts
+       GROUP BY DATE_FORMAT(receipt_date, '%Y-%m')
+       ORDER BY month DESC`
+    );
+    res.json({ success: true, data: rows });
+  } catch (err) {
+    console.error('Error loading monthly summary:', err);
+    res.status(500).json({ error: 'โหลดสรุปยอดรายเดือนไม่สำเร็จ' });
   }
 });
 
