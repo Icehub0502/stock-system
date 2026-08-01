@@ -350,12 +350,18 @@ async function initDatabase() {
     ADD COLUMN customer_signature LONGTEXT DEFAULT NULL
   `).catch(ignoreIfAlreadyApplied);
 
-  // เพิ่มค่า 'no_date' ให้ status — ใช้เมื่อสำนักงานกดยืนยันชัดเจนว่าลูกค้าไม่ระบุวัน
-  // นัดหมาย (ต่างจาก 'pending' เฉยๆ ที่แปลว่ายังไม่ได้ดำเนินการอะไรเลย) MODIFY COLUMN
-  // ปลอดภัยที่จะรันซ้ำทุกครั้งที่บูต ไม่เหมือน ADD COLUMN ที่ error ถ้ามีอยู่แล้ว
+  // เพิ่มค่า 'no_date' + 'declined' ให้ status ในทีเดียว (รวม 2 ขั้นตอนเดิมเข้าด้วย
+  // กัน — เดิมมี MODIFY COLUMN แยก 2 รอบ: รอบแรกใส่แค่ 'no_date' รอบสองค่อยเติม
+  // 'declined' แต่เพราะ migration ทุกอันรันซ้ำทุกครั้งที่บูต พอมีข้อมูลจริงที่
+  // status='declined' อยู่แล้ว (จาก migration รอบสองที่เคยรันผ่านไปแล้วก่อนหน้านี้)
+  // รอบแรก (ที่ ENUM ไม่มี 'declined') จะ MODIFY ทับใหม่ทุกครั้งแล้ว truncate ข้อมูล
+  // แถวที่เป็น 'declined' อยู่ทันที ทำให้ boot fail ทุกรอบ (ignoreIfAlreadyApplied
+  // เห็นว่าไม่ใช่ error แบบ "มีอยู่แล้ว" เลย throw ต่อ) — แก้โดยรวมเป็น MODIFY เดียว
+  // ที่มีค่าสุดท้ายครบทั้งคู่ตั้งแต่แรก ปลอดภัยกับข้อมูลทุกสถานะที่มีอยู่จริงตอนนี้
+  // (pending/approved/scheduled/no_date/declined) และยังรันซ้ำได้ทุกบูตเหมือนเดิม
   await conn.query(`
     ALTER TABLE quotations
-    MODIFY COLUMN status ENUM('pending','approved','scheduled','no_date') NOT NULL DEFAULT 'pending'
+    MODIFY COLUMN status ENUM('pending','approved','scheduled','no_date','declined') NOT NULL DEFAULT 'pending'
   `).catch(ignoreIfAlreadyApplied);
 
   // เพิ่มค่า 'declined' ให้ status — ใช้เมื่อลูกค้าขอใบเสนอราคาแล้วไม่ได้ทำจริง
