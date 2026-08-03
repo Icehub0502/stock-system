@@ -451,8 +451,10 @@ function buildFilledTemplateText(data) {
 // product_name/unit_price ต่างจาก parsed.items ที่ใช้ name/price เฉย ๆ จึงรองรับทั้ง
 // สองชื่อคีย์) ไม่มีรายการเลยจะหยุดแค่ "<--สิ้นสุดรายการ-->" ไม่โชว์ส่วนยอดรวม/ชำระเงิน
 // ต่อท้าย (พนักงานกลุ่มบอท 2 ยังไม่ต้องเห็นช่องพวกนี้จนกว่าจะลงรายการเสร็จจริง)
+// ไม่มีช่องว่างหลัง ":" ให้ตรงกับแพทเทิร์นเดิมของบอท 1 ทุกตัวอักษร (ดู
+// buildQueueTemplateText/buildFilledTemplateText ด้านบน — ทั้งคู่ใช้ธรรมเนียมนี้)
 function fieldLine(label, value) {
-  return value !== null && value !== undefined && value !== '' ? `${label}: ${value}` : `${label}:`;
+  return value !== null && value !== undefined && value !== '' ? `${label}:${value}` : `${label}:`;
 }
 function buildQueueSummaryText(data) {
   const hasItems = Array.isArray(data.items) && data.items.length > 0;
@@ -1298,22 +1300,21 @@ async function updateQuotationItemsByQueue(queueNo, itemLines) {
 
     const quotationDate = todayStr();
     // เงื่อนไขค้นหาเดียวกับ closeQuotationByQueue ด้านบน (คิว/requested_queue_no,
-    // ยังไม่ปิดบิล, pending/approved, ภายใน 14 วันย้อนหลัง) — ให้สองฟังก์ชันจับคู่
-    // ใบเสนอราคาใบเดียวกันเสมอไม่ว่าจะมาจากกลุ่มไหน
+    // ยังไม่ปิดบิล, pending/approved, ภายใน 14 วันย้อนหลัง) ต่างจากการปิดบิลตรงที่นี่
+    // เจอชนกันหลายใบก็เลือกใบล่าสุด (ORDER BY id DESC LIMIT 1) ให้อัตโนมัติเลย ไม่ต้อง
+    // ให้พนักงานยืนยันก่อนเหมือนตอนปิดบิล — แค่ "ลงรายการ" เป็นการแก้ไขร่างที่ยังแก้
+    // เพิ่มทีหลังผ่านแอปได้เสมอ ไม่ใช่การตัดสินใจทางการเงินที่ผิดพลาดแล้วแก้คืนยาก
+    // เหมือนการปิดบิล+ออกใบเสร็จ ความเสี่ยงต่ำกว่ากันมาก
     const [rows] = await conn.execute(
       `SELECT id, quotation_no FROM quotations
        WHERE (queue_no = ? OR requested_queue_no = ?) AND closed_at IS NULL
          AND status IN ('pending', 'approved') AND quotation_date >= DATE_SUB(?, INTERVAL 14 DAY)
-       ORDER BY id DESC`,
+       ORDER BY id DESC LIMIT 1`,
       [queueNo, queueNo, quotationDate]
     );
     if (rows.length === 0) {
       await conn.commit();
       return { matchCount: 0 };
-    }
-    if (rows.length > 1) {
-      await conn.commit();
-      return { matchCount: rows.length };
     }
     const quotation = rows[0];
 

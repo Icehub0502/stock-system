@@ -75,10 +75,6 @@ router.post('/webhook', async (req, res) => {
         await replyWithToken(token, event.replyToken, `⚠️ ไม่พบใบเสนอราคาที่เปิดอยู่สำหรับคิว ${queueNo} กรุณาตรวจสอบเลขคิว`);
         continue;
       }
-      if (result.matchCount > 1) {
-        await replyWithToken(token, event.replyToken, `⚠️ คิว ${queueNo} มีหลายใบที่เปิดอยู่พร้อมกัน ไม่แน่ใจว่าจะลงใบไหน กรุณาลงรายการผ่านแอปแทน`);
-        continue;
-      }
 
       // ตอบกลับกลุ่มบอท 2 ด้วยเทมเพลตเต็ม (เหมือนของเดิมที่พิมพ์เข้าบอท 1 ทุกประการ
       // แต่ตอนนี้มีรายการ+ยอดรวมกรอกให้แล้ว) แล้ว push ข้อความเดียวกันเป๊ะ ๆ ต่อให้
