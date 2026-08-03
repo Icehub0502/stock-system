@@ -1170,16 +1170,27 @@ async function closeQuotationByQueue(parsed) {
     await conn.beginTransaction();
 
     const quotationDate = todayStr();
-    const [rows] = await conn.execute(
-      `SELECT q.id, q.customer_id, q.quotation_no, q.converted_receipt_id, q.status, q.total_amount,
+    // เจ้าของร้านสั่งไว้ชัดเจน — "ปิดของวันนั้นๆ ตามที่เห็นเลย": ลองแมตช์เฉพาะใบของ
+    // "วันนี้" ก่อนเสมอ กันเลขคิววันนี้ไปชนกับใบเก่าที่ยังไม่ปิดจากวันอื่นในช่วง 14 วัน
+    // ย้อนหลัง (เคยเกิดจริง — เจอ 4 ใบพร้อมกันเพราะมีใบทดสอบเก่าค้างคิวเดียวกันหลายวัน
+    // ทำให้ปิดบิลไม่ได้เลยทั้งที่มีใบของวันนี้ตรงอยู่แล้ว) ไม่เจอของวันนี้เลยจริง ๆ
+    // ค่อย fallback ไปหาในช่วง 14 วันย้อนหลังเหมือนเดิม (เผื่องานที่ค้างข้ามวันจริง ๆ)
+    const baseSelect = `SELECT q.id, q.customer_id, q.quotation_no, q.converted_receipt_id, q.status, q.total_amount,
               q.deposit_amount, q.deposit_date, q.vehicle_id, c.customer_name
        FROM quotations q
        LEFT JOIN customers c ON q.customer_id = c.id
        WHERE (q.queue_no = ? OR q.requested_queue_no = ?) AND q.closed_at IS NULL
-         AND q.status IN ('pending', 'approved') AND q.quotation_date >= DATE_SUB(?, INTERVAL 14 DAY)
-       ORDER BY q.id DESC`,
+         AND q.status IN ('pending', 'approved')`;
+    let [rows] = await conn.execute(
+      `${baseSelect} AND q.quotation_date = ? ORDER BY q.id DESC`,
       [parsed.queue_no, parsed.queue_no, quotationDate]
     );
+    if (rows.length === 0) {
+      [rows] = await conn.execute(
+        `${baseSelect} AND q.quotation_date >= DATE_SUB(?, INTERVAL 14 DAY) ORDER BY q.id DESC`,
+        [parsed.queue_no, parsed.queue_no, quotationDate]
+      );
+    }
 
     if (rows.length === 0) {
       await conn.commit(); // ยังไม่ได้แก้อะไรเลย — commit เก็บไว้เฉย ๆ
