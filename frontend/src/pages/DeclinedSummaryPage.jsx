@@ -3,23 +3,53 @@ import client from "../api/client";
 import { DECLINE_REASONS, declineReasonLabel } from "../utils/declineReasons";
 import { todayStr } from "../utils/format";
 
-function daysAgoStr(days) {
-  const d = new Date();
-  d.setDate(d.getDate() - days);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const CURRENT_YEAR = new Date().getFullYear();
+// ปีให้เลือกในมุมมอง "รายปี" — ปีปัจจุบันย้อนหลัง 5 ปี พอสำหรับดูเทรนด์ ไม่ต้อง
+// ให้เลือกไกลเกินความจำเป็นจริงของร้าน (ระบบเพิ่งเริ่มเก็บเหตุผลปีนี้เป็นปีแรก)
+const YEAR_OPTIONS = Array.from({ length: 6 }, (_, i) => CURRENT_YEAR - i);
+
+// แปลงมุมมองที่เลือก (วัน/เดือน/ปี) เป็นช่วง from/to (YYYY-MM-DD) สำหรับกรอง
+// quotation_date — เทียบแบบ string ตรง ๆ ได้เพราะ quotation_date เป็นรูปแบบ
+// YYYY-MM-DD คงที่อยู่แล้วทั้งระบบ (ดู todayStr ใน utils/format.js)
+function computePeriod(periodType, dayValue, monthValue, yearValue) {
+  if (periodType === 'month') {
+    const [y, m] = monthValue.split('-').map(Number);
+    const lastDay = new Date(y, m, 0).getDate();
+    return {
+      from: `${monthValue}-01`,
+      to: `${monthValue}-${String(lastDay).padStart(2, '0')}`,
+      label: new Date(y, m - 1, 1).toLocaleDateString('th-TH', { month: 'long', year: 'numeric' }),
+    };
+  }
+  if (periodType === 'year') {
+    return {
+      from: `${yearValue}-01-01`,
+      to: `${yearValue}-12-31`,
+      label: `ปี ${yearValue + 543}`,
+    };
+  }
+  // 'day' (ค่าเริ่มต้น)
+  return {
+    from: dayValue,
+    to: dayValue,
+    label: new Date(dayValue).toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' }),
+  };
 }
 
-// สรุปเหตุผลที่ลูกค้ากด "ลูกค้าไม่ได้ทำ" ในแต่ละช่วงวันที่ — ใช้ข้อมูลจาก endpoint
-// /quotations เดียวกับ QuotationListPage/AppointmentsPage (ดึงทั้งชุดแล้วกรอง/สรุปฝั่ง
-// client เอง ตามธรรมเนียมเดิมของโปรเจกต์นี้ ไม่มี endpoint สรุปแยกต่างหาก) กราฟเป็น
-// CSS bar chart มือทำเอง (mirror ของ .dash-trend-chart ใน DashboardPage.jsx) โปรเจกต์
-// นี้ไม่มี chart library อยู่แล้ว จึงไม่เพิ่ม dependency ใหม่แค่เพื่อหน้านี้หน้าเดียว
+// สรุปเหตุผลที่ลูกค้ากด "ลูกค้าไม่ได้ทำ" แยกดูได้ 3 มุมมอง (รายวัน/รายเดือน/รายปี) —
+// ใช้ข้อมูลจาก endpoint /quotations เดียวกับ QuotationListPage/AppointmentsPage (ดึง
+// ทั้งชุดแล้วกรอง/สรุปฝั่ง client เอง ตามธรรมเนียมเดิมของโปรเจกต์นี้ ไม่มี endpoint
+// สรุปแยกต่างหาก) กราฟเป็น CSS bar chart มือทำเอง (mirror ของ .dash-trend-chart ใน
+// DashboardPage.jsx) โปรเจกต์นี้ไม่มี chart library อยู่แล้ว จึงไม่เพิ่ม dependency
+// ใหม่แค่เพื่อหน้านี้หน้าเดียว
 export default function DeclinedSummaryPage() {
   const [quotations, setQuotations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [from, setFrom] = useState(daysAgoStr(29));
-  const [to, setTo] = useState(todayStr());
+  const [periodType, setPeriodType] = useState('day'); // 'day' | 'month' | 'year'
+  const [dayValue, setDayValue] = useState(todayStr());
+  const [monthValue, setMonthValue] = useState(todayStr().slice(0, 7));
+  const [yearValue, setYearValue] = useState(CURRENT_YEAR);
 
   useEffect(() => {
     (async () => {
@@ -34,6 +64,11 @@ export default function DeclinedSummaryPage() {
       }
     })();
   }, []);
+
+  const { from, to, label: periodLabel } = useMemo(
+    () => computePeriod(periodType, dayValue, monthValue, yearValue),
+    [periodType, dayValue, monthValue, yearValue]
+  );
 
   const declined = useMemo(
     () =>
@@ -65,13 +100,35 @@ export default function DeclinedSummaryPage() {
 
       <div className="decline-summary-filters">
         <div className="form-group">
-          <label>ตั้งแต่วันที่</label>
-          <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} max={to} />
+          <label>มุมมอง</label>
+          <select value={periodType} onChange={(e) => setPeriodType(e.target.value)}>
+            <option value="day">รายวัน</option>
+            <option value="month">รายเดือน</option>
+            <option value="year">รายปี</option>
+          </select>
         </div>
-        <div className="form-group">
-          <label>ถึงวันที่</label>
-          <input type="date" value={to} onChange={(e) => setTo(e.target.value)} min={from} />
-        </div>
+        {periodType === 'day' && (
+          <div className="form-group">
+            <label>วันที่</label>
+            <input type="date" value={dayValue} onChange={(e) => setDayValue(e.target.value)} />
+          </div>
+        )}
+        {periodType === 'month' && (
+          <div className="form-group">
+            <label>เดือน</label>
+            <input type="month" value={monthValue} onChange={(e) => setMonthValue(e.target.value)} />
+          </div>
+        )}
+        {periodType === 'year' && (
+          <div className="form-group">
+            <label>ปี</label>
+            <select value={yearValue} onChange={(e) => setYearValue(Number(e.target.value))}>
+              {YEAR_OPTIONS.map((y) => (
+                <option key={y} value={y}>{y + 543}</option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
 
       {error && <div className="error-message">{error}</div>}
@@ -79,11 +136,11 @@ export default function DeclinedSummaryPage() {
       {loading ? (
         <div className="loading">กำลังโหลด...</div>
       ) : declined.length === 0 ? (
-        <div className="empty-message">ไม่มีลูกค้าที่ไม่ได้ทำในช่วงวันที่นี้</div>
+        <div className="empty-message">ไม่มีลูกค้าที่ไม่ได้ทำใน{periodLabel}</div>
       ) : (
         <>
           <div className="dash-panel">
-            <div className="dash-panel-title">กราฟสรุปตามเหตุผล ({declined.length} รายการ)</div>
+            <div className="dash-panel-title">กราฟสรุปตามเหตุผล — {periodLabel} ({declined.length} รายการ)</div>
             <div className="decline-summary-chart">
               {reasonCounts.map((r) => (
                 <div key={r.value} className="decline-summary-bar-row">
@@ -101,7 +158,7 @@ export default function DeclinedSummaryPage() {
           </div>
 
           <div className="dash-panel">
-            <div className="dash-panel-title">ตารางสรุปตามเหตุผล</div>
+            <div className="dash-panel-title">ตารางสรุปตามเหตุผล — {periodLabel}</div>
             <div className="quotation-table-wrap">
               <table className="quotation-table">
                 <thead>
@@ -125,7 +182,7 @@ export default function DeclinedSummaryPage() {
           </div>
 
           <div className="dash-panel">
-            <div className="dash-panel-title">รายการทั้งหมด</div>
+            <div className="dash-panel-title">รายการทั้งหมด — {periodLabel}</div>
             <div className="quotation-table-wrap">
               <table className="quotation-table">
                 <thead>
