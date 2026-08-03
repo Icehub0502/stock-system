@@ -1,8 +1,13 @@
 // Webhook ของบอท 3 "Champpower ปิดบิล" — Phase E ของแผนงาน 3 บอท รับข้อความปิดบิล
 // แบบเดียวกับที่บอท 1 เคยรองรับทุกประการ (พิมพ์ "คิว N" + ช่องทางชำระ/ยอดที่ได้รับ +
-// วลี "ชำระเงินเรียบร้อย" — ดู PAID_PHRASE_RE/close_only ใน utils/parseLineQueueMessage.js)
-// ใช้ closeQuotationByQueue ตัวเดียวกับบอท 1 (ดู lineWebhook.routes.js) ไม่ได้เขียน
-// ตรรกะปิดบิล/สร้างใบเสร็จซ้ำ
+// วลี "ชำระเงินเรียบร้อย" — ดู PAID_PHRASE_RE ใน utils/parseLineQueueMessage.js) รับได้
+// ทั้งข้อความสั้นแบบ close_only (ไม่มีชื่อลูกค้า/รายการ) และแพทเทิร์นเต็มที่พนักงาน
+// คัดลอกมาจากบอท 2 (มีชื่อลูกค้า/รถ/รายการครบ) แล้วเติมช่องชำระเงิน+วลีปิดบิลต่อท้าย
+// เอง — เช็คแค่ parsed.paid_confirmed (true ได้ทั้งสองแบบ) ไม่บังคับ close_only เพราะ
+// กลุ่มบอท 3 ได้รับแพทเทิร์นเต็มเป็นปกติอยู่แล้ว (ดู buildQueueSummaryText ที่บอท 2
+// push มาให้) ใช้ closeQuotationByQueue ตัวเดียวกับบอท 1 (ดู lineWebhook.routes.js)
+// ไม่ได้เขียนตรรกะปิดบิล/สร้างใบเสร็จซ้ำ — ฟังก์ชันนั้นอ่านแค่ queue_no/payment_method/
+// paid_amount จาก parsed เท่านั้น ไม่แตะชื่อลูกค้า/รายการที่อาจติดมาในแพทเทิร์นเต็มเลย
 //
 // .env ที่ต้องมี: LINE_BOT3_CHANNEL_SECRET, LINE_BOT3_CHANNEL_ACCESS_TOKEN (แยกจาก
 // ของบอท 1 — คนละ LINE Official Account) เว้นว่างทั้งคู่ = ปิดฟีเจอร์ (webhook ตอบ 503)
@@ -45,7 +50,7 @@ router.post('/webhook', async (req, res) => {
     if (event.type !== 'message' || event.message?.type !== 'text') continue;
 
     const parsed = parseLineQueueMessage(event.message.text);
-    if (!parsed || !parsed.close_only) continue; // ไม่ใช่ข้อความปิดบิลแบบ close_only — ข้ามเงียบ ๆ
+    if (!parsed || !parsed.paid_confirmed) continue; // ไม่มีวลีแจ้งจ่ายเงินแล้ว — ไม่ใช่คำสั่งปิดบิล ข้ามเงียบ ๆ
 
     try {
       const result = await closeQuotationByQueue(parsed);
