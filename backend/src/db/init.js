@@ -592,6 +592,17 @@ async function initDatabase() {
     ADD COLUMN staff_name VARCHAR(100) DEFAULT NULL
   `).catch(ignoreIfAlreadyApplied);
 
+  // เหตุผลที่ลูกค้าไม่ได้ทำ (กด "ลูกค้าไม่ได้ทำ" — ดู PATCH /quotations/:id/decline) —
+  // decline_reason เป็นค่าคงที่จากชุดตัวเลือกที่กำหนดไว้ (ดู DECLINE_REASONS ใน
+  // quotations.routes.js) ไม่ใช่ข้อความอิสระ เพื่อให้สรุปสถิติ (หน้า
+  // DeclinedSummaryPage.jsx) จัดกลุ่มได้ถูกต้อง — decline_note เก็บรายละเอียดเพิ่มเติม
+  // เฉพาะตอนเลือกเหตุผล "อื่นๆ ระบุ" เท่านั้น
+  await conn.query(`
+    ALTER TABLE quotations
+    ADD COLUMN decline_reason VARCHAR(50) DEFAULT NULL,
+    ADD COLUMN decline_note TEXT DEFAULT NULL
+  `).catch(ignoreIfAlreadyApplied);
+
   // ในตารางอื่นเพราะเป็น config ระดับระบบ ไม่ผูกกับ entity ไหนโดยเฉพาะ
   await conn.query(`
     CREATE TABLE IF NOT EXISTS app_settings (

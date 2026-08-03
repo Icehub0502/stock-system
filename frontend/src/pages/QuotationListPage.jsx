@@ -5,6 +5,7 @@ import QuotationFormModal from "../components/QuotationFormModal";
 import QuotationPrintModal from "../components/QuotationPrintModal";
 import ScheduleDateDialog from "../components/ScheduleDateDialog";
 import ClosePaymentDialog from "../components/ClosePaymentDialog";
+import DeclineReasonModal from "../components/DeclineReasonModal";
 import StatusBadge from "../components/StatusBadge";
 import { todayStr } from "../utils/format";
 
@@ -27,6 +28,7 @@ export default function QuotationListPage() {
   const [editingQuotation, setEditingQuotation] = useState(null);
   const [schedulingQuotation, setSchedulingQuotation] = useState(null);
   const [closingQuotation, setClosingQuotation] = useState(null);
+  const [decliningQuotation, setDecliningQuotation] = useState(null);
 
   // Fetch quotations
   const fetchQuotations = async () => {
@@ -157,12 +159,20 @@ export default function QuotationListPage() {
     }
   };
 
-  const handleDecline = async (q) => {
-    if (!window.confirm(`ย้าย ${q.quotation_no} (${q.customer_name}) ไปหน้า "ลูกค้าที่ไม่ได้ทำ" หรือไม่?`)) return;
+  const handleDeclineConfirm = async ({ reason, note }) => {
+    if (!decliningQuotation) return;
+    const q = decliningQuotation;
     setActioningId(q.id);
     try {
-      await client.patch(`/quotations/${q.id}/decline`);
-      setQuotations((prev) => prev.map((row) => (row.id === q.id ? { ...row, status: 'declined', scheduled_date: null } : row)));
+      await client.patch(`/quotations/${q.id}/decline`, { reason, note });
+      setQuotations((prev) =>
+        prev.map((row) =>
+          row.id === q.id
+            ? { ...row, status: 'declined', scheduled_date: null, decline_reason: reason, decline_note: note || null }
+            : row
+        )
+      );
+      setDecliningQuotation(null);
     } catch (err) {
       alert(err.response?.data?.error || "บันทึกไม่สำเร็จ");
     } finally {
@@ -344,7 +354,7 @@ export default function QuotationListPage() {
                             {q.status !== 'declined' && (
                               <button
                                 className="btn-icon-small btn-danger"
-                                onClick={() => handleDecline(q)}
+                                onClick={() => setDecliningQuotation(q)}
                                 disabled={actioningId === q.id}
                               >
                                 ลูกค้าไม่ได้ทำ
@@ -408,6 +418,15 @@ export default function QuotationListPage() {
           loading={actioningId === closingQuotation.id}
           onConfirm={handleCloseConfirm}
           onCancel={() => setClosingQuotation(null)}
+        />
+      )}
+
+      {decliningQuotation && (
+        <DeclineReasonModal
+          quotation={decliningQuotation}
+          loading={actioningId === decliningQuotation.id}
+          onConfirm={handleDeclineConfirm}
+          onCancel={() => setDecliningQuotation(null)}
         />
       )}
 

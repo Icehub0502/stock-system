@@ -32,6 +32,7 @@ const NAV_CATEGORIES = [
       { to: "/receipt-list", label: "ใบเสร็จรับเงิน" },
       { to: "/quotations", label: "ใบเสนอราคา" },
       { to: "/appointments", label: "ลูกค้าที่นัดหมาย" },
+      { to: "/quotations/declined-summary", label: "สรุปลูกค้าไม่ได้ทำ" },
       { to: "/quote-parts", label: "ราคาอะไหล่ตามรุ่นรถ" },
       { to: "/catalog", label: "แคตตาล็อกอะไหล่ (แท็บเล็ต)" },
       { to: "/daily-summary", label: "สรุปยอดขายรายวัน" },

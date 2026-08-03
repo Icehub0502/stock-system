@@ -20,6 +20,7 @@ const ReceiptSessionPage = lazy(() => import("./pages/ReceiptSessionPage"));
 const ReceiptListPage = lazy(() => import("./pages/ReceiptListPage"));
 const QuotationListPage = lazy(() => import("./pages/QuotationListPage"));
 const AppointmentsPage = lazy(() => import("./pages/AppointmentsPage"));
+const DeclinedSummaryPage = lazy(() => import("./pages/DeclinedSummaryPage"));
 const CustomerManagementPage = lazy(() => import("./pages/CustomerManagementPage"));
 const VehicleManagementPage = lazy(() => import("./pages/VehicleManagementPage"));
 const ServiceItemManagementPage = lazy(() => import("./pages/ServiceItemManagementPage"));
@@ -168,6 +169,14 @@ function AppRoutes() {
             element={
               <ProtectedRoute roles={["office"]}>
                 <AppointmentsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/quotations/declined-summary"
+            element={
+              <ProtectedRoute roles={["office"]}>
+                <DeclinedSummaryPage />
               </ProtectedRoute>
             }
           />
