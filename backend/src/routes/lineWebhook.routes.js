@@ -215,6 +215,34 @@ async function getLineGroupId() {
   return getSetting('line_group_id');
 }
 
+// ── Phase C ของแผนงาน 3 บอท: ทันทีที่บอท 1 สร้าง/แก้ไขใบเสนอราคาร่างสำเร็จ ส่งสรุป
+// สั้น ๆ (คิว/ชื่อ/ทะเบียน/อาการ) ต่อให้กลุ่มบอท 2 อัตโนมัติ เพื่อให้พนักงานที่กลุ่ม 2
+// รู้ทันทีว่ามีคิวใหม่รอลงรายการอะไหล่ — ต้องยิงด้วย token ของบอท 2 เอง (ไม่ใช่
+// LINE_CHANNEL_ACCESS_TOKEN ของบอท 1) เพราะ push API ต้องมาจากบัญชีที่เป็นสมาชิกของ
+// กลุ่มปลายทางจริง ๆ group id มาจาก line_group_id_bot2 ที่ webhook ของบอท 2 จับไว้เอง
+// (ดู utils/lineWebhookStub.js) best-effort เหมือน pushToLine ด้านบนทุกประการ — ส่งไม่
+// สำเร็จก็แค่ log ไว้ ไม่กระทบการตอบกลับหน้างานที่กลุ่มบอท 1
+async function pushSummaryToBot2(parsed, info) {
+  try {
+    const token = process.env.LINE_BOT2_CHANNEL_ACCESS_TOKEN;
+    const groupId = await getSetting('line_group_id_bot2');
+    if (!token || !groupId) return;
+    const text = [
+      `📋 คิว ${info.reassignedTo || parsed.queue_no || '-'} · ${parsed.customer_name}`,
+      parsed.license_plate ? `ทะเบียน ${parsed.license_plate}` : null,
+      parsed.symptom ? `อาการ: ${parsed.symptom}` : null,
+    ].filter(Boolean).join('\n');
+    const res = await fetch('https://api.line.me/v2/bot/message/push', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ to: groupId, messages: [{ type: 'text', text }] }),
+    });
+    if (!res.ok) console.error('LINE push to bot2 group failed:', res.status, await res.text());
+  } catch (err) {
+    console.error('Error pushing summary to bot2 group:', err);
+  }
+}
+
 // แคช group id ไว้ในหน่วยความจำ กันเขียนลง DB ซ้ำทุกข้อความที่กลุ่มส่งเข้ามา (เขียน
 // ครั้งแรกพอ ต่อ process — restart ใหม่ค่อยเขียนซ้ำอีกครั้งตอนข้อความแรกเข้ามา ไม่มี
 // ผลเสียอะไรเพราะเป็นค่าเดิม แค่เขียนทับซ้ำ)
@@ -1365,6 +1393,7 @@ router.post('/webhook', async (req, res) => {
         await trackMessageQuotation(messageId, info);
       }
       await replyToLine(event.replyToken, buildSuccessReplyText(parsed, info));
+      await pushSummaryToBot2(parsed, info);
     } catch (err) {
       console.error('Error creating quotation from LINE message:', err);
       await replyToLine(
