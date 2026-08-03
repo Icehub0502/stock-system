@@ -14,6 +14,7 @@ const crypto = require('crypto');
 const express = require('express');
 const pool = require('../db/pool');
 const parseLineQueueMessage = require('../utils/parseLineQueueMessage');
+const { parseItemSectionLines } = require('../utils/parseLineQueueMessage');
 
 const router = express.Router();
 
@@ -143,8 +144,10 @@ function verifySignature(rawBody, signature, secret) {
 
 // ตอบกลับเข้าห้องแชตด้วย reply token (ฟรี ไม่นับโควตา push) — best-effort:
 // ตอบไม่สำเร็จก็แค่ log ไว้ ใบเสนอราคาสร้างเสร็จไปแล้วไม่ต้อง rollback
-async function replyToLine(replyToken, text) {
-  const token = process.env.LINE_CHANNEL_ACCESS_TOKEN;
+// รับ token เป็นพารามิเตอร์ (แทนที่จะอ่าน process.env ตรง ๆ ในนี้) เพื่อให้บอท 2/3
+// (lineWebhookBot2/3.routes.js — คนละ Channel Access Token กับบอท 1) เรียกใช้ร่วมกัน
+// ได้โดยไม่ต้องเขียนโค้ดยิง LINE API ซ้ำ
+async function replyWithToken(token, replyToken, text) {
   if (!token || !replyToken) return;
   try {
     const res = await fetch('https://api.line.me/v2/bot/message/reply', {
@@ -162,14 +165,17 @@ async function replyToLine(replyToken, text) {
     console.error('LINE reply error:', err.message);
   }
 }
+async function replyToLine(replyToken, text) {
+  return replyWithToken(process.env.LINE_CHANNEL_ACCESS_TOKEN, replyToken, text);
+}
 
 // ส่งข้อความเข้ากลุ่มแบบ push (ไม่ต้องมี reply token — ยิงได้ทุกเมื่อ ต่างจาก
 // replyToLine ที่ใช้ได้แค่ในหน้าต่างตอบกลับ webhook เดียวกันเท่านั้น) ใช้ตอนออฟฟิศ
 // แก้ไขข้อมูลผ่านหน้าเว็บ (ใบเสนอราคา/รถ/ลูกค้า) แล้วต้องดันข้อมูลที่ถูกต้องกลับเข้า
-// กลุ่มให้พนักงานเห็น (ดู pushQuotationUpdate ด้านล่าง) — best-effort เหมือน
-// replyToLine ทุกประการ: ส่งไม่สำเร็จก็แค่ log ไว้ ไม่ throw ไม่ rollback อะไร
-async function pushToLine(groupId, text) {
-  const token = process.env.LINE_CHANNEL_ACCESS_TOKEN;
+// กลุ่มให้พนักงานเห็น (ดู pushQuotationUpdate ด้านล่าง) หรือส่งต่อข้อมูลข้ามกลุ่มบอท
+// 2/3 (ดู pushSummaryToBot2 ด้านล่าง) — best-effort เหมือน replyWithToken ทุกประการ:
+// ส่งไม่สำเร็จก็แค่ log ไว้ ไม่ throw ไม่ rollback อะไร
+async function pushWithToken(token, groupId, text) {
   if (!token || !groupId) return;
   try {
     const res = await fetch('https://api.line.me/v2/bot/message/push', {
@@ -181,6 +187,9 @@ async function pushToLine(groupId, text) {
   } catch (err) {
     console.error('LINE push error:', err.message);
   }
+}
+async function pushToLine(groupId, text) {
+  return pushWithToken(process.env.LINE_CHANNEL_ACCESS_TOKEN, groupId, text);
 }
 
 // ── เก็บ config ทั่วไปแบบ key-value ลงตาราง app_settings (ดู db/init.js) — ใช้
@@ -220,24 +229,28 @@ async function getLineGroupId() {
 // รู้ทันทีว่ามีคิวใหม่รอลงรายการอะไหล่ — ต้องยิงด้วย token ของบอท 2 เอง (ไม่ใช่
 // LINE_CHANNEL_ACCESS_TOKEN ของบอท 1) เพราะ push API ต้องมาจากบัญชีที่เป็นสมาชิกของ
 // กลุ่มปลายทางจริง ๆ group id มาจาก line_group_id_bot2 ที่ webhook ของบอท 2 จับไว้เอง
-// (ดู utils/lineWebhookStub.js) best-effort เหมือน pushToLine ด้านบนทุกประการ — ส่งไม่
-// สำเร็จก็แค่ log ไว้ ไม่กระทบการตอบกลับหน้างานที่กลุ่มบอท 1
+// (ดู routes/lineWebhookBot2.routes.js) best-effort เหมือน pushToLine ด้านบนทุกประการ
+// — ส่งไม่สำเร็จก็แค่ log ไว้ ไม่กระทบการตอบกลับหน้างานที่กลุ่มบอท 1
 async function pushSummaryToBot2(parsed, info) {
   try {
-    const token = process.env.LINE_BOT2_CHANNEL_ACCESS_TOKEN;
     const groupId = await getSetting('line_group_id_bot2');
-    if (!token || !groupId) return;
-    const text = [
-      `📋 คิว ${info.reassignedTo || parsed.queue_no || '-'} · ${parsed.customer_name}`,
-      parsed.license_plate ? `ทะเบียน ${parsed.license_plate}` : null,
-      parsed.symptom ? `อาการ: ${parsed.symptom}` : null,
-    ].filter(Boolean).join('\n');
-    const res = await fetch('https://api.line.me/v2/bot/message/push', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ to: groupId, messages: [{ type: 'text', text }] }),
+    // ใช้เทมเพลตเดียวกับที่พนักงานพิมพ์เข้าบอท 1 ทุกประการ (ดู buildQueueSummaryText)
+    // — พนักงานกลุ่มบอท 2 จะเห็นข้อมูลลูกค้า/รถ/อาการครบเหมือนของเดิมทุกตัวอักษร
+    // ต่างแค่เลขคิวที่อาจถูกเปลี่ยนอัตโนมัติถ้าชนกับคิวอื่นวันนี้ (reassignedTo)
+    const text = buildQueueSummaryText({
+      queue_no: info.reassignedTo || parsed.queue_no,
+      quotation_date: parsed.quotation_date,
+      customer_name: parsed.customer_name,
+      phone: parsed.phone,
+      brand: parsed.brand,
+      model: parsed.model,
+      license_plate: parsed.license_plate,
+      color: parsed.color,
+      mileage: parsed.mileage,
+      symptom: parsed.symptom,
+      items: parsed.items,
     });
-    if (!res.ok) console.error('LINE push to bot2 group failed:', res.status, await res.text());
+    await pushWithToken(process.env.LINE_BOT2_CHANNEL_ACCESS_TOKEN, groupId, text);
   } catch (err) {
     console.error('Error pushing summary to bot2 group:', err);
   }
@@ -424,12 +437,66 @@ function buildFilledTemplateText(data) {
   return `${banner}\n\n${template}`;
 }
 
+// เทมเพลตส่งต่อระหว่างกลุ่มบอท 2/3 (ดูแผนงาน 3 บอท Phase C/D) — หน้าตาเหมือนเทมเพลต
+// เต็มที่พนักงานพิมพ์เข้ากลุ่มบอท 1 ทุกประการ (ไม่มีแบนเนอร์แจ้งเตือนแบบ
+// buildFilledTemplateText ด้านบน เพราะข้อความนี้เป็น "ต้นฉบับ" ที่ส่งต่อกันเอง ไม่ใช่
+// การแจ้งเตือนว่าออฟฟิศแก้ไขอะไร) มีวันที่ใบเสนอราคาต่อท้ายเลขคิวด้วย (ผู้ใช้ขอเพิ่ม
+// ให้ตรงกับที่พนักงานเห็นตอนพิมพ์เข้าบอท 1 ครั้งแรก) รับข้อมูลได้ทั้งจาก `parsed`
+// (ตอนบอท 1 เพิ่งสร้างใบเสร็จ — ยังไม่มีรายการ ดู pushSummaryToBot2) และจาก
+// fetchQuotationForPush ด้านล่าง (ตอนบอท 2 ลงรายการเสร็จแล้ว — items ใช้ชื่อคีย์
+// product_name/unit_price ต่างจาก parsed.items ที่ใช้ name/price เฉย ๆ จึงรองรับทั้ง
+// สองชื่อคีย์) ไม่มีรายการเลยจะหยุดแค่ "<--สิ้นสุดรายการ-->" ไม่โชว์ส่วนยอดรวม/ชำระเงิน
+// ต่อท้าย (พนักงานกลุ่มบอท 2 ยังไม่ต้องเห็นช่องพวกนี้จนกว่าจะลงรายการเสร็จจริง)
+function fieldLine(label, value) {
+  return value !== null && value !== undefined && value !== '' ? `${label}: ${value}` : `${label}:`;
+}
+function buildQueueSummaryText(data) {
+  const hasItems = Array.isArray(data.items) && data.items.length > 0;
+  const itemLines = (data.items || []).map((it) => {
+    const name = it.product_name || it.name || '';
+    const qty = Number(it.quantity || 1);
+    const unitPrice = it.unit_price != null ? Number(it.unit_price) : Number(it.price || 0);
+    return `${name} ${qty * unitPrice}`;
+  });
+  const lines = [
+    `คิว ${data.queue_no}`,
+    formatDbDateThai(data.quotation_date),
+    fieldLine('ชื่อ', data.customer_name),
+    fieldLine('เบอโทรศัพท์', data.phone),
+    fieldLine('ยี่ห้อรถ', data.brand),
+    fieldLine('รุ่นรถ', data.model),
+    fieldLine('ทะเบียนรถ', data.license_plate),
+    fieldLine('สีรถ', data.color),
+    fieldLine('เลขไมค์', data.mileage),
+    fieldLine('อาการ', data.symptom),
+    'รายการ:',
+    ...itemLines,
+    '',
+    '<--สิ้นสุดรายการ-->',
+  ];
+  if (hasItems) {
+    const totalAmount = Number(data.total_amount || 0);
+    lines.push(
+      fieldLine('ยอดรวม', totalAmount),
+      fieldLine('มัดจำ', data.deposit_amount),
+      fieldLine('วันที่มัดจำ', formatDbDateThai(data.deposit_date)),
+      fieldLine('วันนัดหมาย', data.status === 'scheduled' ? formatDbDateThai(data.scheduled_date) : ''),
+      fieldLine('หมายเหตุ', data.remark),
+      '',
+      '<--ลูกค้าชำระเงิน-->',
+      'ช่องทางการชำระ (โอน/บัตรเครดิต/เงินสด/QRCode):',
+      'ลูกค้าชำระเงิน (ยอดที่ได้รับจริง):'
+    );
+  }
+  return lines.join('\n');
+}
+
 // ดึงข้อมูลใบเสนอราคา+ลูกค้า+รถ+รายการ มาให้ครบพอสร้างข้อความ push (mirror ของ
 // GET /quotations/:id ใน quotations.routes.js เท่าที่ต้องใช้ในเทมเพลต) คืน null
 // ถ้าไม่พบใบเสนอราคานี้แล้ว (เช่นถูกลบไปแล้วระหว่างทาง)
 async function fetchQuotationForPush(quotationId) {
   const [[q]] = await pool.query(
-    `SELECT q.id, q.queue_no, q.closed_at, q.symptom, q.remark, q.deposit_amount, q.deposit_date, q.total_amount,
+    `SELECT q.id, q.queue_no, q.quotation_date, q.closed_at, q.symptom, q.remark, q.deposit_amount, q.deposit_date, q.total_amount,
             q.status, q.scheduled_date,
             c.customer_name, c.phone,
             v.brand, v.model, v.color, v.license_plate, v.mileage
@@ -1210,6 +1277,101 @@ async function closeQuotationByQueue(parsed) {
   }
 }
 
+// ── Phase D ของแผนงาน 3 บอท: บอท 2 รับข้อความ "คิว N" ตามด้วยรายการอะไหล่+ราคา
+// (บรรทัดละ 1 รายการ พาร์สด้วย parseItemSectionLines ตัวเดียวกับที่บอท 1 ใช้ในส่วน
+// "รายการ:" ของเทมเพลตเต็ม) แล้วบันทึก "ทับ" quotation_items ของใบเสนอราคาที่ตรงเลข
+// คิวทั้งชุด (ไม่ใช่บวกเพิ่ม — ข้อความล่าสุดจากกลุ่มบอท 2 ถือเป็นรายการที่ถูกต้อง
+// ล่าสุดเสมอ เหมือนพฤติกรรม isUpdate ของ createQuotationFromQueue) จับคู่แคตาล็อก/
+// ขยายชุดด้วย resolveQuotationItemRows ฟังก์ชันเดียวกับบอท 1 ไม่ได้เขียนตรรกะจับคู่ซ้ำ
+async function updateQuotationItemsByQueue(queueNo, itemLines) {
+  const { items: parsedItems } = parseItemSectionLines(itemLines);
+  if (parsedItems.length === 0) return { matchCount: 0, noItems: true };
+
+  let conn;
+  try {
+    conn = await pool.getConnection();
+    await conn.beginTransaction();
+
+    const quotationDate = todayStr();
+    // เงื่อนไขค้นหาเดียวกับ closeQuotationByQueue ด้านบน (คิว/requested_queue_no,
+    // ยังไม่ปิดบิล, pending/approved, ภายใน 14 วันย้อนหลัง) — ให้สองฟังก์ชันจับคู่
+    // ใบเสนอราคาใบเดียวกันเสมอไม่ว่าจะมาจากกลุ่มไหน
+    const [rows] = await conn.execute(
+      `SELECT id, quotation_no FROM quotations
+       WHERE (queue_no = ? OR requested_queue_no = ?) AND closed_at IS NULL
+         AND status IN ('pending', 'approved') AND quotation_date >= DATE_SUB(?, INTERVAL 14 DAY)
+       ORDER BY id DESC`,
+      [queueNo, queueNo, quotationDate]
+    );
+    if (rows.length === 0) {
+      await conn.commit();
+      return { matchCount: 0 };
+    }
+    if (rows.length > 1) {
+      await conn.commit();
+      return { matchCount: rows.length };
+    }
+    const quotation = rows[0];
+
+    const resolvedItems = [];
+    for (const item of parsedItems) {
+      const itemRows = await resolveQuotationItemRows(conn, item);
+      resolvedItems.push(...itemRows);
+    }
+    const total_amount = resolvedItems.reduce((sum, it) => sum + it.quantity * it.unit_price, 0);
+    const product_summary = resolvedItems.map((it) => it.product_name).join(', ');
+
+    await conn.execute('DELETE FROM quotation_items WHERE quotation_id = ?', [quotation.id]);
+    for (const item of resolvedItems) {
+      await conn.execute(
+        `INSERT INTO quotation_items (quotation_id, product_id, product_name, quantity, unit_price, warranty_name, warranty_year, warranty_month, warranty_km)
+         VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?)`,
+        [quotation.id, item.product_name, item.quantity, item.unit_price, item.warranty_name, item.warranty_year, item.warranty_month, item.warranty_km]
+      );
+    }
+    await conn.execute('UPDATE quotations SET total_amount = ?, product_summary = ? WHERE id = ?', [total_amount, product_summary, quotation.id]);
+
+    // แก้ไขใบที่อนุมัติไปแล้ว (มีใบเสร็จผูกอยู่) → sync ใบเสร็จให้ตรงกันด้วยเลย เหตุผล
+    // เดียวกับจุด syncedReceipt ใน createQuotationFromQueue (กันบอท 1 อนุมัติไปก่อน
+    // บอท 2 มาลงรายการทีหลัง ทำให้ใบเสร็จเก่าไม่ตรงกับรายการจริง)
+    const [[full]] = await conn.query(
+      'SELECT status, converted_receipt_id FROM quotations WHERE id = ?',
+      [quotation.id]
+    );
+    let syncedReceipt = false;
+    if (full && full.status === 'approved' && full.converted_receipt_id) {
+      const receiptId = full.converted_receipt_id;
+      await conn.execute('UPDATE receipts SET total_amount = ? WHERE id = ?', [total_amount, receiptId]);
+      await conn.execute('DELETE FROM receipt_items WHERE receipt_id = ?', [receiptId]);
+      for (const item of resolvedItems) {
+        await conn.execute(
+          `INSERT INTO receipt_items (receipt_id, service_item_id, product_name_snapshot, qty, price, amount, warranty_name, warranty_year, warranty_month, warranty_km)
+           VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [receiptId, item.product_name, item.quantity, item.unit_price, item.quantity * item.unit_price, item.warranty_name, item.warranty_year, item.warranty_month, item.warranty_km]
+        );
+      }
+      syncedReceipt = true;
+    }
+
+    await conn.commit();
+    return {
+      matchCount: 1,
+      quotationId: quotation.id,
+      quotation_no: quotation.quotation_no,
+      itemCount: resolvedItems.length,
+      totalAmount: total_amount,
+      syncedReceipt,
+    };
+  } catch (err) {
+    if (conn) {
+      try { await conn.rollback(); } catch (rollbackErr) { console.error('Rollback error:', rollbackErr); }
+    }
+    throw err;
+  } finally {
+    if (conn) conn.release();
+  }
+}
+
 // แยกเป็นฟังก์ชันล้วน (pure) ทดสอบได้โดยไม่ต้องยิง LINE API จริง — โดยเฉพาะ
 // ส่วนเตือนยอดไม่ตรง (mismatchLine) ที่ไม่มีทางสังเกตได้จากเทสต์ end-to-end เลย
 // เพราะ replyToLine คุยกับ LINE API ตรง ๆ ไม่มี side effect อื่นให้ตรวจสอบ
@@ -1415,3 +1577,15 @@ module.exports.pushToLine = pushToLine; // ให้เทสต์ยืนย�
 module.exports.getLineGroupId = getLineGroupId; // ให้ quotations/vehicles/customers routes.js อ่าน group id ที่จับไว้ได้
 module.exports.buildFilledTemplateText = buildFilledTemplateText; // ให้เทสต์ตรวจรูปแบบข้อความ push ได้โดยไม่ต้องยิง LINE API จริง
 module.exports.pushQuotationUpdate = pushQuotationUpdate; // จุดรวมเดียวที่ quotations/vehicles/customers routes.js เรียกหลังแก้ไขข้อมูลสำเร็จ
+// ให้ lineWebhookBot2.routes.js/lineWebhookBot3.routes.js (คนละ Channel Secret/Token
+// กับบอท 1) ใช้ตรวจลายเซ็น/อ่าน-เขียน app_settings/ยิง reply-push ผ่าน token ของตัวเอง
+// โดยไม่ต้องคัดลอกโค้ดชุดนี้ซ้ำ — ดูแผนงาน 3 บอท (Phase B-E)
+module.exports.verifySignature = verifySignature;
+module.exports.getSetting = getSetting;
+module.exports.setSetting = setSetting;
+module.exports.replyWithToken = replyWithToken;
+module.exports.pushWithToken = pushWithToken;
+module.exports.fetchQuotationForPush = fetchQuotationForPush; // ให้บอท 2 ดึงข้อมูลใบเสนอราคามาสร้างข้อความสรุปส่งต่อกลุ่มบอท 3 (Phase D)
+module.exports.buildQueueSummaryText = buildQueueSummaryText; // เทมเพลตส่งต่อระหว่างกลุ่มบอท 2/3 — ให้บอท 2 เรียกใช้ตอนตอบกลับกลุ่มตัวเองและ push ต่อบอท 3
+module.exports.updateQuotationItemsByQueue = updateQuotationItemsByQueue; // Phase D — บอท 2 บันทึกรายการอะไหล่ที่พนักงานพิมพ์มา
+module.exports.closeQuotationByQueue = closeQuotationByQueue; // Phase E — บอท 3 ปิดบิลด้วยตรรกะเดียวกับบอท 1

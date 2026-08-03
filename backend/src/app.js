@@ -146,7 +146,7 @@ function createApp() {
   app.use('/api/repair-notices', repairNoticesRoutes);
   app.use('/api/line', lineWebhookRoutes);
   // บอท 2 "รับรายการ" / บอท 3 "ปิดบิล" — endpoint แยกกันเพราะแต่ละบอทมี Channel
-  // Secret ของตัวเอง (ดู utils/lineWebhookStub.js) ยังไม่มี business logic จริง
+  // Secret ของตัวเอง (ดู routes/lineWebhookBot2.routes.js, lineWebhookBot3.routes.js)
   app.use('/api/line/bot2', lineWebhookBot2Routes);
   app.use('/api/line/bot3', lineWebhookBot3Routes);
   app.use('/api/quote-parts', quotePartPricesRoutes);

@@ -607,6 +607,10 @@ function parseLineQueueMessage(text) {
 }
 
 module.exports = parseLineQueueMessage;
+// ให้ lineWebhookBot2.routes.js (Phase D — รับรายการอะไหล่) เอาไปพาร์สข้อความที่มีแค่
+// "คิว N" + รายการอะไหล่ ไม่มีชื่อลูกค้า/รถ ที่ parseLineQueueMessage หลักไม่รับ (คืน
+// null เพราะไม่มี customer_name) โดยไม่ต้องเขียนตัวพาร์สรายการซ้ำ
+module.exports.parseItemSectionLines = parseItemSectionLines;
 // เผยแพร่ formatPhone ให้ที่อื่นเรียกใช้ได้ด้วย — ทุกจุดที่เขียนคอลัมน์ phone ของ
 // customers (customers.routes.js, quotation-customers.routes.js) ต้อง normalize
 // ด้วยฟังก์ชันเดียวกันนี้เสมอ ไม่งั้นการค้นหาลูกค้าด้วย `WHERE phone = ?` แบบตรง ๆ

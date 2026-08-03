@@ -1,10 +1,81 @@
-// Webhook ของบอท 3 "Champpower ปิดบิล" — รับต่อจากบอท 2 (สรุปรายการ/ราคาแล้ว) รอ
-// พนักงานคัดลอกหลักฐานชำระเงินมาปิดบิล (ดูแผนงาน 3 บอทที่ตกลงกันไว้)
-// ยังไม่มี business logic จริง — ดูโครงร่างที่ใช้ร่วมกับบอท 2 ใน utils/lineWebhookStub.js
-const createLineWebhookStub = require('../utils/lineWebhookStub');
+// Webhook ของบอท 3 "Champpower ปิดบิล" — Phase E ของแผนงาน 3 บอท รับข้อความปิดบิล
+// แบบเดียวกับที่บอท 1 เคยรองรับทุกประการ (พิมพ์ "คิว N" + ช่องทางชำระ/ยอดที่ได้รับ +
+// วลี "ชำระเงินเรียบร้อย" — ดู PAID_PHRASE_RE/close_only ใน utils/parseLineQueueMessage.js)
+// ใช้ closeQuotationByQueue ตัวเดียวกับบอท 1 (ดู lineWebhook.routes.js) ไม่ได้เขียน
+// ตรรกะปิดบิล/สร้างใบเสร็จซ้ำ
+//
+// .env ที่ต้องมี: LINE_BOT3_CHANNEL_SECRET, LINE_BOT3_CHANNEL_ACCESS_TOKEN (แยกจาก
+// ของบอท 1 — คนละ LINE Official Account) เว้นว่างทั้งคู่ = ปิดฟีเจอร์ (webhook ตอบ 503)
+const express = require('express');
+const {
+  verifySignature,
+  setSetting,
+  closeQuotationByQueue,
+  replyWithToken,
+} = require('./lineWebhook.routes');
+const parseLineQueueMessage = require('../utils/parseLineQueueMessage');
 
-module.exports = createLineWebhookStub({
-  secretEnv: 'LINE_BOT3_CHANNEL_SECRET',
-  settingsKey: 'line_group_id_bot3',
-  label: 'LINE Bot3 (ปิดบิล)',
+const router = express.Router();
+
+const SECRET_ENV = 'LINE_BOT3_CHANNEL_SECRET';
+const TOKEN_ENV = 'LINE_BOT3_CHANNEL_ACCESS_TOKEN';
+const GROUP_KEY = 'line_group_id_bot3';
+
+router.post('/webhook', async (req, res) => {
+  const secret = process.env[SECRET_ENV];
+  if (!secret) {
+    return res.status(503).json({ error: 'LINE Bot3 webhook not configured' });
+  }
+  if (!verifySignature(req.rawBody, req.get('x-line-signature'), secret)) {
+    return res.status(401).json({ error: 'invalid signature' });
+  }
+
+  const events = Array.isArray(req.body?.events) ? req.body.events : [];
+  const token = process.env[TOKEN_ENV];
+
+  for (const event of events) {
+    if (event.source?.groupId) {
+      try {
+        await setSetting(GROUP_KEY, event.source.groupId);
+      } catch (err) {
+        console.error('Error capturing bot3 group id:', err);
+      }
+    }
+
+    if (event.type !== 'message' || event.message?.type !== 'text') continue;
+
+    const parsed = parseLineQueueMessage(event.message.text);
+    if (!parsed || !parsed.close_only) continue; // ไม่ใช่ข้อความปิดบิลแบบ close_only — ข้ามเงียบ ๆ
+
+    try {
+      const result = await closeQuotationByQueue(parsed);
+      if (result.matchCount === 0) {
+        await replyWithToken(token, event.replyToken, `⚠️ ไม่พบบิลที่เปิดอยู่สำหรับคิว ${parsed.queue_no} กรุณาตรวจสอบเลขคิว`);
+      } else if (result.matchCount > 1) {
+        const list = result.candidates.map((c) => `- ${c.quotation_no} (${c.customer_name || 'ไม่ทราบชื่อ'})`).join('\n');
+        await replyWithToken(
+          token,
+          event.replyToken,
+          `⚠️ คิว ${parsed.queue_no} มีหลายบิลที่เปิดอยู่ ไม่แน่ใจว่าจะปิดใบไหน กรุณาปิดผ่านแอปแทน:\n${list}`
+        );
+      } else if (result.warning === 'no_vehicle') {
+        await replyWithToken(token, event.replyToken, `⚠️ คิว ${parsed.queue_no} (${result.quotation_no}) ยังไม่มีข้อมูลรถ สร้างใบเสร็จไม่ได้ กรุณาเพิ่มข้อมูลรถก่อน`);
+      } else if (result.warning === 'no_items') {
+        await replyWithToken(token, event.replyToken, `⚠️ คิว ${parsed.queue_no} (${result.quotation_no}) ยังไม่มีรายการสินค้า สร้างใบเสร็จไม่ได้ กรุณาเพิ่มรายการก่อน`);
+      } else {
+        await replyWithToken(
+          token,
+          event.replyToken,
+          `✅ ปิดบิล ${result.quotation_no} แล้ว\nคิว ${parsed.queue_no} · ${result.customer_name || '-'}\n💰 รับชำระแล้ว (${parsed.payment_method || '-'} ${Number(result.amount).toLocaleString()} บาท) — ใบเสร็จ ${result.receiptNo}`
+        );
+      }
+    } catch (err) {
+      console.error('Error closing quotation by queue (bot3):', err);
+      await replyWithToken(token, event.replyToken, `❌ ปิดบิลไม่สำเร็จ (คิว ${parsed.queue_no || '-'}) กรุณาปิดเองในระบบ`);
+    }
+  }
+
+  res.json({ success: true });
 });
+
+module.exports = router;
