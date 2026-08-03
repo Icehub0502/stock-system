@@ -237,6 +237,10 @@ async function pushSummaryToBot2(parsed, info) {
     // ใช้เทมเพลตเดียวกับที่พนักงานพิมพ์เข้าบอท 1 ทุกประการ (ดู buildQueueSummaryText)
     // — พนักงานกลุ่มบอท 2 จะเห็นข้อมูลลูกค้า/รถ/อาการครบเหมือนของเดิมทุกตัวอักษร
     // ต่างแค่เลขคิวที่อาจถูกเปลี่ยนอัตโนมัติถ้าชนกับคิวอื่นวันนี้ (reassignedTo)
+    // items ตั้งใจส่ง [] เสมอ ไม่ใช้ parsed.items ที่พนักงานอาจพิมพ์เข้าบอท 1 มาด้วย
+    // (นิสัยเดิมก่อนแยกบอท) — ตามที่เจ้าของร้านสั่งไว้ชัดเจนว่าขั้นตอนนี้ (ต่อกลุ่มบอท 2)
+    // ต้องเห็นแค่ข้อมูลลูกค้า/รถเปล่า ๆ ไม่มีรายการ/ยอดรวมเลย รายการต้องมาจากบอท 2
+    // เท่านั้น (ดู updateQuotationItemsByQueue) กันสับสนว่ายอดที่เห็นคือยอดจริงหรือยัง
     const text = buildQueueSummaryText({
       queue_no: info.reassignedTo || parsed.queue_no,
       quotation_date: parsed.quotation_date,
@@ -248,7 +252,7 @@ async function pushSummaryToBot2(parsed, info) {
       color: parsed.color,
       mileage: parsed.mileage,
       symptom: parsed.symptom,
-      items: parsed.items,
+      items: [],
     });
     await pushWithToken(process.env.LINE_BOT2_CHANNEL_ACCESS_TOKEN, groupId, text);
   } catch (err) {
