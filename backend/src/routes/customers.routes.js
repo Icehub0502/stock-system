@@ -33,7 +33,27 @@ async function generateCustomerCode(conn = pool) {
 
 router.get('/', async (req, res) => {
   try {
-    const { search } = req.query;
+    const { search, found_via } = req.query;
+
+    // ?found_via=1 — ใช้เฉพาะหน้า CustomerChannelPage.jsx (สรุปช่องทางที่ลูกค้าเจอ
+    // ร้าน) ต่างจากโหมดปกติด้านล่างตรงที่ต้องได้ "ลูกค้าที่บันทึกช่องทางไว้แล้ว
+    // ทั้งหมด" ไม่ใช่แค่ 200 รายชื่อล่าสุด (ลูกค้าเก่าที่เพิ่งย้อนกลับมาบันทึกช่องทาง
+    // อาจไม่ติด LIMIT 200 ของโหมดค้นหาปกติ) join รถของลูกค้าคนนั้นมาให้ในคิวรี
+    // เดียวเลย (GROUP_CONCAT) กัน N+1 request แยกไปดึงรถทีละคนที่หน้าเว็บ
+    if (found_via) {
+      const [rows] = await pool.execute(
+        `SELECT c.id, c.customer_code, c.customer_name, c.phone, c.found_via, c.found_via_note, c.updated_at,
+                GROUP_CONCAT(DISTINCT CONCAT(v.brand, ' ', v.model, ' (', v.license_plate, ')') SEPARATOR ', ') AS vehicles_summary
+         FROM customers c
+         LEFT JOIN vehicles v ON v.customer_id = c.id
+         WHERE c.found_via IS NOT NULL
+         GROUP BY c.id
+         ORDER BY c.updated_at DESC
+         LIMIT 2000`
+      );
+      return res.json({ success: true, data: rows });
+    }
+
     // LIMIT กันดึงทั้งตารางเวลาลูกค้าเยอะขึ้นเรื่อย ๆ — หน้า CustomerManagementPage
     // ค้นหาผ่าน search (server-side LIKE) เสมออยู่แล้ว ไม่ได้กรอง/รวมข้อมูลฝั่ง
     // client จากทั้งชุด จึงตัดด้วย LIMIT ตรงนี้ได้อย่างปลอดภัย (เหมือน receipts.routes.js)
@@ -150,6 +170,40 @@ router.put('/:id', async (req, res) => {
   } catch (err) {
     console.error('Error updating customer:', err);
     res.status(500).json({ error: 'อัปเดตลูกค้าไม่สำเร็จ' });
+  }
+});
+
+// ชุดช่องทางคงที่ที่เลือกได้ (mirror กับ FOUND_VIA_CHANNELS ใน
+// frontend/src/utils/foundViaChannels.js — ต้องแก้ทั้งคู่พร้อมกันถ้าจะเพิ่ม/ลดตัวเลือก)
+// จำกัดเป็นค่าคงที่แทนข้อความอิสระ เพื่อให้หน้าสรุปสถิติจัดกลุ่มได้ถูกต้องแม่นยำ
+const FOUND_VIA_VALUES = ['google_map', 'facebook', 'friend', 'other'];
+
+// บันทึกว่าลูกค้าคนนี้เจอร้านจากช่องทางไหน — เก็บไว้ประกอบการตัดสินใจยิงโฆษณา (หน้า
+// CustomerChannelPage.jsx) แยก endpoint ต่างหากจาก PUT /:id ด้านบน (ไม่ต้องพ่วง
+// customer_name/phone มาด้วยทุกครั้ง และไม่ต้องยิง push อัปเดตเข้าไลน์เหมือน PUT)
+router.patch('/:id/found-via', async (req, res) => {
+  const { id } = req.params;
+  const { channel, note } = req.body || {};
+
+  if (!FOUND_VIA_VALUES.includes(channel)) {
+    return res.status(400).json({ error: 'กรุณาเลือกช่องทางที่ลูกค้าเจอร้าน' });
+  }
+  if (channel === 'other' && !note?.trim()) {
+    return res.status(400).json({ error: 'กรุณาระบุรายละเอียดช่องทาง' });
+  }
+
+  try {
+    const [result] = await pool.execute(
+      'UPDATE customers SET found_via = ?, found_via_note = ? WHERE id = ?',
+      [channel, channel === 'other' ? note.trim() : null, id]
+    );
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: 'ไม่พบลูกค้า' });
+    }
+    res.json({ success: true, message: 'บันทึกช่องทางที่ลูกค้าเจอร้านสำเร็จ' });
+  } catch (err) {
+    console.error('Error saving customer found-via channel:', err);
+    res.status(500).json({ error: 'บันทึกไม่สำเร็จ' });
   }
 });
 

@@ -592,6 +592,17 @@ async function initDatabase() {
     ADD COLUMN staff_name VARCHAR(100) DEFAULT NULL
   `).catch(ignoreIfAlreadyApplied);
 
+  // ช่องทางที่ลูกค้าเจอร้าน (Google Map/Facebook/เพื่อนแนะนำ/อื่นๆ — ดู PATCH
+  // /customers/:id/found-via) เก็บไว้ประกอบการตัดสินใจยิงโฆษณา — found_via เป็นค่า
+  // คงที่จากชุดตัวเลือกที่กำหนดไว้ (ดู FOUND_VIA_VALUES ใน customers.routes.js) ไม่ใช่
+  // ข้อความอิสระ เพื่อให้สรุปสถิติ (หน้า CustomerChannelPage.jsx) จัดกลุ่มได้ถูกต้อง —
+  // found_via_note เก็บรายละเอียดเพิ่มเติมเฉพาะตอนเลือก "อื่นๆ ระบุ" เท่านั้น
+  await conn.query(`
+    ALTER TABLE customers
+    ADD COLUMN found_via VARCHAR(50) DEFAULT NULL,
+    ADD COLUMN found_via_note TEXT DEFAULT NULL
+  `).catch(ignoreIfAlreadyApplied);
+
   // เหตุผลที่ลูกค้าไม่ได้ทำ (กด "ลูกค้าไม่ได้ทำ" — ดู PATCH /quotations/:id/decline) —
   // decline_reason เป็นค่าคงที่จากชุดตัวเลือกที่กำหนดไว้ (ดู DECLINE_REASONS ใน
   // quotations.routes.js) ไม่ใช่ข้อความอิสระ เพื่อให้สรุปสถิติ (หน้า
