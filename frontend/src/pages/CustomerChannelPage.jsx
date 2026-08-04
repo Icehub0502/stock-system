@@ -139,17 +139,25 @@ export default function CustomerChannelPage() {
             placeholder="พิมพ์ชื่อหรือเบอร์โทรลูกค้า..."
           />
           {results.length > 0 && (
-            <div className="autocomplete-dropdown">
-              {results.map((cust) => (
-                <button
-                  key={cust.id}
-                  type="button"
-                  className="autocomplete-item"
-                  onClick={() => handleSelectCustomer(cust)}
-                >
-                  {cust.customer_code} · {cust.customer_name} · {cust.phone || '-'}
-                </button>
-              ))}
+            <div className="quotation-table-wrap">
+              <table className="quotation-table">
+                <thead>
+                  <tr>
+                    <th>รหัสลูกค้า</th>
+                    <th>ชื่อลูกค้า</th>
+                    <th>เบอร์โทร</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {results.map((cust) => (
+                    <tr key={cust.id} className="clickable-row" onClick={() => handleSelectCustomer(cust)}>
+                      <td data-label="รหัสลูกค้า">{cust.customer_code}</td>
+                      <td className="col-customer-name" data-label="ชื่อลูกค้า">{cust.customer_name}</td>
+                      <td data-label="เบอร์โทร">{cust.phone || '-'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
         </div>
