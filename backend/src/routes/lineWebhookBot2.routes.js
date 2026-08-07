@@ -2,20 +2,18 @@
 // "คิว N" ตามด้วยรายการอะไหล่+ราคา (บรรทัดละ 1 รายการ) ในกลุ่มนี้ บอทจับคู่แคตาล็อก/
 // ขยายชุดด้วยตรรกะเดียวกับบอท 1 (updateQuotationItemsByQueue ใน lineWebhook.routes.js
 // — ไม่ได้เขียนตรรกะจับคู่/บันทึกรายการซ้ำ) แล้วบันทึกทับ quotation_items ของใบเสนอ
-// ราคาที่ตรงเลขคิว จากนั้น push สรุปยอดรวมต่อให้กลุ่มบอท 3 ให้พร้อมปิดบิล
+// ราคาที่ตรงเลขคิว ตอบกลับในกลุ่มนี้เท่านั้น (เจ้าของร้านสั่งตัดการ push ข้ามกลุ่ม
+// อัตโนมัติออกแล้ว — พนักงานคัดลอกข้อความไปกลุ่ม "สรุปบิล" เองด้วยมือ กันใช้โควต้า
+// push ของ LINE โดยไม่จำเป็น)
 //
 // .env ที่ต้องมี: LINE_BOT2_CHANNEL_SECRET, LINE_BOT2_CHANNEL_ACCESS_TOKEN (แยกจาก
 // ของบอท 1 — คนละ LINE Official Account) เว้นว่างทั้งคู่ = ปิดฟีเจอร์ (webhook ตอบ 503)
 const express = require('express');
 const {
   verifySignature,
-  getSetting,
   setSetting,
   updateQuotationItemsByQueue,
-  fetchQuotationForPush,
-  buildQueueSummaryText,
   replyWithToken,
-  pushWithToken,
 } = require('./lineWebhook.routes');
 const { parseThaiShortDate } = require('../utils/parseLineQueueMessage');
 
@@ -77,31 +75,34 @@ router.post('/webhook', async (req, res) => {
     try {
       const result = await updateQuotationItemsByQueue(queueNo, itemLines, explicitDate);
 
-      if (result.noItems) {
-        await replyWithToken(token, event.replyToken, '⚠️ ไม่พบรายการอะไหล่ในข้อความ กรุณาพิมพ์ชื่อ+ราคาต่อบรรทัดใต้เลขคิว');
-        continue;
-      }
       if (result.matchCount === 0) {
         await replyWithToken(token, event.replyToken, `⚠️ ไม่พบใบเสนอราคาที่เปิดอยู่สำหรับคิว ${queueNo} กรุณาตรวจสอบเลขคิว`);
         continue;
       }
 
-      // ตอบกลับกลุ่มบอท 2 ด้วยเทมเพลตเต็ม (เหมือนของเดิมที่พิมพ์เข้าบอท 1 ทุกประการ
-      // แต่ตอนนี้มีรายการ+ยอดรวมกรอกให้แล้ว) แล้ว push ข้อความเดียวกันเป๊ะ ๆ ต่อให้
-      // กลุ่มบอท 3 เพื่อรอปิดบิล (ดู buildQueueSummaryText ใน lineWebhook.routes.js)
-      const data = await fetchQuotationForPush(result.quotationId);
-      const summaryText = data
-        ? buildQueueSummaryText(data)
-        : `✅ บันทึกรายการแล้ว คิว ${queueNo} · ${result.itemCount} รายการ รวม ${result.totalAmount.toLocaleString()} บาท`;
-      await replyWithToken(token, event.replyToken, summaryText);
+      const headerLine = `คิว ${queueNo} · ${result.customer_name || '-'}${result.license_plate ? ` · ${result.license_plate}` : ''}`;
 
-      // ส่งต่อให้กลุ่มบอท 3 — best-effort เหมือนจุดอื่น ๆ ทั้งหมด (ไม่มี token/
-      // group id ของบอท 3 ก็แค่ข้าม ไม่กระทบการตอบกลับกลุ่มบอท 2 ด้านบน)
-      const bot3Token = process.env.LINE_BOT3_CHANNEL_ACCESS_TOKEN;
-      const bot3GroupId = await getSetting('line_group_id_bot3');
-      if (data && bot3Token && bot3GroupId) {
-        await pushWithToken(bot3Token, bot3GroupId, summaryText);
+      if (result.noItems) {
+        await replyWithToken(
+          token,
+          event.replyToken,
+          `🔄 รอรับรายการของ ${headerLine}\nเพิ่มรายการที่ช่อง "รายการ: " ได้เลยครับ`
+        );
+        continue;
       }
+
+      // เพิ่งลงรายการครั้งแรก (wasEmpty) กับแก้ไขรายการที่มีอยู่แล้วใช้คำตอบต่างกัน
+      // ตามที่เจ้าของร้านสั่ง — ให้พนักงานรู้ชัดว่ากำลังเพิ่มใหม่หรือแก้ของเดิม
+      const verb = result.wasEmpty ? 'เพิ่มรายการเรียบร้อยครับ' : 'แก้ไขรายการเรียบร้อยแล้วครับ';
+      const replyText = [
+        `✅ ${verb}`,
+        headerLine,
+        `รายการ ${result.itemCount} ชิ้น รวม ${result.totalAmount.toLocaleString()} บาท`,
+        result.syncedReceipt ? '🧾 ใบเสร็จที่อนุมัติไว้แล้วถูกแก้ตามด้วย' : null,
+        '❗ ตรวจสอบใบเสนอราคา เพื่อความถูกต้องด้วยนะครับ ❗',
+        'ตรวจเช็คเรียบร้อยแล้ว คัดลอกและส่งลงกลุ่ม "สรุปบิล" ได้เลยครับ',
+      ].filter(Boolean).join('\n');
+      await replyWithToken(token, event.replyToken, replyText);
     } catch (err) {
       console.error('Error updating quotation items from bot2 message:', err);
       await replyWithToken(token, event.replyToken, `❌ บันทึกรายการไม่สำเร็จ (คิว ${queueNo}) กรุณาลงรายการผ่านแอปแทน`);

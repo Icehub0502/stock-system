@@ -172,9 +172,8 @@ async function replyToLine(replyToken, text) {
 // ส่งข้อความเข้ากลุ่มแบบ push (ไม่ต้องมี reply token — ยิงได้ทุกเมื่อ ต่างจาก
 // replyToLine ที่ใช้ได้แค่ในหน้าต่างตอบกลับ webhook เดียวกันเท่านั้น) ใช้ตอนออฟฟิศ
 // แก้ไขข้อมูลผ่านหน้าเว็บ (ใบเสนอราคา/รถ/ลูกค้า) แล้วต้องดันข้อมูลที่ถูกต้องกลับเข้า
-// กลุ่มให้พนักงานเห็น (ดู pushQuotationUpdate ด้านล่าง) หรือส่งต่อข้อมูลข้ามกลุ่มบอท
-// 2/3 (ดู pushSummaryToBot2 ด้านล่าง) — best-effort เหมือน replyWithToken ทุกประการ:
-// ส่งไม่สำเร็จก็แค่ log ไว้ ไม่ throw ไม่ rollback อะไร
+// กลุ่มให้พนักงานเห็น (ดู pushQuotationUpdate ด้านล่าง) — best-effort เหมือน
+// replyWithToken ทุกประการ: ส่งไม่สำเร็จก็แค่ log ไว้ ไม่ throw ไม่ rollback อะไร
 async function pushWithToken(token, groupId, text) {
   if (!token || !groupId) return;
   try {
@@ -222,42 +221,6 @@ async function setSetting(key, value) {
 // import ไปเรียกใช้ตอนต้อง push ข้อมูลอัปเดตกลับเข้ากลุ่ม
 async function getLineGroupId() {
   return getSetting('line_group_id');
-}
-
-// ── Phase C ของแผนงาน 3 บอท: ทันทีที่บอท 1 สร้าง/แก้ไขใบเสนอราคาร่างสำเร็จ ส่งสรุป
-// สั้น ๆ (คิว/ชื่อ/ทะเบียน/อาการ) ต่อให้กลุ่มบอท 2 อัตโนมัติ เพื่อให้พนักงานที่กลุ่ม 2
-// รู้ทันทีว่ามีคิวใหม่รอลงรายการอะไหล่ — ต้องยิงด้วย token ของบอท 2 เอง (ไม่ใช่
-// LINE_CHANNEL_ACCESS_TOKEN ของบอท 1) เพราะ push API ต้องมาจากบัญชีที่เป็นสมาชิกของ
-// กลุ่มปลายทางจริง ๆ group id มาจาก line_group_id_bot2 ที่ webhook ของบอท 2 จับไว้เอง
-// (ดู routes/lineWebhookBot2.routes.js) best-effort เหมือน pushToLine ด้านบนทุกประการ
-// — ส่งไม่สำเร็จก็แค่ log ไว้ ไม่กระทบการตอบกลับหน้างานที่กลุ่มบอท 1
-async function pushSummaryToBot2(parsed, info) {
-  try {
-    const groupId = await getSetting('line_group_id_bot2');
-    // ใช้เทมเพลตเดียวกับที่พนักงานพิมพ์เข้าบอท 1 ทุกประการ (ดู buildQueueSummaryText)
-    // — พนักงานกลุ่มบอท 2 จะเห็นข้อมูลลูกค้า/รถ/อาการครบเหมือนของเดิมทุกตัวอักษร
-    // ต่างแค่เลขคิวที่อาจถูกเปลี่ยนอัตโนมัติถ้าชนกับคิวอื่นวันนี้ (reassignedTo)
-    // items ตั้งใจส่ง [] เสมอ ไม่ใช้ parsed.items ที่พนักงานอาจพิมพ์เข้าบอท 1 มาด้วย
-    // (นิสัยเดิมก่อนแยกบอท) — ตามที่เจ้าของร้านสั่งไว้ชัดเจนว่าขั้นตอนนี้ (ต่อกลุ่มบอท 2)
-    // ต้องเห็นแค่ข้อมูลลูกค้า/รถเปล่า ๆ ไม่มีรายการ/ยอดรวมเลย รายการต้องมาจากบอท 2
-    // เท่านั้น (ดู updateQuotationItemsByQueue) กันสับสนว่ายอดที่เห็นคือยอดจริงหรือยัง
-    const text = buildQueueSummaryText({
-      queue_no: info.reassignedTo || parsed.queue_no,
-      quotation_date: parsed.quotation_date,
-      customer_name: parsed.customer_name,
-      phone: parsed.phone,
-      brand: parsed.brand,
-      model: parsed.model,
-      license_plate: parsed.license_plate,
-      color: parsed.color,
-      mileage: parsed.mileage,
-      symptom: parsed.symptom,
-      items: [],
-    });
-    await pushWithToken(process.env.LINE_BOT2_CHANNEL_ACCESS_TOKEN, groupId, text);
-  } catch (err) {
-    console.error('Error pushing summary to bot2 group:', err);
-  }
 }
 
 // แคช group id ไว้ในหน่วยความจำ กันเขียนลง DB ซ้ำทุกข้อความที่กลุ่มส่งเข้ามา (เขียน
@@ -439,62 +402,6 @@ function buildFilledTemplateText(data) {
     'ลูกค้าชำระเงิน (ยอดที่ได้รับจริง):',
   ].join('\n');
   return `${banner}\n\n${template}`;
-}
-
-// เทมเพลตส่งต่อระหว่างกลุ่มบอท 2/3 (ดูแผนงาน 3 บอท Phase C/D) — หน้าตาเหมือนเทมเพลต
-// เต็มที่พนักงานพิมพ์เข้ากลุ่มบอท 1 ทุกประการ (ไม่มีแบนเนอร์แจ้งเตือนแบบ
-// buildFilledTemplateText ด้านบน เพราะข้อความนี้เป็น "ต้นฉบับ" ที่ส่งต่อกันเอง ไม่ใช่
-// การแจ้งเตือนว่าออฟฟิศแก้ไขอะไร) มีวันที่ใบเสนอราคาต่อท้ายเลขคิวด้วย (ผู้ใช้ขอเพิ่ม
-// ให้ตรงกับที่พนักงานเห็นตอนพิมพ์เข้าบอท 1 ครั้งแรก) รับข้อมูลได้ทั้งจาก `parsed`
-// (ตอนบอท 1 เพิ่งสร้างใบเสร็จ — ยังไม่มีรายการ ดู pushSummaryToBot2) และจาก
-// fetchQuotationForPush ด้านล่าง (ตอนบอท 2 ลงรายการเสร็จแล้ว — items ใช้ชื่อคีย์
-// product_name/unit_price ต่างจาก parsed.items ที่ใช้ name/price เฉย ๆ จึงรองรับทั้ง
-// สองชื่อคีย์) ไม่มีรายการเลยจะหยุดแค่ "<--สิ้นสุดรายการ-->" ไม่โชว์ส่วนยอดรวม/ชำระเงิน
-// ต่อท้าย (พนักงานกลุ่มบอท 2 ยังไม่ต้องเห็นช่องพวกนี้จนกว่าจะลงรายการเสร็จจริง)
-// ไม่มีช่องว่างหลัง ":" ให้ตรงกับแพทเทิร์นเดิมของบอท 1 ทุกตัวอักษร (ดู
-// buildQueueTemplateText/buildFilledTemplateText ด้านบน — ทั้งคู่ใช้ธรรมเนียมนี้)
-function fieldLine(label, value) {
-  return value !== null && value !== undefined && value !== '' ? `${label}:${value}` : `${label}:`;
-}
-function buildQueueSummaryText(data) {
-  const hasItems = Array.isArray(data.items) && data.items.length > 0;
-  const itemLines = (data.items || []).map((it) => {
-    const name = it.product_name || it.name || '';
-    const qty = Number(it.quantity || 1);
-    const unitPrice = it.unit_price != null ? Number(it.unit_price) : Number(it.price || 0);
-    return `${name} ${qty * unitPrice}`;
-  });
-  const lines = [
-    `คิว ${data.queue_no}`,
-    formatDbDateThai(data.quotation_date),
-    fieldLine('ชื่อ', data.customer_name),
-    fieldLine('เบอโทรศัพท์', data.phone),
-    fieldLine('ยี่ห้อรถ', data.brand),
-    fieldLine('รุ่นรถ', data.model),
-    fieldLine('ทะเบียนรถ', data.license_plate),
-    fieldLine('สีรถ', data.color),
-    fieldLine('เลขไมค์', data.mileage),
-    fieldLine('อาการ', data.symptom),
-    'รายการ:',
-    ...itemLines,
-    '',
-    '<--สิ้นสุดรายการ-->',
-  ];
-  if (hasItems) {
-    const totalAmount = Number(data.total_amount || 0);
-    lines.push(
-      fieldLine('ยอดรวม', totalAmount),
-      fieldLine('มัดจำ', data.deposit_amount),
-      fieldLine('วันที่มัดจำ', formatDbDateThai(data.deposit_date)),
-      fieldLine('วันนัดหมาย', data.status === 'scheduled' ? formatDbDateThai(data.scheduled_date) : ''),
-      fieldLine('หมายเหตุ', data.remark),
-      '',
-      '<--ลูกค้าชำระเงิน-->',
-      'ช่องทางการชำระ (โอน/บัตรเครดิต/เงินสด/QRCode):',
-      'ลูกค้าชำระเงิน (ยอดที่ได้รับจริง):'
-    );
-  }
-  return lines.join('\n');
 }
 
 // ดึงข้อมูลใบเสนอราคา+ลูกค้า+รถ+รายการ มาให้ครบพอสร้างข้อความ push (mirror ของ
@@ -1308,34 +1215,41 @@ async function closeQuotationByQueue(parsed) {
 // เลย จะไปแก้ไขรายการของลูกค้าอีกคนที่ใช้เลขคิวเดียวกันในวันอื่นแทน ไม่มี explicitDate
 // (ข้อความไม่มีบรรทัดวันที่ หรืออ่านไม่ได้) ค่อย fallback เป็นของวันนี้ก่อน แล้วค่อยหา
 // ในช่วง 14 วันย้อนหลัง (เผื่องานค้างข้ามวันจริง ๆ ที่ไม่ได้ระบุวันที่มาชัดเจน)
+// คืนข้อมูลหัวใบ (ชื่อลูกค้า/ทะเบียนรถ) เสมอไม่ว่าจะมีรายการมาด้วยหรือไม่ — ให้
+// lineWebhookBot2.routes.js เอาไปสร้างข้อความ "รอรับรายการของคิว N · ชื่อ · ทะเบียน"
+// ได้ตั้งแต่ยังไม่ได้ลงรายการเลย (ก่อนหน้านี้ข้อความไม่มีรายการจะคืนแค่ noItems ไม่มี
+// ชื่อลูกค้าให้เห็นเลย) และคืน wasEmpty (มีรายการอยู่ก่อนหน้านี้ไหม) ให้ผู้เรียกเลือก
+// คำตอบ "เพิ่มรายการ" (ครั้งแรก) หรือ "แก้ไขรายการ" (แก้ของเดิม) ให้ตรงจริง
 async function updateQuotationItemsByQueue(queueNo, itemLines, explicitDate) {
   const { items: parsedItems } = parseItemSectionLines(itemLines);
-  if (parsedItems.length === 0) return { matchCount: 0, noItems: true };
 
   let conn;
   try {
     conn = await pool.getConnection();
     await conn.beginTransaction();
 
-    const baseSelect = `SELECT id, quotation_no FROM quotations
-       WHERE (queue_no = ? OR requested_queue_no = ?) AND closed_at IS NULL
-         AND status IN ('pending', 'approved')`;
+    const baseSelect = `SELECT q.id, q.quotation_no, c.customer_name, v.license_plate
+       FROM quotations q
+       LEFT JOIN customers c ON q.customer_id = c.id
+       LEFT JOIN vehicles v ON q.vehicle_id = v.id
+       WHERE (q.queue_no = ? OR q.requested_queue_no = ?) AND q.closed_at IS NULL
+         AND q.status IN ('pending', 'approved')`;
 
     let rows;
     if (explicitDate) {
       [rows] = await conn.execute(
-        `${baseSelect} AND quotation_date = ? ORDER BY id DESC LIMIT 1`,
+        `${baseSelect} AND q.quotation_date = ? ORDER BY q.id DESC LIMIT 1`,
         [queueNo, queueNo, explicitDate]
       );
     } else {
       const quotationDate = todayStr();
       [rows] = await conn.execute(
-        `${baseSelect} AND quotation_date = ? ORDER BY id DESC LIMIT 1`,
+        `${baseSelect} AND q.quotation_date = ? ORDER BY q.id DESC LIMIT 1`,
         [queueNo, queueNo, quotationDate]
       );
       if (rows.length === 0) {
         [rows] = await conn.execute(
-          `${baseSelect} AND quotation_date >= DATE_SUB(?, INTERVAL 14 DAY) ORDER BY id DESC LIMIT 1`,
+          `${baseSelect} AND q.quotation_date >= DATE_SUB(?, INTERVAL 14 DAY) ORDER BY q.id DESC LIMIT 1`,
           [queueNo, queueNo, quotationDate]
         );
       }
@@ -1345,6 +1259,24 @@ async function updateQuotationItemsByQueue(queueNo, itemLines, explicitDate) {
       return { matchCount: 0 };
     }
     const quotation = rows[0];
+
+    if (parsedItems.length === 0) {
+      await conn.commit();
+      return {
+        matchCount: 1,
+        noItems: true,
+        quotationId: quotation.id,
+        quotation_no: quotation.quotation_no,
+        customer_name: quotation.customer_name,
+        license_plate: quotation.license_plate,
+      };
+    }
+
+    const [[itemCountRow]] = await conn.query(
+      'SELECT COUNT(*) AS c FROM quotation_items WHERE quotation_id = ?',
+      [quotation.id]
+    );
+    const wasEmpty = itemCountRow.c === 0;
 
     const resolvedItems = [];
     for (const item of parsedItems) {
@@ -1391,9 +1323,12 @@ async function updateQuotationItemsByQueue(queueNo, itemLines, explicitDate) {
       matchCount: 1,
       quotationId: quotation.id,
       quotation_no: quotation.quotation_no,
+      customer_name: quotation.customer_name,
+      license_plate: quotation.license_plate,
       itemCount: resolvedItems.length,
       totalAmount: total_amount,
       syncedReceipt,
+      wasEmpty,
     };
   } catch (err) {
     if (conn) {
@@ -1410,12 +1345,13 @@ async function updateQuotationItemsByQueue(queueNo, itemLines, explicitDate) {
 // เพราะ replyToLine คุยกับ LINE API ตรง ๆ ไม่มี side effect อื่นให้ตรวจสอบ
 function buildSuccessReplyText(parsed, info) {
   const {
-    quotation_no, itemCount, totalAmount, hasNote, isUpdate, syncedReceipt, reassignedFrom, reassignedTo,
+    quotation_no, totalAmount, hasNote, isUpdate, syncedReceipt, reassignedFrom, reassignedTo,
     paymentClosed, paymentReceiptNo, paymentAmount, paymentWarning, depositMismatch, depositAmount, appointmentDate,
   } = info;
-  const itemLine = itemCount > 0
-    ? `รายการ ${itemCount} ชิ้น รวม ${totalAmount.toLocaleString()} บาท`
-    : 'ยังไม่มีรายการสินค้า (เพิ่มในแอปได้)';
+  // บอท 1 เป็นแค่ขั้นตอนรับคิว/ข้อมูลลูกค้าเท่านั้น (ไม่ส่งต่อข้ามกลุ่มอัตโนมัติแล้ว —
+  // เจ้าของร้านสั่งตัดออก) รายการอะไหล่ไปลงที่กลุ่มบอท 2 ต่อ พนักงานคัดลอกข้อความนี้
+  // ไปเองด้วยมือ จึงบอกแค่ให้คัดลอกไปกลุ่มไหนต่อ ไม่ต้องรายงานจำนวน/ยอดรวมตรงนี้แล้ว
+  const itemLine = 'คัดลอกลงกลุ่ม "รายการ" ได้เลยครับ';
   const noteLine = hasNote ? '\n📝 มีข้อความเพิ่มเติมที่ไม่ได้แยกเป็นรายการ ดูในหมายเหตุของใบเสนอราคา' : '';
   // ร้านบางทีก็แจ้งยอดรวมมาเองในข้อความ ("รวม 23000") — เทียบกับที่คำนวณจริง
   // แล้วเตือนถ้าไม่ตรง กันบิลผิดหลุดไปถึงลูกค้าโดยไม่มีใครสังเกต
@@ -1588,7 +1524,6 @@ router.post('/webhook', async (req, res) => {
         await trackMessageQuotation(messageId, info);
       }
       await replyToLine(event.replyToken, buildSuccessReplyText(parsed, info));
-      await pushSummaryToBot2(parsed, info);
     } catch (err) {
       console.error('Error creating quotation from LINE message:', err);
       await replyToLine(
@@ -1619,6 +1554,5 @@ module.exports.setSetting = setSetting;
 module.exports.replyWithToken = replyWithToken;
 module.exports.pushWithToken = pushWithToken;
 module.exports.fetchQuotationForPush = fetchQuotationForPush; // ให้บอท 2 ดึงข้อมูลใบเสนอราคามาสร้างข้อความสรุปส่งต่อกลุ่มบอท 3 (Phase D)
-module.exports.buildQueueSummaryText = buildQueueSummaryText; // เทมเพลตส่งต่อระหว่างกลุ่มบอท 2/3 — ให้บอท 2 เรียกใช้ตอนตอบกลับกลุ่มตัวเองและ push ต่อบอท 3
 module.exports.updateQuotationItemsByQueue = updateQuotationItemsByQueue; // Phase D — บอท 2 บันทึกรายการอะไหล่ที่พนักงานพิมพ์มา
 module.exports.closeQuotationByQueue = closeQuotationByQueue; // Phase E — บอท 3 ปิดบิลด้วยตรรกะเดียวกับบอท 1

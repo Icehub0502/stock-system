@@ -1,13 +1,16 @@
-// Webhook ของบอท 3 "Champpower ปิดบิล" — Phase E ของแผนงาน 3 บอท รับข้อความปิดบิล
-// แบบเดียวกับที่บอท 1 เคยรองรับทุกประการ (พิมพ์ "คิว N" + ช่องทางชำระ/ยอดที่ได้รับ +
-// วลี "ชำระเงินเรียบร้อย" — ดู PAID_PHRASE_RE ใน utils/parseLineQueueMessage.js) รับได้
-// ทั้งข้อความสั้นแบบ close_only (ไม่มีชื่อลูกค้า/รายการ) และแพทเทิร์นเต็มที่พนักงาน
-// คัดลอกมาจากบอท 2 (มีชื่อลูกค้า/รถ/รายการครบ) แล้วเติมช่องชำระเงิน+วลีปิดบิลต่อท้าย
-// เอง — เช็คแค่ parsed.paid_confirmed (true ได้ทั้งสองแบบ) ไม่บังคับ close_only เพราะ
-// กลุ่มบอท 3 ได้รับแพทเทิร์นเต็มเป็นปกติอยู่แล้ว (ดู buildQueueSummaryText ที่บอท 2
-// push มาให้) ใช้ closeQuotationByQueue ตัวเดียวกับบอท 1 (ดู lineWebhook.routes.js)
-// ไม่ได้เขียนตรรกะปิดบิล/สร้างใบเสร็จซ้ำ — ฟังก์ชันนั้นอ่านแค่ queue_no/payment_method/
-// paid_amount จาก parsed เท่านั้น ไม่แตะชื่อลูกค้า/รายการที่อาจติดมาในแพทเทิร์นเต็มเลย
+// Webhook ของบอท 3 "Champpower ปิดบิล" — Phase E ของแผนงาน 3 บอท มี 2 หน้าที่ในกลุ่มนี้:
+//
+// 1) ตรวจยอด (read-only) — พนักงานคัดลอกเทมเพลตเต็มจากกลุ่ม "รายการ" (มีชื่อลูกค้า/รถ/
+//    รายการครบ) มาวางในกลุ่มนี้ก่อนแจ้งลูกค้า ยังไม่ได้พิมพ์วลี "ชำระเงินเรียบร้อย" —
+//    บอทรวมยอดจากรายการเอง (parsed.items) เทียบกับ "ยอดรวม:" ที่พนักงานกรอก
+//    (parsed.stated_total) แล้วตอบว่ายอดตรง/ไม่ตรง/ยังไม่ได้กรอกยอด ไม่แตะ DB เลย
+//    (ใช้ parseLineQueueMessage ตัวเดียวกับบอท 1 — ไม่ได้เขียนตัวพาร์สรายการซ้ำ)
+// 2) ปิดบิลจริง — พิมพ์ "คิว N" + ช่องทางชำระ/ยอดที่ได้รับ + วลี "ชำระเงินเรียบร้อย"
+//    (ดู PAID_PHRASE_RE ใน utils/parseLineQueueMessage.js) รับได้ทั้งข้อความสั้นแบบ
+//    close_only (ไม่มีชื่อลูกค้า/รายการ) และแพทเทิร์นเต็มที่เติมช่องชำระเงิน+วลีปิดบิล
+//    ต่อท้าย ใช้ closeQuotationByQueue ตัวเดียวกับบอท 1 (ดู lineWebhook.routes.js)
+//    ไม่ได้เขียนตรรกะปิดบิล/สร้างใบเสร็จซ้ำ — ฟังก์ชันนั้นอ่านแค่ queue_no/
+//    payment_method/paid_amount จาก parsed เท่านั้น ไม่แตะชื่อลูกค้า/รายการเลย
 //
 // .env ที่ต้องมี: LINE_BOT3_CHANNEL_SECRET, LINE_BOT3_CHANNEL_ACCESS_TOKEN (แยกจาก
 // ของบอท 1 — คนละ LINE Official Account) เว้นว่างทั้งคู่ = ปิดฟีเจอร์ (webhook ตอบ 503)
@@ -25,6 +28,16 @@ const router = express.Router();
 const SECRET_ENV = 'LINE_BOT3_CHANNEL_SECRET';
 const TOKEN_ENV = 'LINE_BOT3_CHANNEL_ACCESS_TOKEN';
 const GROUP_KEY = 'line_group_id_bot3';
+
+// ยอดรวมจากรายการ — สูตรเดียวกับที่หน้าเว็บ/updateQuotationItemsByQueue ใช้คำนวณ
+// total_amount: มี quantity/unit_price (แพทเทิร์น "จำนวนxราคาต่อหน่วย") ใช้คูณกัน
+// ไม่งั้นใช้ price ตรง ๆ (ไม่มีราคาเลย = 0)
+function computeItemsTotal(items) {
+  return items.reduce((sum, it) => {
+    const amount = it.unit_price != null ? Number(it.unit_price) * Number(it.quantity || 1) : Number(it.price || 0);
+    return sum + amount;
+  }, 0);
+}
 
 router.post('/webhook', async (req, res) => {
   const secret = process.env[SECRET_ENV];
@@ -50,7 +63,39 @@ router.post('/webhook', async (req, res) => {
     if (event.type !== 'message' || event.message?.type !== 'text') continue;
 
     const parsed = parseLineQueueMessage(event.message.text);
-    if (!parsed || !parsed.paid_confirmed) continue; // ไม่มีวลีแจ้งจ่ายเงินแล้ว — ไม่ใช่คำสั่งปิดบิล ข้ามเงียบ ๆ
+    if (!parsed) continue; // แชตทั่วไปในกลุ่ม/ข้อความไม่ครบเทมเพลต — ข้ามเงียบ ๆ
+
+    // ยังไม่พิมพ์วลีปิดบิล ("ชำระเงินเรียบร้อย" ฯลฯ) — ถ้ามีรายการมาด้วย ให้ตรวจยอด
+    // ให้เฉย ๆ (read-only ไม่แตะ DB) ไม่มีรายการเลยก็ไม่ใช่ข้อความที่เกี่ยวกับกลุ่มนี้
+    // เลย ข้ามเงียบ ๆ (close_only ไม่มีทางมาถึงจุดนี้ เพราะ close_only ต้อง
+    // paid_confirmed=true เสมอ — ดู parseLineQueueMessage.js)
+    if (!parsed.paid_confirmed) {
+      if (!parsed.items || parsed.items.length === 0) continue;
+
+      const computedTotal = computeItemsTotal(parsed.items);
+      const headerLine = `คิว ${parsed.queue_no} · ${parsed.customer_name || '-'}`;
+
+      if (parsed.stated_total == null) {
+        await replyWithToken(
+          token,
+          event.replyToken,
+          `⚠️ ${headerLine}\nยังไม่ได้กรอก "ยอดรวม:" ครับ ยอดที่คำนวณจากรายการได้ ${computedTotal.toLocaleString()} บาท กรุณาตรวจสอบและกรอกยอดรวมก่อนแจ้งลูกค้า`
+        );
+      } else if (computedTotal === Number(parsed.stated_total)) {
+        await replyWithToken(
+          token,
+          event.replyToken,
+          `✅ ${headerLine}\nยอดตรงกันครับ รวม ${computedTotal.toLocaleString()} บาท`
+        );
+      } else {
+        await replyWithToken(
+          token,
+          event.replyToken,
+          `❌ ${headerLine}\nยอดไม่ตรงกัน! รายการรวมได้ ${computedTotal.toLocaleString()} บาท แต่กรอก "ยอดรวม:" ไว้ ${Number(parsed.stated_total).toLocaleString()} บาท กรุณาตรวจสอบก่อนแจ้งลูกค้า`
+        );
+      }
+      continue;
+    }
 
     try {
       const result = await closeQuotationByQueue(parsed);
@@ -71,7 +116,7 @@ router.post('/webhook', async (req, res) => {
         await replyWithToken(
           token,
           event.replyToken,
-          `✅ ปิดบิล ${result.quotation_no} แล้ว\nคิว ${parsed.queue_no} · ${result.customer_name || '-'}\n💰 รับชำระแล้ว (${parsed.payment_method || '-'} ${Number(result.amount).toLocaleString()} บาท) — ใบเสร็จ ${result.receiptNo}`
+          `✅ ปิดบิล ${result.quotation_no} เรียบร้อยแล้วตรับ\nคิว ${parsed.queue_no} · ${result.customer_name || '-'}\n💰 รับชำระแล้ว (${parsed.payment_method || '-'} ${Number(result.amount).toLocaleString()} บาท) — ใบเสร็จ ${result.receiptNo}`
         );
       }
     } catch (err) {
