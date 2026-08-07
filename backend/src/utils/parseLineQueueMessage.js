@@ -461,9 +461,17 @@ function parseLineQueueMessage(text) {
   const queueMatch = /^คิว(?:ที่)?\s*:*\s*(\S+)/.exec(lines[0]);
   const queue_no = queueMatch ? queueMatch[1] : null;
 
+  // บรรทัดที่ 2 (ต่อจาก "คิว N") มักเป็นวันที่ dd/mm/yy (พ.ศ.) — ใช้ค่านี้เป็นวันที่ของ
+  // ใบเสนอราคาถ้าอ่านได้จริง แทนที่จะใช้วันนี้เสมอเหมือนเดิม เพราะเจ้าของร้านลงบิล
+  // ย้อนหลังได้ (รถซ่อมข้ามวัน ลูกค้ายังไม่มารับ ต้องอ้างอิงใบเดิมที่ลงไว้คนละวัน) เลข
+  // คิวเดียวกันเกิดขึ้นได้คนละวัน ถ้าใช้วันนี้เสมอจะจับคู่ผิดใบ (ดู createQuotationFromQueue/
+  // updateQuotationItemsByQueue/closeQuotationByQueue ใน lineWebhook.routes.js ที่ใช้
+  // ค่านี้เป็นตัวจับคู่) ไม่มีบรรทัดวันที่ หรืออ่านไม่ได้ ค่อย fallback เป็นวันนี้เหมือนเดิม
+  const explicitDate = lines[1] && BARE_DATE_RE.test(lines[1]) ? parseThaiShortDate(lines[1]) : null;
+
   const result = {
     queue_no,
-    quotation_date: todayStr(), // ไม่ใช้วันที่ที่พิมพ์มาในข้อความ — ระบบตั้งวันที่สร้างจริงเสมอ
+    quotation_date: explicitDate || todayStr(),
     customer_name: null,
     phone: null,
     brand: null,
@@ -596,6 +604,7 @@ function parseLineQueueMessage(text) {
     return {
       close_only: true,
       queue_no: result.queue_no,
+      quotation_date: result.quotation_date, // วันที่ที่พิมพ์มา (ถ้ามี) ให้ closeQuotationByQueue จับคู่ใบให้ตรงวันเป๊ะ ๆ
       payment_method: result.payment_method,
       paid_amount: result.paid_amount,
       paid_confirmed: true,
@@ -611,6 +620,10 @@ module.exports = parseLineQueueMessage;
 // "คิว N" + รายการอะไหล่ ไม่มีชื่อลูกค้า/รถ ที่ parseLineQueueMessage หลักไม่รับ (คืน
 // null เพราะไม่มี customer_name) โดยไม่ต้องเขียนตัวพาร์สรายการซ้ำ
 module.exports.parseItemSectionLines = parseItemSectionLines;
+// ให้ lineWebhookBot2.routes.js (Phase D) แปลงบรรทัดวันที่ในข้อความลงรายการ (ไม่ผ่าน
+// parseLineQueueMessage หลักเพราะมีแค่ "คิว N" + รายการ ไม่มีชื่อลูกค้า) เป็น YYYY-MM-DD
+// ด้วยตรรกะเดียวกับที่นี่ ไม่ต้องเขียนตัวแปลงวันที่ไทยซ้ำ
+module.exports.parseThaiShortDate = parseThaiShortDate;
 // เผยแพร่ formatPhone ให้ที่อื่นเรียกใช้ได้ด้วย — ทุกจุดที่เขียนคอลัมน์ phone ของ
 // customers (customers.routes.js, quotation-customers.routes.js) ต้อง normalize
 // ด้วยฟังก์ชันเดียวกันนี้เสมอ ไม่งั้นการค้นหาลูกค้าด้วย `WHERE phone = ?` แบบตรง ๆ

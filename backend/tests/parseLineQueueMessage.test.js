@@ -27,13 +27,13 @@ describe('parseLineQueueMessage', () => {
       expect(parsed.queue_no).toBe('1');
     });
 
-    test('บรรทัดวันที่เดี่ยว ๆ (dd/m/yy) ที่สอง ไม่ถูกใช้และไม่หลุดไปปนกับอาการ', () => {
+    test('บรรทัดวันที่เดี่ยว ๆ (dd/m/yy) ที่สอง ใช้เป็น quotation_date และไม่หลุดไปปนกับอาการ', () => {
       const parsed = parseLineQueueMessage(
         'คิวที่10\n16/7/69\nชื่อ:คุณเอกชัย\nอาการ:เลี้ยวติดตัวถัง'
       );
-      const today = new Date();
-      const expected = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-      expect(parsed.quotation_date).toBe(expected);
+      // เจ้าของร้านสั่งไว้ — ต้องใช้วันที่ที่พิมพ์มาจริง (ไม่ใช่วันนี้เสมอ) เพราะลงบิล
+      // ย้อนหลังได้ (รถซ่อมข้ามวัน) ดู parseLineQueueMessage.js
+      expect(parsed.quotation_date).toBe('2026-07-16');
       expect(parsed.symptom).toBe('เลี้ยวติดตัวถัง');
       expect(parsed.symptom).not.toMatch(/69/);
     });
@@ -755,9 +755,14 @@ describe('parseLineQueueMessage', () => {
       const parsed = parseLineQueueMessage(
         ['คิว 3', 'ช่องทางการชำระ: โอน', 'ลูกค้าชำระเงิน: 15400', 'ชำระเงินเรียบร้อย'].join('\n')
       );
+      // ไม่มีบรรทัดวันที่ในข้อความนี้ (บรรทัดที่ 2 เป็น "ช่องทางการชำระ:" ไม่ใช่วันที่)
+      // → fallback เป็นวันนี้ตามปกติ (ดู parseLineQueueMessage.js)
+      const today = new Date();
+      const expectedDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
       expect(parsed).toEqual({
         close_only: true,
         queue_no: '3',
+        quotation_date: expectedDate,
         payment_method: 'โอน',
         paid_amount: 15400,
         paid_confirmed: true,

@@ -47,11 +47,23 @@ function eventsBody(events) {
 // payment.confirm: true ต่อวลี "ชำระเงินเรียบร้อย" ท้ายข้อความ — สัญญาณปิดบิลจริง
 // ในเทมเพลตใหม่ (กรอก "ลูกค้าชำระเงิน:" เฉย ๆ ไม่ปิดบิลเองอีกต่อไป) — อยู่นอก describe
 // เพราะหลาย describe บล็อกในไฟล์นี้ใช้ร่วมกัน (ไม่ใช่แค่บล็อก "เทมเพลตใหม่" เดิม)
+// วันที่ของวันนี้แบบ dd/mm/yy (พ.ศ.) — ให้ตรงกับที่ parseLineQueueMessage.js อ่านเป็น
+// quotation_date จริง ๆ (แต่ก่อนเป็นค่าคงที่ '18/07/69' เพราะวันที่ที่พิมพ์มาไม่เคยถูก
+// ใช้เลย พอแก้ให้ใช้จริงแล้ว ค่าคงที่เดิมจะทำให้ทดสอบ resend/แก้ไขใบเดิมในวันเดียวกัน
+// ล้มเหลว เพราะวันที่ไม่ตรงกับ "วันนี้" ที่ทดสอบรันจริง)
+function todayThaiShortDate() {
+  const d = new Date();
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const yy = String(d.getFullYear() + 543).slice(-2);
+  return `${dd}/${mm}/${yy}`;
+}
+
 function templateText({ queueNo, name, phone, plate, items = [], payment = {} }) {
   const itemLines = items.map((it) => `${it.name} ${it.price}`);
   const lines = [
     `คิว ${queueNo}`,
-    '18/07/69',
+    todayThaiShortDate(),
     `ชื่อ:${name}`,
     `เบอโทรศัพท์:${phone || ''}`,
     'ยี่ห้อรถ:',

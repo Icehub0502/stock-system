@@ -1169,12 +1169,13 @@ async function closeQuotationByQueue(parsed) {
     conn = await pool.getConnection();
     await conn.beginTransaction();
 
-    const quotationDate = todayStr();
-    // เจ้าของร้านสั่งไว้ชัดเจน — "ปิดของวันนั้นๆ ตามที่เห็นเลย": ลองแมตช์เฉพาะใบของ
-    // "วันนี้" ก่อนเสมอ กันเลขคิววันนี้ไปชนกับใบเก่าที่ยังไม่ปิดจากวันอื่นในช่วง 14 วัน
-    // ย้อนหลัง (เคยเกิดจริง — เจอ 4 ใบพร้อมกันเพราะมีใบทดสอบเก่าค้างคิวเดียวกันหลายวัน
-    // ทำให้ปิดบิลไม่ได้เลยทั้งที่มีใบของวันนี้ตรงอยู่แล้ว) ไม่เจอของวันนี้เลยจริง ๆ
+    // ใช้วันที่ที่พิมพ์มาในข้อความเป็นหลัก (parsed.quotation_date — ดู
+    // parseLineQueueMessage.js) ถ้าไม่มีบรรทัดวันที่เลยค่อย fallback เป็นวันนี้ — กัน
+    // เลขคิววันนี้ไปชนกับใบเก่าที่ยังไม่ปิดจากวันอื่นในช่วง 14 วันย้อนหลัง (เคยเกิดจริง
+    // — เจอ 4 ใบพร้อมกันเพราะมีใบทดสอบเก่าค้างคิวเดียวกันหลายวัน) และรองรับกรณีลูกค้า
+    // ยังไม่มารับรถ พนักงานอ้างอิงใบเก่าคนละวันมาปิดบิลทีหลัง ไม่เจอของวันที่ระบุเลยจริง ๆ
     // ค่อย fallback ไปหาในช่วง 14 วันย้อนหลังเหมือนเดิม (เผื่องานที่ค้างข้ามวันจริง ๆ)
+    const quotationDate = parsed.quotation_date || todayStr();
     const baseSelect = `SELECT q.id, q.customer_id, q.quotation_no, q.converted_receipt_id, q.status, q.total_amount,
               q.deposit_amount, q.deposit_date, q.vehicle_id, c.customer_name
        FROM quotations q
@@ -1300,7 +1301,14 @@ async function closeQuotationByQueue(parsed) {
 // คิวทั้งชุด (ไม่ใช่บวกเพิ่ม — ข้อความล่าสุดจากกลุ่มบอท 2 ถือเป็นรายการที่ถูกต้อง
 // ล่าสุดเสมอ เหมือนพฤติกรรม isUpdate ของ createQuotationFromQueue) จับคู่แคตาล็อก/
 // ขยายชุดด้วย resolveQuotationItemRows ฟังก์ชันเดียวกับบอท 1 ไม่ได้เขียนตรรกะจับคู่ซ้ำ
-async function updateQuotationItemsByQueue(queueNo, itemLines) {
+// explicitDate: วันที่ที่พิมพ์มาในข้อความ (บรรทัดต่อจาก "คิว N" — ดู
+// parseLineQueueMessage.js) ถ้ามีให้จับคู่เฉพาะใบของวันนั้นเป๊ะ ๆ เท่านั้น ไม่เผื่อ
+// วันอื่นเลย — กันบั๊กที่เคยเกิดจริง: ลูกค้าคนละคน คนละวัน ใช้เลขคิวเดียวกัน (คิวรีเซ็ต
+// ทุกวัน) ถ้าจับคู่แบบ "เอาใบล่าสุดที่สร้างไว้" (ORDER BY id DESC) เฉย ๆ โดยไม่ดูวันที่
+// เลย จะไปแก้ไขรายการของลูกค้าอีกคนที่ใช้เลขคิวเดียวกันในวันอื่นแทน ไม่มี explicitDate
+// (ข้อความไม่มีบรรทัดวันที่ หรืออ่านไม่ได้) ค่อย fallback เป็นของวันนี้ก่อน แล้วค่อยหา
+// ในช่วง 14 วันย้อนหลัง (เผื่องานค้างข้ามวันจริง ๆ ที่ไม่ได้ระบุวันที่มาชัดเจน)
+async function updateQuotationItemsByQueue(queueNo, itemLines, explicitDate) {
   const { items: parsedItems } = parseItemSectionLines(itemLines);
   if (parsedItems.length === 0) return { matchCount: 0, noItems: true };
 
@@ -1309,20 +1317,29 @@ async function updateQuotationItemsByQueue(queueNo, itemLines) {
     conn = await pool.getConnection();
     await conn.beginTransaction();
 
-    const quotationDate = todayStr();
-    // เงื่อนไขค้นหาเดียวกับ closeQuotationByQueue ด้านบน (คิว/requested_queue_no,
-    // ยังไม่ปิดบิล, pending/approved, ภายใน 14 วันย้อนหลัง) ต่างจากการปิดบิลตรงที่นี่
-    // เจอชนกันหลายใบก็เลือกใบล่าสุด (ORDER BY id DESC LIMIT 1) ให้อัตโนมัติเลย ไม่ต้อง
-    // ให้พนักงานยืนยันก่อนเหมือนตอนปิดบิล — แค่ "ลงรายการ" เป็นการแก้ไขร่างที่ยังแก้
-    // เพิ่มทีหลังผ่านแอปได้เสมอ ไม่ใช่การตัดสินใจทางการเงินที่ผิดพลาดแล้วแก้คืนยาก
-    // เหมือนการปิดบิล+ออกใบเสร็จ ความเสี่ยงต่ำกว่ากันมาก
-    const [rows] = await conn.execute(
-      `SELECT id, quotation_no FROM quotations
+    const baseSelect = `SELECT id, quotation_no FROM quotations
        WHERE (queue_no = ? OR requested_queue_no = ?) AND closed_at IS NULL
-         AND status IN ('pending', 'approved') AND quotation_date >= DATE_SUB(?, INTERVAL 14 DAY)
-       ORDER BY id DESC LIMIT 1`,
-      [queueNo, queueNo, quotationDate]
-    );
+         AND status IN ('pending', 'approved')`;
+
+    let rows;
+    if (explicitDate) {
+      [rows] = await conn.execute(
+        `${baseSelect} AND quotation_date = ? ORDER BY id DESC LIMIT 1`,
+        [queueNo, queueNo, explicitDate]
+      );
+    } else {
+      const quotationDate = todayStr();
+      [rows] = await conn.execute(
+        `${baseSelect} AND quotation_date = ? ORDER BY id DESC LIMIT 1`,
+        [queueNo, queueNo, quotationDate]
+      );
+      if (rows.length === 0) {
+        [rows] = await conn.execute(
+          `${baseSelect} AND quotation_date >= DATE_SUB(?, INTERVAL 14 DAY) ORDER BY id DESC LIMIT 1`,
+          [queueNo, queueNo, quotationDate]
+        );
+      }
+    }
     if (rows.length === 0) {
       await conn.commit();
       return { matchCount: 0 };

@@ -17,6 +17,7 @@ const {
   replyWithToken,
   pushWithToken,
 } = require('./lineWebhook.routes');
+const { parseThaiShortDate } = require('../utils/parseLineQueueMessage');
 
 const router = express.Router();
 
@@ -52,6 +53,15 @@ router.post('/webhook', async (req, res) => {
     if (!queueMatch) continue; // แชตทั่วไปในกลุ่ม ไม่ได้ขึ้นต้นด้วย "คิว N" — ข้ามเงียบ ๆ
 
     const queueNo = queueMatch[1];
+    // บรรทัดที่ 2 (ต่อจาก "คิว N") มักเป็นวันที่ dd/mm/yy (พ.ศ.) ของใบที่พนักงานคัดลอก
+    // เทมเพลตมา — ต้องดึงมาใช้จับคู่ใบให้ตรงวันจริง ๆ (ไม่ใช่วันนี้เสมอ) เพราะบางที
+    // พนักงานลงรายการของบิลเก่าที่ค้างอยู่ (รถซ่อมข้ามวัน ลูกค้ายังไม่มารับ) เลขคิว
+    // เดียวกันแต่คนละวันเกิดขึ้นได้ ถ้าไม่ดูวันที่จะไปแก้ใบของลูกค้าอีกคนที่ใช้เลขคิว
+    // เดียวกันในวันอื่นแทน (ดู updateQuotationItemsByQueue ใน lineWebhook.routes.js)
+    const explicitDate = lines[1] && /^\d{1,2}\/\d{1,2}\/\d{2,4}$/.test(lines[1])
+      ? parseThaiShortDate(lines[1])
+      : null;
+
     // พนักงานพิมพ์รายการเปล่า ๆ ต่อจาก "คิว N" ก็ได้ (บรรทัดละ 1 รายการตรง ๆ) หรือจะ
     // คัดลอกเทมเพลตเต็มที่บอทส่งมาก่อนหน้า (มีหัวข้อลูกค้า/รถ + "รายการ:" + เครื่องหมาย
     // จบรายการ) มาแก้เพิ่มรายการเข้าไปก็ได้เหมือนกัน — เจอบรรทัด "รายการ:" เมื่อไหร่ถือว่า
@@ -65,7 +75,7 @@ router.post('/webhook', async (req, res) => {
       : lines.slice(1).filter((l) => !/^\d{1,2}\/\d{1,2}\/\d{2,4}$/.test(l));
 
     try {
-      const result = await updateQuotationItemsByQueue(queueNo, itemLines);
+      const result = await updateQuotationItemsByQueue(queueNo, itemLines, explicitDate);
 
       if (result.noItems) {
         await replyWithToken(token, event.replyToken, '⚠️ ไม่พบรายการอะไหล่ในข้อความ กรุณาพิมพ์ชื่อ+ราคาต่อบรรทัดใต้เลขคิว');
