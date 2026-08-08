@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import client from "../api/client";
 import ReceiptFormModal from "../components/ReceiptFormModal";
 import ReceiptPrintModal from "../components/ReceiptPrintModal";
+import { buildArchiveGroups, formatDateTh, formatMonthTh, formatYearTh } from "../utils/dateGroups";
 
 export default function ReceiptListPage() {
   const navigate = useNavigate();
@@ -40,23 +41,41 @@ export default function ReceiptListPage() {
     );
   }, [receipts, search]);
 
-  // Group by receipt_date so moving a bill to another day (from the daily
-  // summary page's "ย้ายไปวันถัดไป"/"ย้ายไปวันก่อนหน้า") visibly relocates
-  // it here too — the backend already sorts by receipt_date, this just
-  // adds the visual date header between groups.
-  const groups = useMemo(() => {
-    const out = [];
-    let current = null;
-    for (const r of filtered) {
-      const dateKey = r.receipt_date;
-      if (!current || current.dateKey !== dateKey) {
-        current = { dateKey, rows: [] };
-        out.push(current);
-      }
-      current.rows.push(r);
+  // จัดเป็นแฟ้ม ปี → เดือน → วัน (ใหม่สุดอยู่บนสุด) เหมือนหน้าสรุปยอด — การย้ายบิล
+  // ไปวันอื่น (จากหน้าสรุปยอด "ย้ายไปวันถัดไป"/"ย้ายไปวันก่อนหน้า") ยังคงย้ายที่
+  // แสดงผลตรงนี้ตามจริง เพราะจัดกลุ่มจาก receipt_date ที่ backend ส่งมาเสมอ
+  const archive = useMemo(
+    () => buildArchiveGroups(filtered, (r) => r.receipt_date),
+    [filtered]
+  );
+
+  const [expandedYears, setExpandedYears] = useState(null);
+  const [expandedMonths, setExpandedMonths] = useState(null);
+
+  useEffect(() => {
+    if (expandedYears === null && archive.length > 0) {
+      setExpandedYears(new Set([archive[0].key]));
+      setExpandedMonths(new Set([archive[0].months[0].key]));
     }
-    return out;
-  }, [filtered]);
+  }, [archive, expandedYears]);
+
+  const toggleYear = (key) => {
+    setExpandedYears((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  const toggleMonth = (key) => {
+    setExpandedMonths((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
 
   const handleDelete = async (id) => {
     if (window.confirm('ยืนยันการลบใบเสร็จนี้? การกระทำนี้ไม่สามารถย้อนกลับได้')) {
@@ -125,17 +144,39 @@ export default function ReceiptListPage() {
             <tbody>
               {(() => {
                 let rowNo = 0;
-                return groups.map((group) => (
-                  <React.Fragment key={group.dateKey}>
-                    <tr className="date-group-header-row">
-                      <td colSpan={8}>
-                        {new Date(group.dateKey).toLocaleDateString('th-TH', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-                        <span className="date-group-count"> ({group.rows.length} บิล)</span>
-                      </td>
-                    </tr>
-                    {group.rows.map((receipt) => {
-                      rowNo += 1;
-                      return (
+                return archive.map((year) => {
+                  const yearOpen = expandedYears?.has(year.key);
+                  return (
+                    <React.Fragment key={year.key}>
+                      <tr className="year-group-header-row clickable-row" onClick={() => toggleYear(year.key)}>
+                        <td colSpan={8}>
+                          <span className="month-group-toggle">{yearOpen ? '▾' : '▸'}</span>
+                          {formatYearTh(year.key)}
+                          <span className="date-group-count"> ({year.count} บิล)</span>
+                        </td>
+                      </tr>
+                      {yearOpen && year.months.map((month) => {
+                        const monthOpen = expandedMonths?.has(month.key);
+                        return (
+                          <React.Fragment key={month.key}>
+                            <tr className="month-group-header-row clickable-row" onClick={() => toggleMonth(month.key)}>
+                              <td colSpan={8} style={{ paddingLeft: 28 }}>
+                                <span className="month-group-toggle">{monthOpen ? '▾' : '▸'}</span>
+                                {formatMonthTh(month.key)}
+                                <span className="date-group-count"> ({month.count} บิล)</span>
+                              </td>
+                            </tr>
+                            {monthOpen && month.days.map((day) => (
+                              <React.Fragment key={day.key}>
+                                <tr className="date-group-header-row">
+                                  <td colSpan={8}>
+                                    {formatDateTh(day.key)}
+                                    <span className="date-group-count"> ({day.rows.length} บิล)</span>
+                                  </td>
+                                </tr>
+                                {day.rows.map((receipt) => {
+                                  rowNo += 1;
+                                  return (
                         <tr key={receipt.id}>
                           <td className="col-no" data-label="ลำดับ">{rowNo}</td>
                           <td data-label="เลขที่บิล"><strong>{receipt.receipt_no}</strong></td>
@@ -172,10 +213,16 @@ export default function ReceiptListPage() {
                             </button>
                           </td>
                         </tr>
-                      );
-                    })}
-                  </React.Fragment>
-                ));
+                                  );
+                                })}
+                              </React.Fragment>
+                            ))}
+                          </React.Fragment>
+                        );
+                      })}
+                    </React.Fragment>
+                  );
+                });
               })()}
             </tbody>
           </table>

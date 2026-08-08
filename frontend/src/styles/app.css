@@ -575,7 +575,8 @@ button:disabled { background: #f3f4f6; color: #9ca3af; cursor: not-allowed; }
   }
 
   .quotation-table tr.date-group-header-row,
-  .quotation-table tr.month-group-header-row {
+  .quotation-table tr.month-group-header-row,
+  .quotation-table tr.year-group-header-row {
     border: none;
     margin-bottom: 6px;
   }
@@ -1888,7 +1889,8 @@ button:disabled { background: #f3f4f6; color: #9ca3af; cursor: not-allowed; }
 }
 
 .quotation-table tr.date-group-header-row td,
-.quotation-table tr.month-group-header-row td {
+.quotation-table tr.month-group-header-row td,
+.quotation-table tr.year-group-header-row td {
   background: #eef2f7 !important;
   color: #374151;
   font-weight: 700;
@@ -1908,6 +1910,13 @@ button:disabled { background: #f3f4f6; color: #9ca3af; cursor: not-allowed; }
    ดูเหมือน "แฟ้ม" แยกจากหัวข้อกลุ่มวันปกติ แต่ยังอยู่ในโทนเดียวกัน */
 .quotation-table tr.month-group-header-row td {
   background: #e0e7ff !important;
+  cursor: pointer;
+}
+
+/* หัวข้อ "แฟ้ม" ปี — ชั้นนอกสุดของแฟ้มรายการ (ปี → เดือน → วัน ดู
+   utils/dateGroups.js) เข้มกว่าแฟ้มเดือนเล็กน้อยให้เห็นลำดับชั้นชัดเจน */
+.quotation-table tr.year-group-header-row td {
+  background: #c7d2fe !important;
   cursor: pointer;
 }
 
@@ -3555,7 +3564,8 @@ body:has(.modal-backdrop) .page-fade-in {
     border-top-color: var(--m-line);
     border-bottom-color: var(--m-line);
   }
-  .quotation-table tr.month-group-header-row td {
+  .quotation-table tr.month-group-header-row td,
+  .quotation-table tr.year-group-header-row td {
     background: var(--m-surface) !important;
     color: var(--m-text-hi);
     border-top-color: var(--m-accent);
@@ -4329,6 +4339,7 @@ body:has(.modal-backdrop) .page-fade-in {
   }
   .quotation-table tbody tr.date-group-header-row,
   .quotation-table tbody tr.month-group-header-row,
+  .quotation-table tbody tr.year-group-header-row,
   .pcp-table tbody tr:has(th) {
     animation: none;
   }

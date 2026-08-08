@@ -8,6 +8,7 @@ import ClosePaymentDialog from "../components/ClosePaymentDialog";
 import DeclineReasonModal from "../components/DeclineReasonModal";
 import StatusBadge from "../components/StatusBadge";
 import { todayStr } from "../utils/format";
+import { buildArchiveGroups, formatDateTh, formatMonthTh, formatYearTh } from "../utils/dateGroups";
 
 export default function QuotationListPage() {
   const { user } = useAuth();
@@ -62,25 +63,45 @@ export default function QuotationListPage() {
       q.customer_name?.toLowerCase().includes(search.toLowerCase())
     );
 
-  // Group by quotation_date (newest day first) so the list reads as one
-  // set per day instead of one long scattered table — sort explicitly by
-  // quotation_date rather than relying on the backend's created_at
-  // ordering, since a quotation's date isn't guaranteed to match when it
-  // was created.
-  const groups = useMemo(() => {
-    const sorted = [...filtered].sort((a, b) => new Date(b.quotation_date) - new Date(a.quotation_date));
-    const out = [];
-    let current = null;
-    for (const q of sorted) {
-      const dateKey = q.quotation_date;
-      if (!current || current.dateKey !== dateKey) {
-        current = { dateKey, rows: [] };
-        out.push(current);
-      }
-      current.rows.push(q);
+  // จัดเป็นแฟ้ม ปี → เดือน → วัน (ใหม่สุดอยู่บนสุด) เหมือนหน้าสรุปยอด — ปี/เดือน
+  // เก่ากว่าปัจจุบันพับเก็บไว้เป็นค่าเริ่มต้น กันตารางยาวขึ้นเรื่อย ๆ ตามอายุระบบ
+  const archive = useMemo(
+    () => buildArchiveGroups(
+      [...filtered].sort((a, b) => new Date(b.quotation_date) - new Date(a.quotation_date)),
+      (q) => q.quotation_date
+    ),
+    [filtered]
+  );
+
+  // แฟ้มที่ "เปิด" อยู่ — ค่าเริ่มต้นคือปี/เดือนล่าสุดที่มีข้อมูลเท่านั้น (รอ archive
+  // โหลดมาก่อนถึงจะรู้ว่าปี/เดือนล่าสุดในข้อมูลจริงคือช่วงไหน)
+  const [expandedYears, setExpandedYears] = useState(null);
+  const [expandedMonths, setExpandedMonths] = useState(null);
+
+  useEffect(() => {
+    if (expandedYears === null && archive.length > 0) {
+      setExpandedYears(new Set([archive[0].key]));
+      setExpandedMonths(new Set([archive[0].months[0].key]));
     }
-    return out;
-  }, [filtered]);
+  }, [archive, expandedYears]);
+
+  const toggleYear = (key) => {
+    setExpandedYears((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  const toggleMonth = (key) => {
+    setExpandedMonths((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
 
   // Quotations scheduled for today, regardless of which day-group they fall
   // under above (a quotation could've been created days ago but scheduled
@@ -272,15 +293,37 @@ export default function QuotationListPage() {
               </tr>
             </thead>
             <tbody>
-              {groups.map((group) => (
-                <React.Fragment key={group.dateKey}>
-                  <tr className="date-group-header-row">
-                    <td colSpan={6}>
-                      {new Date(group.dateKey).toLocaleDateString('th-TH', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-                      <span className="date-group-count"> ({group.rows.length} ใบ)</span>
-                    </td>
-                  </tr>
-                  {group.rows.map((q) => (
+              {archive.map((year) => {
+                const yearOpen = expandedYears?.has(year.key);
+                return (
+                  <React.Fragment key={year.key}>
+                    <tr className="year-group-header-row clickable-row" onClick={() => toggleYear(year.key)}>
+                      <td colSpan={6}>
+                        <span className="month-group-toggle">{yearOpen ? '▾' : '▸'}</span>
+                        {formatYearTh(year.key)}
+                        <span className="date-group-count"> ({year.count} ใบ)</span>
+                      </td>
+                    </tr>
+                    {yearOpen && year.months.map((month) => {
+                      const monthOpen = expandedMonths?.has(month.key);
+                      return (
+                        <React.Fragment key={month.key}>
+                          <tr className="month-group-header-row clickable-row" onClick={() => toggleMonth(month.key)}>
+                            <td colSpan={6} style={{ paddingLeft: 28 }}>
+                              <span className="month-group-toggle">{monthOpen ? '▾' : '▸'}</span>
+                              {formatMonthTh(month.key)}
+                              <span className="date-group-count"> ({month.count} ใบ)</span>
+                            </td>
+                          </tr>
+                          {monthOpen && month.days.map((day) => (
+                            <React.Fragment key={day.key}>
+                              <tr className="date-group-header-row">
+                                <td colSpan={6}>
+                                  {formatDateTh(day.key)}
+                                  <span className="date-group-count"> ({day.rows.length} ใบ)</span>
+                                </td>
+                              </tr>
+                              {day.rows.map((q) => (
                     <tr
                       key={q.id}
                       className={
@@ -373,9 +416,15 @@ export default function QuotationListPage() {
                         )}
                       </td>
                     </tr>
-                  ))}
-                </React.Fragment>
-              ))}
+                              ))}
+                            </React.Fragment>
+                          ))}
+                        </React.Fragment>
+                      );
+                    })}
+                  </React.Fragment>
+                );
+              })}
             </tbody>
           </table>
         </div>

@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import client from '../api/client';
 import RepairNoticePrintModal from '../components/RepairNoticePrintModal';
 import RepairNoticeModal from '../components/RepairNoticeModal';
+import { buildArchiveGroups, formatDateTh, formatMonthTh, formatYearTh } from '../utils/dateGroups';
 import '../styles/repairNotice.css';
 
 // เหมือน isRepairNoticeFilled ฝั่ง backend (quotations.routes.js) — เช็คว่ามีคนกรอก
@@ -61,24 +62,43 @@ export default function RepairNoticeListPage() {
     String(n.queue_no || '').toLowerCase().includes(search.toLowerCase())
   );
 
-  // Group by notice_date (newest day first) so the list reads as one set
-  // per day instead of one long scattered table — sort explicitly by
-  // notice_date rather than relying on the backend's created_at ordering,
-  // since a notice's date can be edited away from when it was created.
-  const groups = useMemo(() => {
-    const sorted = [...filtered].sort((a, b) => new Date(b.notice_date) - new Date(a.notice_date));
-    const out = [];
-    let current = null;
-    for (const n of sorted) {
-      const dateKey = n.notice_date;
-      if (!current || current.dateKey !== dateKey) {
-        current = { dateKey, rows: [] };
-        out.push(current);
-      }
-      current.rows.push(n);
+  // จัดเป็นแฟ้ม ปี → เดือน → วัน (ใหม่สุดอยู่บนสุด) เหมือนหน้าสรุปยอด — sort ตาม
+  // notice_date เอง ไม่พึ่ง created_at ของ backend เพราะวันที่ใบแจ้งซ่อมแก้ไขได้
+  const archive = useMemo(
+    () => buildArchiveGroups(
+      [...filtered].sort((a, b) => new Date(b.notice_date) - new Date(a.notice_date)),
+      (n) => n.notice_date
+    ),
+    [filtered]
+  );
+
+  const [expandedYears, setExpandedYears] = useState(null);
+  const [expandedMonths, setExpandedMonths] = useState(null);
+
+  useEffect(() => {
+    if (expandedYears === null && archive.length > 0) {
+      setExpandedYears(new Set([archive[0].key]));
+      setExpandedMonths(new Set([archive[0].months[0].key]));
     }
-    return out;
-  }, [filtered]);
+  }, [archive, expandedYears]);
+
+  const toggleYear = (key) => {
+    setExpandedYears((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  const toggleMonth = (key) => {
+    setExpandedMonths((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
 
   const handleDelete = async (id) => {
     if (!window.confirm('ต้องการลบใบแจ้งซ่อมนี้หรือไม่?')) return;
@@ -132,15 +152,37 @@ export default function RepairNoticeListPage() {
               </tr>
             </thead>
             <tbody>
-              {groups.map((group) => (
-                <React.Fragment key={group.dateKey}>
-                  <tr className="date-group-header-row">
-                    <td colSpan={7}>
-                      {new Date(group.dateKey).toLocaleDateString('th-TH', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-                      <span className="date-group-count"> ({group.rows.length} ใบ)</span>
-                    </td>
-                  </tr>
-                  {group.rows.map((n) => (
+              {archive.map((year) => {
+                const yearOpen = expandedYears?.has(year.key);
+                return (
+                  <React.Fragment key={year.key}>
+                    <tr className="year-group-header-row clickable-row" onClick={() => toggleYear(year.key)}>
+                      <td colSpan={7}>
+                        <span className="month-group-toggle">{yearOpen ? '▾' : '▸'}</span>
+                        {formatYearTh(year.key)}
+                        <span className="date-group-count"> ({year.count} ใบ)</span>
+                      </td>
+                    </tr>
+                    {yearOpen && year.months.map((month) => {
+                      const monthOpen = expandedMonths?.has(month.key);
+                      return (
+                        <React.Fragment key={month.key}>
+                          <tr className="month-group-header-row clickable-row" onClick={() => toggleMonth(month.key)}>
+                            <td colSpan={7} style={{ paddingLeft: 28 }}>
+                              <span className="month-group-toggle">{monthOpen ? '▾' : '▸'}</span>
+                              {formatMonthTh(month.key)}
+                              <span className="date-group-count"> ({month.count} ใบ)</span>
+                            </td>
+                          </tr>
+                          {monthOpen && month.days.map((day) => (
+                            <React.Fragment key={day.key}>
+                              <tr className="date-group-header-row">
+                                <td colSpan={7}>
+                                  {formatDateTh(day.key)}
+                                  <span className="date-group-count"> ({day.rows.length} ใบ)</span>
+                                </td>
+                              </tr>
+                              {day.rows.map((n) => (
                     <tr key={n.id}>
                       <td data-label="รหัสใบแจ้งซ่อม">
                         <strong>{n.code}</strong>
@@ -169,9 +211,15 @@ export default function RepairNoticeListPage() {
                         </button>
                       </td>
                     </tr>
-                  ))}
-                </React.Fragment>
-              ))}
+                              ))}
+                            </React.Fragment>
+                          ))}
+                        </React.Fragment>
+                      );
+                    })}
+                  </React.Fragment>
+                );
+              })}
             </tbody>
           </table>
         </div>

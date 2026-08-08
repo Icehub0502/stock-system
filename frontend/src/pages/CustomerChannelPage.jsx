@@ -120,8 +120,6 @@ export default function CustomerChannelPage() {
     return FOUND_VIA_CHANNELS.map((c) => ({ ...c, count: counts[c.value] }));
   }, [records]);
 
-  const maxCount = Math.max(...channelCounts.map((c) => c.count), 1);
-
   return (
     <div className="quotation-page">
       <div className="quotation-header">
@@ -202,17 +200,26 @@ export default function CustomerChannelPage() {
       ) : (
         <>
           <div className="dash-panel">
-            <div className="dash-panel-title">กราฟสรุปช่องทาง ({records.length} คน)</div>
-            <div className="decline-summary-chart">
-              {channelCounts.map((c) => (
-                <div key={c.value} className="decline-summary-bar-row">
-                  <span className="decline-summary-bar-label">{c.label}</span>
-                  <div className="decline-summary-bar-track">
-                    <div className="decline-summary-bar-fill" style={{ width: `${(c.count / maxCount) * 100}%` }} />
-                  </div>
-                  <span className="decline-summary-bar-count">{c.count}</span>
-                </div>
-              ))}
+            <div className="dash-panel-title">ตารางสรุปช่องทาง ({records.length} คน)</div>
+            <div className="quotation-table-wrap">
+              <table className="quotation-table">
+                <thead>
+                  <tr>
+                    <th>ช่องทาง</th>
+                    <th>จำนวน</th>
+                    <th>สัดส่วน</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {channelCounts.map((c) => (
+                    <tr key={c.value}>
+                      <td data-label="ช่องทาง">{c.label}</td>
+                      <td data-label="จำนวน">{c.count}</td>
+                      <td data-label="สัดส่วน">{records.length > 0 ? `${Math.round((c.count / records.length) * 100)}%` : '-'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
 
