@@ -623,12 +623,17 @@ async function initDatabase() {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
 
-  // vehicle_brand/vehicle_model: กรอกไม่บังคับตอนตัดสต๊อก (ดู StockDeductionPage.jsx)
-  // บันทึกว่าอะไหล่ชิ้นนี้ถูกจ่ายออกไปใช้กับรถยี่ห้อ/รุ่นไหน — ใช้สรุปรายงานว่าควร
-  // สต๊อกอะไหล่ของรถรุ่นไหนเป็นพิเศษ (ดู GET /transactions/usage-report) เจ้าของร้าน
-  // เลือกไม่รวม racks/wing_arms เป็นตารางเดียว เพราะมี QR code พิมพ์ติดชั้นวางจริง
-  // อยู่แล้วที่อ้างอิง endpoint เดิม — เชื่อมสองระบบผ่าน transactions ที่ทั้งคู่บันทึก
-  // ร่วมกันอยู่แล้ว (rack_id/wing_arm_id แบบ nullable คู่ขนาน) แทน
+  // vehicle_model: บันทึกอัตโนมัติตอนตัดสต๊อก (ดู StockDeductionPage.jsx +
+  // vehicleModelFromName.js) ว่าอะไหล่ชิ้นนี้ถูกจ่ายออกไปใช้กับรถรุ่นไหน — ดึงจากชื่อ
+  // รายการอะไหล่เอง (ชื่อระบุรุ่นรถอยู่แล้ว เช่น "แร็ค CHEVROLET AVEO ปี 2007-2013")
+  // ไม่ให้พนักงานพิมพ์ซ้ำ ใช้สรุปรายงานว่าควรสต๊อกอะไหล่ของรถรุ่นไหนเป็นพิเศษ (ดู
+  // GET /transactions/usage-report) เจ้าของร้านเลือกไม่รวม racks/wing_arms เป็นตาราง
+  // เดียว เพราะมี QR code พิมพ์ติดชั้นวางจริงอยู่แล้วที่อ้างอิง endpoint เดิม — เชื่อม
+  // สองระบบผ่าน transactions ที่ทั้งคู่บันทึกร่วมกันอยู่แล้ว (rack_id/wing_arm_id
+  // แบบ nullable คู่ขนาน) แทน — vehicle_brand เป็นคอลัมน์ที่เคยออกแบบไว้ตอนแรกให้
+  // พนักงานเลือกยี่ห้อเองแยกต่างหาก แต่เปลี่ยนใจใช้ชื่อรายการอัตโนมัติทั้งหมดแทน จึง
+  // เหลือเป็นคอลัมน์ที่ไม่มีโค้ดไหนเขียนอีกแล้ว (ไม่ลบ — ข้อมูล/schema ที่ deploy ไป
+  // แล้วไม่ควรย้อนแก้โดยไม่จำเป็น)
   await conn.query(`
     ALTER TABLE transactions
     ADD COLUMN vehicle_brand VARCHAR(100) DEFAULT NULL,

@@ -1,6 +1,7 @@
 const express = require('express');
 const pool = require('../db/pool');
 const { authenticate, requireRole } = require('../middleware/auth');
+const { vehicleModelFromRackName } = require('../utils/vehicleModelFromName');
 
 const router = express.Router();
 router.use(authenticate);
@@ -125,8 +126,10 @@ router.post('/in', async (req, res) => {
 });
 
 // ── จ่ายออกจากสต็อก ──
+// vehicle_model ไม่รับจาก client แล้ว — ดึงจากชื่อแร็คเอง (ชื่อระบุรุ่นรถอยู่แล้ว เช่น
+// "แร็ค CHEVROLET AVEO ปี 2007-2013") กันพนักงานต้องพิมพ์ซ้ำ (ดู vehicleModelFromName.js)
 router.post('/out', async (req, res) => {
-  const { model_code, qty = 1, note = '', vehicle_brand = null, vehicle_model = null } = req.body || {};
+  const { model_code, qty = 1, note = '' } = req.body || {};
   const quantity = Number(qty);
   if (!model_code || !quantity || quantity <= 0) {
     return res.status(400).json({ error: 'ข้อมูลไม่ถูกต้อง' });
@@ -149,8 +152,8 @@ router.post('/out', async (req, res) => {
 
     await conn.execute('UPDATE racks SET stock_qty = stock_qty - ? WHERE id = ?', [quantity, rack.id]);
     await conn.execute(
-      'INSERT INTO transactions (rack_id, type, qty, user_id, note, vehicle_brand, vehicle_model) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [rack.id, 'OUT', quantity, req.user.id, note, vehicle_brand || null, vehicle_model || null]
+      'INSERT INTO transactions (rack_id, type, qty, user_id, note, vehicle_model) VALUES (?, ?, ?, ?, ?, ?)',
+      [rack.id, 'OUT', quantity, req.user.id, note, vehicleModelFromRackName(rack.name)]
     );
     await conn.commit();
 
@@ -194,10 +197,10 @@ router.get('/', requireRole('office'), async (req, res) => {
   }
 });
 
-// ── รายงาน: อะไหล่ที่ถูกตัดสต๊อกบ่อยตามยี่ห้อ/รุ่นรถ ──
-// สรุปเฉพาะรายการ OUT ที่กรอกยี่ห้อ/รุ่นรถมาด้วยตอนตัดสต๊อก (ดู StockDeductionPage.jsx)
-// — รายการที่ไม่ได้กรอกจะไม่ถูกนับในนี้ (vehicle_brand เป็น null) กรองช่วงวันที่ได้
-// ด้วย from/to (YYYY-MM-DD ทั้งคู่ ไม่ระบุ = เอาทั้งหมด)
+// ── รายงาน: อะไหล่ที่ถูกตัดสต๊อกบ่อยตามรุ่นรถ ──
+// vehicle_model ถูกดึงจากชื่ออะไหล่อัตโนมัติตอนตัด (ดู vehicleModelFromName.js) ไม่ใช่
+// ข้อความที่พนักงานพิมพ์เอง กรองช่วงวันที่ได้ด้วย from/to (YYYY-MM-DD ทั้งคู่ ไม่ระบุ
+// = เอาทั้งหมด)
 router.get('/usage-report', requireRole('office'), async (req, res) => {
   const { from, to } = req.query;
   const params = [];
@@ -208,7 +211,6 @@ router.get('/usage-report', requireRole('office'), async (req, res) => {
   try {
     const [rows] = await pool.execute(`
       SELECT
-        t.vehicle_brand,
         t.vehicle_model,
         COALESCE(r.model_code, w.sku) AS part_code,
         COALESCE(r.name, w.name) AS part_name,
@@ -218,8 +220,8 @@ router.get('/usage-report', requireRole('office'), async (req, res) => {
       FROM transactions t
       LEFT JOIN racks r ON r.id = t.rack_id
       LEFT JOIN wing_arms w ON w.id = t.wing_arm_id
-      WHERE t.type = 'OUT' AND t.vehicle_brand IS NOT NULL${dateFilter}
-      GROUP BY t.vehicle_brand, t.vehicle_model, part_code, part_name, item_type
+      WHERE t.type = 'OUT' AND t.vehicle_model IS NOT NULL${dateFilter}
+      GROUP BY t.vehicle_model, part_code, part_name, item_type
       ORDER BY total_qty DESC
     `, params);
     res.json({ success: true, data: rows });

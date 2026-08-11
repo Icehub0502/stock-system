@@ -7,7 +7,7 @@ const YEAR_OPTIONS = Array.from({ length: 6 }, (_, i) => CURRENT_YEAR - i);
 
 // ช่วงวันที่เดียวกับ DeclinedSummaryPage.jsx (มุมมองวัน/เดือน/ปี) บวกตัวเลือก "ทั้งหมด"
 // เพิ่มเข้ามา เพราะฟีเจอร์นี้เพิ่งเปิดใช้ — ถ้าเริ่มที่ "วันนี้" เป็นค่าเริ่มต้นเหมือน
-// หน้าอื่นจะเจอตารางว่างเปล่าจนกว่าจะมีคนตัดสต๊อกแล้วกรอกยี่ห้อ/รุ่นรถจริง
+// หน้าอื่นจะเจอตารางว่างเปล่าจนกว่าจะมีคนตัดสต๊อกแล้วจริง
 function computePeriod(periodType, dayValue, monthValue, yearValue) {
   if (periodType === 'month') {
     const [y, m] = monthValue.split('-').map(Number);
@@ -23,10 +23,9 @@ function computePeriod(periodType, dayValue, monthValue, yearValue) {
   return { from: null, to: null }; // 'all'
 }
 
-// สรุปว่าอะไหล่ตัวไหนถูกตัดสต๊อกไปใช้กับรถยี่ห้อ/รุ่นไหนบ่อยสุด — มาจาก
-// transactions.vehicle_brand/vehicle_model ที่กรอกตอนตัด (ดู StockDeductionPage.jsx)
-// รายการที่ตัดโดยไม่กรอกยี่ห้อ/รุ่นรถจะไม่โผล่ในนี้ (backend กรอง vehicle_brand
-// IS NOT NULL ออกให้แล้ว)
+// สรุปว่าอะไหล่ตัวไหนถูกตัดสต๊อกไปใช้กับรถรุ่นไหนบ่อยสุด — vehicle_model มาจากชื่อ
+// รายการอะไหล่เอง ดึงอัตโนมัติตอนตัดสต๊อก (ดู vehicleModelFromName.js ฝั่ง backend,
+// StockDeductionPage.jsx ฝั่งหน้าตัดสต๊อก) ไม่ใช่ข้อความที่พนักงานพิมพ์เอง
 export default function StockUsageReportPage() {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -58,13 +57,13 @@ export default function StockUsageReportPage() {
     })();
   }, [from, to]);
 
-  // สรุปยอดรวมแยกตามยี่ห้อ/รุ่นรถ (ไม่แยกอะไหล่) ไว้ดูภาพรวมด้านบนตาราง — ใครมาบ่อย
+  // สรุปยอดรวมแยกตามรุ่นรถ (ไม่แยกอะไหล่) ไว้ดูภาพรวมด้านบนตาราง — รุ่นไหนมาบ่อย
   // ที่สุดจะได้เห็นทันทีโดยไม่ต้องไล่บวกเองจากตารางแยกอะไหล่ด้านล่าง
   const byModel = useMemo(() => {
     const map = new Map();
     for (const r of rows) {
-      const key = `${r.vehicle_brand}|${r.vehicle_model || ''}`;
-      const entry = map.get(key) || { vehicle_brand: r.vehicle_brand, vehicle_model: r.vehicle_model, total_qty: 0 };
+      const key = r.vehicle_model || '';
+      const entry = map.get(key) || { vehicle_model: r.vehicle_model, total_qty: 0 };
       entry.total_qty += Number(r.total_qty);
       map.set(key, entry);
     }
@@ -116,7 +115,7 @@ export default function StockUsageReportPage() {
       {loading ? (
         <div className="loading">กำลังโหลด...</div>
       ) : rows.length === 0 ? (
-        <div className="empty-message">ยังไม่มีข้อมูลการตัดสต๊อกที่ระบุยี่ห้อ/รุ่นรถในช่วงนี้</div>
+        <div className="empty-message">ยังไม่มีข้อมูลการตัดสต๊อกในช่วงนี้</div>
       ) : (
         <>
           <div className="dash-panel">
@@ -125,15 +124,13 @@ export default function StockUsageReportPage() {
               <table className="quotation-table">
                 <thead>
                   <tr>
-                    <th>ยี่ห้อ</th>
                     <th>รุ่นรถ</th>
                     <th>จำนวนอะไหล่ที่ตัดออกรวม</th>
                   </tr>
                 </thead>
                 <tbody>
                   {byModel.map((m) => (
-                    <tr key={`${m.vehicle_brand}|${m.vehicle_model}`}>
-                      <td data-label="ยี่ห้อ">{m.vehicle_brand}</td>
+                    <tr key={m.vehicle_model}>
                       <td data-label="รุ่นรถ">{m.vehicle_model || '-'}</td>
                       <td data-label="จำนวนอะไหล่ที่ตัดออกรวม">{m.total_qty.toLocaleString('en-US')}</td>
                     </tr>
@@ -149,7 +146,6 @@ export default function StockUsageReportPage() {
               <table className="quotation-table">
                 <thead>
                   <tr>
-                    <th>ยี่ห้อ</th>
                     <th>รุ่นรถ</th>
                     <th>ประเภท</th>
                     <th>รหัสอะไหล่</th>
@@ -161,7 +157,6 @@ export default function StockUsageReportPage() {
                 <tbody>
                   {rows.map((r, idx) => (
                     <tr key={idx}>
-                      <td data-label="ยี่ห้อ">{r.vehicle_brand}</td>
                       <td data-label="รุ่นรถ">{r.vehicle_model || '-'}</td>
                       <td data-label="ประเภท">{r.item_type === 'rack' ? 'แร็ค' : 'ปีกนก'}</td>
                       <td data-label="รหัสอะไหล่">{r.part_code}</td>

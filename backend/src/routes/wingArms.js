@@ -3,6 +3,14 @@ const router  = express.Router();
 const pool    = require('../db/pool');
 const QRCode  = require('qrcode');
 const { authenticate, requireRole } = require('../middleware/auth');
+const { vehicleModelFromWingArmName } = require('../utils/vehicleModelFromName');
+
+// ปีกนกใช้ทีละคู่เสมอ (ซ้าย+ขวา ตำแหน่ง/เพลาเดียวกัน) — จับคู่ด้วยชื่อที่ตัดคำ
+// "ซ้าย"/"ขวา" ออกแล้วตรงกัน (ดู vehicleModelFromWingArmName) ใช้ทั้งหา "อีกข้าง"
+// ตอนตัดสต๊อกเป็นคู่ (PATCH /pair-stock) และตอนคำนวณ vehicle_model ของรายงาน
+function stripSideWord(name) {
+  return String(name || '').replace(/(ซ้าย|ขวา)\s*/, '').trim();
+}
 
 router.use(authenticate);
 
@@ -154,8 +162,10 @@ router.get('/:id/qrcode', requireRole('office'), async (req, res) => {
 
 // PATCH /wing-arms/:id/stock
 // เปิดให้ทุก role ที่ login แล้ว (technician ใช้ตอนยืนยันสแกน)
+// vehicle_model ไม่รับจาก client แล้ว — ดึงจากชื่อปีกนกเอง เฉพาะตอนตัดออก (OUT) เท่านั้น
+// (รับเข้า/IN ไม่ได้ผูกกับรถคันไหน ไม่บันทึก) ดู vehicleModelFromName.js
 router.patch('/:id/stock', async (req, res) => {
-  const { delta, note = '', vehicle_brand = null, vehicle_model = null } = req.body;
+  const { delta, note = '' } = req.body;
   if (!delta || delta === 0) {
     return res.status(400).json({ error: 'ระบุ delta ที่ไม่เป็น 0' });
   }
@@ -182,12 +192,13 @@ router.patch('/:id/stock', async (req, res) => {
     await conn.query('UPDATE wing_arms SET stock_qty = ? WHERE id = ?', [newQty, req.params.id]);
 
     const userId = req.user?.id || req.body.user_id || 1;
+    const vehicleModel = delta < 0 ? vehicleModelFromWingArmName(rows[0].name) : null;
     // ใช้ wing_arm_id แยกจาก rack_id เพื่อไม่ให้ FK constraint fail
     // ถ้า column ยังไม่มีให้รัน migration SQL ด้านล่างก่อน
     try {
       await conn.query(
-        'INSERT INTO transactions (wing_arm_id, type, qty, user_id, note, vehicle_brand, vehicle_model) VALUES (?,?,?,?,?,?,?)',
-        [req.params.id, delta > 0 ? 'IN' : 'OUT', Math.abs(delta), userId, note, vehicle_brand || null, vehicle_model || null]
+        'INSERT INTO transactions (wing_arm_id, type, qty, user_id, note, vehicle_model) VALUES (?,?,?,?,?,?)',
+        [req.params.id, delta > 0 ? 'IN' : 'OUT', Math.abs(delta), userId, note, vehicleModel]
       );
     } catch (txErr) {
       // log แต่ไม่ fail — stock อัปเดตสำเร็จแล้ว
@@ -202,6 +213,74 @@ router.patch('/:id/stock', async (req, res) => {
     if (conn) await conn.rollback();
     console.error(err);
     res.status(500).json({ error: 'อัปเดตสต็อกไม่สำเร็จ' });
+  } finally {
+    if (conn) conn.release();
+  }
+});
+
+// PATCH /wing-arms/pair-stock — ตัดสต๊อกปีกนกพร้อมกันทั้งซ้าย-ขวาในทรานแซกชันเดียว
+// (เจ้าของร้านสั่ง: ปีกนกใช้ทีละคู่เสมอ กันลืมตัดอีกข้าง) client ต้องหา id ของอีกข้าง
+// มาเองก่อน (จับคู่ด้วย axle+position ตรงกัน+side ตรงข้าม+ชื่อไม่รวมคำว่าซ้าย/ขวา
+// ตรงกัน — ดู StockDeductionPage.jsx) endpoint นี้แค่ตรวจสต๊อก+ตัดให้ทั้งคู่แบบอะตอมิก
+// ไม่รับ id เดี่ยวมาเดาคู่เอง กันตัดผิดตัวถ้า client จับคู่มาไม่ตรง
+router.patch('/pair-stock', requireRole('office'), async (req, res) => {
+  const { left_id, right_id, qty, note = '' } = req.body || {};
+  const quantity = Number(qty);
+  if (!left_id || !right_id || left_id === right_id || !quantity || quantity <= 0) {
+    return res.status(400).json({ error: 'ข้อมูลไม่ถูกต้อง' });
+  }
+
+  let conn;
+  try {
+    conn = await pool.getConnection();
+    await conn.beginTransaction();
+
+    const [rows] = await conn.query(
+      'SELECT * FROM wing_arms WHERE id IN (?, ?) FOR UPDATE',
+      [left_id, right_id]
+    );
+    if (rows.length !== 2) {
+      await conn.rollback();
+      return res.status(404).json({ error: 'ไม่พบรายการทั้งคู่' });
+    }
+
+    // ตรวจว่าสองรายการที่ส่งมาเป็นคู่ซ้าย-ขวาของกันจริง ๆ (axle/position ตรงกัน,
+    // side ตรงข้ามกัน, ชื่อไม่รวมคำว่าซ้าย/ขวาตรงกัน) ไม่เชื่อ id ที่ client ส่งมาเฉย ๆ
+    // กันตัดผิดตัวถ้า logic จับคู่ฝั่ง frontend มีบั๊ก
+    const [a, b] = rows;
+    const isValidPair =
+      a.axle === b.axle &&
+      a.position === b.position &&
+      a.side !== b.side &&
+      stripSideWord(a.name) === stripSideWord(b.name);
+    if (!isValidPair) {
+      await conn.rollback();
+      return res.status(400).json({ error: 'สองรายการนี้ไม่ใช่คู่ซ้าย-ขวาของกัน' });
+    }
+
+    const short = rows.find((r) => r.stock_qty < quantity);
+    if (short) {
+      await conn.rollback();
+      return res.status(400).json({ error: `สต็อกเหลือไม่พอ (${short.sku} คงเหลือ ${short.stock_qty})` });
+    }
+
+    const userId = req.user?.id || 1;
+    for (const item of rows) {
+      await conn.query('UPDATE wing_arms SET stock_qty = stock_qty - ? WHERE id = ?', [quantity, item.id]);
+      await conn.query(
+        'INSERT INTO transactions (wing_arm_id, type, qty, user_id, note, vehicle_model) VALUES (?,?,?,?,?,?)',
+        [item.id, 'OUT', quantity, userId, note, vehicleModelFromWingArmName(item.name)]
+      );
+    }
+
+    await conn.commit();
+
+    const [updated] = await pool.query('SELECT * FROM wing_arms WHERE id IN (?, ?)', [left_id, right_id]);
+    res.json({ success: true, items: updated });
+  } catch (err) {
+    if (conn) await conn.rollback();
+    console.error(err);
+    res.status(500).json({ error: 'ตัดสต๊อกไม่สำเร็จ' });
   } finally {
     if (conn) conn.release();
   }
