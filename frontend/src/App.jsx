@@ -33,6 +33,8 @@ const WingArmDashboard = lazy(() => import("./pages/WingArmDashboard"));
 const DailySalesSummaryPage = lazy(() => import("./pages/DailySalesSummaryPage"));
 const RepairNoticeListPage = lazy(() => import("./pages/RepairNoticeListPage"));
 const RepairNoticePage = lazy(() => import("./pages/RepairNoticePage"));
+const StockDeductionPage = lazy(() => import("./pages/StockDeductionPage"));
+const StockUsageReportPage = lazy(() => import("./pages/StockUsageReportPage"));
 
 function Home() {
   const { user } = useAuth();
@@ -234,6 +236,22 @@ function AppRoutes() {
             element={
               <ProtectedRoute roles={["office", "technician"]}>
                 <RepairNoticePage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/stock-deduction"
+            element={
+              <ProtectedRoute roles={["office"]}>
+                <StockDeductionPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/stock-usage-report"
+            element={
+              <ProtectedRoute roles={["office"]}>
+                <StockUsageReportPage />
               </ProtectedRoute>
             }
           />

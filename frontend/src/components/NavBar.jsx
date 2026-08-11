@@ -11,6 +11,7 @@ const NAV_CATEGORIES = [
     items: [
       { to: "/stock-rack", label: "StockRack" },
       { to: "/wing-arms", label: "ปีกนก" },
+      { to: "/stock-deduction", label: "ตัดสต๊อก" },
       { to: "/service-items", label: "รายการสินค้า/บริการ" },
       { to: "/receipts", label: "บิลรับเข้า" },
       { to: "/product-costs", label: "ต้นทุนสินค้า" },
@@ -44,6 +45,7 @@ const NAV_CATEGORIES = [
     label: "รายงาน",
     items: [
       { to: "/history", label: "ประวัติรายการ" },
+      { to: "/stock-usage-report", label: "อะไหล่ตามรุ่นรถ" },
     ],
   },
 ];

@@ -155,7 +155,7 @@ router.get('/:id/qrcode', requireRole('office'), async (req, res) => {
 // PATCH /wing-arms/:id/stock
 // เปิดให้ทุก role ที่ login แล้ว (technician ใช้ตอนยืนยันสแกน)
 router.patch('/:id/stock', async (req, res) => {
-  const { delta, note = '' } = req.body;
+  const { delta, note = '', vehicle_brand = null, vehicle_model = null } = req.body;
   if (!delta || delta === 0) {
     return res.status(400).json({ error: 'ระบุ delta ที่ไม่เป็น 0' });
   }
@@ -186,8 +186,8 @@ router.patch('/:id/stock', async (req, res) => {
     // ถ้า column ยังไม่มีให้รัน migration SQL ด้านล่างก่อน
     try {
       await conn.query(
-        'INSERT INTO transactions (wing_arm_id, type, qty, user_id, note) VALUES (?,?,?,?,?)',
-        [req.params.id, delta > 0 ? 'IN' : 'OUT', Math.abs(delta), userId, note]
+        'INSERT INTO transactions (wing_arm_id, type, qty, user_id, note, vehicle_brand, vehicle_model) VALUES (?,?,?,?,?,?,?)',
+        [req.params.id, delta > 0 ? 'IN' : 'OUT', Math.abs(delta), userId, note, vehicle_brand || null, vehicle_model || null]
       );
     } catch (txErr) {
       // log แต่ไม่ fail — stock อัปเดตสำเร็จแล้ว

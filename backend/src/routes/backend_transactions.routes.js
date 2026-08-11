@@ -126,7 +126,7 @@ router.post('/in', async (req, res) => {
 
 // ── จ่ายออกจากสต็อก ──
 router.post('/out', async (req, res) => {
-  const { model_code, qty = 1, note = '' } = req.body || {};
+  const { model_code, qty = 1, note = '', vehicle_brand = null, vehicle_model = null } = req.body || {};
   const quantity = Number(qty);
   if (!model_code || !quantity || quantity <= 0) {
     return res.status(400).json({ error: 'ข้อมูลไม่ถูกต้อง' });
@@ -149,8 +149,8 @@ router.post('/out', async (req, res) => {
 
     await conn.execute('UPDATE racks SET stock_qty = stock_qty - ? WHERE id = ?', [quantity, rack.id]);
     await conn.execute(
-      'INSERT INTO transactions (rack_id, type, qty, user_id, note) VALUES (?, ?, ?, ?, ?)',
-      [rack.id, 'OUT', quantity, req.user.id, note]
+      'INSERT INTO transactions (rack_id, type, qty, user_id, note, vehicle_brand, vehicle_model) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [rack.id, 'OUT', quantity, req.user.id, note, vehicle_brand || null, vehicle_model || null]
     );
     await conn.commit();
 
@@ -166,15 +166,22 @@ router.post('/out', async (req, res) => {
 });
 
 // ── ประวัติรายการทั้งหมด ──
+// เดิม JOIN racks แบบ INNER JOIN เพียงอย่างเดียว ทำให้รายการของปีกนก (wing_arm_id
+// ไม่ใช่ null แต่ rack_id เป็น null) หายไปจากประวัติทั้งหมดโดยไม่มีใครสังเกตเห็น —
+// เปลี่ยนเป็น LEFT JOIN ทั้งสองตารางแล้ว COALESCE ชื่อ/รหัสแทน ให้เห็นครบทั้งสอง
+// ระบบสต๊อกในตารางเดียว (ดู model_code/name ของ racks กับ sku/name ของ wing_arms)
 router.get('/', requireRole('office'), async (req, res) => {
   try {
     const [rows] = await pool.execute(`
-      SELECT t.id, t.type, t.qty, t.note, t.created_at,
-             r.model_code, r.name AS rack_name,
+      SELECT t.id, t.type, t.qty, t.note, t.created_at, t.vehicle_brand, t.vehicle_model,
+             COALESCE(r.model_code, w.sku) AS model_code,
+             COALESCE(r.name, w.name) AS rack_name,
+             IF(t.rack_id IS NOT NULL, 'rack', 'wing_arm') AS item_type,
              u.username, u.full_name,
              s.invoice_no
       FROM transactions t
-      JOIN racks r ON r.id = t.rack_id
+      LEFT JOIN racks r ON r.id = t.rack_id
+      LEFT JOIN wing_arms w ON w.id = t.wing_arm_id
       JOIN users u ON u.id = t.user_id
       LEFT JOIN receipt_sessions s ON s.id = t.receipt_session_id
       ORDER BY t.created_at DESC
@@ -184,6 +191,41 @@ router.get('/', requireRole('office'), async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'โหลดประวัติไม่สำเร็จ' });
+  }
+});
+
+// ── รายงาน: อะไหล่ที่ถูกตัดสต๊อกบ่อยตามยี่ห้อ/รุ่นรถ ──
+// สรุปเฉพาะรายการ OUT ที่กรอกยี่ห้อ/รุ่นรถมาด้วยตอนตัดสต๊อก (ดู StockDeductionPage.jsx)
+// — รายการที่ไม่ได้กรอกจะไม่ถูกนับในนี้ (vehicle_brand เป็น null) กรองช่วงวันที่ได้
+// ด้วย from/to (YYYY-MM-DD ทั้งคู่ ไม่ระบุ = เอาทั้งหมด)
+router.get('/usage-report', requireRole('office'), async (req, res) => {
+  const { from, to } = req.query;
+  const params = [];
+  let dateFilter = '';
+  if (from) { dateFilter += ' AND t.created_at >= ?'; params.push(`${from} 00:00:00`); }
+  if (to) { dateFilter += ' AND t.created_at <= ?'; params.push(`${to} 23:59:59`); }
+
+  try {
+    const [rows] = await pool.execute(`
+      SELECT
+        t.vehicle_brand,
+        t.vehicle_model,
+        COALESCE(r.model_code, w.sku) AS part_code,
+        COALESCE(r.name, w.name) AS part_name,
+        IF(t.rack_id IS NOT NULL, 'rack', 'wing_arm') AS item_type,
+        SUM(t.qty) AS total_qty,
+        COUNT(*) AS movement_count
+      FROM transactions t
+      LEFT JOIN racks r ON r.id = t.rack_id
+      LEFT JOIN wing_arms w ON w.id = t.wing_arm_id
+      WHERE t.type = 'OUT' AND t.vehicle_brand IS NOT NULL${dateFilter}
+      GROUP BY t.vehicle_brand, t.vehicle_model, part_code, part_name, item_type
+      ORDER BY total_qty DESC
+    `, params);
+    res.json({ success: true, data: rows });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'โหลดรายงานไม่สำเร็จ' });
   }
 });
 

@@ -623,6 +623,18 @@ async function initDatabase() {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
 
+  // vehicle_brand/vehicle_model: กรอกไม่บังคับตอนตัดสต๊อก (ดู StockDeductionPage.jsx)
+  // บันทึกว่าอะไหล่ชิ้นนี้ถูกจ่ายออกไปใช้กับรถยี่ห้อ/รุ่นไหน — ใช้สรุปรายงานว่าควร
+  // สต๊อกอะไหล่ของรถรุ่นไหนเป็นพิเศษ (ดู GET /transactions/usage-report) เจ้าของร้าน
+  // เลือกไม่รวม racks/wing_arms เป็นตารางเดียว เพราะมี QR code พิมพ์ติดชั้นวางจริง
+  // อยู่แล้วที่อ้างอิง endpoint เดิม — เชื่อมสองระบบผ่าน transactions ที่ทั้งคู่บันทึก
+  // ร่วมกันอยู่แล้ว (rack_id/wing_arm_id แบบ nullable คู่ขนาน) แทน
+  await conn.query(`
+    ALTER TABLE transactions
+    ADD COLUMN vehicle_brand VARCHAR(100) DEFAULT NULL,
+    ADD COLUMN vehicle_model VARCHAR(150) DEFAULT NULL
+  `).catch(ignoreIfAlreadyApplied);
+
   const [userRows] = await conn.query(
     'SELECT COUNT(*) AS c FROM users'
   );
