@@ -46,27 +46,4 @@ router.get('/models', async (req, res) => {
   }
 });
 
-// GET /vehicle-models/all — รุ่นรถทั้งหมดในแคตตาล็อกอ้างอิงแบบแบน (ไม่แยกขั้นยี่ห้อ
-// ก่อน) ให้หน้าตัดสต๊อก (StockDeductionPage.jsx) ทำเป็น dropdown เดียวเลือกรุ่นรถ
-// ได้ตรง ๆ ไม่ต้องเดา/พิมพ์เอง — ข้อมูลมีแค่ ~500 แถว พอสำหรับ dropdown เดียว
-router.get('/all', async (req, res) => {
-  try {
-    const [rows] = await pool.query(
-      `SELECT brand, model, year_range
-       FROM vehicle_models
-       ORDER BY brand ASC, id ASC`
-    );
-    const data = rows.map((r) => ({
-      brand: r.brand,
-      model: r.model,
-      year_range: r.year_range,
-      label: `${r.brand} ${r.model}${r.year_range ? ` (${r.year_range})` : ''}`,
-    }));
-    res.json({ success: true, data });
-  } catch (err) {
-    console.error('Error loading full vehicle model list:', err);
-    res.status(500).json({ error: 'โหลดรายการรุ่นรถไม่สำเร็จ' });
-  }
-});
-
 module.exports = router;
