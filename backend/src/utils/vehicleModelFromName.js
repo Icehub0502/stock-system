@@ -13,7 +13,9 @@ function vehicleModelFromRackName(name) {
 function vehicleModelFromWingArmName(name) {
   return String(name || '')
     .replace(/^ปีกนก(?:บน|ล่าง)?\s*/i, '')
-    .replace(/(ซ้าย|ขวา)\s*/, '')
+    .replace(/(ซ้าย|ขวา)/g, '')
+    .replace(/\bLH\b|\bRH\b/gi, '')
+    .replace(/\s+/g, ' ')
     .trim();
 }
 

@@ -5,11 +5,18 @@ const QRCode  = require('qrcode');
 const { authenticate, requireRole } = require('../middleware/auth');
 const { vehicleModelFromWingArmName } = require('../utils/vehicleModelFromName');
 
-// ปีกนกใช้ทีละคู่เสมอ (ซ้าย+ขวา ตำแหน่ง/เพลาเดียวกัน) — จับคู่ด้วยชื่อที่ตัดคำ
-// "ซ้าย"/"ขวา" ออกแล้วตรงกัน (ดู vehicleModelFromWingArmName) ใช้ทั้งหา "อีกข้าง"
-// ตอนตัดสต๊อกเป็นคู่ (PATCH /pair-stock) และตอนคำนวณ vehicle_model ของรายงาน
+// ปีกนกใช้ทีละคู่เสมอ (ซ้าย+ขวา ตำแหน่ง/เพลาเดียวกัน) — จับคู่ด้วยชื่อที่ตัดคำบอกข้าง
+// ออกแล้วตรงกัน ต้องตัดทั้งคำไทย "ซ้าย"/"ขวา" (ตัดทุกจุดที่เจอ ไม่ใช่แค่จุดแรก) และ
+// คำย่ออังกฤษ "LH"/"RH" ท้ายชื่อ (เช่น "...ZS'17-21 LH" คู่กับ "...ZS'17-21 RH" —
+// พบจริงว่าบางรุ่นตั้งชื่อมีคำย่อนี้ต่อท้ายด้วย ถ้าตัดแค่คำไทยจะเหลือ LH/RH ค้างอยู่
+// ทำให้สองข้างเทียบกันไม่ตรงเลยหาคู่ไม่เจอ) ใช้ทั้งหา "อีกข้าง" ตอนตัดสต๊อกเป็นคู่
+// (PATCH /pair-stock) และตอนคำนวณ vehicle_model ของรายงาน
 function stripSideWord(name) {
-  return String(name || '').replace(/(ซ้าย|ขวา)\s*/, '').trim();
+  return String(name || '')
+    .replace(/(ซ้าย|ขวา)/g, '')
+    .replace(/\bLH\b|\bRH\b/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 router.use(authenticate);

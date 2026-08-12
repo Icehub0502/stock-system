@@ -15,8 +15,16 @@ import client from '../api/client';
 // ให้อัตโนมัติจาก axle/position ตรงกัน + side ตรงข้าม + ชื่อไม่รวมคำว่าซ้าย/ขวาตรงกัน
 // แล้วตัดสต๊อกทั้งคู่พร้อมกันผ่าน PATCH /wing-arms/pair-stock (อะตอมิกฝั่ง backend)
 // ถ้าหาคู่ไม่เจอ (ข้อมูลไม่ครบ/ตั้งชื่อไม่ตรงกัน) จะตัดได้แค่ข้างที่เลือกพร้อมเตือน
+// ต้องตัดทั้งคำไทย "ซ้าย"/"ขวา" (ทุกจุดที่เจอ) และคำย่ออังกฤษ "LH"/"RH" ท้ายชื่อ
+// (พบจริงว่าบางรุ่นตั้งชื่อมีคำย่อนี้ต่อท้ายด้วย เช่น "...ZS'17-21 LH" คู่กับ
+// "...ZS'17-21 RH" — ถ้าตัดแค่คำไทยจะเหลือ LH/RH ค้างอยู่ ทำให้สองข้างเทียบกัน
+// ไม่ตรงเลยหาคู่ไม่เจอ) mirror ของ backend/src/routes/wingArms.js
 function stripSideWord(name) {
-  return String(name || '').replace(/(ซ้าย|ขวา)\s*/, '').trim();
+  return String(name || '')
+    .replace(/(ซ้าย|ขวา)/g, '')
+    .replace(/\bLH\b|\bRH\b/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 function findWingArmPair(item, wingArms) {
