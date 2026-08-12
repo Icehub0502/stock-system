@@ -1,13 +1,15 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import client from '../api/client';
+import { vehicleModelFromRackName, vehicleModelFromWingArmName } from '../utils/vehicleModelFromName';
 
 // รวมรายการจาก racks + wing_arms มาค้นหา/เลือกในหน้าเดียว (แค่ระดับหน้าเว็บ ไม่ได้
 // รวมตารางฐานข้อมูลจริง — เจ้าของร้านเลือกไม่รวมเพราะมี QR code พิมพ์ติดชั้นวางจริง
 // ที่อ้างอิง endpoint เดิมของแต่ละระบบอยู่แล้ว) กดตัดสต๊อกแล้วเรียก endpoint เดิมของ
-// แต่ละระบบตรง ๆ ไม่เขียนตรรกะตัดสต๊อกซ้ำเลย — ไม่มีช่องกรอกยี่ห้อ/รุ่นรถอีกต่อไป
-// (backend ดึงมาจากชื่อรายการเองอัตโนมัติ เพราะชื่ออะไหล่ระบุรุ่นรถอยู่แล้ว เช่น
-// "แร็ค CHEVROLET AVEO ปี 2007-2013" — ดู vehicleModelFromName.js) เอาไปสรุปใน
-// หน้ารายงาน (StockUsageReportPage.jsx)
+// แต่ละระบบตรง ๆ ไม่เขียนตรรกะตัดสต๊อกซ้ำเลย — เลือกอะไหล่แล้วช่อง "รุ่นรถ" จะเดา
+// จากชื่ออะไหล่มาให้อัตโนมัติทันที (ชื่อระบุรุ่นรถอยู่แล้ว เช่น "แร็ค CHEVROLET
+// AVEO ปี 2007-2013" — ดู vehicleModelFromName.js) พนักงานเห็น/แก้ไขได้ก่อนยืนยัน
+// ค่าที่ส่งไปคือค่าที่ยืนยัน/แก้แล้วในช่องนี้ตรง ๆ (backend ไม่เดาซ้ำถ้า client ส่ง
+// vehicle_model มาแล้ว) เอาไปสรุปในหน้ารายงาน (StockUsageReportPage.jsx)
 //
 // ปีกนก (wing_arm) ใช้ทีละคู่เสมอ (ซ้าย+ขวา) — เลือกข้างไหนก็ได้ 1 ตัว ระบบหาคู่
 // ให้อัตโนมัติจาก axle/position ตรงกัน + side ตรงข้าม + ชื่อไม่รวมคำว่าซ้าย/ขวาตรงกัน
@@ -35,6 +37,7 @@ export default function StockDeductionPage() {
   const [selected, setSelected] = useState(null);
 
   const [qty, setQty] = useState('');
+  const [vehicleModel, setVehicleModel] = useState('');
   const [note, setNote] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
@@ -83,6 +86,7 @@ export default function StockDeductionPage() {
     setSelected(item);
     setSearch('');
     setQty('');
+    setVehicleModel(item.type === 'rack' ? vehicleModelFromRackName(item.name) : vehicleModelFromWingArmName(item.name));
     setErrorMsg('');
     setSuccessMsg('');
   };
@@ -90,6 +94,7 @@ export default function StockDeductionPage() {
   const resetForm = () => {
     setSelected(null);
     setQty('');
+    setVehicleModel('');
     setNote('');
   };
 
@@ -109,16 +114,17 @@ export default function StockDeductionPage() {
 
     setSubmitting(true);
     try {
+      const vehicle_model = vehicleModel.trim() || null;
       if (selected.type === 'rack') {
-        await client.post('/transactions/out', { model_code: selected.code, qty: quantity, note });
+        await client.post('/transactions/out', { model_code: selected.code, qty: quantity, note, vehicle_model });
       } else if (pair) {
         const leftItem = selected.side === 'left' ? selected : pair;
         const rightItem = selected.side === 'left' ? pair : selected;
         await client.patch('/wing-arms/pair-stock', {
-          left_id: leftItem.id, right_id: rightItem.id, qty: quantity, note,
+          left_id: leftItem.id, right_id: rightItem.id, qty: quantity, note, vehicle_model,
         });
       } else {
-        await client.patch(`/wing-arms/${selected.id}/stock`, { delta: -quantity, note });
+        await client.patch(`/wing-arms/${selected.id}/stock`, { delta: -quantity, note, vehicle_model });
       }
       setSuccessMsg(
         pair
@@ -221,6 +227,14 @@ export default function StockDeductionPage() {
               value={qty}
               onChange={(e) => setQty(e.target.value)}
               required
+            />
+
+            <label>รุ่นรถ (เดาจากชื่อรายการให้แล้ว แก้ไขได้)</label>
+            <input
+              type="text"
+              placeholder="เช่น CHEVROLET AVEO ปี 2007-2013"
+              value={vehicleModel}
+              onChange={(e) => setVehicleModel(e.target.value)}
             />
 
             <label>หมายเหตุ</label>

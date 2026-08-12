@@ -162,10 +162,11 @@ router.get('/:id/qrcode', requireRole('office'), async (req, res) => {
 
 // PATCH /wing-arms/:id/stock
 // เปิดให้ทุก role ที่ login แล้ว (technician ใช้ตอนยืนยันสแกน)
-// vehicle_model ไม่รับจาก client แล้ว — ดึงจากชื่อปีกนกเอง เฉพาะตอนตัดออก (OUT) เท่านั้น
-// (รับเข้า/IN ไม่ได้ผูกกับรถคันไหน ไม่บันทึก) ดู vehicleModelFromName.js
+// vehicle_model: หน้าตัดสต๊อกเดาค่านี้จากชื่อปีกนกให้เองแล้วโชว์ให้พนักงานยืนยัน/แก้
+// ก่อนส่ง (ดู StockDeductionPage.jsx) — ใช้ค่าที่ client ส่งมาตรง ๆ ถ้ามี ไม่มีค่อย
+// fallback ไปเดาเอง เฉพาะตอนตัดออก (OUT) เท่านั้น (รับเข้า/IN ไม่ผูกกับรถคันไหน)
 router.patch('/:id/stock', async (req, res) => {
-  const { delta, note = '' } = req.body;
+  const { delta, note = '', vehicle_model } = req.body;
   if (!delta || delta === 0) {
     return res.status(400).json({ error: 'ระบุ delta ที่ไม่เป็น 0' });
   }
@@ -192,7 +193,7 @@ router.patch('/:id/stock', async (req, res) => {
     await conn.query('UPDATE wing_arms SET stock_qty = ? WHERE id = ?', [newQty, req.params.id]);
 
     const userId = req.user?.id || req.body.user_id || 1;
-    const vehicleModel = delta < 0 ? vehicleModelFromWingArmName(rows[0].name) : null;
+    const vehicleModel = delta < 0 ? (vehicle_model || vehicleModelFromWingArmName(rows[0].name)) : null;
     // ใช้ wing_arm_id แยกจาก rack_id เพื่อไม่ให้ FK constraint fail
     // ถ้า column ยังไม่มีให้รัน migration SQL ด้านล่างก่อน
     try {
@@ -224,7 +225,7 @@ router.patch('/:id/stock', async (req, res) => {
 // ตรงกัน — ดู StockDeductionPage.jsx) endpoint นี้แค่ตรวจสต๊อก+ตัดให้ทั้งคู่แบบอะตอมิก
 // ไม่รับ id เดี่ยวมาเดาคู่เอง กันตัดผิดตัวถ้า client จับคู่มาไม่ตรง
 router.patch('/pair-stock', requireRole('office'), async (req, res) => {
-  const { left_id, right_id, qty, note = '' } = req.body || {};
+  const { left_id, right_id, qty, note = '', vehicle_model } = req.body || {};
   const quantity = Number(qty);
   if (!left_id || !right_id || left_id === right_id || !quantity || quantity <= 0) {
     return res.status(400).json({ error: 'ข้อมูลไม่ถูกต้อง' });
@@ -269,7 +270,7 @@ router.patch('/pair-stock', requireRole('office'), async (req, res) => {
       await conn.query('UPDATE wing_arms SET stock_qty = stock_qty - ? WHERE id = ?', [quantity, item.id]);
       await conn.query(
         'INSERT INTO transactions (wing_arm_id, type, qty, user_id, note, vehicle_model) VALUES (?,?,?,?,?,?)',
-        [item.id, 'OUT', quantity, userId, note, vehicleModelFromWingArmName(item.name)]
+        [item.id, 'OUT', quantity, userId, note, vehicle_model || vehicleModelFromWingArmName(item.name)]
       );
     }
 

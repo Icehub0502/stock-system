@@ -126,10 +126,12 @@ router.post('/in', async (req, res) => {
 });
 
 // ── จ่ายออกจากสต็อก ──
-// vehicle_model ไม่รับจาก client แล้ว — ดึงจากชื่อแร็คเอง (ชื่อระบุรุ่นรถอยู่แล้ว เช่น
-// "แร็ค CHEVROLET AVEO ปี 2007-2013") กันพนักงานต้องพิมพ์ซ้ำ (ดู vehicleModelFromName.js)
+// vehicle_model: หน้าตัดสต๊อก (StockDeductionPage.jsx) เดาค่านี้จากชื่อแร็คให้เอง
+// แล้วโชว์เป็นช่องกรอกให้พนักงานยืนยัน/แก้ก่อนส่ง — ค่าที่ส่งมาจาก client ใช้ตรง ๆ
+// ไม่มีส่ง/ว่างเปล่าค่อย fallback ไปเดาจากชื่อเองอีกที (กันเรียก endpoint นี้ตรง ๆ
+// โดยไม่ผ่านหน้าตัดสต๊อก เช่นเรียกจาก API ภายนอก)
 router.post('/out', async (req, res) => {
-  const { model_code, qty = 1, note = '' } = req.body || {};
+  const { model_code, qty = 1, note = '', vehicle_model } = req.body || {};
   const quantity = Number(qty);
   if (!model_code || !quantity || quantity <= 0) {
     return res.status(400).json({ error: 'ข้อมูลไม่ถูกต้อง' });
@@ -153,7 +155,7 @@ router.post('/out', async (req, res) => {
     await conn.execute('UPDATE racks SET stock_qty = stock_qty - ? WHERE id = ?', [quantity, rack.id]);
     await conn.execute(
       'INSERT INTO transactions (rack_id, type, qty, user_id, note, vehicle_model) VALUES (?, ?, ?, ?, ?, ?)',
-      [rack.id, 'OUT', quantity, req.user.id, note, vehicleModelFromRackName(rack.name)]
+      [rack.id, 'OUT', quantity, req.user.id, note, vehicle_model || vehicleModelFromRackName(rack.name)]
     );
     await conn.commit();
 
