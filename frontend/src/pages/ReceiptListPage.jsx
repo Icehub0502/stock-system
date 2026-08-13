@@ -1,12 +1,10 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import client from "../api/client";
 import ReceiptFormModal from "../components/ReceiptFormModal";
 import ReceiptPrintModal from "../components/ReceiptPrintModal";
 import { buildArchiveGroups, formatDateTh, formatMonthTh, formatYearTh } from "../utils/dateGroups";
 
 export default function ReceiptListPage() {
-  const navigate = useNavigate();
   const [receipts, setReceipts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -88,14 +86,11 @@ export default function ReceiptListPage() {
     }
   };
 
-  const handlePrinted = (receiptId, receiptDate) => {
+  const handlePrinted = (receiptId) => {
     setReceipts((prev) =>
       prev.map((r) => (r.id === receiptId ? { ...r, printed_at: new Date().toISOString() } : r))
     );
     setSelectedReceiptForPrint(null);
-    if (receiptDate) {
-      navigate('/daily-summary', { state: { openDate: receiptDate } });
-    }
   };
 
   return (

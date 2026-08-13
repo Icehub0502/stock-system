@@ -11,14 +11,36 @@ import client from '../api/client';
 // ในหน้ารายงาน (StockUsageReportPage.jsx) — ฟอร์มยืนยันเปิดเป็น modal ทับหน้า
 // รายการเดิม (ไม่สลับเนื้อหาทั้งหน้า) ปิด modal แล้วกลับมาเห็นรายการเดิมทันที
 //
-// ปีกนก (wing_arm) ใช้ทีละคู่เสมอ (ซ้าย+ขวา) — เลือกข้างไหนก็ได้ 1 ตัว ระบบหาคู่
-// ให้อัตโนมัติจาก axle/position ตรงกัน + side ตรงข้าม + ชื่อไม่รวมคำว่าซ้าย/ขวาตรงกัน
-// แล้วตัดสต๊อกทั้งคู่พร้อมกันผ่าน PATCH /wing-arms/pair-stock (อะตอมิกฝั่ง backend)
-// ถ้าหาคู่ไม่เจอ (ข้อมูลไม่ครบ/ตั้งชื่อไม่ตรงกัน) จะตัดได้แค่ข้างที่เลือกพร้อมเตือน
-// ต้องตัดทั้งคำไทย "ซ้าย"/"ขวา" (ทุกจุดที่เจอ) และคำย่ออังกฤษ "LH"/"RH" ท้ายชื่อ
-// (พบจริงว่าบางรุ่นตั้งชื่อมีคำย่อนี้ต่อท้ายด้วย เช่น "...ZS'17-21 LH" คู่กับ
-// "...ZS'17-21 RH" — ถ้าตัดแค่คำไทยจะเหลือ LH/RH ค้างอยู่ ทำให้สองข้างเทียบกัน
-// ไม่ตรงเลยหาคู่ไม่เจอ) mirror ของ backend/src/routes/wingArms.js
+// ปีกนก (wing_arm) ใช้ทีละคู่เสมอ (ซ้าย+ขวา) — เลือกข้างไหนก็ได้ 1 ตัว ระบบหาคู่ให้
+// อัตโนมัติ แล้วตัดสต๊อกทั้งคู่พร้อมกันผ่าน PATCH /wing-arms/pair-stock (อะตอมิกฝั่ง
+// backend) ถ้าหาคู่ไม่เจอ (ข้อมูลจริงไม่มีคู่ในระบบ) จะตัดได้แค่ข้างที่เลือกพร้อมเตือน
+//
+// จับคู่ 2 ชั้น (ตรวจข้อมูลจริงทั้ง 328 แถวแล้วออกแบบตามนี้ — เจอ 6/328 แถวที่
+// ชั้นแรกอย่างเดียวไม่พอ, เหลือแค่ 2/328 หลังรวมชั้นสองที่เป็น gap ข้อมูลจริง ไม่ใช่
+// บั๊ก คือ SKU เดี่ยวไม่มีคู่ในระบบเลย):
+//   1) รหัส SKU ยาวเท่ากัน + ต่างกันตำแหน่งเดียว + ตำแหน่งนั้นเป็น L↔R (เช่น
+//      "FDCA039U-RB"/"FDCA039U-LB", "3A2-MGZSL /333"/"3A2-MGZSR /333") — น่าเชื่อถือ
+//      สุด เพราะทนต่อ typo ในชื่อ/คอลัมน์ side-axle ที่พบว่ากรอกผิดได้จริง (เช่น SKU
+//      ...-RA แต่ side ในฐานข้อมูลดันเป็น 'left' เหมือนคู่ซ้ายของมัน)
+//   2) ชั้นสำรอง (เจอเมื่อ SKU ไม่ใช่รูปแบบ L/R เช่นรหัสอะไหล่ยี่ห้อ Honda ที่ต่างกัน
+//      ด้วยตัวเลขไม่ใช่ตัวอักษร) — axle/position ตรงกัน + side ตรงข้าม + ชื่อตัดคำ
+//      "ซ้าย"/"ขวา"/"LH"/"RH" แล้วเหมือนกัน
+function findSkuSideDiffIndex(codeA, codeB) {
+  const a = String(codeA || '').toUpperCase();
+  const b = String(codeB || '').toUpperCase();
+  if (a.length !== b.length) return -1;
+  let diffIndex = -1;
+  for (let i = 0; i < a.length; i += 1) {
+    if (a[i] !== b[i]) {
+      if (diffIndex !== -1) return -1; // ต่างกันมากกว่า 1 ตำแหน่ง ไม่ใช่คู่
+      diffIndex = i;
+    }
+  }
+  if (diffIndex === -1) return -1; // รหัสเดียวกันเป๊ะ ไม่นับ
+  const pair = [a[diffIndex], b[diffIndex]].sort().join('');
+  return pair === 'LR' ? diffIndex : -1;
+}
+
 function stripSideWord(name) {
   return String(name || '')
     .replace(/(ซ้าย|ขวา)/g, '')
@@ -28,6 +50,8 @@ function stripSideWord(name) {
 }
 
 function findWingArmPair(item, wingArms) {
+  const skuMatch = wingArms.find((w) => w.id !== item.id && findSkuSideDiffIndex(item.code, w.code) !== -1);
+  if (skuMatch) return skuMatch;
   return wingArms.find((w) =>
     w.id !== item.id &&
     w.axle === item.axle &&
@@ -35,6 +59,16 @@ function findWingArmPair(item, wingArms) {
     w.side !== item.side &&
     stripSideWord(w.name) === stripSideWord(item.name)
   ) || null;
+}
+
+// ข้างไหนคือ "ซ้าย" — ถ้าจับคู่ได้ด้วย SKU ใช้ตัวอักษร L/R ที่ตำแหน่งต่างกันของ SKU
+// เอง (แม่นกว่าคอลัมน์ side จาก DB ที่พิสูจน์แล้วว่ามีข้อมูลกรอกผิดจริง) ถ้าจับคู่
+// ได้ผ่านชั้นสำรอง (ชื่อ/side) ค่อย fallback ไปเชื่อคอลัมน์ side แทน (เชื่อถือได้ใน
+// เคสนี้ เพราะเป็นเงื่อนไขที่ใช้จับคู่ตั้งแต่แรกอยู่แล้ว)
+function skuSide(item, pair) {
+  const idx = findSkuSideDiffIndex(item.code, pair.code);
+  if (idx !== -1) return item.code.toUpperCase()[idx] === 'L' ? 'left' : 'right';
+  return item.side || null;
 }
 
 export default function StockDeductionPage() {
@@ -140,8 +174,9 @@ export default function StockDeductionPage() {
       if (selected.type === 'rack') {
         await client.post('/transactions/out', { model_code: selected.code, qty: quantity, note, vehicle_model });
       } else if (pair) {
-        const leftItem = selected.side === 'left' ? selected : pair;
-        const rightItem = selected.side === 'left' ? pair : selected;
+        const isSelectedLeft = skuSide(selected, pair) === 'left';
+        const leftItem = isSelectedLeft ? selected : pair;
+        const rightItem = isSelectedLeft ? pair : selected;
         await client.patch('/wing-arms/pair-stock', {
           left_id: leftItem.id, right_id: rightItem.id, qty: quantity, note, vehicle_model,
         });
@@ -150,7 +185,7 @@ export default function StockDeductionPage() {
       }
       setSuccessMsg(
         pair
-          ? `ตัดสต๊อก "${stripSideWord(selected.name)}" (ซ้าย+ขวา) จำนวน ${quantity} คู่ สำเร็จ`
+          ? `ตัดสต๊อก "${selected.name}" (ซ้าย+ขวา) จำนวน ${quantity} คู่ สำเร็จ`
           : `ตัดสต๊อก "${selected.name}" จำนวน ${quantity} สำเร็จ`
       );
       resetForm();
@@ -230,7 +265,7 @@ export default function StockDeductionPage() {
             {selected.type === 'wing_arm' && (
               pair ? (
                 <p style={{ marginBottom: 16, color: '#15803d', fontSize: 14 }}>
-                  ✅ พบคู่: <strong>{pair.sku}</strong> ({pair.side === 'left' ? 'ซ้าย' : 'ขวา'}) สต็อกคงเหลือ {pair.stock_qty} — จะตัดพร้อมกันทั้งคู่
+                  ✅ พบคู่: <strong>{pair.code}</strong> ({skuSide(pair, selected) === 'left' ? 'ซ้าย' : 'ขวา'}) สต็อกคงเหลือ {pair.stock_qty} — จะตัดพร้อมกันทั้งคู่
                 </p>
               ) : (
                 <p style={{ marginBottom: 16, color: '#92400e', fontSize: 14 }}>

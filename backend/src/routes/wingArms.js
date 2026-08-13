@@ -5,18 +5,44 @@ const QRCode  = require('qrcode');
 const { authenticate, requireRole } = require('../middleware/auth');
 const { vehicleModelFromWingArmName } = require('../utils/vehicleModelFromName');
 
-// ปีกนกใช้ทีละคู่เสมอ (ซ้าย+ขวา ตำแหน่ง/เพลาเดียวกัน) — จับคู่ด้วยชื่อที่ตัดคำบอกข้าง
-// ออกแล้วตรงกัน ต้องตัดทั้งคำไทย "ซ้าย"/"ขวา" (ตัดทุกจุดที่เจอ ไม่ใช่แค่จุดแรก) และ
-// คำย่ออังกฤษ "LH"/"RH" ท้ายชื่อ (เช่น "...ZS'17-21 LH" คู่กับ "...ZS'17-21 RH" —
-// พบจริงว่าบางรุ่นตั้งชื่อมีคำย่อนี้ต่อท้ายด้วย ถ้าตัดแค่คำไทยจะเหลือ LH/RH ค้างอยู่
-// ทำให้สองข้างเทียบกันไม่ตรงเลยหาคู่ไม่เจอ) ใช้ทั้งหา "อีกข้าง" ตอนตัดสต๊อกเป็นคู่
-// (PATCH /pair-stock) และตอนคำนวณ vehicle_model ของรายงาน
+// ปีกนกใช้ทีละคู่เสมอ (ซ้าย+ขวา) — ตรวจคู่ 2 ชั้น (mirror ของ
+// frontend/src/pages/StockDeductionPage.jsx ทุกประการ ดูคอมเมนต์ละเอียดที่นั่น):
+//   1) SKU ยาวเท่ากัน + ต่างกันตำแหน่งเดียว + ตำแหน่งนั้นเป็น L↔R — เชื่อถือได้สุด
+//      เพราะทนต่อ typo ในชื่อ/คอลัมน์ side ที่พบว่ากรอกผิดได้จริงในข้อมูลจริง
+//   2) ชั้นสำรอง (SKU ไม่ใช่รูปแบบ L/R เช่นรหัสอะไหล่ที่ต่างกันด้วยตัวเลข) — axle/
+//      position ตรงกัน + side ตรงข้าม + ชื่อตัดคำ "ซ้าย"/"ขวา"/"LH"/"RH" แล้วเหมือนกัน
+// ใช้ตรวจคู่ตอนตัดสต๊อกเป็นคู่ (PATCH /pair-stock — ไม่เชื่อ id ที่ client ส่งมาเฉย ๆ
+// ต้องตรวจซ้ำฝั่งนี้ด้วย)
+function isSkuSidePair(codeA, codeB) {
+  const a = String(codeA || '').toUpperCase();
+  const b = String(codeB || '').toUpperCase();
+  if (a.length !== b.length || a === b) return false;
+  let diffIndex = -1;
+  for (let i = 0; i < a.length; i += 1) {
+    if (a[i] !== b[i]) {
+      if (diffIndex !== -1) return false; // ต่างกันมากกว่า 1 ตำแหน่ง ไม่ใช่คู่
+      diffIndex = i;
+    }
+  }
+  return diffIndex !== -1 && [a[diffIndex], b[diffIndex]].sort().join('') === 'LR';
+}
+
 function stripSideWord(name) {
   return String(name || '')
     .replace(/(ซ้าย|ขวา)/g, '')
     .replace(/\bLH\b|\bRH\b/gi, '')
     .replace(/\s+/g, ' ')
     .trim();
+}
+
+function isValidWingArmPair(a, b) {
+  if (isSkuSidePair(a.sku, b.sku)) return true;
+  return (
+    a.axle === b.axle &&
+    a.position === b.position &&
+    a.side !== b.side &&
+    stripSideWord(a.name) === stripSideWord(b.name)
+  );
 }
 
 router.use(authenticate);
@@ -252,16 +278,10 @@ router.patch('/pair-stock', requireRole('office'), async (req, res) => {
       return res.status(404).json({ error: 'ไม่พบรายการทั้งคู่' });
     }
 
-    // ตรวจว่าสองรายการที่ส่งมาเป็นคู่ซ้าย-ขวาของกันจริง ๆ (axle/position ตรงกัน,
-    // side ตรงข้ามกัน, ชื่อไม่รวมคำว่าซ้าย/ขวาตรงกัน) ไม่เชื่อ id ที่ client ส่งมาเฉย ๆ
-    // กันตัดผิดตัวถ้า logic จับคู่ฝั่ง frontend มีบั๊ก
+    // ตรวจว่าสองรายการที่ส่งมาเป็นคู่ซ้าย-ขวาของกันจริง ๆ (ไม่เชื่อ id ที่ client
+    // ส่งมาเฉย ๆ กันตัดผิดตัวถ้า logic จับคู่ฝั่ง frontend มีบั๊ก)
     const [a, b] = rows;
-    const isValidPair =
-      a.axle === b.axle &&
-      a.position === b.position &&
-      a.side !== b.side &&
-      stripSideWord(a.name) === stripSideWord(b.name);
-    if (!isValidPair) {
+    if (!isValidWingArmPair(a, b)) {
       await conn.rollback();
       return res.status(400).json({ error: 'สองรายการนี้ไม่ใช่คู่ซ้าย-ขวาของกัน' });
     }
