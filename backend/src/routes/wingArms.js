@@ -82,6 +82,31 @@ router.get('/lookup/:code', async (req, res) => {
   }
 });
 
+// GET /wing-arms/search?q=... — ค้นหาปีกนกแบบย่อ สำหรับหน้าสแกนตอน QR เสีย/อ่านไม่ออก
+// แล้วต้องกรอกหารายการเอง (ดู TechnicianScanPage.jsx) เปิดให้ทุก role ที่ login แล้ว
+// เหมือน /lookup/:code ด้านบน เพราะช่างเป็นคนสแกนจ่ายออกเองอยู่แล้ว — ตั้งใจแยกจาก
+// GET / (รายการเต็มสำหรับหน้าจัดการ ซึ่งจำกัดเฉพาะ office) ไม่ไปขยายสิทธิ์ route เดิม
+// ต้องประกาศก่อน /:id เสมอ ไม่งั้น Express จะจับ "search" เป็น :id
+router.get('/search', async (req, res) => {
+  const q = (req.query.q || '').trim();
+  if (!q) return res.json([]);
+  try {
+    const like = `%${q}%`;
+    const [rows] = await pool.query(
+      `SELECT id, sku, name, stock_qty, min_stock, position, axle, side
+       FROM wing_arms
+       WHERE sku LIKE ? OR name LIKE ?
+       ORDER BY sku ASC
+       LIMIT 30`,
+      [like, like]
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'ค้นหาปีกนกไม่สำเร็จ' });
+  }
+});
+
 // ─────────────────────────────────────────────────────────────────
 
 // GET /wing-arms
@@ -198,8 +223,11 @@ router.get('/:id/qrcode', requireRole('office'), async (req, res) => {
 // vehicle_model: หน้าตัดสต๊อกเดาค่านี้จากชื่อปีกนกให้เองแล้วโชว์ให้พนักงานยืนยัน/แก้
 // ก่อนส่ง (ดู StockDeductionPage.jsx) — ใช้ค่าที่ client ส่งมาตรง ๆ ถ้ามี ไม่มีค่อย
 // fallback ไปเดาเอง เฉพาะตอนตัดออก (OUT) เท่านั้น (รับเข้า/IN ไม่ผูกกับรถคันไหน)
+// receipt_session_id: ผูกรายการรับเข้ากับบิลรับสินค้า เหมือนที่ POST /transactions/in
+// ทำให้กับแร็ค — เดิมฝั่งปีกนกไม่รับพารามิเตอร์นี้เลย ปีกนกที่สแกนเข้าบิลจึงหลุดออกจาก
+// บิลทั้งหมด (ไม่โผล่ในหน้ารายละเอียดบิล และไม่ถูกนับใน item_count)
 router.patch('/:id/stock', async (req, res) => {
-  const { delta, note = '', vehicle_model } = req.body;
+  const { delta, note = '', vehicle_model, receipt_session_id = null } = req.body;
   if (!delta || delta === 0) {
     return res.status(400).json({ error: 'ระบุ delta ที่ไม่เป็น 0' });
   }
@@ -229,11 +257,13 @@ router.patch('/:id/stock', async (req, res) => {
     const vehicleModel = delta < 0 ? (vehicle_model || vehicleModelFromWingArmName(rows[0].name)) : null;
     // ใช้ wing_arm_id แยกจาก rack_id เพื่อไม่ให้ FK constraint fail
     // ถ้า column ยังไม่มีให้รัน migration SQL ด้านล่างก่อน
+    let transactionId = null;
     try {
-      await conn.query(
-        'INSERT INTO transactions (wing_arm_id, type, qty, user_id, note, vehicle_model) VALUES (?,?,?,?,?,?)',
-        [req.params.id, delta > 0 ? 'IN' : 'OUT', Math.abs(delta), userId, note, vehicleModel]
+      const [txResult] = await conn.query(
+        'INSERT INTO transactions (wing_arm_id, type, qty, user_id, note, vehicle_model, receipt_session_id) VALUES (?,?,?,?,?,?,?)',
+        [req.params.id, delta > 0 ? 'IN' : 'OUT', Math.abs(delta), userId, note, vehicleModel, receipt_session_id || null]
       );
+      transactionId = txResult.insertId;
     } catch (txErr) {
       // log แต่ไม่ fail — stock อัปเดตสำเร็จแล้ว
       console.warn('[wing-arm stock] tx log skipped:', txErr.message);
@@ -242,7 +272,8 @@ router.patch('/:id/stock', async (req, res) => {
     await conn.commit();
 
     const [updated] = await pool.query('SELECT * FROM wing_arms WHERE id = ?', [req.params.id]);
-    res.json(updated[0]);
+    // คืน transaction_id ให้หน้าสแกนเก็บไว้ เผื่อสแกนผิดแล้วกดลบทันที
+    res.json({ ...updated[0], transaction_id: transactionId });
   } catch (err) {
     if (conn) await conn.rollback();
     console.error(err);

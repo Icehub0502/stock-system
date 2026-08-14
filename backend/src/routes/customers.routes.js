@@ -176,7 +176,11 @@ router.put('/:id', async (req, res) => {
 // ชุดช่องทางคงที่ที่เลือกได้ (mirror กับ FOUND_VIA_CHANNELS ใน
 // frontend/src/utils/foundViaChannels.js — ต้องแก้ทั้งคู่พร้อมกันถ้าจะเพิ่ม/ลดตัวเลือก)
 // จำกัดเป็นค่าคงที่แทนข้อความอิสระ เพื่อให้หน้าสรุปสถิติจัดกลุ่มได้ถูกต้องแม่นยำ
-const FOUND_VIA_VALUES = ['google_map', 'facebook', 'friend', 'other'];
+// ⚠️ ห้ามแก้/ลบ 4 ค่าแรก มีข้อมูลลูกค้าที่บันทึกไว้ด้วยค่าพวกนี้อยู่แล้วในฐานข้อมูล
+const FOUND_VIA_VALUES = [
+  'google_map', 'facebook', 'friend', 'other',
+  'google_search', 'tiktok', 'line', 'pass_by', 'shop_referral', 'returning',
+];
 
 // บันทึกว่าลูกค้าคนนี้เจอร้านจากช่องทางไหน — เก็บไว้ประกอบการตัดสินใจยิงโฆษณา (หน้า
 // CustomerChannelPage.jsx) แยก endpoint ต่างหากจาก PUT /:id ด้านบน (ไม่ต้องพ่วง

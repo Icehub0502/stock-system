@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import client from '../api/client';
 import QRScanner from '../components/QRScanner';
 import { useAuth } from '../context/AuthContext';
@@ -54,10 +55,33 @@ const IconArrowUp = () => (
   </svg>
 );
 
+const IconSearch = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" width="18" height="18">
+    <circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/>
+  </svg>
+);
+const IconTrash = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" width="16" height="16">
+    <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/>
+  </svg>
+);
+const IconPlus = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" width="18" height="18">
+    <path d="M12 5v14M5 12h14"/>
+  </svg>
+);
+
 // ─────────────────────────────────────────
 //  STEP CONSTANTS
 // ─────────────────────────────────────────
-const STEP = { MODE: 'mode', INVOICE: 'invoice', SCAN: 'scan' };
+// DONE = หน้าสรุปหลังกด "เสร็จสิ้น" — ทวนของที่สแกนเข้าไปทั้งหมดก่อนปิดงาน
+// แก้ผิดได้ (ลบทีละรายการ) แล้วกลับไปสแกนต่อได้
+const STEP = { MODE: 'mode', INVOICE: 'invoice', SCAN: 'scan', DONE: 'done' };
+
+function todayStr() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
 
 // ─────────────────────────────────────────
 //  QUANTITY BOTTOM SHEET
@@ -117,6 +141,226 @@ function ConfirmSheet({ item, mode, onConfirm, onCancel, loading }) {
           {loading ? 'กำลังบันทึก...' : <><IconCheck /> ยืนยัน {isIN ? 'รับเข้า' : 'จ่ายออก'}</>}
         </button>
         <button style={styles.cancelLink} onClick={onCancel}>ยกเลิก</button>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────
+//  MANUAL ENTRY SHEET — ใช้ตอน QR เสีย/อ่านไม่ออก
+// ─────────────────────────────────────────
+//  ค้นหาอะไหล่ที่มีอยู่แล้วในระบบ (แร็ค + ปีกนก) แล้วเลือกทำรายการได้เหมือนสแกน
+//  ถ้าเป็นของใหม่ที่ยังไม่เคยลงระบบ (เฉพาะโหมดรับเข้า/office) กดเพิ่มเข้าคลังได้เลย
+//  ที่นี่ ไม่ต้องออกไปหน้าจัดการก่อน
+function ManualEntrySheet({ mode, canCreate, onPick, onCancel }) {
+  const [query, setQuery] = useState('');
+  const [racks, setRacks] = useState([]);
+  const [wingArms, setWingArms] = useState([]);
+  const [searching, setSearching] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [createErr, setCreateErr] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({
+    kind: 'rack', code: '', name: '',
+    position: 'lower', axle: 'front', side: 'left',
+  });
+
+  // แร็คมีไม่มาก โหลดครั้งเดียวแล้วกรองฝั่งหน้าเว็บ (แบบเดียวกับหน้าตัดสต๊อก)
+  useEffect(() => {
+    client.get('/racks').then((res) => setRacks(res.data || [])).catch(() => setRacks([]));
+  }, []);
+
+  // ปีกนกมีเยอะและช่างไม่มีสิทธิ์ดึงรายการเต็ม — ใช้ endpoint ค้นหาแทน
+  useEffect(() => {
+    const term = query.trim();
+    if (term.length < 2) { setWingArms([]); return; }
+    let cancelled = false;
+    setSearching(true);
+    const t = setTimeout(() => {
+      client.get('/wing-arms/search', { params: { q: term } })
+        .then((res) => { if (!cancelled) setWingArms(res.data || []); })
+        .catch(() => { if (!cancelled) setWingArms([]); })
+        .finally(() => { if (!cancelled) setSearching(false); });
+    }, 250);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [query]);
+
+  const term = query.trim().toLowerCase();
+  const rackHits = term.length < 1 ? [] : racks.filter(
+    (r) => r.model_code?.toLowerCase().includes(term) || r.name?.toLowerCase().includes(term)
+  ).slice(0, 30);
+
+  const results = [
+    ...rackHits.map((r) => ({ kind: 'rack', id: r.id, code: r.model_code, name: r.name, stock_qty: r.stock_qty, min_stock: r.min_stock, raw: r })),
+    ...wingArms.map((w) => ({ kind: 'wing-arm', id: w.id, code: w.sku, name: w.name, stock_qty: w.stock_qty, min_stock: w.min_stock, raw: w })),
+  ];
+
+  const handleCreate = async () => {
+    setCreateErr('');
+    if (!form.code.trim() || !form.name.trim()) {
+      setCreateErr('กรุณากรอกทั้งรหัสและชื่อรายการ');
+      return;
+    }
+    setSaving(true);
+    try {
+      if (form.kind === 'rack') {
+        const res = await client.post('/racks', {
+          model_code: form.code.trim(), name: form.name.trim(), stock_qty: 0, min_stock: 1,
+        });
+        onPick(res.data, 'rack');
+      } else {
+        const res = await client.post('/wing-arms', {
+          sku: form.code.trim(), name: form.name.trim(),
+          position: form.position, axle: form.axle, side: form.side,
+          stock_qty: 0, min_stock: 1,
+        });
+        onPick(res.data, 'wing-arm');
+      }
+    } catch (err) {
+      setCreateErr(err?.response?.data?.error || 'เพิ่มอะไหล่ใหม่ไม่สำเร็จ');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div style={styles.sheetBackdrop}>
+      <div style={{ ...styles.sheet, maxHeight: '85vh', overflowY: 'auto' }}>
+        <div style={{ width: 36, height: 4, borderRadius: 2, background: '#d1d5db', margin: '0 auto 16px' }} />
+
+        {!creating ? (
+          <>
+            <p style={{ fontSize: 15, fontWeight: 700, color: '#111', marginBottom: 2 }}>กรอกรายการเอง</p>
+            <p style={{ fontSize: 12, color: '#6b7280', marginBottom: 12 }}>
+              ใช้ตอน QR เสียหรือสแกนไม่ติด — ค้นหาด้วยรหัสหรือชื่อรายการ
+            </p>
+
+            <div style={{ position: 'relative', marginBottom: 12 }}>
+              <span style={{ position: 'absolute', left: 12, top: 11, color: '#9ca3af' }}><IconSearch /></span>
+              <input
+                autoFocus
+                type="text"
+                placeholder="พิมพ์รหัส หรือชื่อรายการ..."
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                style={{ ...styles.input, fontFamily: 'inherit', fontWeight: 400, paddingLeft: 38 }}
+              />
+            </div>
+
+            <div style={{ maxHeight: 300, overflowY: 'auto', margin: '0 -4px' }}>
+              {term.length < 1 && (
+                <p style={{ textAlign: 'center', color: '#9ca3af', fontSize: 12, padding: '24px 0' }}>
+                  พิมพ์เพื่อค้นหารายการ
+                </p>
+              )}
+              {term.length >= 1 && results.length === 0 && !searching && (
+                <p style={{ textAlign: 'center', color: '#9ca3af', fontSize: 12, padding: '24px 0' }}>
+                  ไม่พบรายการที่ตรงกับ "{query}"
+                </p>
+              )}
+              {results.map((it) => (
+                <button
+                  key={`${it.kind}-${it.id}`}
+                  style={styles.manualRow}
+                  onClick={() => onPick(it.raw, it.kind)}
+                >
+                  <div style={{ flex: 1, minWidth: 0, textAlign: 'left' }}>
+                    <p style={{ fontFamily: 'monospace', fontSize: 11, color: '#9ca3af', marginBottom: 2 }}>
+                      {it.code} · {it.kind === 'rack' ? 'แร็ค' : 'ปีกนก'}
+                    </p>
+                    <p style={{ fontSize: 13, fontWeight: 500, color: '#111', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {it.name}
+                    </p>
+                  </div>
+                  <span style={{ fontSize: 12, color: '#6b7280', flexShrink: 0 }}>
+                    เหลือ {it.stock_qty}
+                  </span>
+                </button>
+              ))}
+            </div>
+
+            {canCreate && (
+              <button style={styles.addNewBtn} onClick={() => { setCreating(true); setCreateErr(''); }}>
+                <IconPlus /> เพิ่มอะไหล่ใหม่ที่ยังไม่มีในระบบ
+              </button>
+            )}
+            <button style={styles.cancelLink} onClick={onCancel}>ยกเลิก</button>
+          </>
+        ) : (
+          <>
+            <p style={{ fontSize: 15, fontWeight: 700, color: '#111', marginBottom: 2 }}>เพิ่มอะไหล่ใหม่</p>
+            <p style={{ fontSize: 12, color: '#6b7280', marginBottom: 14 }}>
+              สร้างรายการใหม่เข้าคลัง แล้วรับเข้าสต็อกต่อได้ทันที (เริ่มที่ 0 ชิ้น)
+            </p>
+
+            <label style={styles.fieldLabel}>ประเภท</label>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+              {[{ v: 'rack', l: 'แร็ค' }, { v: 'wing-arm', l: 'ปีกนก' }].map((o) => (
+                <button
+                  key={o.v}
+                  onClick={() => setForm({ ...form, kind: o.v })}
+                  style={{ ...styles.segBtn, ...(form.kind === o.v ? styles.segBtnActive : {}) }}
+                >
+                  {o.l}
+                </button>
+              ))}
+            </div>
+
+            <label style={styles.fieldLabel}>{form.kind === 'rack' ? 'รหัสรุ่น' : 'รหัส SKU'}</label>
+            <input
+              type="text"
+              placeholder={form.kind === 'rack' ? 'เช่น RTTO5201' : 'เช่น CHCA005L-LA'}
+              value={form.code}
+              onChange={(e) => setForm({ ...form, code: e.target.value })}
+              style={{ ...styles.input, marginBottom: 12 }}
+            />
+
+            <label style={styles.fieldLabel}>ชื่อรายการ</label>
+            <input
+              type="text"
+              placeholder="ชื่อรายการอะไหล่"
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              style={{ ...styles.input, fontFamily: 'inherit', fontWeight: 400, marginBottom: 12 }}
+            />
+
+            {form.kind === 'wing-arm' && (
+              <>
+                <label style={styles.fieldLabel}>ตำแหน่ง / เพลา / ด้าน</label>
+                <div style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
+                  {[
+                    { k: 'position', opts: [{ v: 'upper', l: 'บน' }, { v: 'lower', l: 'ล่าง' }] },
+                    { k: 'axle', opts: [{ v: 'front', l: 'หน้า' }, { v: 'rear', l: 'หลัง' }] },
+                    { k: 'side', opts: [{ v: 'left', l: 'ซ้าย' }, { v: 'right', l: 'ขวา' }] },
+                  ].map((g) => (
+                    <div key={g.k} style={{ display: 'flex', gap: 4 }}>
+                      {g.opts.map((o) => (
+                        <button
+                          key={o.v}
+                          onClick={() => setForm({ ...form, [g.k]: o.v })}
+                          style={{ ...styles.segBtn, padding: '7px 12px', ...(form[g.k] === o.v ? styles.segBtnActive : {}) }}
+                        >
+                          {o.l}
+                        </button>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+
+            {createErr && <p style={styles.errText}>{createErr}</p>}
+
+            <button
+              style={{ ...styles.primaryBtn, marginTop: 6, opacity: saving ? 0.6 : 1 }}
+              onClick={handleCreate}
+              disabled={saving}
+            >
+              {saving ? 'กำลังบันทึก...' : 'เพิ่มแล้วทำรายการต่อ'}
+            </button>
+            <button style={styles.cancelLink} onClick={() => setCreating(false)}>ย้อนกลับ</button>
+          </>
+        )}
       </div>
     </div>
   );
@@ -209,21 +453,50 @@ function Toast({ msg, onDone }) {
 // ─────────────────────────────────────────
 export default function TechnicianScanPage() {
   const { user } = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
   const isOffice = user?.role === 'office';
   const [step, setStep]           = useState(STEP.MODE);
   const [mode, setMode]           = useState(null);           // 'IN' | 'OUT'
   const [invoice, setInvoice]     = useState('');
+  const [billDate, setBillDate]   = useState(todayStr());     // วันของบิล (คีย์ย้อนหลังได้)
   const [invoiceErr, setInvoiceErr] = useState('');
   const [session, setSession]     = useState(null);           // { id, invoice_no }
   const [starting, setStarting]   = useState(false);
 
   const [scanning, setScanning]   = useState(false);          // กล้องเปิด/ปิด
+  const [manualOpen, setManualOpen] = useState(false);        // แผงกรอกเอง (QR เสีย)
   const [scannedItem, setScannedItem] = useState(null);       // item ที่รอยืนยัน
   const [scannedType, setScannedType] = useState(null);       // 'rack' | 'wing-arm'
   const [confirmLoading, setConfirmLoading] = useState(false);
+  const [deletingId, setDeletingId] = useState(null);
 
   const [orders, setOrders]       = useState([]);             // รายการในบิลนี้
   const [toast, setToast]         = useState(null);
+
+  // ── มาจากหน้าบิลรับเข้า: "สแกนของเข้าบิลนี้" — เปิดบิลเดิมต่อได้เลย ไม่ต้องเปิดบิลใหม่
+  // ใช้ตอนต้นทางส่งของมาไม่ครบ/บิลมาทีหลัง แล้วต้องแอดของเข้าบิลเดิมภายหลัง
+  // โหลดของที่เคยสแกนเข้าบิลไว้แล้วมาแสดงด้วย จะได้เห็นบิลทั้งใบและกดลบรายการเก่าได้
+  useEffect(() => {
+    const resume = location.state?.resumeSession;
+    if (!resume) return;
+    navigate(location.pathname, { replace: true, state: {} }); // กันเปิดซ้ำตอนกด back
+    setMode('IN');
+    setSession(resume);
+    setStep(STEP.SCAN);
+    client.get(`/transactions/receipt-sessions/${resume.id}`)
+      .then((res) => {
+        const existing = (res.data.items || []).map((it) => ({
+          sku: it.model_code,
+          name: it.rack_name,
+          qty: Number(it.qty),
+          txId: it.id,
+          type: it.item_type === 'rack' ? 'rack' : 'wing-arm',
+        }));
+        setOrders(existing.reverse()); // ในหน้านี้เรียงใหม่สุดอยู่บน
+      })
+      .catch(() => setOrders([]));
+  }, [location.state, location.pathname, navigate]);
 
   // ── เลือก mode ──
   const selectMode = (m) => {
@@ -231,6 +504,7 @@ export default function TechnicianScanPage() {
     setOrders([]);
     setSession(null);
     setScannedItem(null);
+    setBillDate(todayStr());
     setStep(m === 'IN' ? STEP.INVOICE : STEP.SCAN);
   };
 
@@ -239,13 +513,41 @@ export default function TechnicianScanPage() {
     if (!invoice.trim()) { setInvoiceErr('กรุณากรอกเลขบิล'); return; }
     setStarting(true); setInvoiceErr('');
     try {
-      const res = await client.post('/transactions/receipt-session', { invoice_no: invoice.trim() });
+      const res = await client.post('/transactions/receipt-session', {
+        invoice_no: invoice.trim(),
+        bill_date: billDate || undefined,
+      });
       setSession(res.data);
       setOrders([]);
       setStep(STEP.SCAN);
     } catch (err) {
       setInvoiceErr(err?.response?.data?.error || 'เปิดบิลไม่สำเร็จ');
     } finally { setStarting(false); }
+  };
+
+  // ── เลือกรายการจากแผง "กรอกเอง" (QR เสีย) — ไหลต่อเข้าหน้ายืนยันจำนวนเหมือนสแกนปกติ ──
+  const handleManualPick = (item, type) => {
+    setManualOpen(false);
+    setScannedItem(item);
+    setScannedType(type);
+  };
+
+  // ── ลบรายการที่เพิ่งทำผิด — backend คืนสต็อกให้เองในทรานแซกชันเดียว ──
+  const handleDeleteOrder = async (order) => {
+    if (!order.txId) {
+      setToast({ ok: false, title: 'ลบไม่ได้', body: 'ไม่พบเลขรายการอ้างอิง' });
+      return;
+    }
+    setDeletingId(order.txId);
+    try {
+      await client.delete(`/transactions/${order.txId}`);
+      setOrders((prev) => prev.filter((o) => o.txId !== order.txId));
+      setToast({ ok: true, title: 'ลบรายการแล้ว', body: `${order.name} — คืนสต็อกเรียบร้อย` });
+    } catch (err) {
+      setToast({ ok: false, title: 'ลบไม่สำเร็จ', body: err?.response?.data?.error || '' });
+    } finally {
+      setDeletingId(null);
+    }
   };
 
   // ── สแกน QR → lookup ──
@@ -293,25 +595,34 @@ export default function TechnicianScanPage() {
     try {
       let remaining;
 
+      let txId = null;
+
       if (scannedType === 'rack') {
         const endpoint = mode === 'IN' ? '/transactions/in' : '/transactions/out';
         const payload  = { model_code: scannedItem.model_code, qty };
         if (mode === 'IN' && session) payload.receipt_session_id = session.id;
         const res = await client.post(endpoint, payload);
         remaining = res.data.rack.stock_qty;
+        txId = res.data.transaction_id ?? null;
       } else {
-        // wing-arm
+        // wing-arm — ต้องส่ง receipt_session_id ไปด้วย ไม่งั้นของหลุดออกจากบิล
+        // (เดิมส่งแค่ note ทำให้ปีกนกไม่โผล่ในหน้ารายละเอียดบิลเลย)
         const delta = mode === 'IN' ? qty : -qty;
-        const note  = mode === 'IN' && session ? `บิล ${session.invoice_no}` : undefined;
-        const res   = await client.patch(`/wing-arms/${scannedItem.id}/stock`, { delta, note });
-        remaining   = res.data.stock_qty;
+        const payload = { delta };
+        if (mode === 'IN' && session) {
+          payload.note = `บิล ${session.invoice_no}`;
+          payload.receipt_session_id = session.id;
+        }
+        const res = await client.patch(`/wing-arms/${scannedItem.id}/stock`, payload);
+        remaining = res.data.stock_qty;
+        txId = res.data.transaction_id ?? null;
       }
 
       const label = scannedItem.name || scannedItem.model_name;
       const code  = scannedItem.sku  || scannedItem.model_code;
 
       setOrders(prev => [{
-        sku: code, name: label, qty,
+        sku: code, name: label, qty, txId,
         type: scannedType, id: scannedItem.id,
       }, ...prev]);
 
@@ -334,7 +645,9 @@ export default function TechnicianScanPage() {
   const resetAll = () => {
     setStep(STEP.MODE); setMode(null); setSession(null);
     setInvoice(''); setInvoiceErr(''); setOrders([]);
+    setBillDate(todayStr());
     setScannedItem(null); setScannedType(null); setScanning(false);
+    setManualOpen(false);
   };
 
   const isIN = mode === 'IN';
@@ -414,8 +727,23 @@ export default function TechnicianScanPage() {
                 style={{ ...styles.input, borderColor: invoiceErr ? '#ef4444' : '#e5e7eb' }}
               />
               {invoiceErr && <p style={styles.errText}>{invoiceErr}</p>}
-              <p style={{ fontSize: 11, color: '#9ca3af', marginTop: 6, lineHeight: 1.6 }}>
-                สินค้าทุกชิ้นที่สแกนในรอบนี้จะถูกผูกกับบิลนี้
+
+              <label style={{ ...styles.fieldLabel, marginTop: 14 }}>วันที่ของบิล</label>
+              <input
+                type="date"
+                value={billDate}
+                max={todayStr()}
+                onChange={e => setBillDate(e.target.value)}
+                style={{ ...styles.input, fontFamily: 'inherit', fontWeight: 500 }}
+              />
+              {billDate !== todayStr() && (
+                <p style={styles.backdateNote}>
+                  📅 กำลังคีย์บิลย้อนหลัง — บิลนี้จะไปอยู่ในวันที่ที่เลือก
+                </p>
+              )}
+
+              <p style={{ fontSize: 11, color: '#9ca3af', marginTop: 8, lineHeight: 1.6 }}>
+                สินค้าทุกชิ้นที่สแกนในรอบนี้จะถูกผูกกับบิลนี้ · ลืมคีย์ย้อนหลังได้โดยเลือกวันที่
               </p>
               <button
                 style={{ ...styles.primaryBtn, marginTop: 14, opacity: starting ? 0.6 : 1 }}
@@ -486,18 +814,34 @@ export default function TechnicianScanPage() {
             <div style={{ height: 96 }} />
           </div>
 
-          {/* FAB */}
-          <button style={styles.fab} onClick={() => setScanning(true)} aria-label="สแกน QR">
-            <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
-              <IconQR />
-              <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.85)', fontWeight: 500, letterSpacing: '0.03em' }}>
-                สแกน
+          {/* แถบปุ่มล่าง — กรอกเอง / สแกน / เสร็จสิ้น */}
+          <div style={styles.actionBar}>
+            <button style={styles.sideBtn} onClick={() => setManualOpen(true)}>
+              <IconSearch />
+              <span style={styles.sideBtnLabel}>กรอกเอง</span>
+            </button>
+
+            <button style={styles.fab} onClick={() => setScanning(true)} aria-label="สแกน QR">
+              <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
+                <IconQR />
+                <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.85)', fontWeight: 500, letterSpacing: '0.03em' }}>
+                  สแกน
+                </span>
               </span>
-            </span>
-            {orders.length > 0 && (
-              <span style={styles.fabBadge}>{orders.length}</span>
-            )}
-          </button>
+              {orders.length > 0 && (
+                <span style={styles.fabBadge}>{orders.length}</span>
+              )}
+            </button>
+
+            <button
+              style={{ ...styles.sideBtn, opacity: orders.length === 0 ? 0.4 : 1 }}
+              onClick={() => setStep(STEP.DONE)}
+              disabled={orders.length === 0}
+            >
+              <IconCheck />
+              <span style={styles.sideBtnLabel}>เสร็จสิ้น</span>
+            </button>
+          </div>
 
           {/* scan overlay (กล้อง) */}
           {scanning && (
@@ -506,6 +850,16 @@ export default function TechnicianScanPage() {
               mode={mode}
               onResult={handleScan}
               onClose={() => setScanning(false)}
+            />
+          )}
+
+          {/* แผงกรอกเอง (QR เสีย/สแกนไม่ติด) */}
+          {manualOpen && (
+            <ManualEntrySheet
+              mode={mode}
+              canCreate={isOffice && mode === 'IN'}
+              onPick={handleManualPick}
+              onCancel={() => setManualOpen(false)}
             />
           )}
 
@@ -521,6 +875,91 @@ export default function TechnicianScanPage() {
           )}
 
           {/* toast */}
+          <Toast msg={toast} onDone={clearToast} />
+        </div>
+      )}
+
+      {/* ════════════════════════════
+          STEP 4 — สรุปของที่สแกนเข้า
+      ════════════════════════════ */}
+      {step === STEP.DONE && (
+        <div style={styles.container}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+            <button onClick={() => setStep(STEP.SCAN)} style={styles.backBtn}><IconArrowLeft /></button>
+            <div>
+              <h2 style={{ ...styles.pageTitle, margin: 0 }}>สรุปรายการ</h2>
+              <p style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>
+                {isIN ? 'รับเข้าสต็อก' : 'จ่ายออกจากสต็อก'}
+                {isIN && session ? ` · บิล ${session.invoice_no}` : ''}
+              </p>
+            </div>
+          </div>
+
+          <div style={styles.summaryTotal}>
+            <div>
+              <p style={{ fontSize: 12, color: '#6b7280' }}>ทำรายการทั้งหมด</p>
+              <p style={{ fontSize: 26, fontWeight: 700, color: '#111', lineHeight: 1.2 }}>
+                {orders.length} <span style={{ fontSize: 14, fontWeight: 500, color: '#6b7280' }}>รายการ</span>
+              </p>
+            </div>
+            <div style={{ textAlign: 'right' }}>
+              <p style={{ fontSize: 12, color: '#6b7280' }}>รวมจำนวน</p>
+              <p style={{ fontSize: 26, fontWeight: 700, color: isIN ? '#166534' : '#991b1b', lineHeight: 1.2 }}>
+                {isIN ? '+' : '−'}{orders.reduce((s, o) => s + Number(o.qty || 0), 0)}
+                <span style={{ fontSize: 14, fontWeight: 500, color: '#6b7280' }}> ชิ้น</span>
+              </p>
+            </div>
+          </div>
+
+          <p style={{ fontSize: 12, color: '#6b7280', margin: '16px 0 8px' }}>
+            ตรวจทานก่อนปิดงาน — สแกนผิดกดลบแล้วสแกนใหม่ได้
+          </p>
+
+          {orders.length === 0 ? (
+            <div style={styles.emptyState}>
+              <span style={{ color: '#d1d5db' }}><IconPackage /></span>
+              <p style={{ fontSize: 13, color: '#9ca3af', marginTop: 8 }}>ไม่มีรายการเหลือแล้ว</p>
+            </div>
+          ) : (
+            orders.map((o, i) => (
+              <div key={o.txId || i} style={styles.orderRow}>
+                <div style={styles.orderNum}>{i + 1}</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ fontFamily: 'monospace', fontSize: 11, color: '#9ca3af', marginBottom: 2 }}>
+                    {o.sku} · {o.type === 'rack' ? 'แร็ค' : 'ปีกนก'}
+                  </p>
+                  <p style={{ fontSize: 13, fontWeight: 500, color: '#111', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {o.name}
+                  </p>
+                </div>
+                <div style={{
+                  fontSize: 12, fontWeight: 600, padding: '4px 10px', borderRadius: 8, flexShrink: 0,
+                  background: isIN ? '#dcfce7' : '#fee2e2',
+                  color: isIN ? '#166534' : '#991b1b',
+                }}>
+                  {isIN ? '+' : '−'}{o.qty}
+                </div>
+                <button
+                  style={{ ...styles.rowDeleteBtn, opacity: deletingId === o.txId ? 0.4 : 1 }}
+                  onClick={() => handleDeleteOrder(o)}
+                  disabled={deletingId === o.txId}
+                  aria-label={`ลบ ${o.name}`}
+                >
+                  <IconTrash />
+                </button>
+              </div>
+            ))
+          )}
+
+          <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
+            <button style={{ ...styles.primaryBtn, flex: 1 }} onClick={() => setStep(STEP.SCAN)}>
+              <IconQR /> สแกนเพิ่ม
+            </button>
+            <button style={styles.finishBtn} onClick={resetAll}>
+              ปิดงาน
+            </button>
+          </div>
+
           <Toast msg={toast} onDone={clearToast} />
         </div>
       )}
@@ -646,17 +1085,36 @@ const styles = {
     alignItems: 'center', justifyContent: 'center',
     minHeight: 260, opacity: 0.7,
   },
-  // FAB — fixed ติดหน้าจอ ไม่โดน overflow:hidden ตัด
-  fab: {
+  // แถบปุ่มล่าง — fixed ติดหน้าจอ วางปุ่มกรอกเอง/สแกน/เสร็จสิ้นให้กดถึงด้วยนิ้วโป้ง
+  actionBar: {
     position: 'fixed',
-    bottom: 'calc(28px + env(safe-area-inset-bottom, 0px))', // iOS safe area
-    left: '50%', transform: 'translateX(-50%)',
+    bottom: 'calc(20px + env(safe-area-inset-bottom, 0px))',
+    left: 0, right: 0,
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    gap: 20,
+    zIndex: 40,
+    pointerEvents: 'none', // ให้กดทะลุช่องว่างระหว่างปุ่มได้
+  },
+  sideBtn: {
+    pointerEvents: 'auto',
+    background: '#fff', border: '1px solid #e5e7eb',
+    borderRadius: 14, padding: '10px 14px',
+    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
+    cursor: 'pointer', color: '#374151',
+    boxShadow: '0 2px 12px rgba(0,0,0,0.10)',
+    minHeight: 'unset',
+  },
+  sideBtnLabel: { fontSize: 11, fontWeight: 600 },
+  // FAB — ไม่โดน overflow:hidden ตัด
+  fab: {
+    pointerEvents: 'auto',
+    position: 'relative',
     width: 72, height: 72, borderRadius: '50%',
     background: '#2563eb', border: 'none',
     cursor: 'pointer', display: 'flex',
     alignItems: 'center', justifyContent: 'center',
     boxShadow: '0 4px 24px rgba(37,99,235,0.45)',
-    zIndex: 40,  // สูงกว่า sticky bar
+    flexShrink: 0,
   },
   fabBadge: {
     position: 'absolute', top: -4, right: -4,
@@ -731,6 +1189,54 @@ const styles = {
   },
   badgeIN:  { background: '#dcfce7', color: '#166534' },
   badgeOUT: { background: '#fee2e2', color: '#991b1b' },
+  // แจ้งเตือนตอนเลือกวันย้อนหลัง ให้เห็นชัดว่าไม่ใช่วันนี้
+  backdateNote: {
+    marginTop: 8, padding: '8px 10px', borderRadius: 10,
+    background: '#fffbeb', border: '1px solid #fde68a',
+    color: '#92400e', fontSize: 12, lineHeight: 1.5,
+  },
+  // แถวผลค้นหาในแผงกรอกเอง
+  manualRow: {
+    width: '100%', display: 'flex', alignItems: 'center', gap: 10,
+    padding: '10px 12px', marginBottom: 6,
+    background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12,
+    cursor: 'pointer', minHeight: 'unset',
+  },
+  addNewBtn: {
+    width: '100%', marginTop: 10, padding: '11px',
+    background: '#f0fdf4', border: '1px dashed #86efac',
+    borderRadius: 12, color: '#166534',
+    fontSize: 13, fontWeight: 600, cursor: 'pointer',
+    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+  },
+  segBtn: {
+    flex: 1, padding: '9px 14px', borderRadius: 10,
+    border: '1.5px solid #e5e7eb', background: '#fff',
+    color: '#6b7280', fontSize: 13, fontWeight: 500,
+    cursor: 'pointer', minHeight: 'unset',
+  },
+  segBtnActive: {
+    borderColor: '#2563eb', background: '#2563eb', color: '#fff', fontWeight: 600,
+  },
+  // สรุปยอดหน้า "เสร็จสิ้น"
+  summaryTotal: {
+    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+    background: '#fff', border: '0.5px solid #e5e3de', borderRadius: 16,
+    padding: '14px 18px', marginTop: 12,
+  },
+  rowDeleteBtn: {
+    background: '#fef2f2', border: '1px solid #fecaca',
+    color: '#dc2626', borderRadius: 10,
+    width: 34, height: 34, flexShrink: 0,
+    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    cursor: 'pointer', minHeight: 'unset', padding: 0,
+  },
+  finishBtn: {
+    flex: 1, padding: '13px',
+    background: '#111827', color: '#fff',
+    border: 'none', borderRadius: 12,
+    fontSize: 14, fontWeight: 600, cursor: 'pointer',
+  },
   // toast — fixed ไม่โดน overflow ตัด
   toast: {
     position: 'fixed', top: 16, left: 16, right: 16,

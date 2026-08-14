@@ -196,7 +196,7 @@ export default function RepairNoticeListPage() {
                         {isNoticeFilled(n) ? (
                           <span className="status-badge status-badge-success">🔧 แจ้งซ่อมแล้ว</span>
                         ) : (
-                          <span className="status-badge status-badge-neutral">⏳ ยังไม่กรอกแจ้งซ่อม</span>
+                          <span className="status-badge status-badge-neutral">⏳ ยังไม่มีการแจ้งซ่อม</span>
                         )}
                       </td>
                       <td className="actions" data-label="จัดการ">

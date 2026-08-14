@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import client from '../api/client';
+import { formatDbDateTime } from '../utils/format';
 
 export default function TransactionHistoryPage() {
   const [rows, setRows] = useState([]);
@@ -29,7 +30,7 @@ export default function TransactionHistoryPage() {
           <tbody>
             {rows.map((r) => (
               <tr key={r.id}>
-                <td data-label="วันที่">{new Date(r.created_at).toLocaleString('th-TH')}</td>
+                <td data-label="วันที่">{formatDbDateTime(r.created_at)}</td>
                 <td data-label="ประเภท">{r.type === 'IN' ? 'รับเข้า' : 'จ่ายออก'}</td>
                 <td data-label="รหัสรุ่น">{r.model_code}</td>
                 <td data-label="รายการ">{r.rack_name}</td>

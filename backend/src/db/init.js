@@ -623,6 +623,21 @@ async function initDatabase() {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
 
+  // bill_date: วันที่ของบิลรับสินค้า แยกจาก created_at (เวลาที่กดคีย์เข้าระบบจริง) —
+  // พนักงานลืมคีย์บิลแล้วมาคีย์ย้อนหลังได้ โดยเลือกวันที่ของบิลเอง (ดู
+  // TechnicianScanPage.jsx) วันที่นี้มีผลกับ "วันของบิล" อย่างเดียว ไม่ย้อนวันที่ของ
+  // ประวัติรับเข้าสต็อก (transactions.created_at) ซึ่งยังเป็นเวลาจริงที่สแกนเสมอ —
+  // เจ้าของร้านเลือกแบบนี้เพื่อให้ยังตรวจสอบย้อนหลังได้ว่าคีย์เข้าระบบจริงตอนไหน
+  // แถวเก่าที่มีอยู่ก่อนหน้า backfill ให้เท่ากับวันของ created_at (ดู UPDATE ด้านล่าง)
+  await conn.query(`
+    ALTER TABLE receipt_sessions
+    ADD COLUMN bill_date DATE DEFAULT NULL
+  `).catch(ignoreIfAlreadyApplied);
+
+  await conn.query(`
+    UPDATE receipt_sessions SET bill_date = DATE(created_at) WHERE bill_date IS NULL
+  `);
+
   // vehicle_model: บันทึกอัตโนมัติตอนตัดสต๊อก (ดู StockDeductionPage.jsx +
   // vehicleModelFromName.js) ว่าอะไหล่ชิ้นนี้ถูกจ่ายออกไปใช้กับรถรุ่นไหน — ดึงจากชื่อ
   // รายการอะไหล่เอง (ชื่อระบุรุ่นรถอยู่แล้ว เช่น "แร็ค CHEVROLET AVEO ปี 2007-2013")
