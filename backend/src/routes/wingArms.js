@@ -163,6 +163,10 @@ router.post('/', requireRole('office'), async (req, res) => {
 });
 
 // PUT /wing-arms/:id
+// position/axle ไม่บังคับส่งมาแล้ว — หน้าแก้ไข (WingArmDashboard.jsx) ไม่ให้แก้ค่านี้
+// อีกต่อไป (ตำแหน่ง/ด้านผูกกับ SKU ตายตัว) ถ้าไม่ส่งมาก็คงค่าเดิมในฐานข้อมูลไว้ —
+// เดิม mysql2 จะ throw "Bind parameters must not contain undefined" ถ้า axle
+// เป็น undefined ทำให้แก้ไขไม่ได้เลยแม้แต่ครั้งเดียว (client เก่าไม่เคยส่ง axle มา)
 router.put('/:id', requireRole('office'), async (req, res) => {
   try {
     const { sku, name, position, axle, side, stock_qty, min_stock } = req.body;
@@ -171,9 +175,17 @@ router.put('/:id', requireRole('office'), async (req, res) => {
       return res.status(400).json({ error: 'sku, name และ side ต้องระบุ' });
     }
 
+    const [existingRows] = await pool.query('SELECT position, axle FROM wing_arms WHERE id = ?', [req.params.id]);
+    if (!existingRows.length) return res.status(404).json({ error: 'ไม่พบรายการ' });
+    const existing = existingRows[0];
+
     await pool.query(
       'UPDATE wing_arms SET sku=?, name=?, position=?, axle=?, side=?, stock_qty=?, min_stock=? WHERE id=?',
-      [sku.trim(), name.trim(), position, axle, side, stock_qty, min_stock, req.params.id]
+      [
+        sku.trim(), name.trim(),
+        position ?? existing.position, axle ?? existing.axle,
+        side, stock_qty, min_stock, req.params.id,
+      ]
     );
 
     const [rows] = await pool.query('SELECT * FROM wing_arms WHERE id = ?', [req.params.id]);

@@ -5,6 +5,7 @@ const emptyForm = {
   sku: '',
   name: '',
   position: 'lower',  // upper | lower
+  axle: 'front',       // front | rear
   side: 'left',       // left | right
   stock_qty: 0,
   min_stock: 1,
@@ -87,7 +88,7 @@ export default function WingArmDashboard() {
   const openEdit = (item) => {
     setEditingId(item.id);
     setForm({ sku: item.sku, name: item.name, position: item.position,
-              side: item.side,
+              axle: item.axle, side: item.side,
               stock_qty: item.stock_qty, min_stock: item.min_stock });
     setErrorMsg(''); setShowFormModal(true);
   };
@@ -359,43 +360,58 @@ export default function WingArmDashboard() {
                 required
               />
 
-              <label>ตำแหน่ง</label>
-              <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
-                {POSITION_OPTIONS.map((o) => (
-                  <button key={o.value} type="button"
-                    onClick={() => setForm({ ...form, position: o.value })}
-                    style={{
-                      flex: 1, padding: '8px', borderRadius: '8px', cursor: 'pointer',
-                      border: '2px solid',
-                      borderColor: form.position === o.value ? 'var(--color-text-primary)' : 'var(--color-border-secondary)',
-                      background:  form.position === o.value ? 'var(--color-text-primary)' : 'transparent',
-                      color:       form.position === o.value ? 'var(--color-background-primary)' : 'var(--color-text-secondary)',
-                      fontWeight:  form.position === o.value ? 600 : 400,
-                    }}
-                  >{o.label}</button>
-                ))}
-              </div>
+              {/* ตำแหน่ง/ด้าน เลือกได้เฉพาะตอนเพิ่มรายการใหม่เท่านั้น — ตอนแก้ไข
+                  รายการเดิม ค่าตำแหน่ง/ด้านเป็นของตายตัวติดกับ SKU นั้นอยู่แล้ว
+                  ไม่ต้องเลือกซ้ำ (เจ้าของร้านสั่ง: กดแก้ไขคือเลือกอันที่เป็นของมัน
+                  อยู่แล้ว ไม่ใช่เลือกตำแหน่ง/ด้านใหม่) แสดงเป็นข้อความอ่านอย่างเดียวแทน */}
+              {editingId ? (
+                <>
+                  <label>ตำแหน่ง / ด้าน</label>
+                  <p style={{ margin: '0 0 12px', fontSize: '14px', color: 'var(--color-text-secondary)' }}>
+                    {tagLabel(form)} (แก้ไขไม่ได้ — ผูกกับ SKU นี้อยู่แล้ว)
+                  </p>
+                </>
+              ) : (
+                <>
+                  <label>ตำแหน่ง</label>
+                  <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+                    {POSITION_OPTIONS.map((o) => (
+                      <button key={o.value} type="button"
+                        onClick={() => setForm({ ...form, position: o.value })}
+                        style={{
+                          flex: 1, padding: '8px', borderRadius: '8px', cursor: 'pointer',
+                          border: '2px solid',
+                          borderColor: form.position === o.value ? 'var(--color-text-primary)' : 'var(--color-border-secondary)',
+                          background:  form.position === o.value ? 'var(--color-text-primary)' : 'transparent',
+                          color:       form.position === o.value ? 'var(--color-background-primary)' : 'var(--color-text-secondary)',
+                          fontWeight:  form.position === o.value ? 600 : 400,
+                        }}
+                      >{o.label}</button>
+                    ))}
+                  </div>
 
-              <label>ด้าน</label>
-              <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
-                {SIDE_OPTIONS.map((o) => (
-                  <button key={o.value} type="button"
-                    onClick={() => setForm({ ...form, side: o.value })}
-                    style={{
-                      flex: 1, padding: '8px', borderRadius: '8px', cursor: 'pointer',
-                      border: '2px solid',
-                      borderColor: form.side === o.value
-                        ? (o.value === 'left' ? '#1e40af' : '#9d174d')
-                        : 'var(--color-border-secondary)',
-                      background: form.side === o.value
-                        ? (o.value === 'left' ? '#1e40af' : '#9d174d')
-                        : 'transparent',
-                      color: form.side === o.value ? '#fff' : 'var(--color-text-secondary)',
-                      fontWeight: form.side === o.value ? 600 : 400,
-                    }}
-                  >{o.label}</button>
-                ))}
-              </div>
+                  <label>ด้าน</label>
+                  <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+                    {SIDE_OPTIONS.map((o) => (
+                      <button key={o.value} type="button"
+                        onClick={() => setForm({ ...form, side: o.value })}
+                        style={{
+                          flex: 1, padding: '8px', borderRadius: '8px', cursor: 'pointer',
+                          border: '2px solid',
+                          borderColor: form.side === o.value
+                            ? (o.value === 'left' ? '#1e40af' : '#9d174d')
+                            : 'var(--color-border-secondary)',
+                          background: form.side === o.value
+                            ? (o.value === 'left' ? '#1e40af' : '#9d174d')
+                            : 'transparent',
+                          color: form.side === o.value ? '#fff' : 'var(--color-text-secondary)',
+                          fontWeight: form.side === o.value ? 600 : 400,
+                        }}
+                      >{o.label}</button>
+                    ))}
+                  </div>
+                </>
+              )}
 
               <label>คงเหลือในสต็อก</label>
               <input
