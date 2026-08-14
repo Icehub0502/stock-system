@@ -92,6 +92,59 @@ router.get('/receipt-sessions/:id', requireRole('office'), async (req, res) => {
   }
 });
 
+// ── ลบบิลทั้งใบ (เผื่อบิลผิด/ไม่ได้ใช้แล้ว) ──
+// คืนสต็อกของทุกรายการในบิลก่อน (เหมือน DELETE /:id ทีละรายการ แต่ทำทั้งบิลในทรานแซกชัน
+// เดียว) แล้วค่อยลบทั้งแถว transactions และ receipt_sessions — ถ้ารายการไหนถูกเบิกออก
+// ไปแล้วหลังรับเข้า (คืนแล้วจะติดลบ) จะไม่ยอมลบทั้งบิลเลยและแจ้งเตือนว่าติดที่รายการไหน
+// กันข้อมูลสต็อกเพี้ยนแบบเงียบ ๆ
+router.delete('/receipt-sessions/:id', requireRole('office'), async (req, res) => {
+  let conn;
+  try {
+    conn = await pool.getConnection();
+    await conn.beginTransaction();
+
+    const [[session]] = await conn.query('SELECT * FROM receipt_sessions WHERE id = ? FOR UPDATE', [req.params.id]);
+    if (!session) {
+      await conn.rollback();
+      return res.status(404).json({ error: 'ไม่พบบิลนี้' });
+    }
+
+    const [items] = await conn.query(
+      `SELECT * FROM transactions WHERE receipt_session_id = ? AND type = 'IN' FOR UPDATE`,
+      [req.params.id]
+    );
+
+    for (const tx of items) {
+      const table = tx.rack_id ? 'racks' : 'wing_arms';
+      const itemId = tx.rack_id || tx.wing_arm_id;
+      if (!itemId) continue;
+      const [rows] = await conn.query(`SELECT * FROM ${table} WHERE id = ? FOR UPDATE`, [itemId]);
+      const item = rows[0];
+      if (!item) continue;
+      const newQty = Number(item.stock_qty) - Number(tx.qty); // IN เคยบวกสต็อก → ลบออก
+      if (newQty < 0) {
+        await conn.rollback();
+        return res.status(400).json({
+          error: `ลบไม่ได้ — "${item.name}" ถูกเบิกออกไปแล้ว ถ้าลบบิลนี้สต็อกจะติดลบ (คงเหลือ ${item.stock_qty})`,
+        });
+      }
+      await conn.query(`UPDATE ${table} SET stock_qty = ? WHERE id = ?`, [newQty, itemId]);
+    }
+
+    await conn.query(`DELETE FROM transactions WHERE receipt_session_id = ? AND type = 'IN'`, [req.params.id]);
+    await conn.query('DELETE FROM receipt_sessions WHERE id = ?', [req.params.id]);
+    await conn.commit();
+
+    res.json({ success: true });
+  } catch (err) {
+    if (conn) await conn.rollback();
+    console.error(err);
+    res.status(500).json({ error: 'ลบบิลไม่สำเร็จ' });
+  } finally {
+    if (conn) conn.release();
+  }
+});
+
 // ── รับเข้าสต็อก ──
 router.post('/in', async (req, res) => {
   const { model_code, qty = 1, note = '', receipt_session_id = null } = req.body || {};

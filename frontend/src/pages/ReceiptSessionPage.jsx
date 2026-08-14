@@ -20,11 +20,6 @@ const IconClose = () => (
     <path d="M18 6L6 18M6 6l12 12"/>
   </svg>
 );
-const IconChevron = () => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" width="18" height="18">
-    <path d="M9 18l6-6-6-6"/>
-  </svg>
-);
 const IconTrash = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" width="15" height="15">
     <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/>
@@ -63,6 +58,7 @@ export default function ReceiptSessionPage() {
   const [selected, setSelected] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
+  const [deletingBill, setDeletingBill] = useState(false);
 
   // 'today' | 'all' | 'date' — ค่าเริ่มต้นเปิดที่วันนี้ เหมือนพฤติกรรมเดิม
   const [range, setRange] = useState('today');
@@ -109,6 +105,22 @@ export default function ReceiptSessionPage() {
     }
   };
 
+  // ลบทั้งบิล — เผื่อบิลผิด/ไม่ได้ใช้แล้ว คืนสต็อกทุกรายการในบิลให้อัตโนมัติ
+  const handleDeleteBill = async () => {
+    if (!selected) return;
+    if (!window.confirm(`ลบบิล "${selected.session.invoice_no}" ทั้งใบ? ระบบจะคืนสต็อกทุกรายการในบิลนี้ให้อัตโนมัติ และไม่สามารถย้อนกลับได้`)) return;
+    setDeletingBill(true);
+    try {
+      await client.delete(`/transactions/receipt-sessions/${selected.session.id}`);
+      setSelected(null);
+      loadSessions();
+    } catch (err) {
+      alert(err?.response?.data?.error || 'ลบบิลไม่สำเร็จ');
+    } finally {
+      setDeletingBill(false);
+    }
+  };
+
   // สแกนของเพิ่มเข้าบิลเดิม — ส่ง session ไปให้หน้าสแกนเปิดต่อจากบิลนี้เลย
   // ใช้ตอนต้นทางส่งของมาไม่ครบ/บิลมาทีหลัง แล้วต้องแอดเข้าบิลเดิมภายหลัง
   const handleScanIntoBill = () => {
@@ -127,7 +139,7 @@ export default function ReceiptSessionPage() {
     qty: acc.qty + Number(s.total_qty ?? 0),
   }), { bills: 0, items: 0, qty: 0 }), [filtered]);
 
-  // จัดกลุ่มตามวันของบิล (ใหม่สุดอยู่บน)
+  // จัดกลุ่มตามวันของบิล (ใหม่สุดอยู่บน) — เหมือนหน้าใบเสนอราคา/ใบเสร็จ
   const groups = useMemo(() => {
     const map = new Map();
     for (const s of filtered) {
@@ -200,60 +212,69 @@ export default function ReceiptSessionPage() {
         </div>
       )}
 
-      {loading && <div className="loading">กำลังโหลด...</div>}
-
-      {!loading && filtered.length === 0 && (
+      {loading ? (
+        <div className="loading">กำลังโหลด...</div>
+      ) : filtered.length === 0 ? (
         <div className="empty-message">
           {range === 'all'
             ? 'ยังไม่มีบิลรับเข้า'
             : `ไม่พบบิลในวันที่ ${fmtDateKey(range === 'today' ? todayStr() : pickedDate)}`}
         </div>
-      )}
-
-      {groups.map(([dateKey, list]) => (
-        <div key={dateKey}>
-          <div className="intake-day-head">
-            <span className="intake-day-title">{fmtDateKey(dateKey)}</span>
-            <span className="intake-day-count">{list.length} บิล</span>
-          </div>
-
-          {list.map((s) => {
-            // บิลที่คีย์ย้อนหลัง: วันของบิลไม่ตรงกับวันที่กดบันทึกจริง
-            const keyedDay = String(s.created_at || '').slice(0, 10);
-            const backdated = keyedDay && keyedDay !== dateKey;
-            return (
-              <button
-                key={s.id}
-                className="intake-bill"
-                onClick={() => openDetail(s.id)}
-                disabled={detailLoading}
-              >
-                <div className="intake-bill-main">
-                  <div className="intake-bill-no">{s.invoice_no}</div>
-                  <div className="intake-bill-meta">
-                    <span>{s.full_name || '—'}</span>
-                    <span>· {formatDbTime(s.created_at)}</span>
-                    {backdated && <span className="intake-backdate-chip">คีย์ย้อนหลัง</span>}
-                  </div>
-                </div>
-
-                <div className="intake-bill-stats">
-                  <div>
-                    <div className="intake-stat-value">{Number(s.item_count ?? 0).toLocaleString()}</div>
-                    <div className="intake-stat-label">รายการ</div>
-                  </div>
-                  <div>
-                    <div className="intake-stat-value is-good">+{Number(s.total_qty ?? 0).toLocaleString()}</div>
-                    <div className="intake-stat-label">ชิ้น</div>
-                  </div>
-                </div>
-
-                <span className="intake-chevron"><IconChevron /></span>
-              </button>
-            );
-          })}
+      ) : (
+        <div className="quotation-table-wrap">
+          <table className="quotation-table">
+            <thead>
+              <tr>
+                <th>เลขที่บิล</th>
+                <th>ผู้บันทึก</th>
+                <th>เวลา</th>
+                <th className="col-amount">รายการ</th>
+                <th className="col-amount">จำนวนชิ้น</th>
+                <th>จัดการ</th>
+              </tr>
+            </thead>
+            <tbody>
+              {groups.map(([dateKey, list]) => (
+                <React.Fragment key={dateKey}>
+                  <tr className="date-group-header-row">
+                    <td colSpan={6}>
+                      {fmtDateKey(dateKey)}
+                      <span className="date-group-count"> ({list.length} บิล)</span>
+                    </td>
+                  </tr>
+                  {list.map((s) => {
+                    const keyedDay = String(s.created_at || '').slice(0, 10);
+                    const backdated = keyedDay && keyedDay !== dateKey;
+                    return (
+                      <tr key={s.id} className="clickable-row" onClick={() => openDetail(s.id)}>
+                        <td data-label="เลขที่บิล">
+                          <strong>{s.invoice_no}</strong>
+                          {backdated && <span className="intake-backdate-chip" style={{ marginLeft: 8 }}>คีย์ย้อนหลัง</span>}
+                        </td>
+                        <td data-label="ผู้บันทึก">{s.full_name || '—'}</td>
+                        <td data-label="เวลา">{formatDbTime(s.created_at)}</td>
+                        <td className="col-amount" data-label="รายการ">{Number(s.item_count ?? 0).toLocaleString()}</td>
+                        <td className="col-amount" data-label="จำนวนชิ้น">
+                          <span style={{ color: '#047857', fontWeight: 700 }}>+{Number(s.total_qty ?? 0).toLocaleString()}</span>
+                        </td>
+                        <td data-label="จัดการ">
+                          <button
+                            className="btn-icon-small"
+                            onClick={(e) => { e.stopPropagation(); openDetail(s.id); }}
+                            disabled={detailLoading}
+                          >
+                            รายละเอียด
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </React.Fragment>
+              ))}
+            </tbody>
+          </table>
         </div>
-      ))}
+      )}
 
       {/* ── รายละเอียดบิล ── */}
       {selected && (
@@ -334,11 +355,16 @@ export default function ReceiptSessionPage() {
               </div>
             )}
 
-            <div className="modal-actions" style={{ marginTop: '1rem' }}>
-              <button className="btn-primary" onClick={handleScanIntoBill}>
-                <IconQR /> สแกนของเข้าบิลนี้
+            <div className="modal-actions" style={{ marginTop: '1rem', justifyContent: 'space-between' }}>
+              <button className="btn-danger" onClick={handleDeleteBill} disabled={deletingBill}>
+                {deletingBill ? 'กำลังลบ...' : 'ลบบิลนี้ทั้งใบ'}
               </button>
-              <button className="btn-secondary" onClick={() => setSelected(null)}>ปิด</button>
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <button className="btn-primary" onClick={handleScanIntoBill}>
+                  <IconQR /> สแกนของเข้าบิลนี้
+                </button>
+                <button className="btn-secondary" onClick={() => setSelected(null)}>ปิด</button>
+              </div>
             </div>
           </div>
         </div>

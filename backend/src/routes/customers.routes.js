@@ -54,6 +54,30 @@ router.get('/', async (req, res) => {
       return res.json({ success: true, data: rows });
     }
 
+    // ?channel_table=1 — ใช้เฉพาะหน้า CustomerChannelPage.jsx โหมดตาราง ต่างจาก
+    // found_via=1 ด้านบนตรงที่เอา "ลูกค้าทุกคน" มาแสดง (ไม่กรองว่าต้องบันทึก
+    // ช่องทางไว้แล้ว) เพื่อให้พนักงานเลือกช่องทางเพิ่มได้ทีละแถวในตารางเดียว — join
+    // รถ+ทะเบียนมาด้วยเหมือนกัน แยกคอลัมน์รถ/ทะเบียนออกจากกัน (ต่างจาก found_via=1
+    // ที่รวมไว้ในสตริงเดียว) ให้หน้าตารางแสดงเป็นคอลัมน์แยกได้ตามที่ขอ
+    if (req.query.channel_table) {
+      let sql = `
+        SELECT c.id, c.customer_code, c.customer_name, c.phone, c.found_via, c.found_via_note, c.updated_at,
+               GROUP_CONCAT(DISTINCT CONCAT(v.brand, ' ', v.model) SEPARATOR ', ') AS vehicles_summary,
+               GROUP_CONCAT(DISTINCT v.license_plate SEPARATOR ', ') AS plates_summary
+        FROM customers c
+        LEFT JOIN vehicles v ON v.customer_id = c.id
+      `;
+      const params = [];
+      if (search) {
+        sql += ' WHERE c.customer_name LIKE ? OR c.phone LIKE ? OR v.license_plate LIKE ?';
+        const term = `%${search}%`;
+        params.push(term, term, term);
+      }
+      sql += ' GROUP BY c.id ORDER BY c.updated_at DESC LIMIT 300';
+      const [rows] = await pool.execute(sql, params);
+      return res.json({ success: true, data: rows });
+    }
+
     // LIMIT กันดึงทั้งตารางเวลาลูกค้าเยอะขึ้นเรื่อย ๆ — หน้า CustomerManagementPage
     // ค้นหาผ่าน search (server-side LIKE) เสมออยู่แล้ว ไม่ได้กรอง/รวมข้อมูลฝั่ง
     // client จากทั้งชุด จึงตัดด้วย LIMIT ตรงนี้ได้อย่างปลอดภัย (เหมือน receipts.routes.js)
