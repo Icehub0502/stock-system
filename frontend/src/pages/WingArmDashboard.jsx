@@ -375,10 +375,14 @@ export default function WingArmDashboard() {
                         style={{
                           flex: 1, padding: '8px', borderRadius: '8px', cursor: 'pointer',
                           border: '2px solid',
-                          borderColor: form.position === o.value ? 'var(--color-text-primary)' : 'var(--color-border-secondary)',
-                          background:  form.position === o.value ? 'var(--color-text-primary)' : 'transparent',
-                          color:       form.position === o.value ? 'var(--color-background-primary)' : 'var(--color-text-secondary)',
-                          fontWeight:  form.position === o.value ? 600 : 400,
+                          borderColor: form.position === o.value
+                            ? (o.value === 'upper' ? '#0f766e' : '#b45309')
+                            : 'var(--color-border-secondary)',
+                          background: form.position === o.value
+                            ? (o.value === 'upper' ? '#0f766e' : '#b45309')
+                            : 'transparent',
+                          color: form.position === o.value ? '#fff' : 'var(--color-text-secondary)',
+                          fontWeight: form.position === o.value ? 600 : 400,
                         }}
                       >{o.label}</button>
                     ))}
