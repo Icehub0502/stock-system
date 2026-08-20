@@ -55,8 +55,9 @@ export default function StockRackPage() {
   const [printLoading, setPrintLoading] = useState(false);
   const [printQueue, setPrintQueue] = useState([]);
 
-  // ── กรองเฉพาะของใกล้หมด/หมด + พิมพ์เอกสารรายการ (คนละปุ่มกับพิมพ์ QR) ──
-  const [lowStockOnly, setLowStockOnly] = useState(false);
+  // ── กรองเฉพาะของใกล้หมด/หมด (แยกกันคนละปุ่ม ไม่รวมกัน) + พิมพ์เอกสารรายการ
+  // (คนละปุ่มกับพิมพ์ QR) ──
+  const [stockFilter, setStockFilter] = useState(''); // '' | 'low' | 'out'
   const [docPrintMode, setDocPrintMode] = useState(false);
 
   const loadRacks = async () => {
@@ -87,8 +88,11 @@ export default function StockRackPage() {
   const filteredRacks = racks.filter((r) => {
     const term = searchTerm.trim().toLowerCase();
     const matchText = !term || r.model_code.toLowerCase().includes(term) || r.name.toLowerCase().includes(term);
-    const matchLowStock = !lowStockOnly || r.stock_qty <= r.min_stock;
-    return matchText && matchLowStock;
+    const matchStock =
+      stockFilter === 'out' ? r.stock_qty === 0 :
+      stockFilter === 'low' ? (r.stock_qty > 0 && r.stock_qty <= r.min_stock) :
+      true;
+    return matchText && matchStock;
   });
 
   const openAdd = () => {
@@ -259,21 +263,44 @@ export default function StockRackPage() {
         )}
       </div>
 
-      {/* กรองเฉพาะของใกล้หมด/หมด */}
+      {/* กรองของใกล้หมดกับของหมด แยกกันคนละปุ่ม (กดได้ทีละอย่าง) */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', margin: '8px 0 12px', alignItems: 'center' }}>
+        <span style={{ fontSize: '13px', color: 'var(--color-text-secondary, #666)', alignSelf: 'center' }}>กรอง:</span>
         <button
           type="button"
-          onClick={() => setLowStockOnly((v) => !v)}
+          onClick={() => setStockFilter((v) => (v === 'low' ? '' : 'low'))}
           style={{
             padding: '4px 12px', borderRadius: '20px', fontSize: '13px', cursor: 'pointer',
             border: '1px solid', transition: 'all .15s',
-            background: lowStockOnly ? '#92400e' : 'transparent',
-            color: lowStockOnly ? '#fff' : 'var(--color-text-secondary, #666)',
-            borderColor: lowStockOnly ? '#92400e' : 'var(--color-border-secondary, #ccc)',
+            background: stockFilter === 'low' ? '#92400e' : 'transparent',
+            color: stockFilter === 'low' ? '#fff' : 'var(--color-text-secondary, #666)',
+            borderColor: stockFilter === 'low' ? '#92400e' : 'var(--color-border-secondary, #ccc)',
           }}
         >
-          ⚠️ แสดงเฉพาะของใกล้หมด/หมด
+          ⚠️ ใกล้หมด
         </button>
+        <button
+          type="button"
+          onClick={() => setStockFilter((v) => (v === 'out' ? '' : 'out'))}
+          style={{
+            padding: '4px 12px', borderRadius: '20px', fontSize: '13px', cursor: 'pointer',
+            border: '1px solid', transition: 'all .15s',
+            background: stockFilter === 'out' ? '#991b1b' : 'transparent',
+            color: stockFilter === 'out' ? '#fff' : 'var(--color-text-secondary, #666)',
+            borderColor: stockFilter === 'out' ? '#991b1b' : 'var(--color-border-secondary, #ccc)',
+          }}
+        >
+          ❌ หมด
+        </button>
+        {stockFilter && (
+          <button
+            type="button"
+            onClick={() => setStockFilter('')}
+            style={{ fontSize: '12px', color: 'var(--color-text-secondary, #666)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}
+          >
+            ล้างตัวกรอง
+          </button>
+        )}
       </div>
 
       {errorMsg && !showFormModal && <p className="error-text">{errorMsg}</p>}
@@ -462,7 +489,7 @@ export default function StockRackPage() {
           ตอนนั้น (ค้นหา/ใกล้หมด) ต่างพื้นที่กับ #qr-print-area กันชนกัน ── */}
       {docPrintMode && (
         <div id="stock-doc-print-area">
-          <h2>รายการสต็อกแร็ค OEM{lowStockOnly ? ' — เฉพาะที่ใกล้หมด/หมด' : ''}</h2>
+          <h2>รายการสต็อกแร็ค OEM{stockFilter === 'low' ? ' — เฉพาะที่ใกล้หมด' : stockFilter === 'out' ? ' — เฉพาะที่หมด' : ''}</h2>
           <p>พิมพ์เมื่อ {new Date().toLocaleString('th-TH')}</p>
           <table>
             <thead>

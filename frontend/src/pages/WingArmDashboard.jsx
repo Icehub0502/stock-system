@@ -44,7 +44,7 @@ export default function WingArmDashboard() {
   const [printQueue, setPrintQueue]   = useState([]);
 
   // ── กรองเฉพาะของใกล้หมด/หมด + พิมพ์เอกสารรายการ (คนละปุ่มกับพิมพ์ QR) ──
-  const [lowStockOnly, setLowStockOnly] = useState(false);
+  const [stockFilter, setStockFilter] = useState(''); // '' | 'low' | 'out'
   const [docPrintMode, setDocPrintMode] = useState(false);
 
   // ── stock modal ──
@@ -85,8 +85,11 @@ export default function WingArmDashboard() {
     const matchText     = !term         || r.sku.toLowerCase().includes(term) || r.name.toLowerCase().includes(term);
     const matchSide     = !filterSide     || r.side     === filterSide;
     const matchPosition = !filterPosition || r.position === filterPosition;
-    const matchLowStock = !lowStockOnly   || r.stock_qty <= r.min_stock;
-    return matchText && matchSide && matchPosition && matchLowStock;
+    const matchStock =
+      stockFilter === 'out' ? r.stock_qty === 0 :
+      stockFilter === 'low' ? (r.stock_qty > 0 && r.stock_qty <= r.min_stock) :
+      true;
+    return matchText && matchSide && matchPosition && matchStock;
   });
 
   // ── helpers ──
@@ -268,23 +271,12 @@ export default function WingArmDashboard() {
         <ToggleBtn value="lower"  current={filterPosition} onChange={setFilterPosition} label="ล่าง" />
         <ToggleBtn value="left"   current={filterSide}     onChange={setFilterSide}     label="ซ้าย" />
         <ToggleBtn value="right"  current={filterSide}     onChange={setFilterSide}     label="ขวา" />
-        <button
-          type="button"
-          onClick={() => setLowStockOnly((v) => !v)}
-          style={{
-            padding: '4px 12px', borderRadius: '20px', fontSize: '13px', cursor: 'pointer',
-            border: '1px solid', transition: 'all .15s',
-            background: lowStockOnly ? '#92400e' : 'transparent',
-            color: lowStockOnly ? '#fff' : 'var(--color-text-secondary, #666)',
-            borderColor: lowStockOnly ? '#92400e' : 'var(--color-border-secondary, #ccc)',
-          }}
-        >
-          ⚠️ ใกล้หมด/หมด
-        </button>
-        {(filterPosition || filterSide || lowStockOnly) && (
+        <ToggleBtn value="low"    current={stockFilter}    onChange={setStockFilter}    label="⚠️ ใกล้หมด" />
+        <ToggleBtn value="out"    current={stockFilter}    onChange={setStockFilter}    label="❌ หมด" />
+        {(filterPosition || filterSide || stockFilter) && (
           <button
             type="button"
-            onClick={() => { setFilterPosition(''); setFilterSide(''); setLowStockOnly(false); }}
+            onClick={() => { setFilterPosition(''); setFilterSide(''); setStockFilter(''); }}
             style={{ fontSize: '12px', color: 'var(--color-text-secondary)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}
           >
             ล้างทั้งหมด
@@ -558,7 +550,7 @@ export default function WingArmDashboard() {
       {/* ── พื้นที่สำหรับพิมพ์เอกสารรายการ (ตาราง ไม่ใช่ QR) ── */}
       {docPrintMode && (
         <div id="stock-doc-print-area">
-          <h2>รายการปีกนก{lowStockOnly ? ' — เฉพาะที่ใกล้หมด/หมด' : ''}</h2>
+          <h2>รายการปีกนก{stockFilter === 'low' ? ' — เฉพาะที่ใกล้หมด' : stockFilter === 'out' ? ' — เฉพาะที่หมด' : ''}</h2>
           <p>พิมพ์เมื่อ {new Date().toLocaleString('th-TH')}</p>
           <table>
             <thead>
