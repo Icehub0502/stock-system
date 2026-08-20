@@ -6,6 +6,7 @@ const {
   CLOSED_STATUSES,
 } = require('../utils/jobStatusFlow');
 const { ALIGN_BAY, isValidBay } = require('../utils/workBays');
+const { emitJobEvent } = require('../realtime');
 
 const router = express.Router();
 router.use(authenticate);
@@ -205,6 +206,7 @@ router.post('/', async (req, res) => {
     }
 
     await conn.commit();
+    emitJobEvent('job:created', { jobId: result.insertId, jobDate, status: 'received', actorId: req.user.id });
     res.status(201).json({ success: true, id: result.insertId, job_no: jobNo, queue_no: queueNo });
   } catch (err) {
     if (conn) await conn.rollback();
@@ -260,6 +262,7 @@ router.patch('/:id', async (req, res) => {
     );
 
     await conn.commit();
+    emitJobEvent('job:updated', { jobId: job.id, jobDate: job.job_date, status: job.status, actorId: req.user.id });
     res.json({ success: true });
   } catch (err) {
     if (conn) await conn.rollback();
@@ -315,6 +318,7 @@ router.patch('/:id/status', async (req, res) => {
     );
 
     await conn.commit();
+    emitJobEvent('job:status-changed', { jobId: job.id, jobDate: job.job_date, status, actorId: req.user.id });
     res.json({ success: true, status, bay: nextBay });
   } catch (err) {
     if (conn) await conn.rollback();
@@ -341,6 +345,10 @@ router.patch('/:id/quotation', async (req, res) => {
       [quotation_id, req.params.id]
     );
     if (!result.affectedRows) return res.status(404).json({ error: 'ไม่พบงานนี้' });
+
+    const [jobRows] = await pool.execute('SELECT job_date, status FROM jobs WHERE id = ?', [req.params.id]);
+    const jobRow = jobRows[0] || {};
+    emitJobEvent('job:quotation-linked', { jobId: req.params.id, jobDate: jobRow.job_date, status: jobRow.status, actorId: req.user.id });
 
     res.json({ success: true });
   } catch (err) {

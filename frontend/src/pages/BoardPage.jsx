@@ -1,13 +1,17 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import axios from 'axios';
 import { WORK_BAYS, ALIGN_BAY } from '../utils/workBays';
+import useRealtimeEvent from '../hooks/useRealtimeEvent';
 
 // axios ตรง ๆ ไม่ผ่าน ../api/client — client.js แนบ Bearer token จาก localStorage
 // ให้ทุก request และ redirect ไป /login ทันทีที่เจอ 401 ซึ่งพังกับหน้านี้ที่ตั้งใจ
 // ให้เปิดแบบสาธารณะ ไม่มีใครล็อกอิน (จอ TV ห้องรับรอง) ยิง /api/board ตรง ๆ พอ
 const boardClient = axios.create({ baseURL: import.meta.env.VITE_API_URL || '/api' });
 
-const POLL_MS = 8000;
+// Realtime (board:changed) is now the primary update path; this poll stays
+// as a backstop for an unattended TV screen whose socket never connects/
+// upgrades (e.g. nginx WS proxy not deployed yet).
+const POLL_MS = 30000;
 
 /**
  * จอบอร์ดห้องรับรอง — สาธารณะ ไม่ต้องล็อกอิน (ดู board.routes.js ฝั่ง backend ที่
@@ -21,24 +25,27 @@ export default function BoardPage() {
   const [loading, setLoading] = useState(true);
   const [now, setNow] = useState(new Date());
 
+  const load = useCallback(async () => {
+    try {
+      const res = await boardClient.get('/board');
+      setBays(res.data.bays || WORK_BAYS);
+      setRows(res.data.data || []);
+    } catch (err) {
+      // จอสาธารณะ ไม่มีใครกดปิด error ได้ — เงียบไว้แล้วลองรอบถัดไปพอ
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
-    let cancelled = false;
-    const load = async () => {
-      try {
-        const res = await boardClient.get('/board');
-        if (cancelled) return;
-        setBays(res.data.bays || WORK_BAYS);
-        setRows(res.data.data || []);
-      } catch (err) {
-        // จอสาธารณะ ไม่มีใครกดปิด error ได้ — เงียบไว้แล้วลองรอบถัดไปพอ
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    };
     load();
     const id = setInterval(load, POLL_MS);
-    return () => { cancelled = true; clearInterval(id); };
-  }, []);
+    return () => clearInterval(id);
+  }, [load]);
+
+  // Public board channel — no auth, no token. Falls back to the poll above
+  // if the socket never connects.
+  useRealtimeEvent('board:changed', () => load(), { channel: 'board' });
 
   useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 1000);

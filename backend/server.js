@@ -6,6 +6,7 @@ const https = require('https');
 
 const initDatabase = require('./src/db/init');
 const { createApp } = require('./src/app');
+const { initRealtime } = require('./src/realtime');
 
 async function main() {
   // เชื่อมต่อ XAMPP MySQL, สร้าง database/ตารางอัตโนมัติถ้ายังไม่มี, และ seed ข้อมูลเริ่มต้น
@@ -18,20 +19,26 @@ async function main() {
   const certPath = path.join(__dirname, 'certs', 'cert.pem');
   const keyPath = path.join(__dirname, 'certs', 'key.pem');
 
-  http.createServer(app).listen(PORT_HTTP, () => {
+  const servers = [];
+
+  const httpServer = http.createServer(app).listen(PORT_HTTP, () => {
     console.log(`HTTP server: http://localhost:${PORT_HTTP}`);
   });
+  servers.push(httpServer);
 
   if (fs.existsSync(certPath) && fs.existsSync(keyPath)) {
     const options = { cert: fs.readFileSync(certPath), key: fs.readFileSync(keyPath) };
-    https.createServer(options, app).listen(PORT_HTTPS, () => {
+    const httpsServer = https.createServer(options, app).listen(PORT_HTTPS, () => {
       console.log(`HTTPS server: https://localhost:${PORT_HTTPS}`);
       console.log('ใช้ URL นี้ (HTTPS) บนมือถือของช่าง เพื่อให้กล้องสแกน QR ทำงานได้ (getUserMedia ต้องใช้ HTTPS)');
     });
+    servers.push(httpsServer);
   } else {
     console.warn('ไม่พบ backend/certs/cert.pem และ backend/certs/key.pem -> HTTPS server จะไม่เปิด');
     console.warn('กล้องสแกน QR บนมือถือจะใช้งานไม่ได้จนกว่าจะสร้าง certificate (ดูวิธีใน README.md)');
   }
+
+  initRealtime(servers);
 }
 
 main().catch((err) => {

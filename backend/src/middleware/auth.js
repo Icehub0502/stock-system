@@ -2,6 +2,10 @@ const jwt = require('jsonwebtoken');
 require('dotenv').config();
 const { JWT_SECRET } = require('../config');
 
+function verifyToken(token) {
+  return jwt.verify(token, JWT_SECRET);
+}
+
 function authenticate(req, res, next) {
   const header = req.headers.authorization || '';
   const token = header.startsWith('Bearer ') ? header.slice(7) : null;
@@ -9,7 +13,7 @@ function authenticate(req, res, next) {
     return res.status(401).json({ error: 'ไม่พบ token กรุณาเข้าสู่ระบบ' });
   }
   try {
-    const payload = jwt.verify(token, JWT_SECRET);
+    const payload = verifyToken(token);
     req.user = payload; // { id, username, role, full_name }
     next();
   } catch (err) {
@@ -26,4 +30,4 @@ function requireRole(...roles) {
   };
 }
 
-module.exports = { authenticate, requireRole };
+module.exports = { authenticate, requireRole, verifyToken };

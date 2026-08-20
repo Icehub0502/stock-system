@@ -7,6 +7,7 @@ import { todayStr } from '../utils/format';
 import AddJobModal from '../components/AddJobModal';
 import CarIcon from '../components/CarIcon';
 import StatusTrack from '../components/StatusTrack';
+import useRealtimeEvent from '../hooks/useRealtimeEvent';
 
 /**
  * รายการงานวันนี้ (สำหรับพนักงาน — ต่างจาก /board ที่เป็นจอสาธารณะห้องรับรอง)
@@ -23,19 +24,27 @@ export default function JobBoardPage() {
   const [busyId, setBusyId] = useState(null);
   const [showAddModal, setShowAddModal] = useState(false);
 
-  const load = async () => {
+  const load = async ({ silent } = {}) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       const res = await client.get('/jobs', { params: { date } });
       setJobs(res.data.data || []);
     } catch (err) {
       setError(err.response?.data?.error || 'โหลดรายการงานไม่สำเร็จ');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
   useEffect(() => { load(); }, [date]);
+
+  // Realtime: other tabs/devices changing today's jobs should refresh this
+  // list without a manual reload. Guarded by `date` — staff browsing a past
+  // date shouldn't have their view silently overwritten by "today" activity.
+  useRealtimeEvent(
+    ['job:created', 'job:updated', 'job:status-changed', 'job:quotation-linked'],
+    (payload) => { if (payload.jobDate === date) load({ silent: true }); }
+  );
 
   async function changeStatus(job, status) {
     setBusyId(job.id);

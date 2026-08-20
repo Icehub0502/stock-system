@@ -13,6 +13,7 @@ const router = express.Router();
 //
 // ห้ามเพิ่มคอลัมน์เหล่านี้เด็ดขาด: customer_name, phone, customer_code, symptom,
 // note, total_amount, quotation_no, technician
+// (คำเตือนเดียวกันนี้ใช้กับ io.of('/board') ใน realtime.js ด้วย — ห้าม emit ฟิลด์งานใด ๆ บน namespace นั้น)
 // สิ่งที่ลูกค้าต้องใช้หารถตัวเองมีแค่: คิว / ทะเบียน / ยี่ห้อ-รุ่น-สี / ช่องยก / สถานะ
 // (หลักการเดียวกับ boardPayloadFor ของโปรเจกต์ ChamppowerD)
 router.get('/', async (req, res) => {

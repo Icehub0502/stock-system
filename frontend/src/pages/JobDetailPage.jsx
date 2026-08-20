@@ -4,6 +4,7 @@ import client from '../api/client';
 import { jobStatusDef } from '../utils/jobStatus';
 import { formatDbDateTime, todayStr } from '../utils/format';
 import DeclineReasonModal from '../components/DeclineReasonModal';
+import useRealtimeEvent from '../hooks/useRealtimeEvent';
 
 const emptyItem = () => ({ product_name: '', quantity: 1, unit_price: '' });
 
@@ -38,19 +39,33 @@ export default function JobDetailPage() {
   const [scheduleDate, setScheduleDate] = useState(todayStr());
   const [showDecline, setShowDecline] = useState(false);
 
-  const load = async () => {
+  const load = async ({ silent } = {}) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       const res = await client.get(`/jobs/${id}`);
       setJob(res.data.data);
     } catch (err) {
       setError(err.response?.data?.error || 'โหลดข้อมูลงานไม่สำเร็จ');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
   useEffect(() => { load(); }, [id]);
+
+  // Realtime: pick up status/quotation changes made elsewhere (e.g. the job
+  // board card, or another staff device) without a manual reload. Skipped
+  // while the user has the edit form open or a mutation in flight, so a
+  // background refresh never clobbers unsaved input or races an in-flight
+  // action's own `load()` call.
+  useRealtimeEvent(
+    ['job:updated', 'job:status-changed', 'job:quotation-linked'],
+    (payload) => {
+      if (String(payload.jobId) !== String(id)) return;
+      if (editing || saving || busy) return;
+      load({ silent: true });
+    }
+  );
 
   useEffect(() => {
     if (!form?.brand?.trim()) { setModels([]); return; }

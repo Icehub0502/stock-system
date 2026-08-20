@@ -8,27 +8,9 @@ const compression = require('compression');
 const path = require('path');
 const fs = require('fs');
 
-// รายชื่อ origin ที่อนุญาตให้เรียก API ข้ามโดเมนได้ (คั่นด้วย , ใน .env)
-// ปกติ frontend ถูกเสิร์ฟจาก Express ตัวเดียวกัน (same-origin) จึงไม่ต้องพึ่ง CORS
-// ค่านี้ไว้เผื่อกรณีเรียกจากโดเมน/มือถือแยก ค่า default คือโดเมนโปรดักชัน
-const ALLOWED_ORIGINS = (process.env.CORS_ORIGIN ||
-  'https://champ-powerspk.com,https://www.champ-powerspk.com')
-  .split(',')
-  .map((o) => o.trim())
-  .filter(Boolean);
-
-// localhost และ IP วง LAN (มือถือช่างเข้าผ่าน https://<ip>:4443 เพื่อสแกน QR)
-// ถือเป็น origin ที่เชื่อถือได้เสมอ ไม่ต้องใส่ใน .env
-const LOCAL_ORIGIN_REGEX =
-  /^https?:\/\/(localhost|127\.0\.0\.1|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3})(:\d+)?$/;
-
-function isAllowedOrigin(origin) {
-  // ไม่มี Origin = same-origin / curl / แอปมือถือ → อนุญาต
-  if (!origin) return true;
-  if (ALLOWED_ORIGINS.includes(origin)) return true;
-  if (LOCAL_ORIGIN_REGEX.test(origin)) return true;
-  return false;
-}
+// รายชื่อ origin ที่อนุญาตให้เรียก API ข้ามโดเมนได้ — นิยามอยู่ใน corsOrigins.js
+// (แยกออกมาจากไฟล์นี้เพื่อไม่ให้ realtime.js เกิด circular require กลับมาที่ app.js)
+const { isAllowedOrigin } = require('./corsOrigins');
 
 const corsOptions = {
   origin(origin, callback) {
@@ -207,4 +189,4 @@ function createApp() {
   return app;
 }
 
-module.exports = { createApp, listLandingImages };
+module.exports = { createApp, listLandingImages, isAllowedOrigin };
