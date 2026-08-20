@@ -45,7 +45,7 @@ const NAV_CATEGORIES = [
     label: "รายงาน",
     items: [
       { to: "/history", label: "ประวัติรายการ" },
-      { to: "/stock-usage-report", label: "อะไหล่ตามรุ่นรถ" },
+      { to: "/stock-usage-report", label: "ประวัติการตัดสต๊อก" },
     ],
   },
 ];

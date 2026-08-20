@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import client from '../api/client';
 import { todayStr } from '../utils/format';
+import { formatDateTh } from '../utils/dateGroups';
 
 const CURRENT_YEAR = new Date().getFullYear();
 const YEAR_OPTIONS = Array.from({ length: 6 }, (_, i) => CURRENT_YEAR - i);
@@ -23,9 +24,11 @@ function computePeriod(periodType, dayValue, monthValue, yearValue) {
   return { from: null, to: null }; // 'all'
 }
 
-// สรุปว่าอะไหล่ตัวไหนถูกตัดสต๊อกไปใช้กับรถรุ่นไหนบ่อยสุด — vehicle_model มาจากชื่อ
-// รายการอะไหล่เอง ดึงอัตโนมัติตอนตัดสต๊อก (ดู vehicleModelFromName.js ฝั่ง backend,
-// StockDeductionPage.jsx ฝั่งหน้าตัดสต๊อก) ไม่ใช่ข้อความที่พนักงานพิมพ์เอง
+// ประวัติการตัดสต๊อก แยกตามวันที่ — แต่ละวันแสดงยอดรวมที่ตัดออก + รายการอะไหล่
+// แต่ละชิ้นที่ตัดในวันนั้น (เดิมเป็นรายงาน "อะไหล่ตามรุ่นรถ" กลุ่มตามรุ่นรถ
+// เจ้าของร้านสั่งเปลี่ยนมากลุ่มตามวันที่แทน — ดูย้อนหลังง่ายกว่าว่าวันไหนตัดอะไรไป
+// เท่าไหร่) tx_date มาจาก created_at จริง ตรงกับวันที่ที่เลือกตอนตัด แม้เป็นการ
+// ตัดย้อนหลังผ่านช่อง "วันที่ตัดสต๊อก" ในหน้าตัดสต๊อกก็ตาม
 export default function StockUsageReportPage() {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -47,33 +50,34 @@ export default function StockUsageReportPage() {
         const params = {};
         if (from) params.from = from;
         if (to) params.to = to;
-        const res = await client.get('/transactions/usage-report', { params });
+        const res = await client.get('/transactions/deduction-history', { params });
         setRows(res.data.data || []);
       } catch (err) {
-        setError(err.response?.data?.error || 'โหลดรายงานไม่สำเร็จ');
+        setError(err.response?.data?.error || 'โหลดประวัติการตัดสต๊อกไม่สำเร็จ');
       } finally {
         setLoading(false);
       }
     })();
   }, [from, to]);
 
-  // สรุปยอดรวมแยกตามรุ่นรถ (ไม่แยกอะไหล่) ไว้ดูภาพรวมด้านบนตาราง — รุ่นไหนมาบ่อย
-  // ที่สุดจะได้เห็นทันทีโดยไม่ต้องไล่บวกเองจากตารางแยกอะไหล่ด้านล่าง
-  const byModel = useMemo(() => {
+  // กลุ่มแถวแบนจาก backend (วันที่ + อะไหล่ + รุ่นรถ) ให้เป็นก้อนต่อวัน — เรียงจาก
+  // วันล่าสุดไปเก่าสุด (backend ORDER BY tx_date DESC มาแล้ว ใช้ insertion order ต่อ)
+  const byDate = useMemo(() => {
     const map = new Map();
     for (const r of rows) {
-      const key = r.vehicle_model || '';
-      const entry = map.get(key) || { vehicle_model: r.vehicle_model, total_qty: 0 };
+      const key = r.tx_date;
+      if (!map.has(key)) map.set(key, { tx_date: key, total_qty: 0, items: [] });
+      const entry = map.get(key);
       entry.total_qty += Number(r.total_qty);
-      map.set(key, entry);
+      entry.items.push(r);
     }
-    return Array.from(map.values()).sort((a, b) => b.total_qty - a.total_qty);
+    return Array.from(map.values());
   }, [rows]);
 
   return (
     <div className="office-dashboard container">
       <div className="dashboard-header">
-        <h2>รายงานอะไหล่ตามรุ่นรถ <span className="dashboard-header-sub">— ดูว่าควรสต๊อกอะไหล่ของรถรุ่นไหนเป็นพิเศษ</span></h2>
+        <h2>ประวัติการตัดสต๊อก <span className="dashboard-header-sub">— ดูย้อนหลังว่าวันไหนตัดอะไหล่อะไรไปบ้าง เท่าไหร่</span></h2>
       </div>
 
       <div className="decline-summary-filters">
@@ -114,53 +118,33 @@ export default function StockUsageReportPage() {
 
       {loading ? (
         <div className="loading">กำลังโหลด...</div>
-      ) : rows.length === 0 ? (
+      ) : byDate.length === 0 ? (
         <div className="empty-message">ยังไม่มีข้อมูลการตัดสต๊อกในช่วงนี้</div>
       ) : (
-        <>
-          <div className="dash-panel">
-            <div className="dash-panel-title">สรุปยอดรวมตามรุ่นรถ</div>
-            <div className="quotation-table-wrap">
-              <table className="quotation-table">
-                <thead>
-                  <tr>
-                    <th>รุ่นรถ</th>
-                    <th>จำนวนอะไหล่ที่ตัดออกรวม</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {byModel.map((m) => (
-                    <tr key={m.vehicle_model}>
-                      <td data-label="รุ่นรถ">{m.vehicle_model || '-'}</td>
-                      <td data-label="จำนวนอะไหล่ที่ตัดออกรวม">{m.total_qty.toLocaleString('en-US')}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+        byDate.map((day) => (
+          <div className="dash-panel" key={day.tx_date}>
+            <div className="dash-panel-title">
+              {formatDateTh(day.tx_date)} — ตัดออกรวม {day.total_qty.toLocaleString('en-US')} ชิ้น
             </div>
-          </div>
-
-          <div className="dash-panel">
-            <div className="dash-panel-title">รายละเอียดแยกตามอะไหล่</div>
             <div className="quotation-table-wrap">
               <table className="quotation-table">
                 <thead>
                   <tr>
-                    <th>รุ่นรถ</th>
                     <th>ประเภท</th>
                     <th>รหัสอะไหล่</th>
                     <th>ชื่ออะไหล่</th>
+                    <th>รุ่นรถ</th>
                     <th>จำนวนที่ตัดออก</th>
                     <th>จำนวนครั้ง</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map((r, idx) => (
+                  {day.items.map((r, idx) => (
                     <tr key={idx}>
-                      <td data-label="รุ่นรถ">{r.vehicle_model || '-'}</td>
                       <td data-label="ประเภท">{r.item_type === 'rack' ? 'แร็ค' : 'ปีกนก'}</td>
                       <td data-label="รหัสอะไหล่">{r.part_code}</td>
                       <td data-label="ชื่ออะไหล่">{r.part_name}</td>
+                      <td data-label="รุ่นรถ">{r.vehicle_model || '-'}</td>
                       <td data-label="จำนวนที่ตัดออก">{Number(r.total_qty).toLocaleString('en-US')}</td>
                       <td data-label="จำนวนครั้ง">{r.movement_count}</td>
                     </tr>
@@ -169,7 +153,7 @@ export default function StockUsageReportPage() {
               </table>
             </div>
           </div>
-        </>
+        ))
       )}
     </div>
   );

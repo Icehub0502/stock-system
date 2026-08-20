@@ -330,11 +330,15 @@ router.delete('/:id', requireRole('office'), async (req, res) => {
   }
 });
 
-// ── รายงาน: อะไหล่ที่ถูกตัดสต๊อกบ่อยตามรุ่นรถ ──
-// vehicle_model ถูกดึงจากชื่ออะไหล่อัตโนมัติตอนตัด (ดู vehicleModelFromName.js) ไม่ใช่
-// ข้อความที่พนักงานพิมพ์เอง กรองช่วงวันที่ได้ด้วย from/to (YYYY-MM-DD ทั้งคู่ ไม่ระบุ
-// = เอาทั้งหมด)
-router.get('/usage-report', requireRole('office'), async (req, res) => {
+// ── ประวัติการตัดสต๊อก: กลุ่มตามวันที่ตัด ──
+// เดิมเป็นรายงาน "อะไหล่ตามรุ่นรถ" (group by vehicle_model) เจ้าของร้านสั่งเปลี่ยน
+// เป็นดูย้อนหลังว่าวันไหนตัดอะไรไปเท่าไหร่กี่ชิ้นแทน (group by วันที่) ใช้ tx_date
+// จาก created_at ตรง ๆ — ตรงกับวันที่จริงที่ตัด แม้เป็นการตัดย้อนหลังผ่านช่อง
+// "วันที่ตัดสต๊อก" ในหน้าตัดสต๊อกก็ตาม (ดู resolveTransactionDate.js) ไม่กรอง
+// vehicle_model IS NOT NULL อีกต่อไป เพราะเป็นหน้าประวัติ ควรเห็นการตัดทุกรายการ
+// จริง แม้รายการเก่าก่อนมีฟีเจอร์ vehicle_model จะไม่มีค่านี้ก็ตาม กรองช่วงวันที่ได้
+// ด้วย from/to (YYYY-MM-DD ทั้งคู่ ไม่ระบุ = เอาทั้งหมด)
+router.get('/deduction-history', requireRole('office'), async (req, res) => {
   const { from, to } = req.query;
   const params = [];
   let dateFilter = '';
@@ -344,6 +348,7 @@ router.get('/usage-report', requireRole('office'), async (req, res) => {
   try {
     const [rows] = await pool.execute(`
       SELECT
+        DATE(t.created_at) AS tx_date,
         t.vehicle_model,
         COALESCE(r.model_code, w.sku) AS part_code,
         COALESCE(r.name, w.name) AS part_name,
@@ -353,9 +358,9 @@ router.get('/usage-report', requireRole('office'), async (req, res) => {
       FROM transactions t
       LEFT JOIN racks r ON r.id = t.rack_id
       LEFT JOIN wing_arms w ON w.id = t.wing_arm_id
-      WHERE t.type = 'OUT' AND t.vehicle_model IS NOT NULL${dateFilter}
-      GROUP BY t.vehicle_model, part_code, part_name, item_type
-      ORDER BY total_qty DESC
+      WHERE t.type = 'OUT'${dateFilter}
+      GROUP BY tx_date, t.vehicle_model, part_code, part_name, item_type
+      ORDER BY tx_date DESC, total_qty DESC
     `, params);
     res.json({ success: true, data: rows });
   } catch (err) {
