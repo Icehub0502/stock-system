@@ -1,14 +1,24 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import client from '../api/client';
-import { jobStatusDef } from '../utils/jobStatus';
-import { formatDbDateTime } from '../utils/format';
+import { jobStatusDef, nextMainStatus } from '../utils/jobStatus';
+import { WORK_BAYS } from '../utils/workBays';
+import { formatDbDateTime, todayStr } from '../utils/format';
+import DeclineReasonModal from '../components/DeclineReasonModal';
+
+const emptyItem = () => ({ product_name: '', quantity: 1, unit_price: '' });
 
 /**
- * รายละเอียดงาน 1 คัน — แสดงข้อมูลรถ/ลูกค้า/อาการ, ประวัติสถานะ, และช่องผูกใบ
- * เสนอราคา ไม่ได้สร้างใบเสนอราคาจากในนี้ (เจ้าของร้านสั่ง: ตรวจเช็คเสร็จแล้วค่อย
- * ไปสร้างที่หน้าใบเสนอราคาปกติ — ฟอร์มนั้นมีระบบค้นหาลูกค้า/รถของตัวเองอยู่แล้ว)
- * กลับมาที่นี่แค่ "ผูก" เลขที่ใบที่สร้างไว้แล้วเข้ากับงาน ด้วยการค้นหาเลขที่/ทะเบียน
+ * รายละเอียดงาน 1 คัน — ข้อมูลรถ/ลูกค้า, สถานะ+ช่องยก, รายการอะไหล่/ใบเสนอราคา,
+ * และประวัติสถานะ ทุกการกระทำของงานนี้ (เปลี่ยนสถานะ ย้อนสถานะ ผูก/สร้างใบเสนอ
+ * ราคา ตัดสินใจอนุมัติ/นัดวัน/ไม่ทำ) รวมมาไว้ที่นี่ที่เดียว — JobBoardPage.jsx
+ * เหลือแค่การ์ดภาพรวม+ช่องยกด่วน ไม่มีปุ่มเปลี่ยนสถานะอีกต่อไป
+ *
+ * จุดตัดสินใจ 3 ทางแยก (อนุมัติ/นัดวันมาทำ/ไม่อนุมัติ) เรียก endpoint เฉพาะของ
+ * ใบเสนอราคาเอง (/approve สร้างใบเสร็จ, /schedule ต้องมีวันนัด, /decline ต้องมี
+ * เหตุผล — ตัวเดียวกับที่ QuotationListPage.jsx ใช้) แล้วค่อยอัปเดตสถานะงานให้
+ * ตรงกันทีหลัง ไม่ใช่ยิง PATCH /jobs/:id/status เฉย ๆ เพราะงั้นจะข้าม side effect
+ * สำคัญไป (ดูคอมเมนต์ที่ backend/src/routes/jobs.routes.js PATCH /:id/status)
  */
 export default function JobDetailPage() {
   const { id } = useParams();
@@ -16,6 +26,7 @@ export default function JobDetailPage() {
   const [job, setJob] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
 
   const [quoteQuery, setQuoteQuery] = useState('');
   const [quotes, setQuotes] = useState([]);
@@ -26,6 +37,11 @@ export default function JobDetailPage() {
   const [brands, setBrands] = useState([]);
   const [models, setModels] = useState([]);
   const [form, setForm] = useState(null);
+
+  const [items, setItems] = useState([emptyItem()]);
+  const [showSchedule, setShowSchedule] = useState(false);
+  const [scheduleDate, setScheduleDate] = useState(todayStr());
+  const [showDecline, setShowDecline] = useState(false);
 
   const load = async () => {
     try {
@@ -61,6 +77,14 @@ export default function JobDetailPage() {
     if (!form?.brand?.trim()) { setModels([]); return; }
     client.get('/vehicle-models/models', { params: { brand: form.brand.trim() } }).then((res) => setModels(res.data.data || []));
   }, [form?.brand]);
+
+  // สถานะก่อนหน้า (สำหรับปุ่มย้อนกลับ) — ดูจากประวัติจริงของงานนี้ ไม่ใช่ไล่ตาม
+  // MAIN_PATH เฉย ๆ เพราะงานอาจแยกไปทาง scheduled/rejected ที่ไม่ได้อยู่บนเส้นทาง
+  // หลัก การใช้ประวัติจริงย้อนได้ถูกต้องไม่ว่าจะมาจากทางไหน
+  const prevStatus = useMemo(() => {
+    const h = job?.history || [];
+    return h.length >= 2 ? h[h.length - 2].status : null;
+  }, [job?.history]);
 
   function startEdit() {
     setForm({
@@ -124,10 +148,127 @@ export default function JobDetailPage() {
     }
   }
 
+  async function changeStatus(status) {
+    setBusy(true);
+    setError('');
+    try {
+      await client.patch(`/jobs/${id}/status`, { status });
+      await load();
+    } catch (err) {
+      setError(err.response?.data?.error || 'เปลี่ยนสถานะไม่สำเร็จ');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function changeBay(bay) {
+    setBusy(true);
+    setError('');
+    try {
+      await client.patch(`/jobs/${id}`, { bay: bay || null });
+      await load();
+    } catch (err) {
+      setError(err.response?.data?.error || 'เปลี่ยนช่องยกไม่สำเร็จ');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function updateItem(idx, patch) {
+    setItems((prev) => prev.map((it, i) => (i === idx ? { ...it, ...patch } : it)));
+  }
+  function addItemRow() {
+    setItems((prev) => [...prev, emptyItem()]);
+  }
+  function removeItemRow(idx) {
+    setItems((prev) => (prev.length === 1 ? prev : prev.filter((_, i) => i !== idx)));
+  }
+  const itemsTotal = items.reduce((sum, it) => sum + (Number(it.quantity) || 0) * (Number(it.unit_price) || 0), 0);
+
+  // สร้างใบเสนอราคาจากรายการที่กรอกในนี้ตรง ๆ (ใช้ลูกค้า/รถของงานนี้เลย ไม่ต้อง
+  // ค้นหาใหม่) แล้วผูกกลับเข้างานทันที — ทำให้เสร็จในหน้าเดียว ไม่ต้องสลับไป
+  // /quotations เพื่อสร้างแล้วย้อนกลับมาผูกอีกที
+  async function createQuotationFromItems() {
+    const validItems = items.filter((it) => it.product_name.trim() && Number(it.quantity) > 0);
+    if (validItems.length === 0) {
+      setError('กรุณากรอกรายการอะไหล่อย่างน้อย 1 รายการ');
+      return;
+    }
+    setBusy(true);
+    setError('');
+    try {
+      const res = await client.post('/quotations', {
+        customer_id: job.customer_id,
+        vehicle_id: job.vehicle_id,
+        quotation_date: todayStr(),
+        mileage: job.mileage_in || 0,
+        queue_no: job.queue_no || null,
+        symptom: job.symptom || null,
+        items: validItems,
+      });
+      await client.patch(`/jobs/${id}/quotation`, { quotation_id: res.data.quotation_id });
+      setItems([emptyItem()]);
+      await load();
+    } catch (err) {
+      setError(err.response?.data?.error || 'สร้างใบเสนอราคาไม่สำเร็จ');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleApprove() {
+    if (!job.quotation_id) return;
+    setBusy(true);
+    setError('');
+    try {
+      await client.patch(`/quotations/${job.quotation_id}/approve`);
+      await client.patch(`/jobs/${id}/status`, { status: 'approved' });
+      await load();
+    } catch (err) {
+      setError(err.response?.data?.error || 'อนุมัติไม่สำเร็จ');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleSchedule() {
+    if (!job.quotation_id || !scheduleDate) return;
+    setBusy(true);
+    setError('');
+    try {
+      await client.patch(`/quotations/${job.quotation_id}/schedule`, { scheduled_date: scheduleDate });
+      await client.patch(`/jobs/${id}/status`, { status: 'scheduled' });
+      setShowSchedule(false);
+      await load();
+    } catch (err) {
+      setError(err.response?.data?.error || 'บันทึกวันนัดหมายไม่สำเร็จ');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleDeclineConfirm({ reason, note }) {
+    if (!job.quotation_id) return;
+    setBusy(true);
+    setError('');
+    try {
+      await client.patch(`/quotations/${job.quotation_id}/decline`, { reason, note });
+      await client.patch(`/jobs/${id}/status`, { status: 'rejected' });
+      setShowDecline(false);
+      navigate('/quotations/declined-summary');
+    } catch (err) {
+      setError(err.response?.data?.error || 'บันทึกไม่สำเร็จ');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   if (loading) return <div className="office-dashboard container"><div className="loading">กำลังโหลด...</div></div>;
   if (!job) return <div className="office-dashboard container"><div className="error-message">{error || 'ไม่พบงานนี้'}</div></div>;
 
   const st = jobStatusDef(job.status);
+  const next = nextMainStatus(job.status);
+  const isDecisionPoint = job.status === 'quoted';
 
   return (
     <div className="office-dashboard container">
@@ -195,9 +336,54 @@ export default function JobDetailPage() {
             <p><strong>เลขไมล์:</strong> {job.mileage_in ?? '-'}</p>
             <p><strong>อาการที่แจ้ง:</strong> {job.symptom || '-'}</p>
             {job.note && <p><strong>หมายเหตุ:</strong> {job.note}</p>}
-            <p><strong>สถานะปัจจุบัน:</strong> <span className={`status-badge ${st.badge}`}>{st.label}</span></p>
-            <p><strong>ช่องยก:</strong> {job.bay || '-'}</p>
           </>
+        )}
+      </div>
+
+      <div className="dash-panel">
+        <div className="dash-panel-title">สถานะ / ช่องยก</div>
+        <p style={{ marginBottom: 10 }}>
+          <span className={`status-badge ${st.badge}`}>{st.label}</span>
+        </p>
+
+        <div className="form-group" style={{ maxWidth: 220 }}>
+          <label>ช่องยก</label>
+          <select value={job.bay || ''} disabled={busy} onChange={(e) => changeBay(e.target.value)}>
+            <option value="">-</option>
+            {WORK_BAYS.map((b) => <option key={b} value={b}>{b}</option>)}
+          </select>
+        </div>
+
+        {error && <p className="error-text">{error}</p>}
+
+        <div className="modal-actions" style={{ marginTop: 12 }}>
+          {isDecisionPoint ? (
+            <>
+              <button type="button" className="btn-primary" disabled={busy || !job.quotation_id} onClick={handleApprove}>
+                อนุมัติ
+              </button>
+              <button type="button" disabled={busy || !job.quotation_id} onClick={() => setShowSchedule(true)}>
+                นัดวันมาทำ
+              </button>
+              <button type="button" className="btn-danger" disabled={busy || !job.quotation_id} onClick={() => setShowDecline(true)}>
+                ไม่ทำ
+              </button>
+            </>
+          ) : (
+            next && (
+              <button type="button" className="btn-primary" disabled={busy} onClick={() => changeStatus(next)}>
+                → {jobStatusDef(next).label}
+              </button>
+            )
+          )}
+          {prevStatus && (
+            <button type="button" disabled={busy} onClick={() => changeStatus(prevStatus)}>
+              ← ย้อนกลับเป็น {jobStatusDef(prevStatus).label}
+            </button>
+          )}
+        </div>
+        {isDecisionPoint && !job.quotation_id && (
+          <p style={{ color: '#92400e', fontSize: 13, marginTop: 8 }}>⚠️ เพิ่มรายการอะไหล่แล้วสร้างใบเสนอราคาก่อน ถึงจะตัดสินใจได้</p>
         )}
       </div>
 
@@ -206,32 +392,65 @@ export default function JobDetailPage() {
         {job.quotation_id ? (
           <p>
             เลขที่ <strong>{job.quotation_no}</strong> — สถานะ {job.quotation_status}
-            {' '}(<Link to="/quotations">ดูรายการใบเสนอราคา</Link>)
+            {' '}(<Link to="/quotations">ไปหน้าใบเสนอราคา / พิมพ์</Link>)
           </p>
         ) : (
           <>
-            <p style={{ color: '#92400e', fontSize: 14 }}>⚠️ ยังไม่ได้ผูกใบเสนอราคา — สร้างที่หน้าใบเสนอราคาก่อน แล้วค้นเลขที่มาผูกที่นี่</p>
-            <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-              <Link to="/quotations" className="btn-primary" style={{ textDecoration: 'none', padding: '8px 16px', borderRadius: 8 }}>
-                ไปสร้างใบเสนอราคา
-              </Link>
-            </div>
-            <input
-              type="text"
-              placeholder="ค้นหาด้วยเลขที่ใบเสนอราคา หรือทะเบียนรถ..."
-              value={quoteQuery}
-              onChange={(e) => setQuoteQuery(e.target.value)}
-            />
-            {matchedQuotes.length > 0 && (
-              <ul className="job-quote-suggest">
-                {matchedQuotes.map((q) => (
-                  <li key={q.id}>
-                    <span>{q.quotation_no} — {q.license_plate} {q.brand} {q.model}</span>
-                    <button type="button" disabled={linking} onClick={() => linkQuotation(q.id)}>ผูกใบนี้</button>
-                  </li>
+            <table className="quotation-table" style={{ marginBottom: 10 }}>
+              <thead>
+                <tr>
+                  <th>รายการอะไหล่</th>
+                  <th style={{ width: 80 }}>จำนวน</th>
+                  <th style={{ width: 120 }}>ราคา/หน่วย</th>
+                  <th style={{ width: 40 }}></th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((it, idx) => (
+                  <tr key={idx}>
+                    <td data-label="รายการอะไหล่">
+                      <input type="text" value={it.product_name} onChange={(e) => updateItem(idx, { product_name: e.target.value })} />
+                    </td>
+                    <td data-label="จำนวน">
+                      <input type="number" min="1" value={it.quantity} onChange={(e) => updateItem(idx, { quantity: e.target.value })} />
+                    </td>
+                    <td data-label="ราคา/หน่วย">
+                      <input type="number" min="0" value={it.unit_price} onChange={(e) => updateItem(idx, { unit_price: e.target.value })} />
+                    </td>
+                    <td data-label="">
+                      <button type="button" onClick={() => removeItemRow(idx)} disabled={items.length === 1}>✕</button>
+                    </td>
+                  </tr>
                 ))}
-              </ul>
-            )}
+              </tbody>
+            </table>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+              <button type="button" onClick={addItemRow}>+ เพิ่มรายการ</button>
+              <strong>รวม {itemsTotal.toLocaleString('th-TH')} บาท</strong>
+            </div>
+            <button type="button" className="btn-primary" disabled={busy} onClick={createQuotationFromItems}>
+              {busy ? 'กำลังสร้าง...' : 'สร้างใบเสนอราคา'}
+            </button>
+
+            <div style={{ marginTop: 20 }}>
+              <p style={{ color: '#6b7280', fontSize: 13, marginBottom: 6 }}>หรือถ้ามีใบเสนอราคาอยู่แล้ว ค้นหามาผูกแทน</p>
+              <input
+                type="text"
+                placeholder="ค้นหาด้วยเลขที่ใบเสนอราคา หรือทะเบียนรถ..."
+                value={quoteQuery}
+                onChange={(e) => setQuoteQuery(e.target.value)}
+              />
+              {matchedQuotes.length > 0 && (
+                <ul className="job-quote-suggest">
+                  {matchedQuotes.map((q) => (
+                    <li key={q.id}>
+                      <span>{q.quotation_no} — {q.license_plate} {q.brand} {q.model}</span>
+                      <button type="button" disabled={linking} onClick={() => linkQuotation(q.id)}>ผูกใบนี้</button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           </>
         )}
       </div>
@@ -248,6 +467,34 @@ export default function JobDetailPage() {
           ))}
         </ul>
       </div>
+
+      {showSchedule && (
+        <div className="modal-backdrop" onClick={() => setShowSchedule(false)}>
+          <div className="modal-card" style={{ maxWidth: 360 }} onClick={(e) => e.stopPropagation()}>
+            <h3 className="modal-title">นัดวันมาทำ</h3>
+            <div className="modal-form">
+              <label>วันที่นัด</label>
+              <input type="date" value={scheduleDate} min={todayStr()} onChange={(e) => setScheduleDate(e.target.value)} />
+              {error && <p className="error-text">{error}</p>}
+              <div className="modal-actions">
+                <button type="button" className="btn-primary" disabled={busy} onClick={handleSchedule}>
+                  {busy ? 'กำลังบันทึก...' : 'บันทึก'}
+                </button>
+                <button type="button" onClick={() => setShowSchedule(false)} disabled={busy}>ยกเลิก</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showDecline && job.quotation_id && (
+        <DeclineReasonModal
+          quotation={{ quotation_no: job.quotation_no, customer_name: job.customer_name }}
+          loading={busy}
+          onConfirm={handleDeclineConfirm}
+          onCancel={() => setShowDecline(false)}
+        />
+      )}
     </div>
   );
 }

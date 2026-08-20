@@ -4,7 +4,6 @@ const { authenticate } = require('../middleware/auth');
 const {
   isValidJobStatus,
   CLOSED_STATUSES,
-  JOB_STATUS_TO_QUOTATION,
 } = require('../utils/jobStatusFlow');
 const { ALIGN_BAY, isValidBay } = require('../utils/workBays');
 
@@ -252,8 +251,13 @@ router.patch('/:id', async (req, res) => {
 });
 
 // ── เปลี่ยนสถานะงาน ──
-// ทำ 4 อย่างในทรานแซกชันเดียว: อัปเดตสถานะ, บันทึกประวัติ, จัดการช่องยก, และดัน
-// สถานะใบเสนอราคาให้ตรงกัน (เฉพาะ 3 ทางแยกที่เป็นคำตอบของลูกค้าจริง ๆ)
+// ทำ 3 อย่างในทรานแซกชันเดียว: อัปเดตสถานะ, บันทึกประวัติ, จัดการช่องยก — จุด
+// ตัดสินใจ 3 ทางแยก (อนุมัติ/นัดวันมาทำ/ไม่อนุมัติ) ไม่ได้ดันสถานะใบเสนอราคา
+// ตรงนี้อีกต่อไป (เดิมทำ UPDATE quotations ตรง ๆ ซึ่งข้าม side effect สำคัญไป
+// เช่น "อนุมัติ" ต้องสร้างใบเสร็จด้วย ไม่ใช่แค่เปลี่ยน status) — หน้าเว็บ
+// (JobDetailPage.jsx) เรียก endpoint เฉพาะของใบเสนอราคาเอง (/approve, /schedule,
+// /decline ใน quotations.routes.js) แยกต่างหาก แล้วค่อยเรียก endpoint นี้เพื่อ
+// อัปเดตสถานะงานให้ตรงกันทีหลัง
 router.patch('/:id/status', async (req, res) => {
   const { status } = req.body || {};
   if (!isValidJobStatus(status)) return res.status(400).json({ error: 'สถานะไม่ถูกต้อง' });
@@ -289,15 +293,6 @@ router.patch('/:id/status', async (req, res) => {
       'INSERT INTO job_status_history (job_id, status, changed_by) VALUES (?,?,?)',
       [job.id, status, req.user.id]
     );
-
-    // ขากลับ: งาน → ใบเสนอราคา (ดู jobStatusFlow.js) ทำเฉพาะเมื่องานนี้ผูกใบไว้แล้ว
-    const quotationStatus = JOB_STATUS_TO_QUOTATION[status];
-    if (quotationStatus && job.quotation_id) {
-      await conn.execute(
-        'UPDATE quotations SET status = ? WHERE id = ?',
-        [quotationStatus, job.quotation_id]
-      );
-    }
 
     await conn.commit();
     res.json({ success: true, status, bay: nextBay });

@@ -1,7 +1,7 @@
 // สถานะงานรับรถ (ระบบคิว) — 11 ขั้นตามที่เจ้าของร้านเลือก อิงจากโครงของโปรเจกต์
 // ChamppowerD ที่ทำไว้สำหรับร้านเดียวกัน แต่ผูกกับ quotations.status ของระบบนี้แทน
-// (ดู QUOTATION_STATUS_TO_JOB ด้านล่าง) ไฟล์นี้เป็นต้นทางความจริงฝั่ง backend —
-// ฝั่งหน้าเว็บมีสำเนาที่ frontend/src/utils/jobStatus.js ต้องแก้ให้ตรงกันทั้งคู่
+// ไฟล์นี้เป็นต้นทางความจริงฝั่ง backend — ฝั่งหน้าเว็บมีสำเนาที่
+// frontend/src/utils/jobStatus.js ต้องแก้ให้ตรงกันทั้งคู่
 const JOB_STATUSES = [
   { key: 'received',   label: 'รับรถ' },
   { key: 'inspecting', label: 'ตรวจเช็ค' },
@@ -34,27 +34,10 @@ const BRANCH_ENDS = { scheduled: 'carout', rejected: 'carout' };
 // งานที่ถือว่า "จบแล้ว" — ไม่กินช่องยก และไม่ต้องขึ้นบนจอบอร์ดอีก
 const CLOSED_STATUSES = ['delivered', 'carout'];
 
-// ── เชื่อมสองทางกับสถานะใบเสนอราคาเดิมของระบบ ──
-// quotations.status เป็น ENUM('pending','approved','scheduled','no_date','declined')
-// อยู่แล้ว (ดู db/init.js) — พอฝั่งใบเสนอราคาเปลี่ยน สถานะงานเดินตามเอง ไม่ต้องกด
-// ซ้ำสองที่ 'no_date' (รอนัดหมาย ยังไม่ได้วัน) กับ 'scheduled' (นัดวันแล้ว) ฝั่งงาน
-// รับรถถือเป็นสถานะเดียวกันคือ "นัดวันมาทำ" เพราะบนช่องยกไม่ต่างกัน — รถลงทั้งคู่
-const QUOTATION_STATUS_TO_JOB = {
-  pending: 'quoted',
-  approved: 'approved',
-  scheduled: 'scheduled',
-  no_date: 'scheduled',
-  declined: 'rejected',
-};
-
-// ขากลับ: งานเปลี่ยนสถานะแล้วดันใบเสนอราคาให้ตรงกัน — เฉพาะ 3 ทางแยกที่เป็นคำตอบ
-// ของลูกค้าจริง ๆ สถานะอื่น (repairing/ready/…) เป็นความคืบหน้าหน้างาน ไม่ใช่การ
-// ตัดสินใจของลูกค้า จึงไม่แตะใบเสนอราคา
-const JOB_STATUS_TO_QUOTATION = {
-  approved: 'approved',
-  scheduled: 'scheduled',
-  rejected: 'declined',
-};
+// จุดตัดสินใจ 3 ทางแยกหลังเสนอราคา (อนุมัติ/นัดวันมาทำ/ไม่อนุมัติ) เชื่อมกับ
+// สถานะใบเสนอราคาจริงผ่าน endpoint เฉพาะของ quotations.routes.js เอง
+// (/approve, /schedule, /decline) ไม่ใช่การ map ค่าตรง ๆ ที่นี่ — เพราะ "อนุมัติ"
+// ต้องสร้างใบเสร็จไปด้วย ไม่ใช่แค่เปลี่ยน status (ดู JobDetailPage.jsx ฝั่งหน้าเว็บ)
 
 function isValidJobStatus(status) {
   return JOB_STATUS_KEYS.includes(status);
@@ -71,8 +54,6 @@ module.exports = {
   DECISION_KEYS,
   BRANCH_ENDS,
   CLOSED_STATUSES,
-  QUOTATION_STATUS_TO_JOB,
-  JOB_STATUS_TO_QUOTATION,
   isValidJobStatus,
   jobStatusLabel,
 };

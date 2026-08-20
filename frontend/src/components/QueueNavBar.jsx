@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
@@ -17,11 +17,25 @@ import { useAuth } from '../context/AuthContext';
  * ไม่มี hamburger/BottomNav มาปิดให้) ทับเนื้อหาเกือบทั้งจอเป็นสีดำ — เมนูนี้
  * มีลิงก์แค่ 2-3 อันจึงไม่จำเป็นต้องมี drawer เลย ทำเป็นแถบเรียงแนวนอนธรรมดา
  * ที่ wrap ได้เองบนจอแคบ ง่ายและชัวร์กว่า
+ *
+ * ปุ่มเฟือง (⚙️) แทนปุ่ม "ออกจากระบบ" ที่เคยอยู่ตรง ๆ — เผื่อที่ไว้สำหรับเมนู
+ * ตั้งค่าที่จะเพิ่มทีหลัง (ยังไม่มีอะไรจริงตอนนี้ เจ้าของร้านสั่งทำค้างไว้ก่อน)
+ * ตอนนี้ในนั้นมีแค่ "ออกจากระบบ" รายการเดียว
  */
 export default function QueueNavBar() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef(null);
+
+  useEffect(() => {
+    function onClickOutside(e) {
+      if (menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false);
+    }
+    document.addEventListener('mousedown', onClickOutside);
+    return () => document.removeEventListener('mousedown', onClickOutside);
+  }, []);
 
   const handleLogout = () => {
     logout();
@@ -41,8 +55,23 @@ export default function QueueNavBar() {
             รายการงานวันนี้
           </Link>
           <a href="/board" target="_blank" rel="noreferrer">จอบอร์ด ↗</a>
-          <span className="navbar-user">{user.full_name}</span>
-          <button type="button" className="btn-logout" onClick={handleLogout}>ออกจากระบบ</button>
+
+          <div className="queue-navbar-settings" ref={menuRef}>
+            <button
+              type="button"
+              className="queue-navbar-gear"
+              aria-label="ตั้งค่า"
+              onClick={() => setMenuOpen((o) => !o)}
+            >
+              ⚙️
+            </button>
+            {menuOpen && (
+              <div className="queue-navbar-settings-menu">
+                <div className="queue-navbar-settings-user">{user.full_name}</div>
+                <button type="button" onClick={handleLogout}>ออกจากระบบ</button>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </nav>

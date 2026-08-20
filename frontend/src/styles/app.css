@@ -5607,6 +5607,88 @@ body:has(.modal-backdrop) .page-fade-in {
 }
 .checkbox-chip input { width: auto; min-height: unset; }
 
+/* ── JobBoardPage.jsx — การ์ดรายการงานวันนี้ ── */
+.job-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+.job-card {
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  padding: 14px;
+  cursor: pointer;
+  transition: box-shadow 0.15s ease, transform 0.15s ease;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.job-card:hover { box-shadow: 0 6px 18px -6px rgba(0, 0, 0, 0.18); transform: translateY(-1px); }
+
+.job-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.job-card-queue { font-weight: 700; font-size: 1.05rem; color: #111827; }
+
+.job-card-vehicle {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 0;
+}
+.job-card-car-icon { width: 96px; height: 60px; color: #9ca3af; }
+
+/* ป้ายทะเบียนจำลองจริง — พื้นขาว ขอบดำมน มีแถบฟ้าบางด้านบนเหมือนป้ายรถส่วนบุคคล
+   ในไทย ตัวเลขตัวหนาสีดำตรงกลาง */
+.plate-badge {
+  min-width: 120px;
+  background: #ffffff;
+  border: 2px solid #1f2937;
+  border-radius: 6px;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+}
+.plate-badge-no {
+  display: block;
+  padding: 6px 14px;
+  text-align: center;
+  font-weight: 800;
+  font-size: 1.05rem;
+  color: #111827;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.job-card-info { text-align: center; }
+.job-card-model { font-weight: 600; color: #111827; font-size: 0.95rem; }
+.job-card-customer { color: #6b7280; font-size: 0.85rem; margin-top: 2px; }
+.job-card-symptom {
+  color: #9ca3af;
+  font-size: 0.8rem;
+  margin-top: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.job-card-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #f1f5f9;
+}
+.job-card-bottom select { font-size: 0.82rem; padding: 4px 8px; }
+.job-card-quote-no { font-size: 0.78rem; color: #6b7280; white-space: nowrap; }
+
 .job-quote-suggest {
   list-style: none;
   margin: 8px 0 0;
@@ -5693,6 +5775,54 @@ body:has(.modal-backdrop) .page-fade-in {
 }
 .queue-navbar-links a:hover,
 .queue-navbar-links a.active { color: white; }
+
+.queue-navbar-settings { position: relative; }
+.queue-navbar-gear {
+  background: transparent;
+  border: 1px solid #3f3f3f;
+  color: #cbd5e1;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  font-size: 1.05rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.queue-navbar-gear:hover { background: #2a2a2a; color: white; }
+.queue-navbar-settings-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 180px;
+  background: #1a1a1a;
+  border: 1px solid #2a2a2a;
+  border-radius: 10px;
+  padding: 6px;
+  box-shadow: 0 8px 24px -4px rgba(0, 0, 0, 0.5);
+  z-index: 90;
+}
+.queue-navbar-settings-user {
+  padding: 8px 10px;
+  color: #9ca3af;
+  font-size: 0.82rem;
+  border-bottom: 1px solid #2a2a2a;
+  margin-bottom: 4px;
+  white-space: nowrap;
+}
+.queue-navbar-settings-menu button {
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  color: #ef4444;
+  padding: 8px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+.queue-navbar-settings-menu button:hover { background: #2a2a2a; }
 
 @media (max-width: 640px) {
   .queue-navbar { padding: 10px 14px; padding-top: calc(10px + env(safe-area-inset-top, 0px)); }

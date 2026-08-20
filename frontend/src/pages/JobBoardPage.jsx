@@ -1,16 +1,18 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import client from '../api/client';
-import { jobStatusDef, nextMainStatus, DECISION_KEYS, CLOSED_STATUSES } from '../utils/jobStatus';
+import { jobStatusDef } from '../utils/jobStatus';
 import { WORK_BAYS } from '../utils/workBays';
 import { todayStr } from '../utils/format';
 import AddJobModal from '../components/AddJobModal';
+import CarIcon from '../components/CarIcon';
 
 /**
  * รายการงานวันนี้ (สำหรับพนักงาน — ต่างจาก /board ที่เป็นจอสาธารณะห้องรับรอง)
- * ปุ่ม "ขั้นถัดไป" เดินตามเส้นทางหลัก (MAIN_PATH); ตรงจุดตัดสินใจ (หลังเสนอราคา)
- * จะโชว์ 3 ปุ่มให้เลือกแทนปุ่มเดียว — ทุกการเปลี่ยนสถานะจะดันสถานะใบเสนอราคาที่
- * ผูกไว้ให้ตรงกันอัตโนมัติที่ backend (ดู jobs.routes.js PATCH /:id/status)
+ * แสดงเป็นการ์ด ไม่ใช่ตาราง — แต่ละใบเห็นรูปรถ+ป้ายทะเบียนแบบจำลองของจริง เห็น
+ * สถานะทันทีโดยไม่ต้องกดเข้าไป กดที่การ์ดเพื่อดู/แก้ไขรายละเอียด เปลี่ยนสถานะ
+ * ตัดสินใจใบเสนอราคา ฯลฯ (ทุกอย่างย้ายไปอยู่ที่ JobDetailPage.jsx แล้ว หน้านี้
+ * เหลือแค่ช่องยกที่ยังปรับเร็ว ๆ จากการ์ดได้เลยโดยไม่ต้องเปิดเข้าไป)
  */
 export default function JobBoardPage() {
   const navigate = useNavigate();
@@ -34,19 +36,6 @@ export default function JobBoardPage() {
   };
 
   useEffect(() => { load(); }, [date]);
-
-  async function changeStatus(job, status) {
-    setBusyId(job.id);
-    setError('');
-    try {
-      await client.patch(`/jobs/${job.id}/status`, { status });
-      await load();
-    } catch (err) {
-      setError(err.response?.data?.error || 'เปลี่ยนสถานะไม่สำเร็จ');
-    } finally {
-      setBusyId(null);
-    }
-  }
 
   async function changeBay(job, bay) {
     setBusyId(job.id);
@@ -84,63 +73,43 @@ export default function JobBoardPage() {
       ) : jobs.length === 0 ? (
         <div className="empty-message">ยังไม่มีรถเข้าคิววันนี้</div>
       ) : (
-        <div className="quotation-table-wrap">
-          <table className="quotation-table">
-            <thead>
-              <tr>
-                <th>คิว</th>
-                <th>เลขงาน</th>
-                <th>ทะเบียน / รุ่นรถ</th>
-                <th>ลูกค้า</th>
-                <th>อาการ</th>
-                <th>ช่องยก</th>
-                <th>สถานะ</th>
-                <th>ใบเสนอราคา</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {jobs.map((j) => {
-                const st = jobStatusDef(j.status);
-                const next = nextMainStatus(j.status);
-                const isDecisionPoint = j.status === 'quoted';
-                const isClosed = CLOSED_STATUSES.includes(j.status);
-                return (
-                  <tr key={j.id}>
-                    <td data-label="คิว">{j.queue_no || '-'}</td>
-                    <td data-label="เลขงาน">{j.job_no}</td>
-                    <td data-label="ทะเบียน / รุ่นรถ">{j.license_plate || '-'} — {j.brand} {j.model}</td>
-                    <td data-label="ลูกค้า">{j.customer_name || '-'}</td>
-                    <td data-label="อาการ">{j.symptom || '-'}</td>
-                    <td data-label="ช่องยก">
-                      <select value={j.bay || ''} disabled={busyId === j.id || isClosed} onChange={(e) => changeBay(j, e.target.value)}>
-                        <option value="">-</option>
-                        {WORK_BAYS.map((b) => <option key={b} value={b}>{b}</option>)}
-                      </select>
-                    </td>
-                    <td data-label="สถานะ"><span className={`status-badge ${st.badge}`}>{st.label}</span></td>
-                    <td data-label="ใบเสนอราคา">{j.quotation_no || '-'}</td>
-                    <td data-label="" className="actions">
-                      <button type="button" onClick={() => navigate(`/jobs/${j.id}`)}>รายละเอียด</button>
-                      {isDecisionPoint ? (
-                        DECISION_KEYS.map((k) => (
-                          <button key={k} type="button" disabled={busyId === j.id} onClick={() => changeStatus(j, k)}>
-                            {jobStatusDef(k).label}
-                          </button>
-                        ))
-                      ) : (
-                        next && !isClosed && (
-                          <button type="button" className="btn-primary" disabled={busyId === j.id} onClick={() => changeStatus(j, next)}>
-                            → {jobStatusDef(next).label}
-                          </button>
-                        )
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+        <div className="job-card-grid">
+          {jobs.map((j) => {
+            const st = jobStatusDef(j.status);
+            return (
+              <div key={j.id} className="job-card" onClick={() => navigate(`/jobs/${j.id}`)}>
+                <div className="job-card-top">
+                  <span className="job-card-queue">คิว {j.queue_no || '-'}</span>
+                  <span className={`status-badge ${st.badge}`}>{st.label}</span>
+                </div>
+
+                <div className="job-card-vehicle">
+                  <CarIcon className="job-card-car-icon" />
+                  <div className="plate-badge">
+                    <span className="plate-badge-no">{j.license_plate || '-'}</span>
+                  </div>
+                </div>
+
+                <div className="job-card-info">
+                  <div className="job-card-model">{j.brand} {j.model} {j.color && `· ${j.color}`}</div>
+                  <div className="job-card-customer">{j.customer_name || '-'}</div>
+                  {j.symptom && <div className="job-card-symptom">{j.symptom}</div>}
+                </div>
+
+                <div className="job-card-bottom" onClick={(e) => e.stopPropagation()}>
+                  <select
+                    value={j.bay || ''}
+                    disabled={busyId === j.id}
+                    onChange={(e) => changeBay(j, e.target.value)}
+                  >
+                    <option value="">ช่องยก: -</option>
+                    {WORK_BAYS.map((b) => <option key={b} value={b}>ช่องยก: {b}</option>)}
+                  </select>
+                  {j.quotation_no && <span className="job-card-quote-no">{j.quotation_no}</span>}
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
 
