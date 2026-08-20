@@ -46,4 +46,28 @@ router.get('/models', async (req, res) => {
   }
 });
 
+// POST /vehicle-models — เพิ่มยี่ห้อ/รุ่นใหม่เข้าแคตตาล็อกอ้างอิง ใช้ตอนเจอรถ
+// รุ่นใหม่ที่ยังไม่มีในระบบระหว่างกรอกหน้างานจริง (เช่นหน้าเพิ่มคิวรับรถ) — ไม่
+// บังคับ year_range เพราะพนักงานมักพิมพ์ปีต่อท้ายชื่อรุ่นไปเลย (เช่น "Altis 08")
+// แทนที่จะแยกกรอกช่วงปี ใช้ INSERT IGNORE เพราะมี UNIQUE (brand, model,
+// year_range) อยู่แล้ว — ถ้ามีอยู่แล้วพอดีก็แค่ไม่ทำอะไร ไม่ใช่ error
+router.post('/', async (req, res) => {
+  const brand = req.body.brand?.toString().trim();
+  const model = req.body.model?.toString().trim();
+  const yearRange = req.body.year_range?.toString().trim() || null;
+  if (!brand || !model) {
+    return res.status(400).json({ error: 'กรุณากรอกยี่ห้อและรุ่นรถ' });
+  }
+  try {
+    await pool.execute(
+      'INSERT IGNORE INTO vehicle_models (brand, model, year_range) VALUES (?, ?, ?)',
+      [brand, model, yearRange]
+    );
+    res.status(201).json({ success: true });
+  } catch (err) {
+    console.error('Error adding vehicle model:', err);
+    res.status(500).json({ error: 'เพิ่มรุ่นรถไม่สำเร็จ' });
+  }
+});
+
 module.exports = router;

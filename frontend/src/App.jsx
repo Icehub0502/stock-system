@@ -41,7 +41,6 @@ const StockUsageReportPage = lazy(() => import("./pages/StockUsageReportPage"));
 // บนโดเมนหลักได้ด้วย เพราะเป็น build เดียวกัน) BoardPage ไม่ต้องล็อกอิน — จอ TV
 // ห้องรับรอง
 const BoardPage = lazy(() => import("./pages/BoardPage"));
-const CheckInPage = lazy(() => import("./pages/CheckInPage"));
 const JobBoardPage = lazy(() => import("./pages/JobBoardPage"));
 const JobDetailPage = lazy(() => import("./pages/JobDetailPage"));
 
@@ -275,14 +274,6 @@ function AppRoutes() {
           {/* /board เปิดสาธารณะ ไม่ต้องล็อกอิน (จอ TV ห้องรับรอง) — ตั้งใจไม่มี
               ProtectedRoute ห่อ ต่างจากทุก route อื่นในไฟล์นี้ */}
           <Route path="/board" element={<BoardPage />} />
-          <Route
-            path="/checkin"
-            element={
-              <ProtectedRoute roles={["office"]}>
-                <CheckInPage />
-              </ProtectedRoute>
-            }
-          />
           <Route
             path="/jobs"
             element={

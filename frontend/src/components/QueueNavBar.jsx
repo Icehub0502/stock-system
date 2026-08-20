@@ -31,9 +31,6 @@ export default function QueueNavBar() {
       <div className="navbar-links open">
         {user && (
           <>
-            <Link to="/checkin" className={`navbar-standalone-link ${location.pathname === '/checkin' ? 'active' : ''}`}>
-              รับรถเข้าคิว
-            </Link>
             <Link to="/jobs" className={`navbar-standalone-link ${location.pathname === '/jobs' ? 'active' : ''}`}>
               รายการงานวันนี้
             </Link>

@@ -1,9 +1,10 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import client from '../api/client';
 import { jobStatusDef, nextMainStatus, DECISION_KEYS, CLOSED_STATUSES } from '../utils/jobStatus';
 import { WORK_BAYS } from '../utils/workBays';
 import { todayStr } from '../utils/format';
+import AddJobModal from '../components/AddJobModal';
 
 /**
  * รายการงานวันนี้ (สำหรับพนักงาน — ต่างจาก /board ที่เป็นจอสาธารณะห้องรับรอง)
@@ -18,6 +19,7 @@ export default function JobBoardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [busyId, setBusyId] = useState(null);
+  const [showAddModal, setShowAddModal] = useState(false);
 
   const load = async () => {
     try {
@@ -70,7 +72,9 @@ export default function JobBoardPage() {
           <label>วันที่</label>
           <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
         </div>
-        <button type="button" className="btn-primary" onClick={() => navigate('/checkin')}>+ รับรถเข้าคิว</button>
+        <button type="button" className="btn btn-primary btn-fab-mobile" onClick={() => setShowAddModal(true)}>
+          + เพิ่มคิว
+        </button>
       </div>
 
       {error && <div className="error-message">{error}</div>}
@@ -138,6 +142,13 @@ export default function JobBoardPage() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {showAddModal && (
+        <AddJobModal
+          onClose={() => setShowAddModal(false)}
+          onCreated={() => { setShowAddModal(false); load(); }}
+        />
       )}
     </div>
   );

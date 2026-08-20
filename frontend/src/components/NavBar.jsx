@@ -31,8 +31,7 @@ const NAV_CATEGORIES = [
     key: "queue",
     label: "คิวรับรถ",
     items: [
-      { to: "/checkin", label: "รับรถเข้าคิว" },
-      { to: "/jobs", label: "รายการงานวันนี้" },
+      { to: "/jobs", label: "รายการงานวันนี้ (+ เพิ่มคิว)" },
       { to: "/board", label: "จอบอร์ดห้องรับรอง" },
     ],
   },
