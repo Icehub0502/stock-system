@@ -71,6 +71,16 @@ function skuSide(item, pair) {
   return item.side || null;
 }
 
+// วันที่วันนี้ตามเวลาเครื่องผู้ใช้ (ไม่ใช้ toISOString ตรง ๆ เพราะนั่นคือเวลา UTC
+// อาจข้ามวันไปแล้วถ้าผู้ใช้อยู่ timezone +7)
+function todayLocalDate() {
+  const now = new Date();
+  const yyyy = now.getFullYear();
+  const mm = String(now.getMonth() + 1).padStart(2, '0');
+  const dd = String(now.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+
 export default function StockDeductionPage() {
   const [racks, setRacks] = useState([]);
   const [wingArms, setWingArms] = useState([]);
@@ -84,6 +94,7 @@ export default function StockDeductionPage() {
   const [models, setModels] = useState([]);
   const [model, setModel] = useState('');
   const [note, setNote] = useState('');
+  const [txDate, setTxDate] = useState(todayLocalDate());
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
@@ -141,6 +152,7 @@ export default function StockDeductionPage() {
     setQty('');
     setBrand('');
     setModel('');
+    setTxDate(todayLocalDate());
     setErrorMsg('');
     setSuccessMsg('');
   };
@@ -151,6 +163,7 @@ export default function StockDeductionPage() {
     setBrand('');
     setModel('');
     setNote('');
+    setTxDate(todayLocalDate());
   };
 
   const maxQty = useMemo(() => {
@@ -166,22 +179,27 @@ export default function StockDeductionPage() {
     if (!selected) return setErrorMsg('กรุณาเลือกอะไหล่ก่อน');
     if (!quantity || quantity <= 0) return setErrorMsg('กรุณาระบุจำนวนที่มากกว่า 0');
     if (quantity > maxQty) return setErrorMsg(`สต๊อกเหลือไม่พอ (คงเหลือสูงสุด ${maxQty})`);
+    if (!txDate) return setErrorMsg('กรุณาระบุวันที่ตัดสต๊อก');
+    if (txDate > todayLocalDate()) return setErrorMsg('เลือกวันที่ในอนาคตไม่ได้');
 
     setSubmitting(true);
     try {
       const modelLabel = models.find((m) => m.model === model)?.label || model;
       const vehicle_model = brand ? `${brand} ${modelLabel}`.trim() : null;
+      // ส่ง transaction_date ไปด้วยเสมอ — ถ้าเป็นวันนี้ backend จะใช้เวลาปัจจุบันตามปกติ
+      // (ดู resolveTransactionDate.js) เผื่อกรณีของออกวันนี้แต่พนักงานลืมตัด มาตัด
+      // ย้อนหลังทีหลัง จะได้เลือกวันที่จริงที่ของออกแทนวันที่กดตัดจริง
       if (selected.type === 'rack') {
-        await client.post('/transactions/out', { model_code: selected.code, qty: quantity, note, vehicle_model });
+        await client.post('/transactions/out', { model_code: selected.code, qty: quantity, note, vehicle_model, transaction_date: txDate });
       } else if (pair) {
         const isSelectedLeft = skuSide(selected, pair) === 'left';
         const leftItem = isSelectedLeft ? selected : pair;
         const rightItem = isSelectedLeft ? pair : selected;
         await client.patch('/wing-arms/pair-stock', {
-          left_id: leftItem.id, right_id: rightItem.id, qty: quantity, note, vehicle_model,
+          left_id: leftItem.id, right_id: rightItem.id, qty: quantity, note, vehicle_model, transaction_date: txDate,
         });
       } else {
-        await client.patch(`/wing-arms/${selected.id}/stock`, { delta: -quantity, note, vehicle_model });
+        await client.patch(`/wing-arms/${selected.id}/stock`, { delta: -quantity, note, vehicle_model, transaction_date: txDate });
       }
       setSuccessMsg(
         pair
@@ -303,6 +321,20 @@ export default function StockDeductionPage() {
                     ))}
                   </select>
                 </>
+              )}
+
+              <label>วันที่ตัดสต๊อก</label>
+              <input
+                type="date"
+                value={txDate}
+                max={todayLocalDate()}
+                onChange={(e) => setTxDate(e.target.value)}
+                required
+              />
+              {txDate !== todayLocalDate() && (
+                <p style={{ margin: '4px 0 0', color: '#92400e', fontSize: 13 }}>
+                  ⚠️ กำลังตัดสต๊อกย้อนหลัง — จะถูกบันทึกเป็นวันที่ {txDate}
+                </p>
               )}
 
               <label>หมายเหตุ</label>

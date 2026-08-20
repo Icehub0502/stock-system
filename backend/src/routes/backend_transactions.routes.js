@@ -2,6 +2,7 @@ const express = require('express');
 const pool = require('../db/pool');
 const { authenticate, requireRole } = require('../middleware/auth');
 const { vehicleModelFromRackName } = require('../utils/vehicleModelFromName');
+const { resolveTransactionDate } = require('../utils/resolveTransactionDate');
 
 const router = express.Router();
 router.use(authenticate);
@@ -198,11 +199,12 @@ router.post('/in', async (req, res) => {
 // ไม่มีส่ง/ว่างเปล่าค่อย fallback ไปเดาจากชื่อเองอีกที (กันเรียก endpoint นี้ตรง ๆ
 // โดยไม่ผ่านหน้าตัดสต๊อก เช่นเรียกจาก API ภายนอก)
 router.post('/out', async (req, res) => {
-  const { model_code, qty = 1, note = '', vehicle_model } = req.body || {};
+  const { model_code, qty = 1, note = '', vehicle_model, transaction_date } = req.body || {};
   const quantity = Number(qty);
   if (!model_code || !quantity || quantity <= 0) {
     return res.status(400).json({ error: 'ข้อมูลไม่ถูกต้อง' });
   }
+  const createdAt = resolveTransactionDate(transaction_date);
 
   let conn;
   try {
@@ -220,10 +222,15 @@ router.post('/out', async (req, res) => {
     }
 
     await conn.execute('UPDATE racks SET stock_qty = stock_qty - ? WHERE id = ?', [quantity, rack.id]);
-    const [txResult] = await conn.execute(
-      'INSERT INTO transactions (rack_id, type, qty, user_id, note, vehicle_model) VALUES (?, ?, ?, ?, ?, ?)',
-      [rack.id, 'OUT', quantity, req.user.id, note, vehicle_model || vehicleModelFromRackName(rack.name)]
-    );
+    const [txResult] = createdAt
+      ? await conn.execute(
+          'INSERT INTO transactions (rack_id, type, qty, user_id, note, vehicle_model, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+          [rack.id, 'OUT', quantity, req.user.id, note, vehicle_model || vehicleModelFromRackName(rack.name), createdAt]
+        )
+      : await conn.execute(
+          'INSERT INTO transactions (rack_id, type, qty, user_id, note, vehicle_model) VALUES (?, ?, ?, ?, ?, ?)',
+          [rack.id, 'OUT', quantity, req.user.id, note, vehicle_model || vehicleModelFromRackName(rack.name)]
+        );
     await conn.commit();
 
     const [updatedRows] = await pool.execute('SELECT * FROM racks WHERE id = ?', [rack.id]);

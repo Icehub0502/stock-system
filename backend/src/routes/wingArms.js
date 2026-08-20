@@ -4,6 +4,7 @@ const pool    = require('../db/pool');
 const QRCode  = require('qrcode');
 const { authenticate, requireRole } = require('../middleware/auth');
 const { vehicleModelFromWingArmName } = require('../utils/vehicleModelFromName');
+const { resolveTransactionDate } = require('../utils/resolveTransactionDate');
 
 // ปีกนกใช้ทีละคู่เสมอ (ซ้าย+ขวา) — ตรวจคู่ 2 ชั้น (mirror ของ
 // frontend/src/pages/StockDeductionPage.jsx ทุกประการ ดูคอมเมนต์ละเอียดที่นั่น):
@@ -239,10 +240,11 @@ router.get('/:id/qrcode', requireRole('office'), async (req, res) => {
 // ทำให้กับแร็ค — เดิมฝั่งปีกนกไม่รับพารามิเตอร์นี้เลย ปีกนกที่สแกนเข้าบิลจึงหลุดออกจาก
 // บิลทั้งหมด (ไม่โผล่ในหน้ารายละเอียดบิล และไม่ถูกนับใน item_count)
 router.patch('/:id/stock', async (req, res) => {
-  const { delta, note = '', vehicle_model, receipt_session_id = null } = req.body;
+  const { delta, note = '', vehicle_model, receipt_session_id = null, transaction_date } = req.body;
   if (!delta || delta === 0) {
     return res.status(400).json({ error: 'ระบุ delta ที่ไม่เป็น 0' });
   }
+  const createdAt = resolveTransactionDate(transaction_date);
 
   // ใช้ transaction + FOR UPDATE ล็อคแถวกันเหตุการณ์ lost update
   // เมื่อมีการอัปเดตสต็อกชิ้นเดียวกันพร้อมกันหลาย request
@@ -271,10 +273,15 @@ router.patch('/:id/stock', async (req, res) => {
     // ถ้า column ยังไม่มีให้รัน migration SQL ด้านล่างก่อน
     let transactionId = null;
     try {
-      const [txResult] = await conn.query(
-        'INSERT INTO transactions (wing_arm_id, type, qty, user_id, note, vehicle_model, receipt_session_id) VALUES (?,?,?,?,?,?,?)',
-        [req.params.id, delta > 0 ? 'IN' : 'OUT', Math.abs(delta), userId, note, vehicleModel, receipt_session_id || null]
-      );
+      const [txResult] = createdAt
+        ? await conn.query(
+            'INSERT INTO transactions (wing_arm_id, type, qty, user_id, note, vehicle_model, receipt_session_id, created_at) VALUES (?,?,?,?,?,?,?,?)',
+            [req.params.id, delta > 0 ? 'IN' : 'OUT', Math.abs(delta), userId, note, vehicleModel, receipt_session_id || null, createdAt]
+          )
+        : await conn.query(
+            'INSERT INTO transactions (wing_arm_id, type, qty, user_id, note, vehicle_model, receipt_session_id) VALUES (?,?,?,?,?,?,?)',
+            [req.params.id, delta > 0 ? 'IN' : 'OUT', Math.abs(delta), userId, note, vehicleModel, receipt_session_id || null]
+          );
       transactionId = txResult.insertId;
     } catch (txErr) {
       // log แต่ไม่ fail — stock อัปเดตสำเร็จแล้ว
@@ -301,11 +308,12 @@ router.patch('/:id/stock', async (req, res) => {
 // ตรงกัน — ดู StockDeductionPage.jsx) endpoint นี้แค่ตรวจสต๊อก+ตัดให้ทั้งคู่แบบอะตอมิก
 // ไม่รับ id เดี่ยวมาเดาคู่เอง กันตัดผิดตัวถ้า client จับคู่มาไม่ตรง
 router.patch('/pair-stock', requireRole('office'), async (req, res) => {
-  const { left_id, right_id, qty, note = '', vehicle_model } = req.body || {};
+  const { left_id, right_id, qty, note = '', vehicle_model, transaction_date } = req.body || {};
   const quantity = Number(qty);
   if (!left_id || !right_id || left_id === right_id || !quantity || quantity <= 0) {
     return res.status(400).json({ error: 'ข้อมูลไม่ถูกต้อง' });
   }
+  const createdAt = resolveTransactionDate(transaction_date);
 
   let conn;
   try {
@@ -338,10 +346,17 @@ router.patch('/pair-stock', requireRole('office'), async (req, res) => {
     const userId = req.user?.id || 1;
     for (const item of rows) {
       await conn.query('UPDATE wing_arms SET stock_qty = stock_qty - ? WHERE id = ?', [quantity, item.id]);
-      await conn.query(
-        'INSERT INTO transactions (wing_arm_id, type, qty, user_id, note, vehicle_model) VALUES (?,?,?,?,?,?)',
-        [item.id, 'OUT', quantity, userId, note, vehicle_model || vehicleModelFromWingArmName(item.name)]
-      );
+      if (createdAt) {
+        await conn.query(
+          'INSERT INTO transactions (wing_arm_id, type, qty, user_id, note, vehicle_model, created_at) VALUES (?,?,?,?,?,?,?)',
+          [item.id, 'OUT', quantity, userId, note, vehicle_model || vehicleModelFromWingArmName(item.name), createdAt]
+        );
+      } else {
+        await conn.query(
+          'INSERT INTO transactions (wing_arm_id, type, qty, user_id, note, vehicle_model) VALUES (?,?,?,?,?,?)',
+          [item.id, 'OUT', quantity, userId, note, vehicle_model || vehicleModelFromWingArmName(item.name)]
+        );
+      }
     }
 
     await conn.commit();
