@@ -5642,7 +5642,31 @@ body:has(.modal-backdrop) .page-fade-in {
 .job-history-time { color: #6b7280; }
 .job-history-by { color: #9ca3af; margin-left: auto; }
 
-/* ── QueueNavBar.jsx — แท็บเล็กบอกว่าเป็นระบบคิวรับรถ ── */
+/* ── QueueNavBar.jsx — แถบเมนูของ subdomain คิวรับรถ ──
+   ตั้งใจไม่ใช้คลาส .navbar/.navbar-brand/.navbar-links ของ NavBar ปกติเลย
+   (ยกเว้น .navbar-brand-text/.brand-champ/.brand-power ที่เป็นแค่สไตล์ตัวอักษร
+   ล้วน ๆ ไม่มีผลกับ layout) เพราะคลาสพวกนั้นผูกกับระบบ hamburger + slide-in
+   drawer + BottomNav ของแอปหลัก ลองใช้ร่วมกันแล้วเจอบั๊ก: .navbar-links กลาย
+   เป็นแผงเลื่อนออกด้านข้าง position:fixed ที่ไม่มีอะไรมาปิดให้ (เพราะที่นี่ไม่มี
+   hamburger/BottomNav) เลยค้าง "เปิด" ทับเนื้อหาเกือบทั้งจอเป็นสีดำตลอด — เมนูนี้
+   ลิงก์แค่ 2-3 อัน จึงทำเป็นแถบเดียวเรียงแนวนอน wrap เองได้บนจอแคบแทน ไม่ต้องมี
+   drawer เลย */
+.queue-navbar {
+  position: sticky;
+  top: 0;
+  z-index: 70;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 10px 20px;
+  padding-top: calc(10px + env(safe-area-inset-top, 0px));
+  background: #111111;
+  border-bottom: 1px solid #2a2a2a;
+}
+
+.queue-navbar-title { display: flex; align-items: center; flex-shrink: 0; }
+
 .queue-navbar-tag {
   margin-left: 10px;
   padding: 2px 10px;
@@ -5652,4 +5676,25 @@ body:has(.modal-backdrop) .page-fade-in {
   font-size: 0.72rem;
   font-weight: 700;
   vertical-align: middle;
+}
+
+.queue-navbar-links {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-left: auto;
+}
+.queue-navbar-links a {
+  color: #cbd5e1;
+  text-decoration: none;
+  font-size: 0.92rem;
+  white-space: nowrap;
+}
+.queue-navbar-links a:hover,
+.queue-navbar-links a.active { color: white; }
+
+@media (max-width: 640px) {
+  .queue-navbar { padding: 10px 14px; padding-top: calc(10px + env(safe-area-inset-top, 0px)); }
+  .queue-navbar-links { gap: 12px; margin-left: 0; width: 100%; }
 }
