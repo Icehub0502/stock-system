@@ -43,6 +43,10 @@ export default function WingArmDashboard() {
   const [printLoading, setPrintLoading] = useState(false);
   const [printQueue, setPrintQueue]   = useState([]);
 
+  // ── กรองเฉพาะของใกล้หมด/หมด + พิมพ์เอกสารรายการ (คนละปุ่มกับพิมพ์ QR) ──
+  const [lowStockOnly, setLowStockOnly] = useState(false);
+  const [docPrintMode, setDocPrintMode] = useState(false);
+
   // ── stock modal ──
   const [stockModal, setStockModal]   = useState(null);
   const [stockDelta, setStockDelta]   = useState('');
@@ -64,10 +68,16 @@ export default function WingArmDashboard() {
   }, [printQueue]);
 
   useEffect(() => {
-    const fn = () => setPrintQueue([]);
+    const fn = () => { setPrintQueue([]); setDocPrintMode(false); };
     window.addEventListener('afterprint', fn);
     return () => window.removeEventListener('afterprint', fn);
   }, []);
+
+  useEffect(() => {
+    if (!docPrintMode) return;
+    const t = setTimeout(() => window.print(), 100);
+    return () => clearTimeout(t);
+  }, [docPrintMode]);
 
   // ── filtered list ──
   const filtered = items.filter((r) => {
@@ -75,7 +85,8 @@ export default function WingArmDashboard() {
     const matchText     = !term         || r.sku.toLowerCase().includes(term) || r.name.toLowerCase().includes(term);
     const matchSide     = !filterSide     || r.side     === filterSide;
     const matchPosition = !filterPosition || r.position === filterPosition;
-    return matchText && matchSide && matchPosition;
+    const matchLowStock = !lowStockOnly   || r.stock_qty <= r.min_stock;
+    return matchText && matchSide && matchPosition && matchLowStock;
   });
 
   // ── helpers ──
@@ -216,6 +227,7 @@ export default function WingArmDashboard() {
           {!selectMode && (
             <>
               <button type="button" onClick={toggleSelectMode}>🖨️ เลือกพิมพ์ QR</button>
+              <button type="button" onClick={() => setDocPrintMode(true)}>🖨️ พิมพ์เอกสาร</button>
               <button className="btn-primary" onClick={openAdd}>+ เพิ่มรายการ</button>
             </>
           )}
@@ -256,10 +268,23 @@ export default function WingArmDashboard() {
         <ToggleBtn value="lower"  current={filterPosition} onChange={setFilterPosition} label="ล่าง" />
         <ToggleBtn value="left"   current={filterSide}     onChange={setFilterSide}     label="ซ้าย" />
         <ToggleBtn value="right"  current={filterSide}     onChange={setFilterSide}     label="ขวา" />
-        {(filterPosition || filterSide) && (
+        <button
+          type="button"
+          onClick={() => setLowStockOnly((v) => !v)}
+          style={{
+            padding: '4px 12px', borderRadius: '20px', fontSize: '13px', cursor: 'pointer',
+            border: '1px solid', transition: 'all .15s',
+            background: lowStockOnly ? '#92400e' : 'transparent',
+            color: lowStockOnly ? '#fff' : 'var(--color-text-secondary, #666)',
+            borderColor: lowStockOnly ? '#92400e' : 'var(--color-border-secondary, #ccc)',
+          }}
+        >
+          ⚠️ ใกล้หมด/หมด
+        </button>
+        {(filterPosition || filterSide || lowStockOnly) && (
           <button
             type="button"
-            onClick={() => { setFilterPosition(''); setFilterSide(''); }}
+            onClick={() => { setFilterPosition(''); setFilterSide(''); setLowStockOnly(false); }}
             style={{ fontSize: '12px', color: 'var(--color-text-secondary)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}
           >
             ล้างทั้งหมด
@@ -517,7 +542,7 @@ export default function WingArmDashboard() {
         </div>
       )}
 
-      {/* ── Print Area ── */}
+      {/* ── Print Area (QR) ── */}
       <div id="qr-print-area">
         {printQueue.map((item) => (
           <div className="qr-print-label" key={item.sku}>
@@ -529,6 +554,38 @@ export default function WingArmDashboard() {
           </div>
         ))}
       </div>
+
+      {/* ── พื้นที่สำหรับพิมพ์เอกสารรายการ (ตาราง ไม่ใช่ QR) ── */}
+      {docPrintMode && (
+        <div id="stock-doc-print-area">
+          <h2>รายการปีกนก{lowStockOnly ? ' — เฉพาะที่ใกล้หมด/หมด' : ''}</h2>
+          <p>พิมพ์เมื่อ {new Date().toLocaleString('th-TH')}</p>
+          <table>
+            <thead>
+              <tr>
+                <th>รหัส SKU</th>
+                <th>ตำแหน่ง</th>
+                <th>รายการ</th>
+                <th>คงเหลือ</th>
+                <th>แจ้งเตือนเมื่อต่ำกว่า</th>
+                <th>สถานะ</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((r) => (
+                <tr key={r.id}>
+                  <td>{r.sku}</td>
+                  <td>{tagLabel(r)}</td>
+                  <td>{r.name}</td>
+                  <td>{r.stock_qty}</td>
+                  <td>{r.min_stock}</td>
+                  <td>{r.stock_qty === 0 ? 'หมด' : r.stock_qty <= r.min_stock ? 'ใกล้หมด' : 'ปกติ'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }

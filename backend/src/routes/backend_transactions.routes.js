@@ -338,6 +338,10 @@ router.delete('/:id', requireRole('office'), async (req, res) => {
 // vehicle_model IS NOT NULL อีกต่อไป เพราะเป็นหน้าประวัติ ควรเห็นการตัดทุกรายการ
 // จริง แม้รายการเก่าก่อนมีฟีเจอร์ vehicle_model จะไม่มีค่านี้ก็ตาม กรองช่วงวันที่ได้
 // ด้วย from/to (YYYY-MM-DD ทั้งคู่ ไม่ระบุ = เอาทั้งหมด)
+// ไม่ group อีกต่อไป (เดิม SUM+GROUP BY รวมยอดต่อวัน) — เปลี่ยนเป็นคืนทีละ
+// transaction จริง เพื่อให้หน้าเว็บมี id ต่อแถวสำหรับปุ่มลบ (เรียก DELETE /:id
+// เดิมด้านบน ซึ่งคืนสต็อกให้ถูกต้องอยู่แล้ว) ยอดรวมต่อวันยังคำนวณได้เหมือนเดิม
+// แค่ไปรวมฝั่งหน้าเว็บแทน (StockUsageReportPage.jsx)
 router.get('/deduction-history', requireRole('office'), async (req, res) => {
   const { from, to } = req.query;
   const params = [];
@@ -348,19 +352,19 @@ router.get('/deduction-history', requireRole('office'), async (req, res) => {
   try {
     const [rows] = await pool.execute(`
       SELECT
+        t.id,
+        t.created_at,
         DATE(t.created_at) AS tx_date,
         t.vehicle_model,
+        t.qty,
         COALESCE(r.model_code, w.sku) AS part_code,
         COALESCE(r.name, w.name) AS part_name,
-        IF(t.rack_id IS NOT NULL, 'rack', 'wing_arm') AS item_type,
-        SUM(t.qty) AS total_qty,
-        COUNT(*) AS movement_count
+        IF(t.rack_id IS NOT NULL, 'rack', 'wing_arm') AS item_type
       FROM transactions t
       LEFT JOIN racks r ON r.id = t.rack_id
       LEFT JOIN wing_arms w ON w.id = t.wing_arm_id
       WHERE t.type = 'OUT'${dateFilter}
-      GROUP BY tx_date, t.vehicle_model, part_code, part_name, item_type
-      ORDER BY tx_date DESC, total_qty DESC
+      ORDER BY tx_date DESC, t.created_at DESC
     `, params);
     res.json({ success: true, data: rows });
   } catch (err) {

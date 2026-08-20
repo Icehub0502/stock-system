@@ -888,6 +888,34 @@ button:disabled { background: #f3f4f6; color: #9ca3af; cursor: not-allowed; }
 }
 
 /* ════════════════════════════════════════
+   พิมพ์เอกสารรายการสต็อก (แร็ค/ปีกนก) — ตาราง
+   ไม่ใช่ QR ใช้กับ StockRackPage.jsx และ WingArmDashboard.jsx
+   ════════════════════════════════════════ */
+#stock-doc-print-area { display: none; }
+
+@media print {
+  body * { visibility: hidden; }
+  #stock-doc-print-area, #stock-doc-print-area * { visibility: visible; }
+  #stock-doc-print-area {
+    display: block !important;
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%;
+    padding: 16px;
+    color: #000;
+  }
+  #stock-doc-print-area h2 { font-size: 20px; margin-bottom: 4px; }
+  #stock-doc-print-area p { font-size: 12px; color: #444; margin-bottom: 12px; }
+  #stock-doc-print-area table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  #stock-doc-print-area th, #stock-doc-print-area td {
+    border: 1px solid #000;
+    padding: 6px 8px;
+    text-align: left;
+  }
+  #stock-doc-print-area th { background: #eee; }
+}
+
+/* ════════════════════════════════════════
    PRODUCT COST PAGE — monochrome redesign
    ════════════════════════════════════════ */
 

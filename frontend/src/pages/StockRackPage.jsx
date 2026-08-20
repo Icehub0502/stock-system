@@ -55,6 +55,10 @@ export default function StockRackPage() {
   const [printLoading, setPrintLoading] = useState(false);
   const [printQueue, setPrintQueue] = useState([]);
 
+  // ── กรองเฉพาะของใกล้หมด/หมด + พิมพ์เอกสารรายการ (คนละปุ่มกับพิมพ์ QR) ──
+  const [lowStockOnly, setLowStockOnly] = useState(false);
+  const [docPrintMode, setDocPrintMode] = useState(false);
+
   const loadRacks = async () => {
     const res = await client.get('/racks');
     setRacks(res.data);
@@ -69,18 +73,22 @@ export default function StockRackPage() {
   }, [printQueue]);
 
   useEffect(() => {
-    const handleAfterPrint = () => setPrintQueue([]);
+    const handleAfterPrint = () => { setPrintQueue([]); setDocPrintMode(false); };
     window.addEventListener('afterprint', handleAfterPrint);
     return () => window.removeEventListener('afterprint', handleAfterPrint);
   }, []);
 
+  useEffect(() => {
+    if (!docPrintMode) return;
+    const timer = setTimeout(() => window.print(), 100);
+    return () => clearTimeout(timer);
+  }, [docPrintMode]);
+
   const filteredRacks = racks.filter((r) => {
     const term = searchTerm.trim().toLowerCase();
-    if (!term) return true;
-    return (
-      r.model_code.toLowerCase().includes(term) ||
-      r.name.toLowerCase().includes(term)
-    );
+    const matchText = !term || r.model_code.toLowerCase().includes(term) || r.name.toLowerCase().includes(term);
+    const matchLowStock = !lowStockOnly || r.stock_qty <= r.min_stock;
+    return matchText && matchLowStock;
   });
 
   const openAdd = () => {
@@ -207,6 +215,9 @@ export default function StockRackPage() {
               <button type="button" onClick={toggleSelectMode}>
                 🖨️ เลือกพิมพ์ QR
               </button>
+              <button type="button" onClick={() => setDocPrintMode(true)}>
+                🖨️ พิมพ์เอกสาร
+              </button>
               <button className="btn-primary" onClick={openAdd}>+ เพิ่มรายการ</button>
             </>
           )}
@@ -246,6 +257,23 @@ export default function StockRackPage() {
             ✕
           </button>
         )}
+      </div>
+
+      {/* กรองเฉพาะของใกล้หมด/หมด */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', margin: '8px 0 12px', alignItems: 'center' }}>
+        <button
+          type="button"
+          onClick={() => setLowStockOnly((v) => !v)}
+          style={{
+            padding: '4px 12px', borderRadius: '20px', fontSize: '13px', cursor: 'pointer',
+            border: '1px solid', transition: 'all .15s',
+            background: lowStockOnly ? '#92400e' : 'transparent',
+            color: lowStockOnly ? '#fff' : 'var(--color-text-secondary, #666)',
+            borderColor: lowStockOnly ? '#92400e' : 'var(--color-border-secondary, #ccc)',
+          }}
+        >
+          ⚠️ แสดงเฉพาะของใกล้หมด/หมด
+        </button>
       </div>
 
       {errorMsg && !showFormModal && <p className="error-text">{errorMsg}</p>}
@@ -429,6 +457,37 @@ export default function StockRackPage() {
           </div>
         ))}
       </div>
+
+      {/* ── พื้นที่สำหรับพิมพ์เอกสารรายการ (ตาราง ไม่ใช่ QR) — ใช้รายการที่กรองอยู่
+          ตอนนั้น (ค้นหา/ใกล้หมด) ต่างพื้นที่กับ #qr-print-area กันชนกัน ── */}
+      {docPrintMode && (
+        <div id="stock-doc-print-area">
+          <h2>รายการสต็อกแร็ค OEM{lowStockOnly ? ' — เฉพาะที่ใกล้หมด/หมด' : ''}</h2>
+          <p>พิมพ์เมื่อ {new Date().toLocaleString('th-TH')}</p>
+          <table>
+            <thead>
+              <tr>
+                <th>รหัสรุ่น</th>
+                <th>รายการ</th>
+                <th>คงเหลือ</th>
+                <th>แจ้งเตือนเมื่อต่ำกว่า</th>
+                <th>สถานะ</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredRacks.map((r) => (
+                <tr key={r.id}>
+                  <td>{r.model_code}</td>
+                  <td>{r.name}</td>
+                  <td>{r.stock_qty}</td>
+                  <td>{r.min_stock}</td>
+                  <td>{r.stock_qty === 0 ? 'หมด' : r.stock_qty <= r.min_stock ? 'ใกล้หมด' : 'ปกติ'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
