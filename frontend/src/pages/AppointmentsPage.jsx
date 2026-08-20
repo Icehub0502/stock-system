@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import client from "../api/client";
 import QuotationFormModal from "../components/QuotationFormModal";
 import QuotationPrintModal from "../components/QuotationPrintModal";
 import ScheduleDateDialog from "../components/ScheduleDateDialog";
 import StatusBadge from "../components/StatusBadge";
 import { todayStr } from "../utils/format";
+import useRealtimeEvent from "../hooks/useRealtimeEvent";
 
 // รวมใบเสนอราคาที่ยังไม่อนุมัติและอยู่ในสถานะ "นัดหมาย" ไว้หน้าเดียว แยกเป็น 2
 // กลุ่มชัดเจน: มีวันนัดแล้ว (status='scheduled') กับยังไม่ได้ระบุวันนัด
@@ -22,21 +23,43 @@ export default function AppointmentsPage() {
   const [editingQuotation, setEditingQuotation] = useState(null);
   const [schedulingQuotation, setSchedulingQuotation] = useState(null);
 
-  const fetchQuotations = async () => {
+  const fetchQuotations = async ({ silent } = {}) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       const response = await client.get('/quotations');
       setQuotations(response.data.data || []);
     } catch (err) {
       setError(err.response?.data?.error || "เกิดข้อผิดพลาด");
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
   useEffect(() => {
     fetchQuotations();
   }, []);
+
+  // Realtime: same pattern as QuotationListPage — refresh in the background,
+  // deferring while a row-level action is in flight or the form modal is
+  // open so we never clobber unsaved input, catching up once the guard clears.
+  const pendingRefreshRef = useRef(false);
+  useRealtimeEvent(
+    ['quotation:created', 'quotation:updated', 'quotation:deleted'],
+    () => {
+      if (actioningId !== null || showFormModal) {
+        pendingRefreshRef.current = true;
+        return;
+      }
+      fetchQuotations({ silent: true });
+    }
+  );
+
+  useEffect(() => {
+    if (actioningId === null && !showFormModal && pendingRefreshRef.current) {
+      pendingRefreshRef.current = false;
+      fetchQuotations({ silent: true });
+    }
+  }, [showFormModal, actioningId]);
 
   // ปิดบิล/อนุมัติไปแล้วไม่ใช่ "รอนัดหมาย" อีกต่อไป — กรองเฉพาะที่ยังค้างจริง ๆ
   const openAppointments = useMemo(

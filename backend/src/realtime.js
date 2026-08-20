@@ -44,17 +44,43 @@ function initRealtime(httpServers) {
   // board.routes.js) — ดู emitJobEvent ด้านล่างสำหรับ payload ที่อนุญาต
   io.of('/board');
 
+  // Join office-role staff into a dedicated room so quotation/receipt events
+  // (office-only) don't fan out to every /rt client (e.g. job-board kiosks).
+  // Registered as its own connection listener (not inside the auth
+  // middleware above) so it re-runs correctly on every reconnect.
+  io.of('/rt').on('connection', (socket) => {
+    if (socket.data.user?.role === 'office') socket.join('office');
+  });
+
   return io;
+}
+
+function emitStaffEvent(event, payload, { room } = {}) {
+  if (!io) return;
+  try {
+    const target = room ? io.of('/rt').to(room) : io.of('/rt');
+    target.emit(event, payload);
+  } catch (err) {
+    console.error(err);
+  }
 }
 
 function emitJobEvent(event, { jobId, jobDate, status, actorId }) {
   if (!io) return;
+  emitStaffEvent(event, { jobId, jobDate, status, actorId });
   try {
-    io.of('/rt').emit(event, { jobId, jobDate, status, actorId });
     io.of('/board').emit('board:changed', { jobDate });
   } catch (err) {
     console.error(err);
   }
 }
 
-module.exports = { initRealtime, emitJobEvent };
+function emitQuotationEvent(event, { quotationId, status, actorId }) {
+  emitStaffEvent(event, { quotationId, status, actorId }, { room: 'office' });
+}
+
+function emitReceiptEvent(event, { receiptId, actorId }) {
+  emitStaffEvent(event, { receiptId, actorId }, { room: 'office' });
+}
+
+module.exports = { initRealtime, emitJobEvent, emitQuotationEvent, emitReceiptEvent };

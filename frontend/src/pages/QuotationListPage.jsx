@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { useAuth } from "../context/AuthContext";
 import client from "../api/client";
 import QuotationFormModal from "../components/QuotationFormModal";
@@ -9,6 +9,7 @@ import DeclineReasonModal from "../components/DeclineReasonModal";
 import StatusBadge from "../components/StatusBadge";
 import { todayStr } from "../utils/format";
 import { buildArchiveGroups, formatDateTh, formatMonthTh, formatYearTh } from "../utils/dateGroups";
+import useRealtimeEvent from "../hooks/useRealtimeEvent";
 
 export default function QuotationListPage() {
   const { user } = useAuth();
@@ -32,21 +33,46 @@ export default function QuotationListPage() {
   const [decliningQuotation, setDecliningQuotation] = useState(null);
 
   // Fetch quotations
-  const fetchQuotations = async () => {
+  const fetchQuotations = async ({ silent } = {}) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       const response = await client.get('/quotations');
       setQuotations(response.data.data || []);
     } catch (err) {
       setError(err.response?.data?.error || "เกิดข้อผิดพลาด");
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
   useEffect(() => {
     fetchQuotations();
   }, []);
+
+  // Realtime: other tabs/devices changing quotations should refresh this list
+  // without a manual reload. Skipped while a row-level action is in flight or
+  // the create/edit form modal is open, so a background refresh never races
+  // an in-flight mutation's own refetch or clobbers unsaved form input —
+  // deferred via `pendingRefreshRef` instead of dropped, and caught up once
+  // the guard clears.
+  const pendingRefreshRef = useRef(false);
+  useRealtimeEvent(
+    ['quotation:created', 'quotation:updated', 'quotation:deleted'],
+    () => {
+      if (actioningId !== null || showFormModal) {
+        pendingRefreshRef.current = true;
+        return;
+      }
+      fetchQuotations({ silent: true });
+    }
+  );
+
+  useEffect(() => {
+    if (actioningId === null && !showFormModal && pendingRefreshRef.current) {
+      pendingRefreshRef.current = false;
+      fetchQuotations({ silent: true });
+    }
+  }, [showFormModal, actioningId]);
 
   // ใบที่ถูก decline ("ลูกค้าไม่ได้ทำ") ไม่โผล่ในรายการหลักอีกต่อไป — แยกไปดูใน
   // มุมมอง viewMode === 'declined' แทน กันปนกับงานที่ยังทำอยู่จริง

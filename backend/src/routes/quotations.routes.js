@@ -6,6 +6,7 @@ const { formatPhone } = require('../utils/parseLineQueueMessage');
 // เสนอราคาที่มาจากไลน์ (มีเลขคิว+ยังไม่ปิดบิล) ผ่านหน้าเว็บ — กันพนักงานคัดลอก
 // ข้อความไลน์เก่าที่ยังผิดอยู่มาส่งซ้ำทับข้อมูลที่ออฟฟิศเพิ่งแก้ (ดู PUT /:id ด้านล่าง)
 const { pushQuotationUpdate, computeReceiptAmount } = require('./lineWebhook.routes');
+const { emitQuotationEvent, emitReceiptEvent } = require('../realtime');
 
 // ทำให้ตรงรูปแบบเดียวกับที่ customers.routes.js ใช้ กันเบอร์ที่พิมพ์ไม่มีขีดตรงนี้
 // ไปหลุดจากการค้นหาของบอทไลน์ (lineWebhook.routes.js เทียบแบบ phone = ? ตรง ๆ)
@@ -290,6 +291,8 @@ router.post('/', async (req, res) => {
 
     await conn.commit();
 
+    emitQuotationEvent('quotation:created', { quotationId: quotation_id, status: 'pending', actorId: req.user.id });
+
     res.status(201).json({
       success: true,
       message: 'สร้างใบเสนอราคาสำเร็จ',
@@ -400,6 +403,7 @@ router.patch('/:id/mark-printed', async (req, res) => {
       return res.status(404).json({ error: 'ไม่พบใบเสนอราคานี้' });
     }
     const [[row]] = await pool.execute('SELECT printed_at FROM quotations WHERE id = ?', [id]);
+    emitQuotationEvent('quotation:updated', { quotationId: Number(id), status: null, actorId: req.user.id });
     res.json({ success: true, printed_at: row.printed_at });
   } catch (err) {
     console.error('Error marking quotation as printed:', err);
@@ -567,6 +571,11 @@ router.put('/:id', async (req, res) => {
 
     await conn.commit();
 
+    emitQuotationEvent('quotation:updated', { quotationId: Number(id), status: existingQuotation.status, actorId: req.user.id });
+    if (syncedReceipt) {
+      emitReceiptEvent('receipt:updated', { receiptId: existingQuotation.converted_receipt_id, actorId: req.user.id });
+    }
+
     // Push ข้อมูลอัปเดตกลับเข้ากลุ่มไลน์ของร้าน ถ้าใบนี้ "มาจากไลน์และยังเปิดอยู่"
     // (มีเลขคิว + closed_at ยังว่าง — เช็คจากค่าที่อ่านไว้ก่อน UPDATE ด้านบน เพราะ
     // ฟอร์มนี้ไม่มีช่องแก้ closed_at) กันพนักงานคัดลอกข้อความไลน์เก่าที่ยังผิดอยู่มา
@@ -675,6 +684,9 @@ router.patch('/:id/approve', async (req, res) => {
 
     await conn.commit();
 
+    emitQuotationEvent('quotation:updated', { quotationId: Number(id), status: 'approved', actorId: req.user.id });
+    emitReceiptEvent('receipt:created', { receiptId, actorId: req.user.id });
+
     res.json({
       success: true,
       message: 'อนุมัติใบเสนอราคาและสร้างใบเสร็จสำเร็จ',
@@ -736,6 +748,10 @@ router.patch('/:id/close', async (req, res) => {
     await conn.execute('UPDATE quotations SET closed_at = NOW() WHERE id = ?', [id]);
 
     await conn.commit();
+
+    emitQuotationEvent('quotation:updated', { quotationId: Number(id), status: 'approved', actorId: req.user.id });
+    emitReceiptEvent('receipt:updated', { receiptId: quotation.converted_receipt_id, actorId: req.user.id });
+
     res.json({ success: true, message: 'ปิดบิลสำเร็จ', total_amount: receiptAmount });
   } catch (err) {
     if (conn) {
@@ -765,6 +781,7 @@ router.patch('/:id/schedule', async (req, res) => {
     if (result.affectedRows === 0) {
       return res.status(404).json({ error: 'ไม่พบใบเสนอราคา' });
     }
+    emitQuotationEvent('quotation:updated', { quotationId: Number(id), status: 'scheduled', actorId: req.user.id });
     res.json({ success: true, message: 'บันทึกวันนัดหมายสำเร็จ' });
   } catch (err) {
     console.error('Error scheduling quotation:', err);
@@ -785,6 +802,7 @@ router.patch('/:id/no-date', async (req, res) => {
     if (result.affectedRows === 0) {
       return res.status(404).json({ error: 'ไม่พบใบเสนอราคา' });
     }
+    emitQuotationEvent('quotation:updated', { quotationId: Number(id), status: 'no_date', actorId: req.user.id });
     res.json({ success: true, message: 'บันทึกสถานะไม่ระบุวันนัดหมายสำเร็จ' });
   } catch (err) {
     console.error('Error marking quotation as no-date:', err);
@@ -822,6 +840,7 @@ router.patch('/:id/decline', async (req, res) => {
     if (result.affectedRows === 0) {
       return res.status(404).json({ error: 'ไม่พบใบเสนอราคา' });
     }
+    emitQuotationEvent('quotation:updated', { quotationId: Number(id), status: 'declined', actorId: req.user.id });
     res.json({ success: true, message: 'บันทึกสถานะลูกค้าไม่ได้ทำสำเร็จ' });
   } catch (err) {
     console.error('Error marking quotation as declined:', err);
@@ -846,6 +865,7 @@ router.patch('/:id/signature', async (req, res) => {
     if (result.affectedRows === 0) {
       return res.status(404).json({ error: 'ไม่พบใบเสนอราคา' });
     }
+    emitQuotationEvent('quotation:updated', { quotationId: Number(id), status: null, actorId: req.user.id });
     res.json({ success: true });
   } catch (err) {
     console.error('Error saving quotation signature:', err);
@@ -872,6 +892,7 @@ router.patch('/:id/staff-signature', async (req, res) => {
     if (result.affectedRows === 0) {
       return res.status(404).json({ error: 'ไม่พบใบเสนอราคา' });
     }
+    emitQuotationEvent('quotation:updated', { quotationId: Number(id), status: null, actorId: req.user.id });
     res.json({ success: true });
   } catch (err) {
     console.error('Error saving staff signature:', err);
@@ -907,6 +928,8 @@ router.delete('/:id', async (req, res) => {
     if (result.affectedRows === 0) {
       return res.status(404).json({ error: 'ไม่พบใบเสนอราคา' });
     }
+
+    emitQuotationEvent('quotation:deleted', { quotationId: Number(id), status: null, actorId: req.user.id });
 
     res.json({
       success: true,

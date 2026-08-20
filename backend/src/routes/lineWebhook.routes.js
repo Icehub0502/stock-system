@@ -15,6 +15,7 @@ const express = require('express');
 const pool = require('../db/pool');
 const parseLineQueueMessage = require('../utils/parseLineQueueMessage');
 const { parseItemSectionLines } = require('../utils/parseLineQueueMessage');
+const { emitQuotationEvent, emitReceiptEvent } = require('../realtime');
 
 const router = express.Router();
 
@@ -907,6 +908,12 @@ async function createQuotationFromQueue(parsed) {
     let paymentAmount = null;
     let paymentWarning = null; // 'no_items' | 'no_vehicle'
     let depositMismatch = null;
+    // ใช้แจ้ง realtime event ให้ตรงกับสิ่งที่เกิดขึ้นจริงหลัง commit — ปิดบิลด้วย
+    // ใบเสร็จที่มีอยู่แล้ว (sync ต่อจาก syncedReceipt ด้านบน) ควรเป็น receipt:updated
+    // ไม่ใช่ receipt:created ส่วนกรณีอนุมัติ+สร้างใบเสร็จใหม่ในทรานแซกชันนี้เอง
+    // (ไม่เคยมีใบเสร็จมาก่อน) ถึงจะเป็น receipt:created จริง ๆ
+    let closedReceiptId = null;
+    let closedReceiptIsNew = false;
 
     // ค่ามัดจำที่จะถูกบันทึกจริง (COALESCE เดียวกับจุด UPDATE quotations ด้านบน) —
     // ข้อความอาจไม่ได้พิมพ์ "มัดจำ:" ซ้ำ ต้องย้อนไปใช้ค่าที่เคยบันทึกไว้ในใบเดิม คำนวณ
@@ -941,6 +948,8 @@ async function createQuotationFromQueue(parsed) {
           paymentReceiptNo = receiptRow ? receiptRow.receipt_no : null;
           await conn.execute('UPDATE quotations SET closed_at = NOW() WHERE id = ?', [quotationId]);
           paymentClosed = true;
+          closedReceiptId = receiptId;
+          closedReceiptIsNew = false;
         } else if (!vehicleId) {
           // Mirrors PATCH /quotations/:id/approve's vehicle_id requirement — ไม่มี
           // ข้อมูลรถพอจะสร้างใบเสร็จไม่ได้ เตือนแล้วปล่อยผ่าน ไม่ปิดบิล
@@ -984,11 +993,22 @@ async function createQuotationFromQueue(parsed) {
           }
           paymentReceiptNo = receipt_no;
           paymentClosed = true;
+          closedReceiptId = receiptId;
+          closedReceiptIsNew = true;
         }
       }
     }
 
     await conn.commit();
+
+    emitQuotationEvent(isUpdate ? 'quotation:updated' : 'quotation:created', { quotationId, status: null, actorId: null });
+    if (paymentClosed) {
+      emitReceiptEvent(closedReceiptIsNew ? 'receipt:created' : 'receipt:updated', { receiptId: closedReceiptId, actorId: null });
+    } else if (syncedReceipt) {
+      // sync รายการ/ยอดลงใบเสร็จเดิม (ไม่ได้ปิดบิล) — แจ้งฝั่งใบเสร็จให้รีเฟรชด้วย
+      // เหมือนจุดเดียวกันใน PUT /quotations/:id ฝั่งเว็บ (quotations.routes.js)
+      emitReceiptEvent('receipt:updated', { receiptId: existing.converted_receipt_id, actorId: null });
+    }
     return {
       quotation_no,
       quotationId,
@@ -1038,6 +1058,8 @@ async function deleteQuotationForMessage(info) {
     }
     await conn.execute('DELETE FROM quotations WHERE id = ?', [info.quotationId]);
     await conn.commit();
+
+    emitQuotationEvent('quotation:deleted', { quotationId: info.quotationId, status: null, actorId: null });
   } catch (err) {
     await conn.rollback();
     throw err;
@@ -1185,6 +1207,9 @@ async function closeQuotationByQueue(parsed) {
     await conn.execute('UPDATE quotations SET closed_at = NOW() WHERE id = ?', [quotation.id]);
     await conn.commit();
 
+    emitQuotationEvent('quotation:updated', { quotationId: quotation.id, status: 'approved', actorId: null });
+    emitReceiptEvent('receipt:updated', { receiptId, actorId: null });
+
     return {
       matchCount: 1,
       quotation_no: quotation.quotation_no,
@@ -1319,6 +1344,14 @@ async function updateQuotationItemsByQueue(queueNo, itemLines, explicitDate) {
     }
 
     await conn.commit();
+
+    emitQuotationEvent('quotation:updated', { quotationId: quotation.id, status: null, actorId: null });
+    if (syncedReceipt) {
+      // sync รายการ/ยอดลงใบเสร็จเดิม — แจ้งฝั่งใบเสร็จให้รีเฟรชด้วยเหมือนจุดเดียวกัน
+      // ใน createQuotationFromQueue/PUT /quotations/:id ฝั่งเว็บ
+      emitReceiptEvent('receipt:updated', { receiptId: full.converted_receipt_id, actorId: null });
+    }
+
     return {
       matchCount: 1,
       quotationId: quotation.id,

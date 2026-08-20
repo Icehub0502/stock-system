@@ -2,6 +2,7 @@ const express = require('express');
 const pool = require('../db/pool');
 const { authenticate, requireRole } = require('../middleware/auth');
 const { formatPhone } = require('../utils/parseLineQueueMessage');
+const { emitReceiptEvent, emitQuotationEvent } = require('../realtime');
 
 // ทำให้ตรงรูปแบบเดียวกับที่ customers.routes.js ใช้ กันเบอร์ที่พิมพ์ไม่มีขีดตรงนี้
 // ไปหลุดจากการค้นหาของบอทไลน์ (lineWebhook.routes.js เทียบแบบ phone = ? ตรง ๆ)
@@ -163,6 +164,7 @@ router.patch('/:id/mark-printed', async (req, res) => {
       return res.status(404).json({ error: 'ไม่พบบิลนี้' });
     }
     const [[row]] = await pool.execute('SELECT printed_at FROM receipts WHERE id = ?', [id]);
+    emitReceiptEvent('receipt:updated', { receiptId: Number(id), actorId: req.user.id });
     res.json({ success: true, printed_at: row.printed_at });
   } catch (err) {
     console.error('Error marking receipt as printed:', err);
@@ -219,6 +221,7 @@ router.patch('/:id/meta', async (req, res) => {
     if (result.affectedRows === 0) {
       return res.status(404).json({ error: 'ไม่พบบิลนี้' });
     }
+    emitReceiptEvent('receipt:updated', { receiptId: Number(id), actorId: req.user.id });
     res.json({ success: true });
   } catch (err) {
     console.error('Error updating receipt meta:', err);
@@ -240,6 +243,7 @@ router.patch('/:id/date', async (req, res) => {
     if (result.affectedRows === 0) {
       return res.status(404).json({ error: 'ไม่พบบิลนี้' });
     }
+    emitReceiptEvent('receipt:updated', { receiptId: Number(id), actorId: req.user.id });
     res.json({ success: true });
   } catch (err) {
     console.error('Error moving receipt date:', err);
@@ -529,6 +533,7 @@ router.post('/', async (req, res) => {
     }
 
     await conn.commit();
+    emitReceiptEvent('receipt:created', { receiptId, actorId: req.user.id });
     res.status(201).json({ success: true, receipt_id: receiptId, receipt_no });
   } catch (err) {
     if (conn) {
@@ -696,6 +701,7 @@ router.put('/:id', async (req, res) => {
     }
 
     await conn.commit();
+    emitReceiptEvent('receipt:updated', { receiptId, actorId: req.user.id });
     res.json({ success: true });
   } catch (err) {
     if (conn) {
@@ -714,6 +720,13 @@ router.delete('/:id', async (req, res) => {
     conn = await pool.getConnection();
     await conn.beginTransaction();
 
+    // เก็บ id ของใบเสนอราคาที่ผูกกับใบเสร็จนี้ไว้ก่อน UPDATE ด้านล่างจะล้าง
+    // converted_receipt_id ทิ้ง — ใช้ยิง event แจ้งฝั่งใบเสนอราคาหลัง commit
+    const [[linked]] = await conn.query(
+      'SELECT id FROM quotations WHERE converted_receipt_id = ? LIMIT 1',
+      [req.params.id]
+    );
+
     // ถ้าใบเสร็จนี้ถูกแปลงมาจากใบเสนอราคา ต้องคืนสถานะใบเสนอราคากลับเป็น pending
     // ก่อนลบใบเสร็จ ไม่งั้น FK จะแค่ set converted_receipt_id เป็น NULL แต่ status
     // ยังเป็น 'approved' ค้างอยู่ ทำให้ดูเหมือนอนุมัติแล้วแต่ไม่มีใบเสร็จจริง
@@ -729,6 +742,12 @@ router.delete('/:id', async (req, res) => {
     }
 
     await conn.commit();
+
+    emitReceiptEvent('receipt:deleted', { receiptId: Number(req.params.id), actorId: req.user.id });
+    if (linked) {
+      emitQuotationEvent('quotation:updated', { quotationId: linked.id, status: 'pending', actorId: req.user.id });
+    }
+
     res.json({ success: true, message: 'ลบใบเสร็จสำเร็จ' });
   } catch (err) {
     if (conn) {

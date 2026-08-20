@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import client from "../api/client";
 import { DECLINE_REASONS, declineReasonLabel } from "../utils/declineReasons";
 import { todayStr } from "../utils/format";
+import useRealtimeEvent from "../hooks/useRealtimeEvent";
 
 const CURRENT_YEAR = new Date().getFullYear();
 // ปีให้เลือกในมุมมอง "รายปี" — ปีปัจจุบันย้อนหลัง 5 ปี พอสำหรับดูเทรนด์ ไม่ต้อง
@@ -51,19 +52,32 @@ export default function DeclinedSummaryPage() {
   const [monthValue, setMonthValue] = useState(todayStr().slice(0, 7));
   const [yearValue, setYearValue] = useState(CURRENT_YEAR);
 
-  useEffect(() => {
-    (async () => {
-      try {
-        setLoading(true);
-        const response = await client.get('/quotations');
-        setQuotations(response.data.data || []);
-      } catch (err) {
-        setError(err.response?.data?.error || "เกิดข้อผิดพลาด");
-      } finally {
-        setLoading(false);
-      }
-    })();
+  const fetchQuotations = useCallback(async ({ silent } = {}) => {
+    try {
+      if (!silent) setLoading(true);
+      const response = await client.get('/quotations');
+      setQuotations(response.data.data || []);
+    } catch (err) {
+      setError(err.response?.data?.error || "เกิดข้อผิดพลาด");
+    } finally {
+      if (!silent) setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    fetchQuotations();
+  }, [fetchQuotations]);
+
+  // Realtime: only listens for updated/deleted — a brand-new quotation can
+  // never already be in 'declined' status (it must go through a decline
+  // action first, which fires 'quotation:updated'), so 'quotation:created'
+  // would only cause pointless refetches here. No open-editing-surface guard
+  // needed — this page has no form modal or persistent edit state, only
+  // client-side derived date-range filters.
+  useRealtimeEvent(
+    ['quotation:updated', 'quotation:deleted'],
+    () => fetchQuotations({ silent: true })
+  );
 
   const { from, to, label: periodLabel } = useMemo(
     () => computePeriod(periodType, dayValue, monthValue, yearValue),

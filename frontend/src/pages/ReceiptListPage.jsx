@@ -1,8 +1,9 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import client from "../api/client";
 import ReceiptFormModal from "../components/ReceiptFormModal";
 import ReceiptPrintModal from "../components/ReceiptPrintModal";
 import { buildArchiveGroups, formatDateTh, formatMonthTh, formatYearTh } from "../utils/dateGroups";
+import useRealtimeEvent from "../hooks/useRealtimeEvent";
 
 export default function ReceiptListPage() {
   const [receipts, setReceipts] = useState([]);
@@ -13,21 +14,45 @@ export default function ReceiptListPage() {
   const [editingReceiptId, setEditingReceiptId] = useState(null);
   const [selectedReceiptForPrint, setSelectedReceiptForPrint] = useState(null);
 
-  const fetchReceipts = async () => {
+  const fetchReceipts = async ({ silent } = {}) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       const response = await client.get('/receipts');
       setReceipts(response.data.data || []);
     } catch (err) {
       setError(err.response?.data?.error || 'โหลดบิลไม่สำเร็จ');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
   useEffect(() => {
     fetchReceipts();
   }, []);
+
+  // Realtime: quotation-side actions (approve/close) also emit receipt:*
+  // events server-side, so this page only needs the receipt channel. Guarded
+  // only on the create/edit form modal — the print modal fetches its own
+  // single receipt by id independently, so it's unaffected by a background
+  // list refetch and doesn't need a guard.
+  const pendingRefreshRef = useRef(false);
+  useRealtimeEvent(
+    ['receipt:created', 'receipt:updated', 'receipt:deleted'],
+    () => {
+      if (showFormModal) {
+        pendingRefreshRef.current = true;
+        return;
+      }
+      fetchReceipts({ silent: true });
+    }
+  );
+
+  useEffect(() => {
+    if (!showFormModal && pendingRefreshRef.current) {
+      pendingRefreshRef.current = false;
+      fetchReceipts({ silent: true });
+    }
+  }, [showFormModal]);
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase();
