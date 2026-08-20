@@ -123,8 +123,12 @@ function createApp() {
   // ซึ่งคำนวณจาก body ดิบก่อน parse (ดู routes/lineWebhook.routes.js)
   // limit ยกจาก default 100kb — รูปอะไหล่ในแคตตาล็อกเสนอราคา (quote_part_prices.
   // image_data) ส่งเป็น base64 data URI ตรงๆ เหมือนลายเซ็น อาจเกิน 100kb ได้
+  // ยกเป็น 20mb (เดิม 5mb) — หน้าเพิ่มคิวรับรถอัปโหลดรูปได้หลายรูปพร้อมกัน
+  // (AddJobModal.jsx) แม้แต่ละรูปย่อแล้วก็ยังรวมกันเกิน 5mb ได้ถ้าถ่ายมาหลายรูป
+  // ต้องยกคู่กับ client_max_body_size ที่ nginx (site config บนเซิร์ฟเวอร์) ด้วย
+  // ไม่งั้น nginx จะบล็อกก่อนถึง Express เลยจากดีฟอลต์ 1mb
   app.use(express.json({
-    limit: '5mb',
+    limit: '20mb',
     verify: (req, res, buf) => { req.rawBody = buf; }
   }));
   // บีบอัด response ด้วย gzip/deflate (JSON API + frontend bundle) — วางไว้หลัง
