@@ -28,6 +28,15 @@ const NAV_CATEGORIES = [
     ],
   },
   {
+    key: "queue",
+    label: "คิวรับรถ",
+    items: [
+      { to: "/checkin", label: "รับรถเข้าคิว" },
+      { to: "/jobs", label: "รายการงานวันนี้" },
+      { to: "/board", label: "จอบอร์ดห้องรับรอง" },
+    ],
+  },
+  {
     key: "sales",
     label: "งานขาย",
     items: [

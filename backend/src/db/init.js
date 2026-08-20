@@ -655,6 +655,63 @@ async function initDatabase() {
     ADD COLUMN vehicle_model VARCHAR(150) DEFAULT NULL
   `).catch(ignoreIfAlreadyApplied);
 
+  // ── ระบบคิวรับรถ (subdomain queue.champ-powerspk.com) ──
+  // jobs = งานรับรถ 1 คัน ต่อ 1 แถว แยกจาก quotations เพราะรถที่เข้ามาแล้ว "ยังไม่
+  // เสนอราคา" (เพิ่งรับเข้า/กำลังตรวจเช็ค) ต้องมีคิวและกินช่องยกได้ก่อน — ใบเสนอราคา
+  // ค่อยผูกทีหลังตอนตรวจเช็คเสร็จผ่าน quotation_id (NULL ได้) วิธีนี้ไม่ต้องแตะ
+  // schema/สถานะของ quotations เดิมที่ระบบสต๊อก+บอทไลน์ใช้อยู่เลย
+  //
+  // status เก็บเป็น VARCHAR ไม่ใช่ ENUM — ต่างจาก quotations.status ที่เป็น ENUM
+  // เพราะการเพิ่ม/แก้สถานะงานหน้าร้านมีแนวโน้มเปลี่ยนบ่อยกว่า และ ENUM ต้อง MODIFY
+  // COLUMN ทุกครั้งที่เพิ่มค่า ซึ่งเคยทำให้บูตพังมาแล้ว (ดูคอมเมนต์ยาวที่
+  // quotations.status ด้านบน) ค่าที่ยอมรับตรวจที่ชั้น API แทน (utils/jobStatusFlow.js)
+  await conn.query(`
+    CREATE TABLE IF NOT EXISTS jobs (
+      id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+      job_no VARCHAR(20) NOT NULL UNIQUE COMMENT 'JB-260820-001',
+      queue_no VARCHAR(20) DEFAULT NULL COMMENT 'เลขคิวของวัน รันอัตโนมัติ แก้เองได้',
+      job_date DATE NOT NULL COMMENT 'วันที่รับรถ (คีย์ย้อนหลังได้)',
+      customer_id BIGINT UNSIGNED DEFAULT NULL,
+      vehicle_id BIGINT UNSIGNED DEFAULT NULL,
+      quotation_id BIGINT UNSIGNED DEFAULT NULL COMMENT 'ผูกตอนเสนอราคา',
+      mileage_in INT DEFAULT NULL,
+      symptom TEXT DEFAULT NULL COMMENT 'อาการที่ลูกค้าแจ้ง',
+      status VARCHAR(20) NOT NULL DEFAULT 'received',
+      bay VARCHAR(20) DEFAULT NULL COMMENT 'ช่องยก H1-H11 / ตั้งศูนย์',
+      technician VARCHAR(100) DEFAULT NULL,
+      est_minutes INT DEFAULT NULL COMMENT 'เวลาซ่อมโดยประมาณ (นาที)',
+      note TEXT DEFAULT NULL,
+      received_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      closed_at DATETIME DEFAULT NULL COMMENT 'ส่งรถ/เอารถลงแล้ว',
+      created_by INT DEFAULT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      CONSTRAINT fk_job_customer FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE SET NULL,
+      CONSTRAINT fk_job_vehicle FOREIGN KEY (vehicle_id) REFERENCES vehicles(id) ON DELETE SET NULL,
+      CONSTRAINT fk_job_quotation FOREIGN KEY (quotation_id) REFERENCES quotations(id) ON DELETE SET NULL,
+      CONSTRAINT fk_job_user FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL,
+      KEY idx_jobs_date_queue (job_date, queue_no),
+      KEY idx_jobs_status (status),
+      KEY idx_jobs_bay (bay),
+      KEY idx_jobs_quotation (quotation_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  // ประวัติการเปลี่ยนสถานะ — เก็บทุกครั้งที่เปลี่ยน ใครเปลี่ยน เมื่อไหร่ ใช้ดูย้อนหลัง
+  // ว่ารถคันนี้ค้างอยู่ขั้นไหนนานเกินไป และคำนวณเวลาที่ใช้ซ่อมจริงต่อคัน
+  await conn.query(`
+    CREATE TABLE IF NOT EXISTS job_status_history (
+      id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+      job_id BIGINT UNSIGNED NOT NULL,
+      status VARCHAR(20) NOT NULL,
+      changed_by INT DEFAULT NULL,
+      changed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT fk_job_history_job FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE,
+      CONSTRAINT fk_job_history_user FOREIGN KEY (changed_by) REFERENCES users(id) ON DELETE SET NULL,
+      KEY idx_job_history_job (job_id, changed_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
   const [userRows] = await conn.query(
     'SELECT COUNT(*) AS c FROM users'
   );

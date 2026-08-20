@@ -5476,3 +5476,168 @@ body:has(.modal-backdrop) .page-fade-in {
   min-height: unset; padding: 6px 9px; font-size: 0.78rem;
   border: 1.5px solid #e5e7eb; border-radius: 8px; width: 140px;
 }
+
+/* ── ระบบคิวรับรถ: จอบอร์ดห้องรับรอง (BoardPage.jsx) ── */
+/* จอ TV มืด คมชัด อ่านจากระยะไกลได้ — ต่างจากธีมสว่างของแอปหลักตั้งใจ เพราะเป็น
+   จอสาธารณะแยกบริบท ไม่ใช่หน้าจอทำงาน */
+.board-page {
+  min-height: 100vh;
+  background: #0a0a0f;
+  color: #e8e8e8;
+  padding: 24px 32px;
+  font-family: 'Segoe UI', 'Sarabun', Arial, sans-serif;
+}
+.board-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+.board-title {
+  font-size: 1.8rem;
+  font-weight: 800;
+  color: #f5c400;
+  letter-spacing: 0.02em;
+}
+.board-clock {
+  font-size: 1.6rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.board-bays {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 12px;
+  margin-bottom: 28px;
+}
+.board-bay {
+  background: #18181f;
+  border: 2px solid #2a2a33;
+  border-radius: 12px;
+  padding: 16px 10px;
+  text-align: center;
+}
+.board-bay.occupied {
+  border-color: #f5c400;
+  background: #1f1c0d;
+}
+.board-bay-label {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #9a9aa5;
+  margin-bottom: 8px;
+}
+.board-bay.occupied .board-bay-label { color: #f5c400; }
+.board-bay-plate {
+  font-size: 1.3rem;
+  font-weight: 800;
+  color: #fff;
+}
+.board-bay-empty {
+  font-size: 1rem;
+  color: #55555f;
+}
+.board-loading, .board-empty {
+  text-align: center;
+  color: #7d7d88;
+  padding: 60px 0;
+  font-size: 1.1rem;
+}
+.board-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.board-row {
+  display: grid;
+  grid-template-columns: 70px 140px 1fr 90px 150px;
+  align-items: center;
+  gap: 14px;
+  background: #16161d;
+  border: 1px solid #26262f;
+  border-radius: 10px;
+  padding: 14px 18px;
+}
+.board-row-queue-n {
+  font-size: 1.6rem;
+  font-weight: 800;
+  color: #f5c400;
+}
+.board-row-queue-dash { color: #55555f; font-size: 1.4rem; }
+.board-row-plate {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: #fff;
+}
+.board-row-model {
+  font-size: 1rem;
+  color: #c5c5cd;
+}
+.board-row-bay {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #9a9aa5;
+  text-align: center;
+}
+
+@media (max-width: 900px) {
+  .board-bays { grid-template-columns: repeat(3, 1fr); }
+  .board-row { grid-template-columns: 50px 100px 1fr 70px; }
+  .board-row-bay { display: none; }
+}
+
+/* ── ระบบคิวรับรถ: หน้ารับรถ / รายละเอียดงาน ── */
+.checkbox-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.checkbox-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1.5px solid #e5e7eb;
+  background: #fff;
+  font-size: 0.85rem;
+  cursor: pointer;
+  min-height: unset;
+}
+.checkbox-chip input { width: auto; min-height: unset; }
+
+.job-quote-suggest {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  overflow: hidden;
+}
+.job-quote-suggest li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  border-bottom: 1px solid #f0f0f0;
+  font-size: 0.9rem;
+}
+.job-quote-suggest li:last-child { border-bottom: none; }
+
+.job-history-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.job-history-list li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid #f0f0f0;
+  font-size: 0.9rem;
+}
+.job-history-list li:last-child { border-bottom: none; }
+.job-history-time { color: #6b7280; }
+.job-history-by { color: #9ca3af; margin-left: auto; }

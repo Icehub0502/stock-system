@@ -58,6 +58,8 @@ const lineWebhookBot2Routes = require('./routes/lineWebhookBot2.routes');
 const lineWebhookBot3Routes = require('./routes/lineWebhookBot3.routes');
 const quotePartPricesRoutes = require('./routes/quotePartPrices.routes');
 const vehicleModelsRoutes = require('./routes/vehicleModels.routes');
+const jobsRoutes = require('./routes/jobs.routes');
+const boardRoutes = require('./routes/board.routes');
 
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 const FRONTEND_DIST = path.join(__dirname, '..', '..', 'frontend', 'dist');
@@ -151,6 +153,11 @@ function createApp() {
   app.use('/api/line/bot3', lineWebhookBot3Routes);
   app.use('/api/quote-parts', quotePartPricesRoutes);
   app.use('/api/vehicle-models', vehicleModelsRoutes);
+  // ระบบคิวรับรถ — /api/jobs ต้องล็อกอิน (ทำ auth เองในไฟล์ route) ส่วน /api/board
+  // เปิดสาธารณะสำหรับจอ TV ห้องรับรอง คืนเฉพาะข้อมูลที่ไม่ระบุตัวลูกค้า (ดูคอมเมนต์
+  // เตือนในไฟล์ board.routes.js ก่อนแก้ query)
+  app.use('/api/jobs', jobsRoutes);
+  app.use('/api/board', boardRoutes);
 
   app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
   app.get('/api/landing-images', (req, res) => {

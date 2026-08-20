@@ -35,6 +35,13 @@ const RepairNoticeListPage = lazy(() => import("./pages/RepairNoticeListPage"));
 const RepairNoticePage = lazy(() => import("./pages/RepairNoticePage"));
 const StockDeductionPage = lazy(() => import("./pages/StockDeductionPage"));
 const StockUsageReportPage = lazy(() => import("./pages/StockUsageReportPage"));
+// ระบบคิวรับรถ (subdomain queue.champ-powerspk.com แต่ route เดียวกันนี้ทำงาน
+// บนโดเมนหลักได้ด้วย เพราะเป็น build เดียวกัน) BoardPage ไม่ต้องล็อกอิน — จอ TV
+// ห้องรับรอง
+const BoardPage = lazy(() => import("./pages/BoardPage"));
+const CheckInPage = lazy(() => import("./pages/CheckInPage"));
+const JobBoardPage = lazy(() => import("./pages/JobBoardPage"));
+const JobDetailPage = lazy(() => import("./pages/JobDetailPage"));
 
 function Home() {
   const { user } = useAuth();
@@ -50,7 +57,7 @@ function AppRoutes() {
   const location = useLocation();
   // หน้ารายการอะไหล่บนแท็บเล็ตใช้เต็มจอแบบแอป — ซ่อนแถบเมนูบน/ล่างและ
   // ยกเลิก padding ของ .container เพื่อให้เนื้อหาเต็มพื้นที่จริง ๆ
-  const isKiosk = location.pathname.startsWith("/catalog");
+  const isKiosk = location.pathname.startsWith("/catalog") || location.pathname.startsWith("/board");
   return (
     <>
       {!isKiosk && <NavBar />}
@@ -252,6 +259,33 @@ function AppRoutes() {
             element={
               <ProtectedRoute roles={["office"]}>
                 <StockUsageReportPage />
+              </ProtectedRoute>
+            }
+          />
+          {/* /board เปิดสาธารณะ ไม่ต้องล็อกอิน (จอ TV ห้องรับรอง) — ตั้งใจไม่มี
+              ProtectedRoute ห่อ ต่างจากทุก route อื่นในไฟล์นี้ */}
+          <Route path="/board" element={<BoardPage />} />
+          <Route
+            path="/checkin"
+            element={
+              <ProtectedRoute roles={["office"]}>
+                <CheckInPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/jobs"
+            element={
+              <ProtectedRoute roles={["office"]}>
+                <JobBoardPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/jobs/:id"
+            element={
+              <ProtectedRoute roles={["office"]}>
+                <JobDetailPage />
               </ProtectedRoute>
             }
           />
