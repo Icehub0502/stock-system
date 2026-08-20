@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { isQueueHost } from '../utils/isQueueHost';
 import logo from '../image/champpower-logo.jpg';
 
 export default function LoginPage() {
@@ -15,6 +16,12 @@ export default function LoginPage() {
     setError('');
     try {
       const user = await login(username, password);
+      // subdomain คิวรับรถ ไม่มีแดชบอร์ด/หน้าสแกนของระบบหลักให้ไปต่อ (เหมือน
+      // Home() ใน App.jsx) พาไปหน้ารายการงานแทนเสมอไม่ว่า role ไหน
+      if (isQueueHost()) {
+        navigate('/jobs');
+        return;
+      }
       navigate(user.role === 'office' ? '/dashboard' : '/scan');
     } catch (err) {
       setError(err.response?.data?.error || 'เข้าสู่ระบบไม่สำเร็จ');

@@ -3,8 +3,10 @@ import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import ProtectedRoute from "./components/ProtectedRoute";
 import NavBar from "./components/NavBar";
+import QueueNavBar from "./components/QueueNavBar";
 import BottomNav from "./components/BottomNav";
 import PageSkeleton from "./components/PageSkeleton";
+import { isQueueHost } from "./utils/isQueueHost";
 // LoginPage stays a static import — every visitor needs it before we know
 // their role, so lazy-loading it would only add a network round trip.
 import LoginPage from "./pages/LoginPage";
@@ -46,6 +48,9 @@ const JobDetailPage = lazy(() => import("./pages/JobDetailPage"));
 function Home() {
   const { user } = useAuth();
   if (!user) return <Navigate to="/login" replace />;
+  // subdomain คิวรับรถ ไม่มีแดชบอร์ด/หน้าสแกนของระบบหลักให้ไปต่อ (ดู
+  // utils/isQueueHost.js) — พาไปหน้ารายการงานแทนเสมอไม่ว่า role ไหน
+  if (isQueueHost()) return <Navigate to="/jobs" replace />;
   return user.role === "office" ? (
     <Navigate to="/dashboard" replace />
   ) : (
@@ -58,9 +63,14 @@ function AppRoutes() {
   // หน้ารายการอะไหล่บนแท็บเล็ตใช้เต็มจอแบบแอป — ซ่อนแถบเมนูบน/ล่างและ
   // ยกเลิก padding ของ .container เพื่อให้เนื้อหาเต็มพื้นที่จริง ๆ
   const isKiosk = location.pathname.startsWith("/catalog") || location.pathname.startsWith("/board");
+  // subdomain คิวรับรถ ใช้แถบเมนูของตัวเอง (QueueNavBar) แทน NavBar เต็มรูปแบบ —
+  // login/session เดียวกัน แค่ไม่โชว์เมนูสต๊อก/ใบเสนอราคา/รายงานที่ไม่เกี่ยวข้อง
+  // (ดู utils/isQueueHost.js) BottomNav (แถบล่างมือถือ) ก็ผูกกับเมนูระบบหลัก
+  // ล้วน ๆ เหมือนกัน จึงซ่อนไปด้วยแทนที่จะทำ mobile bar แยกอีกชุด
+  const queueHost = isQueueHost();
   return (
     <>
-      {!isKiosk && <NavBar />}
+      {!isKiosk && (queueHost ? <QueueNavBar /> : <NavBar />)}
       <div className={isKiosk ? "" : "container"}>
         {/* key={pathname} forces this subtree to remount on navigation, which
             both retriggers the fade-in animation and gives Suspense a fresh
@@ -293,7 +303,7 @@ function AppRoutes() {
         </Suspense>
         </div>
       </div>
-      {!isKiosk && <BottomNav />}
+      {!isKiosk && !queueHost && <BottomNav />}
     </>
   );
 }
