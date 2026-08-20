@@ -5633,18 +5633,64 @@ body:has(.modal-backdrop) .page-fade-in {
   justify-content: space-between;
 }
 .job-card-queue { font-weight: 700; font-size: 1.05rem; color: #111827; }
+.job-card-quote-no { font-size: 0.78rem; color: #6b7280; white-space: nowrap; }
+
+/* ── หลอดสถานะ + ควบคุมสถานะ/ช่องยก — ย้ายมาไว้หน้าการ์ดแทนที่จะอยู่ในหน้า
+   รายละเอียด กดเปลี่ยนได้จากตรงนี้เลย (stopPropagation กันไม่ให้กดแล้วเด้งเข้า
+   หน้ารายละเอียดไปด้วย) ── */
+.job-card-status-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  background: #f9fafb;
+  border-radius: 10px;
+  cursor: default;
+}
+
+.status-track { display: flex; align-items: center; }
+.status-track-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #e5e7eb;
+  flex-shrink: 0;
+}
+.status-track-dot.done { background: #16a34a; }
+.status-track-dot.current { background: #2563eb; box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.25); }
+.status-track-line { flex: 1; height: 2px; background: #e5e7eb; min-width: 6px; }
+.status-track-line.done { background: #16a34a; }
+.status-track-off { display: flex; }
+
+.job-card-status-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.job-card-status-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.job-card-status-actions button { font-size: 0.78rem; padding: 4px 8px; }
+.job-card-status-block select { font-size: 0.82rem; padding: 4px 8px; }
 
 .job-card-vehicle {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 8px;
-  padding: 10px 0;
+  padding: 6px 0;
 }
 .job-card-car-icon { width: 96px; height: 60px; color: #9ca3af; }
+.job-card-photo {
+  width: 100%;
+  max-width: 220px;
+  height: 120px;
+  object-fit: cover;
+  border-radius: 10px;
+  background: #f1f5f9;
+}
 
-/* ป้ายทะเบียนจำลองจริง — พื้นขาว ขอบดำมน มีแถบฟ้าบางด้านบนเหมือนป้ายรถส่วนบุคคล
-   ในไทย ตัวเลขตัวหนาสีดำตรงกลาง */
+/* ป้ายทะเบียนจำลองจริง — พื้นขาว ขอบดำมน ตัวเลขตัวหนาสีดำตรงกลาง */
 .plate-badge {
   min-width: 120px;
   background: #ffffff;
@@ -5664,48 +5710,100 @@ body:has(.modal-backdrop) .page-fade-in {
   white-space: nowrap;
 }
 
-.job-card-info { text-align: center; }
-.job-card-model { font-weight: 600; color: #111827; font-size: 0.95rem; }
-.job-card-customer { color: #6b7280; font-size: 0.85rem; margin-top: 2px; }
+/* ข้อความชิดซ้ายตามลำดับ: ชื่อ → อาการ → ยี่ห้อ/รุ่น/สี */
+.job-card-info { text-align: left; }
+.job-card-customer { font-weight: 600; color: #111827; font-size: 0.95rem; }
 .job-card-symptom {
-  color: #9ca3af;
-  font-size: 0.8rem;
-  margin-top: 4px;
+  color: #6b7280;
+  font-size: 0.85rem;
+  margin-top: 3px;
   overflow: hidden;
   text-overflow: ellipsis;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
 }
+.job-card-model { color: #9ca3af; font-size: 0.8rem; margin-top: 4px; }
 
-.job-card-bottom {
+/* ── AddJobModal.jsx — เลือก/ถ่ายรูปตอนเพิ่มคิว ── */
+.job-photo-picker {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding-top: 8px;
-  border-top: 1px solid #f1f5f9;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 8px;
 }
-.job-card-bottom select { font-size: 0.82rem; padding: 4px 8px; }
-.job-card-quote-no { font-size: 0.78rem; color: #6b7280; white-space: nowrap; }
-
-.job-quote-suggest {
-  list-style: none;
-  margin: 8px 0 0;
-  padding: 0;
-  border: 1px solid #e5e7eb;
+.job-photo-thumb {
+  position: relative;
+  width: 84px;
+}
+.job-photo-thumb img {
+  width: 84px;
+  height: 84px;
+  object-fit: cover;
   border-radius: 8px;
-  overflow: hidden;
+  background: #f1f5f9;
+  display: block;
 }
-.job-quote-suggest li {
+.job-photo-num {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  background: rgba(0, 0, 0, 0.65);
+  color: white;
+  font-size: 0.72rem;
+  font-weight: 700;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.job-photo-thumb-actions {
   display: flex;
   justify-content: space-between;
+  gap: 2px;
+  margin-top: 4px;
+}
+.job-photo-thumb-actions button {
+  flex: 1;
+  font-size: 0.7rem;
+  padding: 3px 0;
+  min-height: unset;
+}
+.job-photo-add-row {
+  display: flex;
   align-items: center;
-  padding: 8px 12px;
-  border-bottom: 1px solid #f0f0f0;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+.job-photo-add-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  border: 1px solid var(--color-border-secondary, #d1d5db);
+  border-radius: 8px;
+  padding: 8px 14px;
   font-size: 0.9rem;
 }
-.job-quote-suggest li:last-child { border-bottom: none; }
+
+.job-detail-photos {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  margin-bottom: 12px;
+  padding-bottom: 4px;
+}
+.job-detail-photos img {
+  width: 96px;
+  height: 96px;
+  object-fit: cover;
+  border-radius: 8px;
+  flex-shrink: 0;
+  background: #f1f5f9;
+}
 
 .job-history-list {
   list-style: none;
@@ -5739,12 +5837,21 @@ body:has(.modal-backdrop) .page-fade-in {
   z-index: 70;
   display: flex;
   align-items: center;
+  justify-content: space-between;
   flex-wrap: wrap;
   gap: 12px;
   padding: 10px 20px;
   padding-top: calc(10px + env(safe-area-inset-top, 0px));
   background: #111111;
   border-bottom: 1px solid #2a2a2a;
+}
+
+/* โลโก้ + ลิงก์เมนู ชิดซ้ายด้วยกัน เหลือแค่ปุ่มเฟืองอยู่ขวาสุด */
+.queue-navbar-left {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 20px;
 }
 
 .queue-navbar-title { display: flex; align-items: center; flex-shrink: 0; }
@@ -5765,7 +5872,6 @@ body:has(.modal-backdrop) .page-fade-in {
   align-items: center;
   flex-wrap: wrap;
   gap: 16px;
-  margin-left: auto;
 }
 .queue-navbar-links a {
   color: #cbd5e1;
@@ -5776,7 +5882,11 @@ body:has(.modal-backdrop) .page-fade-in {
 .queue-navbar-links a:hover,
 .queue-navbar-links a.active { color: white; }
 
-.queue-navbar-settings { position: relative; }
+/* margin-left: auto กันปุ่มเฟืองตกไปอยู่ซ้ายมือตอนจอแคบจน .queue-navbar-left
+   ยาวจนต้องขึ้นบรรทัดใหม่ (justify-content: space-between เพียงอย่างเดียวจัด
+   ตำแหน่งได้แค่ตอนอยู่บรรทัดเดียว พอ wrap เป็น 2 บรรทัดแล้วแถวที่มีแค่ปุ่มเดียว
+   จะกลับไปชิดซ้ายตามค่าเริ่มต้นแทน) */
+.queue-navbar-settings { position: relative; margin-left: auto; }
 .queue-navbar-gear {
   background: transparent;
   border: 1px solid #3f3f3f;

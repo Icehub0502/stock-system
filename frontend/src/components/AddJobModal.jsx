@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import client from '../api/client';
 import { todayStr } from '../utils/format';
 import { formatDateTh } from '../utils/dateGroups';
+import { resizeImageToDataUrl } from '../utils/resizeImage';
 
 // ยี่ห้อ/รุ่นรถ: พิมพ์แล้วมีตัวเลือกจากฐานข้อมูลเด้งขึ้นมาให้กด (เช่นพิมพ์ "To" แล้ว
 // เห็น "Toyota") แต่ยังพิมพ์ค่าที่ไม่มีในระบบได้อยู่ (รถรุ่นใหม่) — ใช้ <datalist>
@@ -30,6 +31,8 @@ export default function AddJobModal({ onClose, onCreated }) {
   const [color, setColor] = useState('');
   const [mileage, setMileage] = useState('');
   const [symptom, setSymptom] = useState('');
+  const [photos, setPhotos] = useState([]);
+  const [photosBusy, setPhotosBusy] = useState(false);
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -60,6 +63,40 @@ export default function AddJobModal({ onClose, onCreated }) {
     setModel(matchedVehicle.model || '');
     setColor(matchedVehicle.color || '');
   }, [matchedVehicle]);
+
+  // อัปโหลดกี่รูปก็ได้ — ทั้งถ่ายจากกล้อง (input capture="environment") และเลือก
+  // จากคลังรูปมือถือ (input ธรรมดา) มาต่อท้ายรายการเดียวกัน ย่อขนาดก่อนเก็บใน
+  // state เสมอ (utils/resizeImage.js) กันการ์ดหน่วงตอน preview รูปเยอะ ๆ
+  async function handleFilesSelected(e) {
+    const files = Array.from(e.target.files || []);
+    e.target.value = '';
+    if (files.length === 0) return;
+    setPhotosBusy(true);
+    try {
+      const resized = await Promise.all(files.map((f) => resizeImageToDataUrl(f)));
+      setPhotos((prev) => [...prev, ...resized]);
+    } catch {
+      setError('เพิ่มรูปไม่สำเร็จ ลองใหม่อีกครั้ง');
+    } finally {
+      setPhotosBusy(false);
+    }
+  }
+
+  function removePhoto(idx) {
+    setPhotos((prev) => prev.filter((_, i) => i !== idx));
+  }
+
+  // สลับตำแหน่งรูป — เลขที่โชว์บนรูปคือลำดับ (รูปที่ 1 คือรูปปกที่จะโชว์บนการ์ด
+  // หน้ารายการงานวันนี้ ดู photo_thumb ที่ GET /jobs)
+  function movePhoto(idx, dir) {
+    setPhotos((prev) => {
+      const target = idx + dir;
+      if (target < 0 || target >= prev.length) return prev;
+      const next = [...prev];
+      [next[idx], next[target]] = [next[target], next[idx]];
+      return next;
+    });
+  }
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -102,6 +139,7 @@ export default function AddJobModal({ onClose, onCreated }) {
         queue_no: queueNo,
         mileage_in: Number(mileage) || null,
         symptom: symptom.trim(),
+        photos,
       });
 
       onCreated(res.data.id);
@@ -159,6 +197,32 @@ export default function AddJobModal({ onClose, onCreated }) {
 
           <label>อาการ</label>
           <textarea rows={3} value={symptom} onChange={(e) => setSymptom(e.target.value)} />
+
+          <label>รูปรถ</label>
+          <div className="job-photo-picker">
+            {photos.map((src, idx) => (
+              <div className="job-photo-thumb" key={idx}>
+                <span className="job-photo-num">{idx + 1}</span>
+                <img src={src} alt="" />
+                <div className="job-photo-thumb-actions">
+                  <button type="button" onClick={() => movePhoto(idx, -1)} disabled={idx === 0}>◀</button>
+                  <button type="button" onClick={() => removePhoto(idx)}>✕</button>
+                  <button type="button" onClick={() => movePhoto(idx, 1)} disabled={idx === photos.length - 1}>▶</button>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="job-photo-add-row">
+            <label className="btn job-photo-add-btn">
+              📷 ถ่ายรูป
+              <input type="file" accept="image/*" capture="environment" multiple hidden onChange={handleFilesSelected} />
+            </label>
+            <label className="btn job-photo-add-btn">
+              🖼️ เลือกรูป
+              <input type="file" accept="image/*" multiple hidden onChange={handleFilesSelected} />
+            </label>
+            {photosBusy && <span style={{ fontSize: 13, color: '#6b7280' }}>กำลังย่อรูป...</span>}
+          </div>
 
           {error && <p className="error-text">{error}</p>}
 

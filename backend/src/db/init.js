@@ -712,6 +712,23 @@ async function initDatabase() {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
 
+  // รูปรถตอนรับเข้าคิว — ถ่าย/เลือกได้หลายรูป จัดลำดับได้ (sort_order) รูปแรก
+  // (sort_order=0) ใช้เป็นรูปหน้าปกแสดงในการ์ดที่หน้ารายการงานวันนี้ เก็บเป็น
+  // base64 data URI ตรงๆ เหมือน customers/quotations.customer_signature และ
+  // quote_part_prices.image_data — ระบบนี้ไม่มี file-upload pipeline แยกต่างหาก
+  // (ดู utils/resizeImage.js ฝั่งหน้าเว็บที่ย่อรูปก่อนส่งมาเก็บ กัน DB บวม)
+  await conn.query(`
+    CREATE TABLE IF NOT EXISTS job_photos (
+      id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+      job_id BIGINT UNSIGNED NOT NULL,
+      photo_data LONGTEXT NOT NULL,
+      sort_order INT NOT NULL DEFAULT 0,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT fk_job_photo_job FOREIGN KEY (job_id) REFERENCES jobs(id) ON DELETE CASCADE,
+      KEY idx_job_photo_job (job_id, sort_order)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
   const [userRows] = await conn.query(
     'SELECT COUNT(*) AS c FROM users'
   );

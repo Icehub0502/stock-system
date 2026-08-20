@@ -62,7 +62,8 @@ router.get('/', async (req, res) => {
              j.customer_id, j.vehicle_id, j.quotation_id,
              c.customer_name, c.phone,
              v.license_plate, v.brand, v.model, v.color,
-             q.quotation_no, q.status AS quotation_status, q.total_amount
+             q.quotation_no, q.status AS quotation_status, q.total_amount,
+             (SELECT p.photo_data FROM job_photos p WHERE p.job_id = j.id ORDER BY p.sort_order LIMIT 1) AS photo_thumb
       FROM jobs j
       LEFT JOIN customers c ON c.id = j.customer_id
       LEFT JOIN vehicles v ON v.id = j.vehicle_id
@@ -132,7 +133,12 @@ router.get('/:id', async (req, res) => {
       ORDER BY h.changed_at, h.id
     `, [req.params.id]);
 
-    res.json({ success: true, data: { ...rows[0], history } });
+    const [photos] = await pool.execute(
+      'SELECT id, photo_data, sort_order FROM job_photos WHERE job_id = ? ORDER BY sort_order',
+      [req.params.id]
+    );
+
+    res.json({ success: true, data: { ...rows[0], history, photos } });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'โหลดข้อมูลงานไม่สำเร็จ' });
@@ -147,7 +153,7 @@ router.post('/', async (req, res) => {
   const {
     vehicle_id = null, customer_id = null, queue_no = null,
     job_date = null, mileage_in = null, symptom = '', note = '',
-    technician = null, bay = null, est_minutes = null,
+    technician = null, bay = null, est_minutes = null, photos = [],
   } = req.body || {};
 
   if (!vehicle_id) return res.status(400).json({ error: 'กรุณาเลือกรถ' });
@@ -183,6 +189,20 @@ router.post('/', async (req, res) => {
       'INSERT INTO job_status_history (job_id, status, changed_by) VALUES (?,?,?)',
       [result.insertId, 'received', req.user.id]
     );
+
+    // รูปรถ (ถ้ามี) — เรียงตามลำดับที่ส่งมา รูปแรก (index 0) คือรูปปกที่จะโชว์บน
+    // การ์ดรายการงานวันนี้ (ดู photo_thumb ใน GET /) จำกัดที่ตัวรูป ไม่ใช่จำนวน —
+    // หน้าเว็บย่อรูปก่อนส่งมาแล้ว (utils/resizeImage.js) จึงไม่ต้อง validate ขนาดซ้ำ
+    if (Array.isArray(photos) && photos.length > 0) {
+      for (let i = 0; i < photos.length; i += 1) {
+        const dataUrl = photos[i];
+        if (typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image/')) continue;
+        await conn.execute(
+          'INSERT INTO job_photos (job_id, photo_data, sort_order) VALUES (?,?,?)',
+          [result.insertId, dataUrl, i]
+        );
+      }
+    }
 
     await conn.commit();
     res.status(201).json({ success: true, id: result.insertId, job_no: jobNo, queue_no: queueNo });

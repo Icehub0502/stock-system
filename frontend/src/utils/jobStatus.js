@@ -37,3 +37,14 @@ export function nextMainStatus(status) {
   if (idx === -1 || idx === MAIN_PATH.length - 1) return null;
   return MAIN_PATH[idx + 1];
 }
+
+// ปุ่ม "ย้อนกลับ" บนการ์ด (หน้ารายการงานวันนี้) — เผื่อกดขั้นถัดไปผิด ใช้ไล่ตาม
+// MAIN_PATH ย้อนกลับตรง ๆ (ไม่ได้ดูประวัติจริงเหมือน JobDetailPage เดิม เพราะ
+// รายการงานวันนี้ไม่ได้โหลดประวัติทีละงานมาด้วย) ใช้ได้เฉพาะงานที่ยังอยู่บนเส้น
+// ทางหลัก — งานที่แยกไปทาง scheduled/rejected/carout ไม่มีปุ่มนี้ (ไม่อยู่บน
+// MAIN_PATH ตั้งแต่แรก)
+export function prevMainStatus(status) {
+  const idx = MAIN_PATH.indexOf(status);
+  if (idx <= 0) return null;
+  return MAIN_PATH[idx - 1];
+}

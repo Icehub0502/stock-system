@@ -44,34 +44,38 @@ export default function QueueNavBar() {
 
   return (
     <nav className="queue-navbar">
-      <div className="navbar-brand-text queue-navbar-title">
-        <span className="brand-champ">Champ</span><span className="brand-power">power</span>
-        <span className="queue-navbar-tag">คิวรับรถ</span>
+      <div className="queue-navbar-left">
+        <div className="navbar-brand-text queue-navbar-title">
+          <span className="brand-champ">Champ</span><span className="brand-power">power</span>
+          <span className="queue-navbar-tag">คิวรับรถ</span>
+        </div>
+
+        {user && (
+          <div className="queue-navbar-links">
+            <Link to="/jobs" className={location.pathname === '/jobs' ? 'active' : ''}>
+              รายการงานวันนี้
+            </Link>
+            <a href="/board" target="_blank" rel="noreferrer">จอบอร์ด ↗</a>
+          </div>
+        )}
       </div>
 
       {user && (
-        <div className="queue-navbar-links">
-          <Link to="/jobs" className={location.pathname === '/jobs' ? 'active' : ''}>
-            รายการงานวันนี้
-          </Link>
-          <a href="/board" target="_blank" rel="noreferrer">จอบอร์ด ↗</a>
-
-          <div className="queue-navbar-settings" ref={menuRef}>
-            <button
-              type="button"
-              className="queue-navbar-gear"
-              aria-label="ตั้งค่า"
-              onClick={() => setMenuOpen((o) => !o)}
-            >
-              ⚙️
-            </button>
-            {menuOpen && (
-              <div className="queue-navbar-settings-menu">
-                <div className="queue-navbar-settings-user">{user.full_name}</div>
-                <button type="button" onClick={handleLogout}>ออกจากระบบ</button>
-              </div>
-            )}
-          </div>
+        <div className="queue-navbar-settings" ref={menuRef}>
+          <button
+            type="button"
+            className="queue-navbar-gear"
+            aria-label="ตั้งค่า"
+            onClick={() => setMenuOpen((o) => !o)}
+          >
+            ⚙️
+          </button>
+          {menuOpen && (
+            <div className="queue-navbar-settings-menu">
+              <div className="queue-navbar-settings-user">{user.full_name}</div>
+              <button type="button" onClick={handleLogout}>ออกจากระบบ</button>
+            </div>
+          )}
         </div>
       )}
     </nav>
