@@ -159,7 +159,7 @@ async function initDatabase() {
   await conn.query(`
     CREATE TABLE IF NOT EXISTS products (
       id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-      category VARCHAR(100) NOT NULL,
+      category VARCHAR(100) DEFAULT NULL,
       parts VARCHAR(100) NOT NULL,
       description TEXT NOT NULL,
       brand VARCHAR(100) DEFAULT NULL,
@@ -170,6 +170,16 @@ async function initDatabase() {
   await conn.query(`
     ALTER TABLE products
     MODIFY COLUMN id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT
+  `).catch(ignoreIfAlreadyApplied);
+
+  // category ไม่เคยถูกเขียน/อ่านจริงในโค้ด (POST /product-costs ไม่ส่งค่านี้เลย —
+  // หน้าเว็บคำนวณหมวดหมู่จาก description แบบ dynamic ผ่าน detectCategory() แทน)
+  // แต่ตอนสร้างตารางครั้งแรกตั้งเป็น NOT NULL ไว้ ทำให้ INSERT พังด้วย
+  // ER_NO_DEFAULT_FOR_FIELD ทุกครั้งที่เพิ่มอะไหล่ใหม่ — ผ่อนเป็น nullable ให้ตรงกับ
+  // การใช้งานจริง (เหมือน brand/price ที่ nullable อยู่แล้ว)
+  await conn.query(`
+    ALTER TABLE products
+    MODIFY COLUMN category VARCHAR(100) DEFAULT NULL
   `).catch(ignoreIfAlreadyApplied);
 
   await conn.query(`
