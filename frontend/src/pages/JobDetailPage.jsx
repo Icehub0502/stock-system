@@ -99,9 +99,9 @@ export default function JobDetailPage() {
   }, [form?.brand]);
 
   // โหลดรายการสินค้า/บริการ (ไม่ผูกกับยี่ห้อ/รุ่นรถ) เสมอ ไม่ว่าจะมีใบเสนอราคา
-  // อยู่แล้วหรือยัง เพราะแผงนี้แก้ไข/เพิ่มรายการได้ตลอด — ตัด "ชุดโปร" (is_set)
-  // ออก เพราะราคาชุดคำนวณแยกและต้อง expand เป็นรายการย่อย ซึ่งซับซ้อนเกินความ
-  // จำเป็นของแผงนี้ — เลือกทีละชิ้นตามปกติพอ
+  // อยู่แล้วหรือยัง เพราะแผงนี้แก้ไข/เพิ่มรายการได้ตลอด — รวม "ชุดโปร" (is_set)
+  // ไว้ด้วย ติ๊กแล้วจะ "กระเด้ง" ขยายเป็นรายการย่อยให้อัตโนมัติ (ดู togglePart)
+  // เหมือนพฤติกรรมเดิมที่ PartsCatalogKioskPage.jsx ใช้
   useEffect(() => {
     if (!job) return;
     setCatalogLoading(true);
@@ -109,8 +109,7 @@ export default function JobDetailPage() {
     client.get('/service-items')
       .then((res) => setCatalogParts(
         (res.data.data || [])
-          .filter((si) => !si.is_set)
-          .map((si) => ({ id: si.id, part_name: si.product_name, category: si.category }))
+          .map((si) => ({ id: si.id, part_name: si.product_name, category: si.category, kind: si.is_set ? 'set' : 'part' }))
       ))
       .catch((err) => setCatalogError(err.response?.data?.error || 'โหลดรายการสินค้า/บริการไม่สำเร็จ'))
       .finally(() => setCatalogLoading(false));
@@ -194,7 +193,46 @@ export default function JobDetailPage() {
   // จิ้มเลือก/ถอนรายการ (เหมือน PartsCatalogKioskPage.jsx) — ไม่มีราคาตั้งต้น
   // จากแคตตาล็อกให้เติมให้ (service_items ไม่เก็บราคา) พนักงานพิมพ์ราคาเอง
   // ทุกครั้งตามหน้างานจริง
-  function togglePart(part) {
+  //
+  // "ชุดโปร" (kind === 'set') ไม่ใช่รายการเดียว — จิ้มเลือกแล้วต้อง "กระเด้ง"
+  // ขยายเป็นรายการย่อยของชุดนั้นทุกชิ้น (มาจาก service_item_components) ลงไปใน
+  // selectedParts ทีเดียว คีย์ `set-<setId>-comp-<idx>` ไม่ใช่เพิ่มเป็นบรรทัดเดียว
+  // ชื่อ "ชุดโปร..." เฉยๆ — พฤติกรรมเดียวกับ PartsCatalogKioskPage.jsx.togglePart
+  async function togglePart(part) {
+    if (part.kind === 'set') {
+      const alreadyIn = Object.values(selectedParts).some((it) => it.setId === part.id);
+      if (alreadyIn) {
+        setSelectedParts((prev) => {
+          const next = { ...prev };
+          Object.keys(next).forEach((k) => {
+            if (next[k].setId === part.id) delete next[k];
+          });
+          return next;
+        });
+        return;
+      }
+      try {
+        const res = await client.get(`/service-items/${part.id}/components`);
+        const components = res.data.data || [];
+        const rows = components.length > 0 ? components : [{ component_name: part.part_name, default_qty: 1 }];
+        setSelectedParts((prev) => {
+          const next = { ...prev };
+          rows.forEach((comp, idx) => {
+            next[`set-${part.id}-comp-${idx}`] = {
+              setId: part.id,
+              part_name: comp.component_name,
+              quantity: Number(comp.default_qty) > 0 ? Number(comp.default_qty) : 1,
+              unitPrice: '',
+            };
+          });
+          return next;
+        });
+      } catch (err) {
+        setCatalogError(err.response?.data?.error || 'โหลดรายการย่อยของชุดไม่สำเร็จ');
+      }
+      return;
+    }
+
     setSelectedParts((prev) => {
       const key = part.id;
       if (prev[key]) {
@@ -591,16 +629,19 @@ export default function JobDetailPage() {
               ) : (
                 <div className="jdp-item-grid">
                   {filteredCatalogParts.map((part) => {
-                    const selected = selectedParts[part.id];
+                    const selected = part.kind === 'set'
+                      ? Object.values(selectedParts).some((it) => it.setId === part.id)
+                      : selectedParts[part.id];
                     return (
                       <button
                         type="button"
                         key={part.id}
-                        className={`jdp-item-btn ${selected ? 'active' : ''}`}
+                        className={`jdp-item-btn ${selected ? 'active' : ''} ${part.kind === 'set' ? 'jdp-item-set' : ''}`}
                         onClick={() => togglePart(part)}
                       >
                         {selected && <span className="jdp-item-check">✓</span>}
                         {part.part_name}
+                        {part.kind === 'set' && <span className="jdp-item-set-badge">ชุดโปร</span>}
                       </button>
                     );
                   })}

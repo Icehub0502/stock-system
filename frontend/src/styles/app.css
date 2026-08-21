@@ -5767,21 +5767,24 @@ body:has(.modal-backdrop) .page-fade-in {
   gap: 8px;
   margin-bottom: 14px;
 }
+/* ตั้งใจให้สีต่างชุดกับปุ่มรายการด้านล่าง (.jdp-item-btn ที่เป็นขาว/เทาอ่อน) จะ
+   ได้แยกออกจากกันชัดว่าอันไหนคือ "ตัวกรอง" อันไหนคือ "รายการให้เลือก" — ใช้โทน
+   น้ำเงินอ่อนแทนเทา (เทาเดิมกลืนกับปุ่มรายการจนแยกไม่ออก) */
 .jdp-category-chip {
   padding: 7px 14px;
   border-radius: 8px;
-  border: 1px solid #d1d5db;
-  background: #f9fafb;
-  color: #374151;
+  border: 1px solid #bfdbfe;
+  background: #eff6ff;
+  color: #1d4ed8;
   font-size: 0.85rem;
   font-weight: 600;
   white-space: nowrap;
   cursor: pointer;
 }
-.jdp-category-chip:hover { background: #f3f4f6; }
+.jdp-category-chip:hover { background: #dbeafe; }
 .jdp-category-chip.active {
-  background: #111111;
-  border-color: #111111;
+  background: #1d4ed8;
+  border-color: #1d4ed8;
   color: #fff;
 }
 
@@ -5812,6 +5815,18 @@ body:has(.modal-backdrop) .page-fade-in {
   color: #fff;
 }
 .jdp-item-check { font-size: 0.8rem; line-height: 1; }
+.jdp-item-set-badge {
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: #fef3c7;
+  color: #92400e;
+}
+.jdp-item-btn.active .jdp-item-set-badge {
+  background: #fbbf24;
+  color: #1f1300;
+}
 
 /* รายการที่เลือกไว้ — โชว์ตลอดไม่ว่าจะกรองหมวดหมู่ไหนอยู่ (แก้ปัญหาเดิม: ติ๊ก
    แล้วเปลี่ยนหมวดหมู่ มองไม่เห็นว่าเลือกอะไรไว้บ้าง) รวมทั้งของเดิมที่มีอยู่แล้ว
