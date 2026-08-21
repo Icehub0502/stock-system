@@ -5738,12 +5738,12 @@ body:has(.modal-backdrop) .page-fade-in {
 .job-card-model { color: #9ca3af; font-size: 0.8rem; margin-top: 4px; }
 
 /* ── JobDetailPage.jsx — เลือกอะไหล่จากแคตตาล็อกแบบติ๊กเลือก (แทนตารางกรอกมือ
-   เดิม) การ์ดยืมโครง .kiosk-part/.kiosk-grid-part มาจาก PartsCatalogKioskPage.jsx
-   (พฤติกรรม tick-select เดียวกัน) แต่หน้านี้เป็นธีมสว่างเหมือนแผงอื่น ๆ ใน
-   dash-panel ไม่ใช่ธีมมืดของคีออส จึง override สีให้เข้ากับหน้า — ส่วนแถบหมวดหมู่
-   ใช้คลาสของตัวเอง (.jdp-category-chip) แยกจาก .kiosk-category-chip ไปเลย ไม่ได้
-   แค่ override สี เพราะโครงเดิม (พื้นดำ ขอบมนเต็ม 999px แบบคีออส) ผิดธีมทั้งชุด
-   ไม่ใช่แค่สีผิด ── */
+   เดิม) เดิมเคยยืมโครง .kiosk-part (การ์ด+รูป+ราคา+qty stepper ในตัว) มาจาก
+   PartsCatalogKioskPage.jsx แต่พอตัดรูป/ราคา/qty ออก (ย้ายไปอยู่ในรายการที่เลือก
+   ด้านบนแทน) เหลือแค่ชื่อบรรทัดเดียวกับ padding แบบการ์ดเดิม (เผื่อพื้นที่ให้รูป/
+   ราคาด้านล่าง) การ์ดเลยยุบเป็นทรงแคปซูลเบี้ยว ๆ กับ badge ติ๊กที่ลอยทับขอบ ดูรก —
+   เปลี่ยนมาใช้ปุ่มชิปแบนเรียบ (.jdp-item-btn) แทนไปเลย ไม่ใช้โครงการ์ดคีออสอีก
+   ต่อไป ให้เข้าชุดกับแถบหมวดหมู่ (.jdp-category-chip) ที่ปรับไปแล้วก่อนหน้า ── */
 .jdp-part-picker {
   /* กันล้นจอมือถือ (bug เดิม: ตารางกรอกมือกว้างเกิน 375px) — เผื่อไว้เป็นตาข่าย
      นิรภัยแม้กริดด้านล่างจะ wrap เองอยู่แล้วก็ตาม */
@@ -5785,23 +5785,33 @@ body:has(.modal-backdrop) .page-fade-in {
   color: #fff;
 }
 
-.jdp-part-grid {
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  margin-bottom: 14px;
+.jdp-item-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
 }
-.jdp-part {
+.jdp-item-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 16px;
+  border-radius: 10px;
+  border: 1px solid #d1d5db;
   background: #fff;
-  border-color: #e5e7eb;
   color: #111111;
+  font-size: 0.88rem;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
 }
-.jdp-part.kiosk-part-selected {
-  border-color: #111111;
-  box-shadow: 0 0 0 1px #111111;
-}
-.jdp-part .kiosk-part-check {
+.jdp-item-btn:hover { border-color: #9ca3af; }
+.jdp-item-btn.active {
   background: #111111;
+  border-color: #111111;
   color: #fff;
 }
+.jdp-item-check { font-size: 0.8rem; line-height: 1; }
 
 /* รายการที่เลือกไว้ — โชว์ตลอดไม่ว่าจะกรองหมวดหมู่ไหนอยู่ (แก้ปัญหาเดิม: ติ๊ก
    แล้วเปลี่ยนหมวดหมู่ มองไม่เห็นว่าเลือกอะไรไว้บ้าง) รวมทั้งของเดิมที่มีอยู่แล้ว

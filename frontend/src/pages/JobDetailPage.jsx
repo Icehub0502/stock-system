@@ -584,22 +584,19 @@ export default function JobDetailPage() {
               {filteredCatalogParts.length === 0 ? (
                 <p className="empty-message">ยังไม่มีรายการสินค้า/บริการในระบบ — เพิ่มใหม่ได้ด้านล่าง</p>
               ) : (
-                <div className="kiosk-grid kiosk-grid-part jdp-part-grid">
+                <div className="jdp-item-grid">
                   {filteredCatalogParts.map((part) => {
                     const selected = selectedParts[part.id];
                     return (
-                      <article
+                      <button
+                        type="button"
                         key={part.id}
-                        className={`kiosk-part jdp-part ${selected ? 'kiosk-part-selected' : ''}`}
+                        className={`jdp-item-btn ${selected ? 'active' : ''}`}
                         onClick={() => togglePart(part)}
-                        role="button"
-                        tabIndex={0}
                       >
-                        {selected && <span className="kiosk-part-check">✓</span>}
-                        <div className="kiosk-part-body">
-                          <div className="kiosk-part-name">{part.part_name}</div>
-                        </div>
-                      </article>
+                        {selected && <span className="jdp-item-check">✓</span>}
+                        {part.part_name}
+                      </button>
                     );
                   })}
                 </div>
