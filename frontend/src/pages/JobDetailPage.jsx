@@ -40,11 +40,21 @@ export default function JobDetailPage() {
   // คอลัมน์ราคาเก็บไว้เลย ตรงกับที่ต้องการ — พนักงานเสนอราคาเองทุกครั้งตามแต่ละ
   // เคส ไม่ใช้ราคาตายตัวจากแคตตาล็อก (quote_part_prices ยังเก็บไว้ใช้ในอนาคต
   // ที่อื่นตามเดิม แค่ไม่ใช้ในแผงนี้แล้ว)
+  //
+  // selectedParts รวม "รายการที่มีอยู่แล้วในใบเสนอราคา" (คีย์ existing-<id>, seed
+  // ตอนโหลดใบเสนอราคาที่มีอยู่) กับ "รายการที่เพิ่งติ๊กเลือกใหม่" (คีย์ = part.id
+  // ตัวเลข) ไว้ในก้อนเดียวกัน เพื่อให้หน้านี้แก้ไขรายการได้ตลอดแม้สร้างใบเสนอราคา
+  // ไปแล้ว (เจ้าของร้านขอ — เจอว่าต้องเพิ่มอะไหล่ทีหลังจะได้เพิ่มเข้าใบเดิมได้เลย
+  // ไม่ต้องออกไปแก้ที่หน้าใบเสนอราคาแยก) และให้เป็น single source of truth เดียว
+  // สำหรับทั้งช่อง checkmark ในกริดและรายการสรุปด้านบนที่โชว์ตลอดไม่ว่าจะกรอง
+  // หมวดหมู่ไหนอยู่ (แก้ปัญหาเดิม: ติ๊กแล้วเปลี่ยนหมวดหมู่ มองไม่เห็นว่าเลือกอะไรไว้)
   const [catalogParts, setCatalogParts] = useState([]);
   const [catalogLoading, setCatalogLoading] = useState(false);
   const [catalogError, setCatalogError] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [selectedParts, setSelectedParts] = useState({});
+  const [quotationMeta, setQuotationMeta] = useState(null);
+  const [itemsLoading, setItemsLoading] = useState(false);
   const [showAddPart, setShowAddPart] = useState(false);
   const [newPart, setNewPart] = useState({ part_name: '', category: '' });
   const [addingPart, setAddingPart] = useState(false);
@@ -88,11 +98,12 @@ export default function JobDetailPage() {
     client.get('/vehicle-models/models', { params: { brand: form.brand.trim() } }).then((res) => setModels(res.data.data || []));
   }, [form?.brand]);
 
-  // โหลดรายการสินค้า/บริการ (ไม่ผูกกับยี่ห้อ/รุ่นรถ) เฉพาะตอนยังไม่มีใบเสนอราคา
-  // ตัด "ชุดโปร" (is_set) ออก เพราะราคาชุดคำนวณแยกและต้อง expand เป็นรายการย่อย
-  // ซึ่งซับซ้อนเกินความจำเป็นของแผงนี้ — เลือกทีละชิ้นตามปกติพอ
+  // โหลดรายการสินค้า/บริการ (ไม่ผูกกับยี่ห้อ/รุ่นรถ) เสมอ ไม่ว่าจะมีใบเสนอราคา
+  // อยู่แล้วหรือยัง เพราะแผงนี้แก้ไข/เพิ่มรายการได้ตลอด — ตัด "ชุดโปร" (is_set)
+  // ออก เพราะราคาชุดคำนวณแยกและต้อง expand เป็นรายการย่อย ซึ่งซับซ้อนเกินความ
+  // จำเป็นของแผงนี้ — เลือกทีละชิ้นตามปกติพอ
   useEffect(() => {
-    if (!job || job.quotation_id) return;
+    if (!job) return;
     setCatalogLoading(true);
     setCatalogError('');
     client.get('/service-items')
@@ -103,7 +114,34 @@ export default function JobDetailPage() {
       ))
       .catch((err) => setCatalogError(err.response?.data?.error || 'โหลดรายการสินค้า/บริการไม่สำเร็จ'))
       .finally(() => setCatalogLoading(false));
-  }, [job?.id, job?.quotation_id]);
+  }, [job?.id]);
+
+  // มีใบเสนอราคาอยู่แล้ว — โหลดรายการที่มีอยู่มา seed selectedParts (คีย์
+  // existing-<quotation_items.id>) พร้อมเก็บฟิลด์อื่นของใบเสนอราคาไว้ใน
+  // quotationMeta ไว้ส่งกลับตอนบันทึกทับ (PUT ต้องส่งฟิลด์ครบ ไม่งั้นข้อมูลเดิม
+  // เช่นมัดจำ/หมายเหตุจะหาย) — ผูก dependency กับ job?.quotation_id เท่านั้น
+  // (ไม่ใช่ทั้ง job object) กัน effect นี้รันซ้ำทุกครั้งที่ job ถูก reload เบื้องหลัง
+  // (เช่นจาก realtime) ซึ่งจะทับรายการที่กำลังแก้ไขอยู่ทิ้ง
+  useEffect(() => {
+    if (!job?.quotation_id) { setQuotationMeta(null); setSelectedParts({}); return; }
+    setItemsLoading(true);
+    client.get(`/quotations/${job.quotation_id}`)
+      .then((res) => {
+        const q = res.data.data;
+        setQuotationMeta(q);
+        const seeded = {};
+        (q.items || []).forEach((it) => {
+          seeded[`existing-${it.id}`] = {
+            part_name: it.product_name,
+            quantity: it.quantity,
+            unitPrice: String(it.unit_price),
+          };
+        });
+        setSelectedParts(seeded);
+      })
+      .catch((err) => setCatalogError(err.response?.data?.error || 'โหลดรายการในใบเสนอราคาไม่สำเร็จ'))
+      .finally(() => setItemsLoading(false));
+  }, [job?.quotation_id]);
 
   function startEdit() {
     setForm({
@@ -189,6 +227,14 @@ export default function JobDetailPage() {
     setSelectedParts((prev) => (prev[key] ? { ...prev, [key]: { ...prev[key], unitPrice: value } } : prev));
   }
 
+  function removeSelected(key) {
+    setSelectedParts((prev) => {
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+  }
+
   const catalogCategories = useMemo(() => {
     const seen = new Set();
     const list = [];
@@ -248,35 +294,52 @@ export default function JobDetailPage() {
     }
   }
 
-  // สร้างใบเสนอราคาจากอะไหล่ที่ติ๊กเลือกไว้ (ใช้ลูกค้า/รถของงานนี้เลย ไม่ต้อง
-  // ค้นหาใหม่) แล้วผูกกลับเข้างานทันที — ทำให้เสร็จในหน้าเดียว ไม่ต้องสลับไป
-  // /quotations เพื่อสร้างแล้วย้อนกลับมาผูกอีกที
-  async function createQuotationFromItems() {
+  // บันทึกรายการที่ติ๊กเลือกไว้ — ยังไม่มีใบเสนอราคาก็สร้างใหม่ (ใช้ลูกค้า/รถของ
+  // งานนี้เลย ไม่ต้องค้นหาใหม่) แล้วผูกกลับเข้างานทันที; ถ้ามีใบเสนอราคาอยู่แล้ว
+  // ก็แก้ไขรายการทับของเดิมทั้งชุดผ่าน PUT ปกติ (endpoint เดียวกับที่หน้าคีออส/
+  // หน้าใบเสนอราคาใช้แก้ไข ไม่ใช่ endpoint พิเศษ) ทำให้หน้านี้แก้ไขรายการได้ตลอด
+  // แม้จะกดสร้างใบเสนอราคาไปแล้ว เช่นทำไปแล้วเจอว่าต้องเปลี่ยนอะไหล่เพิ่ม
+  async function saveQuotationItems() {
     if (selectedPartsList.length === 0) {
-      setError('กรุณาเลือกรายการอะไหล่อย่างน้อย 1 รายการ');
+      setError('กรุณาเลือกรายการอย่างน้อย 1 รายการ');
       return;
     }
     setBusy(true);
     setError('');
+    const items = selectedPartsList.map((p) => ({
+      product_name: p.part_name,
+      quantity: p.quantity,
+      unit_price: Number(p.unitPrice) || 0,
+    }));
     try {
-      const res = await client.post('/quotations', {
-        customer_id: job.customer_id,
-        vehicle_id: job.vehicle_id,
-        quotation_date: todayStr(),
-        mileage: job.mileage_in || 0,
-        queue_no: job.queue_no || null,
-        symptom: job.symptom || null,
-        items: selectedPartsList.map((p) => ({
-          product_name: p.part_name,
-          quantity: p.quantity,
-          unit_price: Number(p.unitPrice) || 0,
-        })),
-      });
-      await client.patch(`/jobs/${id}/quotation`, { quotation_id: res.data.quotation_id });
-      setSelectedParts({});
+      if (job.quotation_id) {
+        await client.put(`/quotations/${job.quotation_id}`, {
+          customer_id: quotationMeta?.customer_id,
+          vehicle_id: quotationMeta?.vehicle_id,
+          quotation_date: quotationMeta?.quotation_date,
+          mileage: quotationMeta?.mileage,
+          remark: quotationMeta?.remark,
+          queue_no: quotationMeta?.queue_no,
+          symptom: quotationMeta?.symptom,
+          deposit_amount: quotationMeta?.deposit_amount,
+          deposit_date: quotationMeta?.deposit_date,
+          items,
+        });
+      } else {
+        const res = await client.post('/quotations', {
+          customer_id: job.customer_id,
+          vehicle_id: job.vehicle_id,
+          quotation_date: todayStr(),
+          mileage: job.mileage_in || 0,
+          queue_no: job.queue_no || null,
+          symptom: job.symptom || null,
+          items,
+        });
+        await client.patch(`/jobs/${id}/quotation`, { quotation_id: res.data.quotation_id });
+      }
       await load();
     } catch (err) {
-      setError(err.response?.data?.error || 'สร้างใบเสนอราคาไม่สำเร็จ');
+      setError(err.response?.data?.error || 'บันทึกรายการไม่สำเร็จ');
     } finally {
       setBusy(false);
     }
@@ -332,7 +395,6 @@ export default function JobDetailPage() {
   if (loading) return <div className="office-dashboard container"><div className="loading">กำลังโหลด...</div></div>;
   if (!job) return <div className="office-dashboard container"><div className="error-message">{error || 'ไม่พบงานนี้'}</div></div>;
 
-  const st = jobStatusDef(job.status);
   const isDecisionPoint = job.status === 'quoted';
 
   return (
@@ -402,14 +464,14 @@ export default function JobDetailPage() {
                 ))}
               </div>
             )}
-            <p><strong>สถานะ:</strong> <span className={`status-badge ${st.badge}`}>{st.label}</span> {job.bay && `· ช่องยก ${job.bay}`}</p>
-            <p><strong>ทะเบียน:</strong> {job.license_plate || '-'}</p>
-            <p><strong>รถ:</strong> {job.brand} {job.model} {job.color && `· ${job.color}`}</p>
-            <p><strong>ลูกค้า:</strong> {job.customer_name || '-'} {job.phone && `(${job.phone})`}</p>
+            <p><strong>ชื่อลูกค้า:</strong> {job.customer_name || '-'} {job.phone && `(${job.phone})`}</p>
+            <p><strong>ยี่ห้อรถ:</strong> {job.brand || '-'}</p>
+            <p><strong>รุ่นรถ:</strong> {job.model || '-'} {job.color && `· ${job.color}`}</p>
+            <p><strong>ทะเบียนรถ:</strong> {job.license_plate || '-'}</p>
             <p><strong>เลขไมล์:</strong> {job.mileage_in ?? '-'}</p>
             <p><strong>อาการที่แจ้ง:</strong> {job.symptom || '-'}</p>
             {job.note && <p><strong>หมายเหตุ:</strong> {job.note}</p>}
-            <p style={{ fontSize: 13, color: '#6b7280' }}>เปลี่ยนสถานะ/ช่องยกได้ที่การ์ดในหน้ารายการงานวันนี้</p>
+            <p style={{ fontSize: 13, color: '#6b7280' }}>ดูสถานะ/เปลี่ยนสถานะ/ช่องยกได้ที่การ์ดในหน้ารายการงานวันนี้</p>
           </>
         )}
       </div>
@@ -448,142 +510,148 @@ export default function JobDetailPage() {
 
       <div className="dash-panel">
         <div className="dash-panel-title">ใบเสนอราคา</div>
-        {job.quotation_id ? (
-          <p>
+        {job.quotation_id && (
+          <p className="jdp-quotation-meta">
             เลขที่ <strong>{job.quotation_no}</strong> — สถานะ {job.quotation_status}
             {' '}(<Link to="/quotations">ไปหน้าใบเสนอราคา / พิมพ์</Link>)
           </p>
-        ) : (
-          <div className="jdp-part-picker">
-            {error && <p className="error-text">{error}</p>}
-            {catalogError && <p className="error-text">{catalogError}</p>}
+        )}
 
-            {catalogLoading ? (
-              <div className="loading">กำลังโหลดรายการสินค้า/บริการ...</div>
-            ) : (
-              <>
-                {catalogCategories.length > 0 && (
-                  <div className="kiosk-category-bar jdp-category-bar">
+        <div className="jdp-part-picker">
+          {error && <p className="error-text">{error}</p>}
+          {catalogError && <p className="error-text">{catalogError}</p>}
+
+          {/* รายการที่เลือกไว้ — โชว์ตลอดไม่ว่าจะกรองหมวดหมู่ไหนอยู่ (ทั้งของเดิม
+              ที่มีอยู่แล้วในใบเสนอราคา และของที่เพิ่งติ๊กเพิ่ม) แก้จำนวน/ราคา/ลบ
+              ได้ตรงนี้เลย ไม่ต้องไล่หาในกริดด้านล่าง */}
+          {selectedPartsList.length > 0 && (
+            <div className="jdp-selected-list">
+              <div className="jdp-selected-list-title">รายการที่เลือก ({selectedPartsCount} ชิ้น)</div>
+              {Object.entries(selectedParts).map(([key, item]) => (
+                <div className="jdp-selected-row" key={key}>
+                  <span className="jdp-selected-name">{item.part_name}</span>
+                  <div className="jdp-selected-qty">
+                    <button type="button" onClick={() => changePartQty(key, -1)} aria-label="ลดจำนวน">−</button>
+                    <span>{item.quantity}</span>
+                    <button type="button" onClick={() => changePartQty(key, 1)} aria-label="เพิ่มจำนวน">+</button>
+                  </div>
+                  <label className="jdp-selected-price">
+                    <span>฿</span>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      placeholder="ราคา/หน่วย"
+                      value={item.unitPrice}
+                      onChange={(e) => updatePartPrice(key, e.target.value)}
+                    />
+                  </label>
+                  <button type="button" className="jdp-selected-remove" onClick={() => removeSelected(key)} aria-label="ลบรายการ">
+                    ✕
+                  </button>
+                </div>
+              ))}
+              <div className="jdp-selected-total">รวม {selectedPartsTotal.toLocaleString('th-TH')} บาท</div>
+            </div>
+          )}
+
+          {catalogLoading || itemsLoading ? (
+            <div className="loading">กำลังโหลดรายการสินค้า/บริการ...</div>
+          ) : (
+            <>
+              {catalogCategories.length > 0 && (
+                <div className="jdp-category-bar">
+                  <button
+                    type="button"
+                    className={`jdp-category-chip ${!categoryFilter ? 'active' : ''}`}
+                    onClick={() => setCategoryFilter('')}
+                  >
+                    ทั้งหมด
+                  </button>
+                  {catalogCategories.map((cat) => (
                     <button
                       type="button"
-                      className={`kiosk-category-chip ${!categoryFilter ? 'active' : ''}`}
-                      onClick={() => setCategoryFilter('')}
+                      key={cat}
+                      className={`jdp-category-chip ${categoryFilter === cat ? 'active' : ''}`}
+                      onClick={() => setCategoryFilter(cat)}
                     >
-                      ทั้งหมด
+                      {cat}
                     </button>
-                    {catalogCategories.map((cat) => (
-                      <button
-                        type="button"
-                        key={cat}
-                        className={`kiosk-category-chip ${categoryFilter === cat ? 'active' : ''}`}
-                        onClick={() => setCategoryFilter(cat)}
-                      >
-                        {cat}
-                      </button>
-                    ))}
-                  </div>
-                )}
-
-                {filteredCatalogParts.length === 0 ? (
-                  <p className="empty-message">ยังไม่มีรายการสินค้า/บริการในระบบ — เพิ่มใหม่ได้ด้านล่าง</p>
-                ) : (
-                  <div className="kiosk-grid kiosk-grid-part jdp-part-grid">
-                    {filteredCatalogParts.map((part) => {
-                      const selected = selectedParts[part.id];
-                      return (
-                        <article
-                          key={part.id}
-                          className={`kiosk-part jdp-part ${selected ? 'kiosk-part-selected' : ''}`}
-                          onClick={() => togglePart(part)}
-                          role="button"
-                          tabIndex={0}
-                        >
-                          {selected && <span className="kiosk-part-check">✓</span>}
-                          <div className="kiosk-part-body">
-                            <div className="kiosk-part-name">{part.part_name}</div>
-                          </div>
-
-                          {selected && (
-                            <div className="jdp-part-selected-controls" onClick={(e) => e.stopPropagation()}>
-                              <div className="kiosk-part-qty">
-                                <button type="button" onClick={() => changePartQty(part.id, -1)} aria-label="ลดจำนวน">−</button>
-                                <span>{selected.quantity}</span>
-                                <button type="button" onClick={() => changePartQty(part.id, 1)} aria-label="เพิ่มจำนวน">+</button>
-                              </div>
-                              <label className="jdp-part-price-input">
-                                <span>฿</span>
-                                <input
-                                  type="number"
-                                  min="0"
-                                  step="0.01"
-                                  placeholder="ราคา/หน่วย"
-                                  value={selected.unitPrice}
-                                  onChange={(e) => updatePartPrice(part.id, e.target.value)}
-                                />
-                              </label>
-                            </div>
-                          )}
-                        </article>
-                      );
-                    })}
-                  </div>
-                )}
-              </>
-            )}
-
-            <div className="jdp-add-part">
-              {!showAddPart ? (
-                <button type="button" onClick={() => setShowAddPart(true)}>
-                  + เพิ่มรายการใหม่
-                </button>
-              ) : (
-                <form className="modal-form jdp-add-part-form" onSubmit={submitNewPart}>
-                  <label>ชื่อสินค้า/บริการ</label>
-                  <input
-                    type="text"
-                    value={newPart.part_name}
-                    onChange={(e) => setNewPart({ ...newPart, part_name: e.target.value })}
-                  />
-                  <label>หมวดหมู่</label>
-                  <input
-                    type="text"
-                    list="jdp-category-options"
-                    value={newPart.category}
-                    onChange={(e) => setNewPart({ ...newPart, category: e.target.value })}
-                  />
-                  <datalist id="jdp-category-options">
-                    {catalogCategories.map((c) => <option key={c} value={c} />)}
-                  </datalist>
-                  {addPartError && <p className="error-text">{addPartError}</p>}
-                  <div className="modal-actions">
-                    <button type="submit" className="btn-primary" disabled={addingPart}>
-                      {addingPart ? 'กำลังเพิ่ม...' : 'เพิ่ม'}
-                    </button>
-                    <button type="button" onClick={() => { setShowAddPart(false); setAddPartError(''); }} disabled={addingPart}>
-                      ยกเลิก
-                    </button>
-                  </div>
-                </form>
+                  ))}
+                </div>
               )}
-            </div>
 
-            {selectedPartsList.length > 0 && (
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '4px 0 12px' }}>
-                <span>เลือกแล้ว {selectedPartsCount} ชิ้น</span>
-                <strong>รวม {selectedPartsTotal.toLocaleString('th-TH')} บาท</strong>
-              </div>
+              {filteredCatalogParts.length === 0 ? (
+                <p className="empty-message">ยังไม่มีรายการสินค้า/บริการในระบบ — เพิ่มใหม่ได้ด้านล่าง</p>
+              ) : (
+                <div className="kiosk-grid kiosk-grid-part jdp-part-grid">
+                  {filteredCatalogParts.map((part) => {
+                    const selected = selectedParts[part.id];
+                    return (
+                      <article
+                        key={part.id}
+                        className={`kiosk-part jdp-part ${selected ? 'kiosk-part-selected' : ''}`}
+                        onClick={() => togglePart(part)}
+                        role="button"
+                        tabIndex={0}
+                      >
+                        {selected && <span className="kiosk-part-check">✓</span>}
+                        <div className="kiosk-part-body">
+                          <div className="kiosk-part-name">{part.part_name}</div>
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+              )}
+            </>
+          )}
+
+          <div className="jdp-add-part">
+            {!showAddPart ? (
+              <button type="button" onClick={() => setShowAddPart(true)}>
+                + เพิ่มรายการใหม่
+              </button>
+            ) : (
+              <form className="modal-form jdp-add-part-form" onSubmit={submitNewPart}>
+                <label>ชื่อสินค้า/บริการ</label>
+                <input
+                  type="text"
+                  value={newPart.part_name}
+                  onChange={(e) => setNewPart({ ...newPart, part_name: e.target.value })}
+                />
+                <label>หมวดหมู่</label>
+                <input
+                  type="text"
+                  list="jdp-category-options"
+                  value={newPart.category}
+                  onChange={(e) => setNewPart({ ...newPart, category: e.target.value })}
+                />
+                <datalist id="jdp-category-options">
+                  {catalogCategories.map((c) => <option key={c} value={c} />)}
+                </datalist>
+                {addPartError && <p className="error-text">{addPartError}</p>}
+                <div className="modal-actions">
+                  <button type="submit" className="btn-primary" disabled={addingPart}>
+                    {addingPart ? 'กำลังเพิ่ม...' : 'เพิ่ม'}
+                  </button>
+                  <button type="button" onClick={() => { setShowAddPart(false); setAddPartError(''); }} disabled={addingPart}>
+                    ยกเลิก
+                  </button>
+                </div>
+              </form>
             )}
-
-            <button
-              type="button"
-              className="btn-primary"
-              disabled={busy || selectedPartsList.length === 0}
-              onClick={createQuotationFromItems}
-            >
-              {busy ? 'กำลังสร้าง...' : 'สร้างใบเสนอราคา'}
-            </button>
           </div>
-        )}
+
+          <button
+            type="button"
+            className="btn-primary"
+            disabled={busy || itemsLoading || selectedPartsList.length === 0}
+            onClick={saveQuotationItems}
+          >
+            {busy ? 'กำลังบันทึก...' : job.quotation_id ? '+ เพิ่มรายการเข้าใบเสนอราคา' : 'สร้างใบเสนอราคา'}
+          </button>
+        </div>
       </div>
 
       <div className="dash-panel">

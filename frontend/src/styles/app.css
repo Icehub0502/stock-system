@@ -5738,19 +5738,53 @@ body:has(.modal-backdrop) .page-fade-in {
 .job-card-model { color: #9ca3af; font-size: 0.8rem; margin-top: 4px; }
 
 /* ── JobDetailPage.jsx — เลือกอะไหล่จากแคตตาล็อกแบบติ๊กเลือก (แทนตารางกรอกมือ
-   เดิม) ยืมโครง .kiosk-part/.kiosk-grid-part/.kiosk-category-* มาจาก
-   PartsCatalogKioskPage.jsx ตรง ๆ (พฤติกรรม tick-select + qty stepper เดียวกัน)
-   แต่หน้านี้เป็นธีมสว่างเหมือนแผงอื่น ๆ ใน dash-panel ไม่ใช่ธีมมืดของคีออส จึง
-   override สีให้เข้ากับหน้าแทนที่จะสร้างกริด/การ์ดใหม่ทั้งหมด ── */
+   เดิม) การ์ดยืมโครง .kiosk-part/.kiosk-grid-part มาจาก PartsCatalogKioskPage.jsx
+   (พฤติกรรม tick-select เดียวกัน) แต่หน้านี้เป็นธีมสว่างเหมือนแผงอื่น ๆ ใน
+   dash-panel ไม่ใช่ธีมมืดของคีออส จึง override สีให้เข้ากับหน้า — ส่วนแถบหมวดหมู่
+   ใช้คลาสของตัวเอง (.jdp-category-chip) แยกจาก .kiosk-category-chip ไปเลย ไม่ได้
+   แค่ override สี เพราะโครงเดิม (พื้นดำ ขอบมนเต็ม 999px แบบคีออส) ผิดธีมทั้งชุด
+   ไม่ใช่แค่สีผิด ── */
 .jdp-part-picker {
   /* กันล้นจอมือถือ (bug เดิม: ตารางกรอกมือกว้างเกิน 375px) — เผื่อไว้เป็นตาข่าย
      นิรภัยแม้กริดด้านล่างจะ wrap เองอยู่แล้วก็ตาม */
   overflow-x: auto;
 }
-.jdp-category-bar {
-  margin-bottom: 12px;
-  padding-bottom: 0;
+.jdp-quotation-meta {
+  padding: 8px 12px;
+  margin: 0 0 14px;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 8px;
+  font-size: 0.9rem;
 }
+
+/* แถบตัวกรองหมวดหมู่ — ปล่อยให้ wrap ลงบรรทัดใหม่แทนสกอลล์แนวนอนอย่างเดียว (ของ
+   เดิมสกอลล์แล้วชิดขอบขวาตัดพอดี ดูอึดอัด) ขอบมนพอประมาณ (8px) แทนแบบเม็ดยา
+   (999px) ให้เข้ากับปุ่ม/การ์ดอื่นในหน้านี้ที่ไม่มีอันไหนเป็นเม็ดยาเลย */
+.jdp-category-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.jdp-category-chip {
+  padding: 7px 14px;
+  border-radius: 8px;
+  border: 1px solid #d1d5db;
+  background: #f9fafb;
+  color: #374151;
+  font-size: 0.85rem;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.jdp-category-chip:hover { background: #f3f4f6; }
+.jdp-category-chip.active {
+  background: #111111;
+  border-color: #111111;
+  color: #fff;
+}
+
 .jdp-part-grid {
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   margin-bottom: 14px;
@@ -5768,48 +5802,90 @@ body:has(.modal-backdrop) .page-fade-in {
   background: #111111;
   color: #fff;
 }
-.jdp-part .kiosk-part-image { background: #f3f4f6; }
-.jdp-part .kiosk-part-desc { color: #6b7280; }
-.jdp-part .kiosk-part-price { color: #16a34a; font-size: 1.1rem; }
-.jdp-part .kiosk-part-qty button {
-  background: #f3f4f6;
-  border-color: #d1d5db;
-  color: #111111;
+
+/* รายการที่เลือกไว้ — โชว์ตลอดไม่ว่าจะกรองหมวดหมู่ไหนอยู่ (แก้ปัญหาเดิม: ติ๊ก
+   แล้วเปลี่ยนหมวดหมู่ มองไม่เห็นว่าเลือกอะไรไว้บ้าง) รวมทั้งของเดิมที่มีอยู่แล้ว
+   ในใบเสนอราคาและของที่เพิ่งติ๊กเพิ่ม แก้จำนวน/ราคา/ลบได้ตรงนี้เลย */
+.jdp-selected-list {
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-bottom: 16px;
 }
-.jdp-part .kiosk-part-qty button:active { background: #e5e7eb; }
-.jdp-part-disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
+.jdp-selected-list-title {
+  font-weight: 700;
+  font-size: 0.9rem;
+  margin-bottom: 8px;
 }
-.jdp-part-needs-price {
-  padding: 8px 0 2px;
-  font-size: 0.82rem;
-  color: #92400e;
-  font-weight: 600;
-}
-.jdp-part-selected-controls {
-  padding: 0 14px 14px;
+.jdp-selected-row {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  border-top: 1px solid #e5e7eb;
+  flex-wrap: wrap;
 }
-.jdp-part-price-input {
+.jdp-selected-row:first-of-type { border-top: none; }
+.jdp-selected-name {
+  flex: 1 1 160px;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+.jdp-selected-qty {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.jdp-selected-qty button {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  border: 1px solid #d1d5db;
+  background: #fff;
+  color: #111111;
+  cursor: pointer;
+  line-height: 1;
+}
+.jdp-selected-qty button:active { background: #e5e7eb; }
+.jdp-selected-qty span { min-width: 18px; text-align: center; font-weight: 600; }
+.jdp-selected-price {
   display: flex;
   align-items: center;
   gap: 4px;
   border: 1px solid #d1d5db;
   border-radius: 8px;
   padding: 2px 8px;
+  background: #fff;
   font-size: 0.85rem;
 }
-.jdp-part-price-input input {
+.jdp-selected-price input {
   border: none;
   min-height: unset;
   padding: 4px 2px;
-  width: 100%;
+  width: 90px;
   font-size: 0.9rem;
 }
-.jdp-part-price-input input:focus { outline: none; }
+.jdp-selected-price input:focus { outline: none; }
+.jdp-selected-remove {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  border: 1px solid #fecaca;
+  background: #fef2f2;
+  color: #b91c1c;
+  cursor: pointer;
+  line-height: 1;
+}
+.jdp-selected-remove:hover { background: #fee2e2; }
+.jdp-selected-total {
+  text-align: right;
+  font-weight: 700;
+  padding-top: 10px;
+  margin-top: 4px;
+  border-top: 1px solid #e5e7eb;
+}
+
 .jdp-add-part { margin: 4px 0 16px; }
 .jdp-add-part-form { max-width: 360px; }
 
