@@ -530,25 +530,30 @@ export default function JobDetailPage() {
               {Object.entries(selectedParts).map(([key, item]) => (
                 <div className="jdp-selected-row" key={key}>
                   <span className="jdp-selected-name">{item.part_name}</span>
-                  <div className="jdp-selected-qty">
-                    <button type="button" onClick={() => changePartQty(key, -1)} aria-label="ลดจำนวน">−</button>
-                    <span>{item.quantity}</span>
-                    <button type="button" onClick={() => changePartQty(key, 1)} aria-label="เพิ่มจำนวน">+</button>
+                  {/* กลุ่มควบคุมทั้งสาม (จำนวน/ราคา/ลบ) รวมเป็นก้อนเดียว ไม่แยกกัน
+                      ห่อบรรทัดใหม่ทีละปุ่ม — กันปัญหาเดิมที่จอแคบแล้วปุ่มหลุด
+                      กระจัดกระจาย/โดนตัดขอบ ถ้าพื้นที่ไม่พอก็ตกไปทั้งก้อนแทน */}
+                  <div className="jdp-selected-controls">
+                    <div className="jdp-selected-qty">
+                      <button type="button" onClick={() => changePartQty(key, -1)} aria-label="ลดจำนวน">−</button>
+                      <span>{item.quantity}</span>
+                      <button type="button" onClick={() => changePartQty(key, 1)} aria-label="เพิ่มจำนวน">+</button>
+                    </div>
+                    <label className="jdp-selected-price">
+                      <span>฿</span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        placeholder="ราคา/หน่วย"
+                        value={item.unitPrice}
+                        onChange={(e) => updatePartPrice(key, e.target.value)}
+                      />
+                    </label>
+                    <button type="button" className="jdp-selected-remove" onClick={() => removeSelected(key)} aria-label="ลบรายการ">
+                      ✕
+                    </button>
                   </div>
-                  <label className="jdp-selected-price">
-                    <span>฿</span>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      placeholder="ราคา/หน่วย"
-                      value={item.unitPrice}
-                      onChange={(e) => updatePartPrice(key, e.target.value)}
-                    />
-                  </label>
-                  <button type="button" className="jdp-selected-remove" onClick={() => removeSelected(key)} aria-label="ลบรายการ">
-                    ✕
-                  </button>
                 </div>
               ))}
               <div className="jdp-selected-total">รวม {selectedPartsTotal.toLocaleString('th-TH')} บาท</div>

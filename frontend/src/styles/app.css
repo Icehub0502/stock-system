@@ -5831,16 +5831,31 @@ body:has(.modal-backdrop) .page-fade-in {
 .jdp-selected-row {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 0;
-  border-top: 1px solid #e5e7eb;
+  justify-content: space-between;
   flex-wrap: wrap;
+  gap: 10px;
+  padding: 10px 2px;
+  border-top: 1px solid #e5e7eb;
 }
 .jdp-selected-row:first-of-type { border-top: none; }
 .jdp-selected-name {
-  flex: 1 1 160px;
+  flex: 1 1 140px;
+  min-width: 0;
   font-weight: 600;
   font-size: 0.9rem;
+  overflow-wrap: break-word;
+}
+/* กลุ่มควบคุมทั้งก้อน (จำนวน/ราคา/ลบ) — ให้ทุกปุ่มสูงเท่ากัน (28px) เป๊ะ ๆ แล้วใช้
+   align-items: center ที่นี่ด้วยอีกชั้น กันกรณีที่ปุ่มหรือกล่องราคาสูงไม่เท่ากัน
+   ทำให้เคยดู "ไม่กลาง" แนวตั้ง — ตัวก้อนนี้ไม่แตกออกจากกันเวลาห่อบรรทัดใหม่ด้วย
+   (มี flex-shrink: 0 + ไม่ห่อภายในตัวเอง) ตกไปทั้งก้อนบรรทัดถัดไปแทนที่จะโดนตัด
+   ขอบทีละปุ่มเหมือนเดิม */
+.jdp-selected-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+  flex-wrap: nowrap;
 }
 .jdp-selected-qty {
   display: flex;
@@ -5848,8 +5863,14 @@ body:has(.modal-backdrop) .page-fade-in {
   gap: 6px;
 }
 .jdp-selected-qty button {
-  width: 26px;
-  height: 26px;
+  width: 28px;
+  height: 28px;
+  min-height: 28px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
   border-radius: 6px;
   border: 1px solid #d1d5db;
   background: #fff;
@@ -5863,23 +5884,32 @@ body:has(.modal-backdrop) .page-fade-in {
   display: flex;
   align-items: center;
   gap: 4px;
+  height: 28px;
+  box-sizing: border-box;
   border: 1px solid #d1d5db;
   border-radius: 8px;
-  padding: 2px 8px;
+  padding: 0 8px;
   background: #fff;
   font-size: 0.85rem;
 }
 .jdp-selected-price input {
   border: none;
-  min-height: unset;
-  padding: 4px 2px;
-  width: 90px;
+  min-height: 0;
+  height: 100%;
+  padding: 0 2px;
+  width: 84px;
   font-size: 0.9rem;
 }
 .jdp-selected-price input:focus { outline: none; }
 .jdp-selected-remove {
-  width: 26px;
-  height: 26px;
+  width: 28px;
+  height: 28px;
+  min-height: 28px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
   border-radius: 6px;
   border: 1px solid #fecaca;
   background: #fef2f2;
