@@ -1,5 +1,6 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import client from '../api/client';
+import useRealtimeEvent from '../hooks/useRealtimeEvent';
 
 // รวมรายการจาก racks + wing_arms มาค้นหา/เลือกในหน้าเดียว (แค่ระดับหน้าเว็บ ไม่ได้
 // รวมตารางฐานข้อมูลจริง — เจ้าของร้านเลือกไม่รวมเพราะมี QR code พิมพ์ติดชั้นวางจริง
@@ -99,9 +100,9 @@ export default function StockDeductionPage() {
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
 
-  const loadItems = async () => {
+  const loadItems = async ({ silent } = {}) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       const [racksRes, wingArmsRes] = await Promise.all([
         client.get('/racks'),
         client.get('/wing-arms'),
@@ -111,11 +112,35 @@ export default function StockDeductionPage() {
     } catch (err) {
       setErrorMsg('โหลดรายการอะไหล่ไม่สำเร็จ');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
   useEffect(() => { loadItems(); }, []);
+
+  // Realtime: จำนวนคงเหลือของแร็ค/ปีกนกเปลี่ยนจากเครื่องอื่น ให้รีเฟรชอัตโนมัติ —
+  // เลื่อนออกไปก่อนถ้ากำลังเลือกรายการเพื่อตัดสต๊อกอยู่ (selected เก็บ stock_qty
+  // ไว้ตรวจ max ในฟอร์ม จะเพี้ยนถ้าข้อมูลเปลี่ยนกลางทาง) หรือกำลังส่งฟอร์มอยู่
+  // (submitting) — ไม่ subscribe stock:tx-* เพราะหน้านี้ต้องการแค่จำนวนคงเหลือ
+  // ปัจจุบัน ไม่ใช่ประวัติ transaction
+  const pendingRefreshRef = useRef(false);
+  useRealtimeEvent(
+    ['stock:item-created', 'stock:item-updated', 'stock:item-deleted'],
+    () => {
+      if (selected !== null || submitting) {
+        pendingRefreshRef.current = true;
+        return;
+      }
+      loadItems({ silent: true });
+    }
+  );
+
+  useEffect(() => {
+    if (selected === null && !submitting && pendingRefreshRef.current) {
+      pendingRefreshRef.current = false;
+      loadItems({ silent: true });
+    }
+  }, [selected, submitting]);
 
   useEffect(() => {
     client.get('/vehicle-models/brands').then((res) => setBrands(res.data.data || []));

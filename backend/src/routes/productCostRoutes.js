@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const pool = require("../db/pool");
 const { authenticate, requireRole } = require("../middleware/auth");
+const { emitProductCostEvent } = require("../realtime");
 
 router.use(authenticate);
 router.use(requireRole("office"));
@@ -208,6 +209,8 @@ router.post("/", async (req, res) => {
 
     await conn.commit();
 
+    emitProductCostEvent('product-cost:created', { productId: inserted[0] ?? null, actorId: req.user.id });
+
     res.json({
       success: true,
       message: `เพิ่ม ${inserted.length} รายการสำเร็จ`,
@@ -247,6 +250,8 @@ router.put("/:id", async (req, res) => {
       ]
     );
 
+    emitProductCostEvent('product-cost:updated', { productId: Number(req.params.id), actorId: req.user.id });
+
     res.json({
       success: true,
       message: "แก้ไขสำเร็จ"
@@ -270,6 +275,8 @@ router.delete("/:id", async (req, res) => {
       "DELETE FROM products WHERE id=?",
       [req.params.id]
     );
+
+    emitProductCostEvent('product-cost:deleted', { productId: Number(req.params.id), actorId: req.user.id });
 
     res.json({
       success: true,
@@ -303,6 +310,8 @@ router.delete("/", async (req, res) => {
       "DELETE FROM products WHERE id IN (?)",
       [ids]
     );
+
+    emitProductCostEvent('product-cost:deleted', { productId: null, actorId: req.user.id });
 
     res.json({
       success: true,

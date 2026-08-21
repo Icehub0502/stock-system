@@ -1,6 +1,7 @@
 // pages/ProductCostPage.jsx
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import client from "../api/client";
+import useRealtimeEvent from "../hooks/useRealtimeEvent";
 
 function detectCategory(desc = "") {
   const d = desc.toLowerCase();
@@ -256,8 +257,8 @@ export default function ProductCostPage() {
   const PAGE_SIZE = 50;
 
   /* ─ fetch ─ */
-  const fetchProducts = useCallback(async () => {
-    setLoading(true);
+  const fetchProducts = useCallback(async ({ silent } = {}) => {
+    if (!silent) setLoading(true);
     try {
       const params = {};
       if (search) params.search = search;
@@ -271,7 +272,7 @@ export default function ProductCostPage() {
         else if (!search && !filterCategory && !filterCarBrand) setTotalCount(json.data.length);
       }
     } catch { showToast("error", "โหลดข้อมูลล้มเหลว"); }
-    setLoading(false);
+    if (!silent) setLoading(false);
   }, [search, filterCategory, filterCarBrand]);
 
   const fetchCategories = useCallback(async () => {
@@ -303,6 +304,41 @@ export default function ProductCostPage() {
   }, [fetchProducts]);
   useEffect(() => { fetchCategories(); }, [fetchCategories]);
   useEffect(() => { setPage(1); }, [search, filterCategory, filterCarBrand]);
+
+  // หน้าปัจจุบันอาจเกินจำนวนหน้าจริงหลังข้อมูลเปลี่ยน (เช่นอยู่หน้า 5/5 แล้วมีคนลบ
+  // รายการจากเครื่องอื่นจนเหลือแค่ 3 หน้า) — ดึงกลับเข้าช่วงที่ถูกต้องเสมอ
+  useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil(products.length / PAGE_SIZE));
+    setPage((p) => Math.min(p, totalPages));
+  }, [products.length]);
+
+  // Realtime: มีคนแก้ไข/เพิ่ม/ลบต้นทุนสินค้าจากเครื่องอื่น ให้รีเฟรชอัตโนมัติ —
+  // เลื่อนออกไปก่อนถ้ากำลังเปิดโมดัลเพิ่ม/แก้ไข/ยืนยันลบอยู่ (modal อาจมีข้อความ
+  // bulk-paste ที่ยังไม่บันทึกอยู่ในนั้น) หรืออยู่ในโหมดเลือกหลายรายการ
+  // (selectionMode เก็บ selected เป็น Set ของ id ที่จะเพี้ยนถ้ารายการเปลี่ยน) —
+  // ค้างไว้ใน pendingRefreshRef แล้วรีเฟรชทันทีที่เงื่อนไขปลดล็อก
+  const pendingRefreshRef = useRef(false);
+  useRealtimeEvent(
+    ['product-cost:created', 'product-cost:updated', 'product-cost:deleted'],
+    () => {
+      if (modal !== null || selectionMode) {
+        pendingRefreshRef.current = true;
+        return;
+      }
+      fetchProducts({ silent: true });
+      fetchCategories();
+      fetchTotalCount();
+    }
+  );
+
+  useEffect(() => {
+    if (modal === null && !selectionMode && pendingRefreshRef.current) {
+      pendingRefreshRef.current = false;
+      fetchProducts({ silent: true });
+      fetchCategories();
+      fetchTotalCount();
+    }
+  }, [modal, selectionMode, fetchProducts, fetchCategories, fetchTotalCount]);
 
   /* ─ toast ─ */
   const showToast = (type, msg) => {

@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import client from '../api/client';
+import useRealtimeEvent from '../hooks/useRealtimeEvent';
 
 const emptyForm = { model_code: '', name: '', stock_qty: 0, min_stock: 1 };
 
@@ -66,6 +67,37 @@ export default function StockRackPage() {
   };
 
   useEffect(() => { loadRacks(); }, []);
+
+  // Realtime: มีคนแก้ไขแร็ค/ปีกนกจากเครื่องอื่น ให้รีเฟรชตารางอัตโนมัติ —
+  // เลื่อนออกไปก่อนถ้ากำลังเปิดฟอร์มเพิ่ม/แก้ไข, ยืนยันลบ, อยู่ในโหมดเลือก
+  // (selectMode เก็บ selectedIds ที่จะเพี้ยนถ้าตารางเปลี่ยน), หรือกำลังพิมพ์
+  // เอกสาร/QR (window.print ต้องใช้ข้อมูลชุดเดิมตลอด flow) — ค้างไว้แล้วรีเฟรช
+  // ทันทีที่เงื่อนไขปลดล็อก
+  const pendingRefreshRef = useRef(false);
+  useRealtimeEvent(
+    ['stock:item-created', 'stock:item-updated', 'stock:item-deleted'],
+    () => {
+      if (
+        showFormModal || deleteConfirmId !== null || selectMode ||
+        docPrintMode || printQueue.length > 0 || printLoading
+      ) {
+        pendingRefreshRef.current = true;
+        return;
+      }
+      loadRacks();
+    }
+  );
+
+  useEffect(() => {
+    if (
+      !showFormModal && deleteConfirmId === null && !selectMode &&
+      !docPrintMode && printQueue.length === 0 && !printLoading &&
+      pendingRefreshRef.current
+    ) {
+      pendingRefreshRef.current = false;
+      loadRacks();
+    }
+  }, [showFormModal, deleteConfirmId, selectMode, docPrintMode, printQueue.length, printLoading]);
 
   useEffect(() => {
     if (printQueue.length === 0) return;

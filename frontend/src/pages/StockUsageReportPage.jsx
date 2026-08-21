@@ -1,7 +1,8 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import client from '../api/client';
 import { todayStr, formatDbTime } from '../utils/format';
 import { formatDateTh } from '../utils/dateGroups';
+import useRealtimeEvent from '../hooks/useRealtimeEvent';
 
 const CURRENT_YEAR = new Date().getFullYear();
 const YEAR_OPTIONS = Array.from({ length: 6 }, (_, i) => CURRENT_YEAR - i);
@@ -68,9 +69,9 @@ export default function StockUsageReportPage() {
     [periodType, dayValue, monthValue, yearValue]
   );
 
-  const load = async () => {
+  const load = async ({ silent } = {}) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       const params = {};
       if (from) params.from = from;
       if (to) params.to = to;
@@ -79,11 +80,34 @@ export default function StockUsageReportPage() {
     } catch (err) {
       setError(err.response?.data?.error || 'โหลดประวัติการตัดสต๊อกไม่สำเร็จ');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
   useEffect(() => { load(); }, [from, to]);
+
+  // Realtime: มีคนรับ-จ่ายสต๊อกจากเครื่อง/แท็บอื่น ให้รีเฟรชตารางอัตโนมัติ —
+  // เลื่อนการรีเฟรชออกไปก่อนถ้ากำลังลบแถวอยู่ (deletingId) หรือกำลังเปิดฟอร์ม
+  // "เพิ่มตัวกรอง" (showAddFilter) เพื่อไม่ให้ข้อมูลที่กำลังกรอกหาย/สลับกลาง
+  // อากาศ — ค้างไว้ใน pendingRefreshRef แล้วรีเฟรชให้ทันทีที่เงื่อนไขปลดล็อก
+  const pendingRefreshRef = useRef(false);
+  useRealtimeEvent(
+    ['stock:tx-created', 'stock:tx-deleted'],
+    () => {
+      if (deletingId !== null || showAddFilter) {
+        pendingRefreshRef.current = true;
+        return;
+      }
+      load({ silent: true });
+    }
+  );
+
+  useEffect(() => {
+    if (deletingId === null && !showAddFilter && pendingRefreshRef.current) {
+      pendingRefreshRef.current = false;
+      load({ silent: true });
+    }
+  }, [deletingId, showAddFilter]);
 
   useEffect(() => {
     localStorage.setItem(CUSTOM_FILTERS_KEY, JSON.stringify(customFilters));

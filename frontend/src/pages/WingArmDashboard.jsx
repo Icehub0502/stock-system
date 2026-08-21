@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import client from '../api/client';
+import useRealtimeEvent from '../hooks/useRealtimeEvent';
 
 const emptyForm = {
   sku: '',
@@ -60,6 +61,37 @@ export default function WingArmDashboard() {
   };
 
   useEffect(() => { loadItems(); }, []);
+
+  // Realtime: มีคนแก้ไขปีกนกจากเครื่องอื่น ให้รีเฟรชตารางอัตโนมัติ — เลื่อนออก
+  // ไปก่อนถ้ากำลังเปิดฟอร์มเพิ่ม/แก้ไข, ยืนยันลบ, เปิดโมดัลรับ/เบิกสต็อก
+  // (stockModal เก็บ stock_qty ปัจจุบันไว้แสดง จะเพี้ยนถ้าตารางเปลี่ยนกลางทาง),
+  // อยู่ในโหมดเลือก, หรือกำลังพิมพ์เอกสาร/QR — ค้างไว้แล้วรีเฟรชทันทีที่
+  // เงื่อนไขปลดล็อก
+  const pendingRefreshRef = useRef(false);
+  useRealtimeEvent(
+    ['stock:item-created', 'stock:item-updated', 'stock:item-deleted'],
+    () => {
+      if (
+        showFormModal || deleteConfirmId !== null || stockModal !== null ||
+        selectMode || docPrintMode || printQueue.length > 0 || printLoading
+      ) {
+        pendingRefreshRef.current = true;
+        return;
+      }
+      loadItems();
+    }
+  );
+
+  useEffect(() => {
+    if (
+      !showFormModal && deleteConfirmId === null && stockModal === null &&
+      !selectMode && !docPrintMode && printQueue.length === 0 && !printLoading &&
+      pendingRefreshRef.current
+    ) {
+      pendingRefreshRef.current = false;
+      loadItems();
+    }
+  }, [showFormModal, deleteConfirmId, stockModal, selectMode, docPrintMode, printQueue.length, printLoading]);
 
   useEffect(() => {
     if (printQueue.length === 0) return;

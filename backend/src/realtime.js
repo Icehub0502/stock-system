@@ -83,4 +83,24 @@ function emitReceiptEvent(event, { receiptId, actorId }) {
   emitStaffEvent(event, { receiptId, actorId }, { room: 'office' });
 }
 
-module.exports = { initRealtime, emitJobEvent, emitQuotationEvent, emitReceiptEvent };
+function emitStockEvent(event, { entityType, entityId, actorId }) {
+  emitStaffEvent(event, { entityType, entityId, actorId }, { room: 'office' });
+}
+
+function emitStockTxEvent(event, { txType, entityType, entityId, actorId }) {
+  emitStaffEvent(event, { txType, entityType, entityId, actorId }, { room: 'office' });
+}
+
+function emitProductCostEvent(event, { productId, actorId }) {
+  emitStaffEvent(event, { productId, actorId }, { room: 'office' });
+}
+
+module.exports = {
+  initRealtime,
+  emitJobEvent,
+  emitQuotationEvent,
+  emitReceiptEvent,
+  emitStockEvent,
+  emitStockTxEvent,
+  emitProductCostEvent,
+};

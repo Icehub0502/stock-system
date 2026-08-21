@@ -1,13 +1,23 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import client from '../api/client';
 import { formatDbDateTime } from '../utils/format';
+import useRealtimeEvent from '../hooks/useRealtimeEvent';
 
 export default function TransactionHistoryPage() {
   const [rows, setRows] = useState([]);
 
-  useEffect(() => {
-    client.get('/transactions').then((res) => setRows(res.data));
+  const loadRows = useCallback(async () => {
+    const res = await client.get('/transactions');
+    setRows(res.data);
   }, []);
+
+  useEffect(() => {
+    loadRows();
+  }, [loadRows]);
+
+  // Realtime: หน้านี้เป็นแค่ตารางประวัติ อ่านอย่างเดียว ไม่มีฟอร์ม/โหมดแก้ไขที่
+  // ต้องกันการรีเฟรชระหว่างทาง จึงรีเฟรชได้ทันทีโดยไม่ต้อง guard
+  useRealtimeEvent(['stock:tx-created', 'stock:tx-deleted'], () => loadRows());
 
   return (
     <div className="office-dashboard container">

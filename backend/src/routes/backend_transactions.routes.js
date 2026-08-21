@@ -3,6 +3,7 @@ const pool = require('../db/pool');
 const { authenticate, requireRole } = require('../middleware/auth');
 const { vehicleModelFromRackName } = require('../utils/vehicleModelFromName');
 const { resolveTransactionDate } = require('../utils/resolveTransactionDate');
+const { emitStockEvent, emitStockTxEvent } = require('../realtime');
 
 const router = express.Router();
 router.use(authenticate);
@@ -136,6 +137,9 @@ router.delete('/receipt-sessions/:id', requireRole('office'), async (req, res) =
     await conn.query('DELETE FROM receipt_sessions WHERE id = ?', [req.params.id]);
     await conn.commit();
 
+    emitStockEvent('stock:item-updated', { entityType: null, entityId: null, actorId: req.user.id });
+    emitStockTxEvent('stock:tx-deleted', { txType: 'IN', entityType: null, entityId: null, actorId: req.user.id });
+
     res.json({ success: true });
   } catch (err) {
     if (conn) await conn.rollback();
@@ -181,6 +185,9 @@ router.post('/in', async (req, res) => {
       [rack.id, 'IN', quantity, req.user.id, note, receipt_session_id || null]
     );
     await conn.commit();
+
+    emitStockEvent('stock:item-updated', { entityType: 'rack', entityId: rack.id, actorId: req.user.id });
+    emitStockTxEvent('stock:tx-created', { txType: 'IN', entityType: 'rack', entityId: rack.id, actorId: req.user.id });
 
     const [updatedRows] = await pool.execute('SELECT * FROM racks WHERE id = ?', [rack.id]);
     res.json({ success: true, rack: updatedRows[0], transaction_id: txResult.insertId });
@@ -232,6 +239,9 @@ router.post('/out', async (req, res) => {
           [rack.id, 'OUT', quantity, req.user.id, note, vehicle_model || vehicleModelFromRackName(rack.name)]
         );
     await conn.commit();
+
+    emitStockEvent('stock:item-updated', { entityType: 'rack', entityId: rack.id, actorId: req.user.id });
+    emitStockTxEvent('stock:tx-created', { txType: 'OUT', entityType: 'rack', entityId: rack.id, actorId: req.user.id });
 
     const [updatedRows] = await pool.execute('SELECT * FROM racks WHERE id = ?', [rack.id]);
     res.json({ success: true, rack: updatedRows[0], transaction_id: txResult.insertId });
@@ -319,6 +329,18 @@ router.delete('/:id', requireRole('office'), async (req, res) => {
     await conn.query(`UPDATE ${table} SET stock_qty = ? WHERE id = ?`, [newQty, itemId]);
     await conn.query('DELETE FROM transactions WHERE id = ?', [req.params.id]);
     await conn.commit();
+
+    emitStockEvent('stock:item-updated', {
+      entityType: tx.rack_id ? 'rack' : 'wing_arm',
+      entityId: tx.rack_id || tx.wing_arm_id,
+      actorId: req.user.id,
+    });
+    emitStockTxEvent('stock:tx-deleted', {
+      txType: tx.type,
+      entityType: tx.rack_id ? 'rack' : 'wing_arm',
+      entityId: tx.rack_id || tx.wing_arm_id,
+      actorId: req.user.id,
+    });
 
     res.json({ success: true, stock_qty: newQty });
   } catch (err) {

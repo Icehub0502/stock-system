@@ -2,6 +2,7 @@ const express = require('express');
 const QRCode = require('qrcode');
 const pool = require('../db/pool');
 const { authenticate, requireRole } = require('../middleware/auth');
+const { emitStockEvent } = require('../realtime');
 
 const router = express.Router();
 router.use(authenticate);
@@ -67,6 +68,7 @@ router.post('/', requireRole('office'), async (req, res) => {
       [String(model_code).trim(), String(name).trim(), Number(stock_qty), Number(min_stock)]
     );
     const [rows] = await pool.execute('SELECT * FROM racks WHERE id = ?', [result.insertId]);
+    emitStockEvent('stock:item-created', { entityType: 'rack', entityId: result.insertId, actorId: req.user.id });
     res.status(201).json(rows[0]);
   } catch (err) {
     if (err.code === 'ER_DUP_ENTRY') {
@@ -95,6 +97,7 @@ router.put('/:id', requireRole('office'), async (req, res) => {
       [String(model_code).trim(), String(name).trim(), Number(stock_qty), Number(min_stock), req.params.id]
     );
     const [rows] = await pool.execute('SELECT * FROM racks WHERE id = ?', [req.params.id]);
+    emitStockEvent('stock:item-updated', { entityType: 'rack', entityId: Number(req.params.id), actorId: req.user.id });
     res.json(rows[0]);
   } catch (err) {
     if (err.code === 'ER_DUP_ENTRY') {
@@ -110,6 +113,7 @@ router.delete('/:id', requireRole('office'), async (req, res) => {
     const [existingRows] = await pool.execute('SELECT * FROM racks WHERE id = ?', [req.params.id]);
     if (!existingRows[0]) return res.status(404).json({ error: 'ไม่พบรายการ' });
     await pool.execute('DELETE FROM racks WHERE id = ?', [req.params.id]);
+    emitStockEvent('stock:item-deleted', { entityType: 'rack', entityId: Number(req.params.id), actorId: req.user.id });
     res.json({ success: true });
   } catch (err) {
     console.error(err);

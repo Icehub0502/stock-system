@@ -5,6 +5,7 @@ const QRCode  = require('qrcode');
 const { authenticate, requireRole } = require('../middleware/auth');
 const { vehicleModelFromWingArmName } = require('../utils/vehicleModelFromName');
 const { resolveTransactionDate } = require('../utils/resolveTransactionDate');
+const { emitStockEvent, emitStockTxEvent } = require('../realtime');
 
 // ปีกนกใช้ทีละคู่เสมอ (ซ้าย+ขวา) — ตรวจคู่ 2 ชั้น (mirror ของ
 // frontend/src/pages/StockDeductionPage.jsx ทุกประการ ดูคอมเมนต์ละเอียดที่นั่น):
@@ -153,6 +154,7 @@ router.post('/', requireRole('office'), async (req, res) => {
     );
 
     const [rows] = await pool.query('SELECT * FROM wing_arms WHERE id = ?', [result.insertId]);
+    emitStockEvent('stock:item-created', { entityType: 'wing_arm', entityId: result.insertId, actorId: req.user.id });
     res.status(201).json(rows[0]);
   } catch (err) {
     if (err.code === 'ER_DUP_ENTRY') {
@@ -191,6 +193,7 @@ router.put('/:id', requireRole('office'), async (req, res) => {
 
     const [rows] = await pool.query('SELECT * FROM wing_arms WHERE id = ?', [req.params.id]);
     if (!rows.length) return res.status(404).json({ error: 'ไม่พบรายการ' });
+    emitStockEvent('stock:item-updated', { entityType: 'wing_arm', entityId: Number(req.params.id), actorId: req.user.id });
     res.json(rows[0]);
   } catch (err) {
     if (err.code === 'ER_DUP_ENTRY') {
@@ -206,6 +209,7 @@ router.delete('/:id', requireRole('office'), async (req, res) => {
   try {
     const [result] = await pool.query('DELETE FROM wing_arms WHERE id = ?', [req.params.id]);
     if (!result.affectedRows) return res.status(404).json({ error: 'ไม่พบรายการ' });
+    emitStockEvent('stock:item-deleted', { entityType: 'wing_arm', entityId: Number(req.params.id), actorId: req.user.id });
     res.json({ success: true });
   } catch (err) {
     console.error(err);
@@ -290,6 +294,16 @@ router.patch('/:id/stock', async (req, res) => {
 
     await conn.commit();
 
+    emitStockEvent('stock:item-updated', { entityType: 'wing_arm', entityId: Number(req.params.id), actorId: userId });
+    if (transactionId != null) {
+      emitStockTxEvent('stock:tx-created', {
+        txType: delta > 0 ? 'IN' : 'OUT',
+        entityType: 'wing_arm',
+        entityId: Number(req.params.id),
+        actorId: userId,
+      });
+    }
+
     const [updated] = await pool.query('SELECT * FROM wing_arms WHERE id = ?', [req.params.id]);
     // คืน transaction_id ให้หน้าสแกนเก็บไว้ เผื่อสแกนผิดแล้วกดลบทันที
     res.json({ ...updated[0], transaction_id: transactionId });
@@ -360,6 +374,9 @@ router.patch('/pair-stock', requireRole('office'), async (req, res) => {
     }
 
     await conn.commit();
+
+    emitStockEvent('stock:item-updated', { entityType: 'wing_arm', entityId: Number(left_id), actorId: userId });
+    emitStockTxEvent('stock:tx-created', { txType: 'OUT', entityType: 'wing_arm', entityId: Number(left_id), actorId: userId });
 
     const [updated] = await pool.query('SELECT * FROM wing_arms WHERE id IN (?, ?)', [left_id, right_id]);
     res.json({ success: true, items: updated });
