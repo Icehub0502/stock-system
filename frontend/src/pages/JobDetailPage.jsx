@@ -33,15 +33,20 @@ export default function JobDetailPage() {
   const [models, setModels] = useState([]);
   const [form, setForm] = useState(null);
 
-  // เลือกอะไหล่จากแคตตาล็อกของยี่ห้อ/รุ่นรถงานนี้ (tick-select เหมือน
-  // PartsCatalogKioskPage.jsx) แทนตารางกรอกมือแบบเดิม — คีย์ด้วย part.id
+  // เลือกรายการสินค้า/บริการ (tick-select เหมือน PartsCatalogKioskPage.jsx)
+  // แทนตารางกรอกมือแบบเดิม — คีย์ด้วย part.id ดึงจาก service_items แทน
+  // quote_part_prices เพราะ (1) มีหมวดหมู่ครบอยู่แล้ว ไม่ผูกกับยี่ห้อ/รุ่นรถ
+  // เหมือน quote_part_prices ที่ต้องกรอกยี่ห้อ/รุ่นก่อนถึงจะเห็นรายการ (2) ไม่มี
+  // คอลัมน์ราคาเก็บไว้เลย ตรงกับที่ต้องการ — พนักงานเสนอราคาเองทุกครั้งตามแต่ละ
+  // เคส ไม่ใช้ราคาตายตัวจากแคตตาล็อก (quote_part_prices ยังเก็บไว้ใช้ในอนาคต
+  // ที่อื่นตามเดิม แค่ไม่ใช้ในแผงนี้แล้ว)
   const [catalogParts, setCatalogParts] = useState([]);
   const [catalogLoading, setCatalogLoading] = useState(false);
   const [catalogError, setCatalogError] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [selectedParts, setSelectedParts] = useState({});
   const [showAddPart, setShowAddPart] = useState(false);
-  const [newPart, setNewPart] = useState({ part_name: '', category: '', price: '' });
+  const [newPart, setNewPart] = useState({ part_name: '', category: '' });
   const [addingPart, setAddingPart] = useState(false);
   const [addPartError, setAddPartError] = useState('');
 
@@ -83,17 +88,22 @@ export default function JobDetailPage() {
     client.get('/vehicle-models/models', { params: { brand: form.brand.trim() } }).then((res) => setModels(res.data.data || []));
   }, [form?.brand]);
 
-  // โหลดแคตตาล็อกอะไหล่ของยี่ห้อ/รุ่นรถงานนี้โดยตรง (ข้ามขั้นเลือกยี่ห้อ/รุ่น
-  // แบบ kiosk เพราะรู้ข้อมูลรถของงานนี้อยู่แล้ว) เฉพาะตอนยังไม่มีใบเสนอราคา
+  // โหลดรายการสินค้า/บริการ (ไม่ผูกกับยี่ห้อ/รุ่นรถ) เฉพาะตอนยังไม่มีใบเสนอราคา
+  // ตัด "ชุดโปร" (is_set) ออก เพราะราคาชุดคำนวณแยกและต้อง expand เป็นรายการย่อย
+  // ซึ่งซับซ้อนเกินความจำเป็นของแผงนี้ — เลือกทีละชิ้นตามปกติพอ
   useEffect(() => {
-    if (!job || job.quotation_id || !job.brand || !job.model) return;
+    if (!job || job.quotation_id) return;
     setCatalogLoading(true);
     setCatalogError('');
-    client.get('/quote-parts/parts', { params: { brand: job.brand, model: job.model } })
-      .then((res) => setCatalogParts(res.data.data || []))
-      .catch((err) => setCatalogError(err.response?.data?.error || 'โหลดรายการอะไหล่ไม่สำเร็จ'))
+    client.get('/service-items')
+      .then((res) => setCatalogParts(
+        (res.data.data || [])
+          .filter((si) => !si.is_set)
+          .map((si) => ({ id: si.id, part_name: si.product_name, category: si.category }))
+      ))
+      .catch((err) => setCatalogError(err.response?.data?.error || 'โหลดรายการสินค้า/บริการไม่สำเร็จ'))
       .finally(() => setCatalogLoading(false));
-  }, [job?.id, job?.quotation_id, job?.brand, job?.model]);
+  }, [job?.id, job?.quotation_id]);
 
   function startEdit() {
     setForm({
@@ -143,11 +153,10 @@ export default function JobDetailPage() {
     }
   }
 
-  // จิ้มเลือก/ถอนอะไหล่ (เหมือน PartsCatalogKioskPage.jsx) — ข้ามการ์ดที่ยัง
-  // ไม่ตั้งราคา (needs_price) กันเสนอราคา 0 บาทโดยไม่ตั้งใจ ต้องไปตั้งราคาที่
-  // เมนู "ราคาอะไหล่ตามรุ่นรถ" ก่อน
+  // จิ้มเลือก/ถอนรายการ (เหมือน PartsCatalogKioskPage.jsx) — ไม่มีราคาตั้งต้น
+  // จากแคตตาล็อกให้เติมให้ (service_items ไม่เก็บราคา) พนักงานพิมพ์ราคาเอง
+  // ทุกครั้งตามหน้างานจริง
   function togglePart(part) {
-    if (part.needs_price) return;
     setSelectedParts((prev) => {
       const key = part.id;
       if (prev[key]) {
@@ -157,7 +166,7 @@ export default function JobDetailPage() {
       }
       return {
         ...prev,
-        [key]: { ...part, quantity: 1, unitPrice: Number(part.price) > 0 ? String(part.price) : '' },
+        [key]: { ...part, quantity: 1, unitPrice: '' },
       };
     });
   }
@@ -200,45 +209,40 @@ export default function JobDetailPage() {
   const selectedPartsCount = selectedPartsList.reduce((sum, p) => sum + p.quantity, 0);
   const selectedPartsTotal = selectedPartsList.reduce((sum, p) => sum + p.quantity * (Number(p.unitPrice) || 0), 0);
 
-  // เพิ่มอะไหล่ที่ไม่มีในแคตตาล็อกวันนี้ (ดู backend/src/routes/quotePartPrices.routes.js
-  // POST / — รับ brand/model/part_name/description/price/image_data เท่านั้น ยังไม่
-  // รองรับ category ในการบันทึกจริง ส่งไปด้วยไว้เผื่ออนาคต แต่ backend จะเพิกเฉยฟิลด์นี้)
+  // เพิ่มรายการสินค้า/บริการใหม่ที่ยังไม่มีในระบบ (POST /service-items) — ไม่มี
+  // ช่องราคา เพราะ service_items ไม่เก็บราคาไว้เลย พนักงานพิมพ์ราคาเองตอนติ๊ก
+  // เลือกเข้ารายการ (เหมือนรายการอื่นทุกชิ้นในแผงนี้)
   async function submitNewPart(e) {
     e.preventDefault();
     if (!newPart.part_name.trim()) {
-      setAddPartError('กรุณากรอกชื่ออะไหล่');
+      setAddPartError('กรุณากรอกชื่อสินค้า/บริการ');
+      return;
+    }
+    if (!newPart.category.trim()) {
+      setAddPartError('กรุณากรอกหมวดหมู่');
       return;
     }
     setAddingPart(true);
     setAddPartError('');
     try {
-      const res = await client.post('/quote-parts', {
-        brand: job.brand,
-        model: job.model,
-        part_name: newPart.part_name.trim(),
-        category: newPart.category.trim() || undefined,
-        price: Number(newPart.price) || 0,
+      const res = await client.post('/service-items', {
+        category: newPart.category.trim(),
+        product_name: newPart.part_name.trim(),
       });
       const created = {
         id: res.data.data.id,
-        brand: job.brand,
-        model: job.model,
         part_name: newPart.part_name.trim(),
-        description: '',
-        price: Number(newPart.price) || 0,
-        image_data: null,
-        needs_price: 0,
-        category: newPart.category.trim() || null,
+        category: newPart.category.trim(),
       };
       setCatalogParts((prev) => [...prev, created]);
       setSelectedParts((prev) => ({
         ...prev,
-        [created.id]: { ...created, quantity: 1, unitPrice: Number(created.price) > 0 ? String(created.price) : '' },
+        [created.id]: { ...created, quantity: 1, unitPrice: '' },
       }));
-      setNewPart({ part_name: '', category: '', price: '' });
+      setNewPart({ part_name: '', category: '' });
       setShowAddPart(false);
     } catch (err) {
-      setAddPartError(err.response?.data?.error || 'เพิ่มอะไหล่ไม่สำเร็จ');
+      setAddPartError(err.response?.data?.error || 'เพิ่มรายการไม่สำเร็จ');
     } finally {
       setAddingPart(false);
     }
@@ -454,10 +458,8 @@ export default function JobDetailPage() {
             {error && <p className="error-text">{error}</p>}
             {catalogError && <p className="error-text">{catalogError}</p>}
 
-            {(!job.brand || !job.model) ? (
-              <p className="empty-message">กรุณาระบุยี่ห้อ/รุ่นรถก่อน (กด "แก้ไข" ด้านบน) ถึงจะเลือกอะไหล่จากแคตตาล็อกได้</p>
-            ) : catalogLoading ? (
-              <div className="loading">กำลังโหลดรายการอะไหล่...</div>
+            {catalogLoading ? (
+              <div className="loading">กำลังโหลดรายการสินค้า/บริการ...</div>
             ) : (
               <>
                 {catalogCategories.length > 0 && (
@@ -483,7 +485,7 @@ export default function JobDetailPage() {
                 )}
 
                 {filteredCatalogParts.length === 0 ? (
-                  <p className="empty-message">ยังไม่มีรายการอะไหล่ของ {job.brand} {job.model} ในแคตตาล็อก — เพิ่มใหม่ได้ด้านล่าง</p>
+                  <p className="empty-message">ยังไม่มีรายการสินค้า/บริการในระบบ — เพิ่มใหม่ได้ด้านล่าง</p>
                 ) : (
                   <div className="kiosk-grid kiosk-grid-part jdp-part-grid">
                     {filteredCatalogParts.map((part) => {
@@ -491,27 +493,14 @@ export default function JobDetailPage() {
                       return (
                         <article
                           key={part.id}
-                          className={`kiosk-part jdp-part ${selected ? 'kiosk-part-selected' : ''} ${part.needs_price ? 'jdp-part-disabled' : ''}`}
+                          className={`kiosk-part jdp-part ${selected ? 'kiosk-part-selected' : ''}`}
                           onClick={() => togglePart(part)}
                           role="button"
                           tabIndex={0}
                         >
                           {selected && <span className="kiosk-part-check">✓</span>}
-                          <div className="kiosk-part-image">
-                            {part.image_data ? (
-                              <img src={part.image_data} alt={part.part_name} />
-                            ) : (
-                              <span className="kiosk-part-noimage">ไม่มีรูป</span>
-                            )}
-                          </div>
                           <div className="kiosk-part-body">
                             <div className="kiosk-part-name">{part.part_name}</div>
-                            {part.description && <div className="kiosk-part-desc">{part.description}</div>}
-                            {part.needs_price ? (
-                              <div className="jdp-part-needs-price">ยังไม่ตั้งราคา</div>
-                            ) : Number(part.price) > 0 ? (
-                              <div className="kiosk-part-price">฿{Number(part.price).toLocaleString('th-TH')}</div>
-                            ) : null}
                           </div>
 
                           {selected && (
@@ -544,12 +533,12 @@ export default function JobDetailPage() {
 
             <div className="jdp-add-part">
               {!showAddPart ? (
-                <button type="button" onClick={() => setShowAddPart(true)} disabled={!job.brand || !job.model}>
-                  + เพิ่มอะไหล่ใหม่
+                <button type="button" onClick={() => setShowAddPart(true)}>
+                  + เพิ่มรายการใหม่
                 </button>
               ) : (
                 <form className="modal-form jdp-add-part-form" onSubmit={submitNewPart}>
-                  <label>ชื่ออะไหล่</label>
+                  <label>ชื่อสินค้า/บริการ</label>
                   <input
                     type="text"
                     value={newPart.part_name}
@@ -565,14 +554,6 @@ export default function JobDetailPage() {
                   <datalist id="jdp-category-options">
                     {catalogCategories.map((c) => <option key={c} value={c} />)}
                   </datalist>
-                  <label>ราคา</label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={newPart.price}
-                    onChange={(e) => setNewPart({ ...newPart, price: e.target.value })}
-                  />
                   {addPartError && <p className="error-text">{addPartError}</p>}
                   <div className="modal-actions">
                     <button type="submit" className="btn-primary" disabled={addingPart}>
