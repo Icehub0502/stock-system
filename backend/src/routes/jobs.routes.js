@@ -6,12 +6,33 @@ const {
   CLOSED_STATUSES,
 } = require('../utils/jobStatusFlow');
 const { ALIGN_BAY, isValidBay } = require('../utils/workBays');
-const { emitJobEvent } = require('../realtime');
+const { emitJobEvent, emitQuotationEvent, emitReceiptEvent } = require('../realtime');
+// ใช้ตรรกะออกเลขที่/กรองรายการชุดเดียวกับ quotations.routes.js — กันไม่ให้เลขที่
+// เอกสาร/กติกากรองรายการแยกกันเป็น 2 ชุดที่อาจเพี้ยนไม่ตรงกันในอนาคต (ดู
+// promoteDraftToQuotation ด้านล่าง ที่ใช้ตอน "โปรโมท" quote_draft เป็นใบเสนอราคาจริง)
+const {
+  generateQuotationNo, generateReceiptNo, generateRepairNoticeCode,
+  buildValidItems, findInvalidItems,
+} = require('./quotations.routes');
 
 const router = express.Router();
 router.use(authenticate);
 
 const DATE_ONLY_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+// mysql2 ไม่ auto-parse คอลัมน์ JSON ให้ (คืนเป็น string ดิบเสมอ ต่างจากที่บาง
+// driver ทำให้) — ต้อง parse เองทุกจุดที่อ่าน jobs.quote_draft ไม่งั้นโค้ดที่ทำ
+// `job.quote_draft || {}` แล้ว spread ต่อจะพังเงียบ ๆ (string ถูก spread เป็น
+// index ตัวอักษรแทนที่จะเป็น key จริง)
+function parseDraft(raw) {
+  if (!raw) return {};
+  if (typeof raw === 'object') return raw;
+  try {
+    return JSON.parse(raw) || {};
+  } catch {
+    return {};
+  }
+}
 
 function todayStr() {
   const d = new Date();
@@ -140,7 +161,7 @@ router.get('/:id', async (req, res) => {
       [req.params.id]
     );
 
-    res.json({ success: true, data: { ...rows[0], history, photos } });
+    res.json({ success: true, data: { ...rows[0], quote_draft: parseDraft(rows[0].quote_draft), history, photos } });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'โหลดข้อมูลงานไม่สำเร็จ' });
@@ -355,6 +376,344 @@ router.patch('/:id/quotation', async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'ผูกใบเสนอราคาไม่สำเร็จ' });
+  }
+});
+
+// ── ลบงาน (ทั้งคิว) ──
+// job_photos/job_status_history ลบตามอัตโนมัติ (ON DELETE CASCADE) ไม่ต้องลบเองที่นี่
+// บล็อกเฉพาะกรณีมีใบเสนอราคาที่อนุมัติแล้ว+ผูกใบเสร็จอยู่ (ข้อมูลการเงิน) — เหมือน
+// กฎเดียวกับ DELETE /quotations/:id ถ้ามีใบเสนอราคาที่ยัง pending/scheduled/declined
+// อยู่ (ยังไม่มีใบเสร็จ) ปล่อยให้ลบได้ตามปกติ ใบเสนอราคานั้นจะกลายเป็นรายการลอย
+// จัดการต่อได้ที่หน้าใบเสนอราคาโดยตรง ไม่ต้องพึ่งงานนี้อีกต่อไป
+router.delete('/:id', async (req, res) => {
+  try {
+    const [[job]] = await pool.query(
+      `SELECT j.id, j.job_date, j.quotation_id, q.status AS quotation_status, q.converted_receipt_id
+       FROM jobs j
+       LEFT JOIN quotations q ON q.id = j.quotation_id
+       WHERE j.id = ?`,
+      [req.params.id]
+    );
+    if (!job) return res.status(404).json({ error: 'ไม่พบงานนี้' });
+    if (job.quotation_status === 'approved' && job.converted_receipt_id) {
+      return res.status(409).json({ error: 'งานนี้มีใบเสนอราคาที่อนุมัติและมีใบเสร็จผูกอยู่แล้ว กรุณาจัดการที่ใบเสร็จก่อน' });
+    }
+
+    const [result] = await pool.execute('DELETE FROM jobs WHERE id = ?', [req.params.id]);
+    if (!result.affectedRows) return res.status(404).json({ error: 'ไม่พบงานนี้' });
+
+    emitJobEvent('job:deleted', { jobId: Number(req.params.id), jobDate: job.job_date, actorId: req.user.id });
+    res.json({ success: true, message: 'ลบงานสำเร็จ' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'ลบงานไม่สำเร็จ' });
+  }
+});
+
+// ── บันทึกร่างรายการ/ราคา/มัดจำก่อนตัดสินใจ ──
+// ยังไม่สร้างแถวใน quotations เลย — เก็บไว้ใน jobs.quote_draft (JSON) เท่านั้น
+// จนกว่าจะกด อนุมัติ/นัดวันมาทำ/ไม่ทำ อย่างใดอย่างหนึ่ง (ดู POST /:id/quotation/*
+// ด้านล่าง) กันไม่ให้ทุกครั้งที่พนักงานติ๊กเลือกอะไหล่สร้างใบเสนอราคาจริงทันที
+router.patch('/:id/quote-draft', async (req, res) => {
+  const { items, remark, deposit_amount, deposit_date } = req.body || {};
+
+  const invalidItems = findInvalidItems(items);
+  if (invalidItems.length > 0) {
+    return res.status(400).json({ error: `จำนวนของรายการ "${invalidItems[0].product_name}" ไม่ถูกต้อง กรุณาตรวจสอบ` });
+  }
+  const validItems = buildValidItems(items);
+  if (validItems.length === 0) {
+    return res.status(400).json({ error: 'กรุณาเลือกรายการอย่างน้อย 1 รายการ' });
+  }
+
+  try {
+    const [[job]] = await pool.query('SELECT id, job_date, quote_draft FROM jobs WHERE id = ?', [req.params.id]);
+    if (!job) return res.status(404).json({ error: 'ไม่พบงานนี้' });
+
+    const prevDraft = parseDraft(job.quote_draft);
+    const nextDraft = {
+      ...prevDraft,
+      items: validItems.map((i) => ({
+        product_name: i.product_name,
+        quantity: parseInt(i.quantity || 1),
+        unit_price: parseFloat(i.unit_price || 0),
+      })),
+      remark: remark === undefined ? (prevDraft.remark || null) : (remark || null),
+      deposit_amount: deposit_amount === undefined
+        ? (prevDraft.deposit_amount ?? null)
+        : (deposit_amount === '' || deposit_amount === null ? null : Number(deposit_amount)),
+      deposit_date: deposit_date === undefined ? (prevDraft.deposit_date || null) : (deposit_date || null),
+    };
+
+    await pool.execute('UPDATE jobs SET quote_draft = ? WHERE id = ?', [JSON.stringify(nextDraft), job.id]);
+    emitJobEvent('job:updated', { jobId: job.id, jobDate: job.job_date, status: null, actorId: req.user.id });
+    res.json({ success: true, quote_draft: nextDraft });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'บันทึกข้อมูลไม่สำเร็จ' });
+  }
+});
+
+// ── ลายเซ็นลูกค้า/ผู้เสนอราคา บนร่าง (ก่อนมีใบเสนอราคาจริง) ──
+// mirror /quotations/:id/signature และ /quotations/:id/staff-signature แต่เขียนลง
+// jobs.quote_draft แทน — ลูกค้าเซ็นดูราคาได้แม้ยังไม่ตัดสินใจ ไม่ต้องรอสร้างใบจริงก่อน
+router.patch('/:id/quote-draft/signature', async (req, res) => {
+  const { signature } = req.body || {};
+  if (!signature || !signature.startsWith('data:image/')) {
+    return res.status(400).json({ error: 'ข้อมูลลายเซ็นไม่ถูกต้อง' });
+  }
+  try {
+    const [[job]] = await pool.query('SELECT id, job_date, quote_draft FROM jobs WHERE id = ?', [req.params.id]);
+    if (!job) return res.status(404).json({ error: 'ไม่พบงานนี้' });
+    const nextDraft = { ...parseDraft(job.quote_draft), customer_signature: signature };
+    await pool.execute('UPDATE jobs SET quote_draft = ? WHERE id = ?', [JSON.stringify(nextDraft), job.id]);
+    emitJobEvent('job:updated', { jobId: job.id, jobDate: job.job_date, status: null, actorId: req.user.id });
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'บันทึกลายเซ็นไม่สำเร็จ' });
+  }
+});
+
+router.patch('/:id/quote-draft/staff-signature', async (req, res) => {
+  const { signature, staff_name } = req.body || {};
+  if (!signature || !signature.startsWith('data:image/')) {
+    return res.status(400).json({ error: 'ข้อมูลลายเซ็นไม่ถูกต้อง' });
+  }
+  try {
+    const [[job]] = await pool.query('SELECT id, job_date, quote_draft FROM jobs WHERE id = ?', [req.params.id]);
+    if (!job) return res.status(404).json({ error: 'ไม่พบงานนี้' });
+    const nextDraft = { ...parseDraft(job.quote_draft), staff_signature: signature, staff_name: staff_name?.trim() || null };
+    await pool.execute('UPDATE jobs SET quote_draft = ? WHERE id = ?', [JSON.stringify(nextDraft), job.id]);
+    emitJobEvent('job:updated', { jobId: job.id, jobDate: job.job_date, status: null, actorId: req.user.id });
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'บันทึกลายเซ็นไม่สำเร็จ' });
+  }
+});
+
+// สร้างใบเสนอราคาจริงจาก quote_draft ของงาน (ใช้ร่วมกันทั้ง 3 เส้นทางตัดสินใจ
+// ด้านล่าง: approve/schedule/decline) — mirror ตรรกะ POST /quotations เดิมเท่าที่
+// จำเป็น (ไม่รองรับ newCustomer/newVehicle เพราะงานมีลูกค้า/รถอยู่แล้วเสมอตอนถึง
+// จุดนี้) ต้องเรียกภายใน transaction ของผู้เรียกเท่านั้น (รับ conn เข้ามา ไม่เปิดเอง)
+async function promoteDraftToQuotation(conn, job, { status, scheduledDate, declineReason, declineNote } = {}) {
+  const draft = parseDraft(job.quote_draft);
+  const validItems = buildValidItems(draft.items || []);
+  if (validItems.length === 0) {
+    const err = new Error('ยังไม่มีรายการสินค้า/บริการที่บันทึกไว้ กรุณากด "บันทึกข้อมูล" ก่อน');
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const quotation_no = await generateQuotationNo(conn);
+  const total_amount = validItems.reduce((sum, item) => sum + Number(item.quantity || 1) * Number(item.unit_price || 0), 0);
+
+  const [quotationResult] = await conn.execute(
+    `INSERT INTO quotations
+       (quotation_no, quotation_date, customer_id, vehicle_id, mileage, remark, product_summary,
+        total_amount, queue_no, symptom, deposit_amount, deposit_date, customer_signature,
+        staff_signature, staff_name, status, scheduled_date, decline_reason, decline_note)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    [
+      quotation_no, todayStr(), job.customer_id, job.vehicle_id, job.mileage_in || 0,
+      draft.remark || null, validItems.map((i) => i.product_name).join(', '), total_amount,
+      job.queue_no || null, job.symptom || null, draft.deposit_amount ?? null, draft.deposit_date || null,
+      draft.customer_signature || null, draft.staff_signature || null, draft.staff_name || null,
+      status, scheduledDate || null, declineReason || null, declineNote || null,
+    ]
+  );
+  const quotation_id = quotationResult.insertId;
+
+  for (const item of validItems) {
+    await conn.execute(
+      `INSERT INTO quotation_items (quotation_id, product_id, product_name, quantity, unit_price, warranty_name, warranty_year, warranty_month, warranty_km)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [quotation_id, null, item.product_name, parseInt(item.quantity || 1), parseFloat(item.unit_price || 0), null, 0, 0, 0]
+    );
+  }
+
+  // ใบแจ้งซ่อมคู่กัน เหมือน POST /quotations เดิม — สร้างตอนโปรโมทนี้เลย ไม่ต้องรอ
+  // ขั้นอนุมัติ (รถขึ้นทะเบียนในหน้าใบแจ้งซ่อมได้ทันทีที่มีใบเสนอราคาจริงแล้ว)
+  if (job.vehicle_id) {
+    const rnCode = await generateRepairNoticeCode(conn);
+    await conn.execute(
+      `INSERT INTO repair_notices (code, customer_id, vehicle_id, quotation_id, notice_date, checklist)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [rnCode, job.customer_id, job.vehicle_id, quotation_id, todayStr(), '{}']
+    );
+  }
+
+  return { quotation_id, quotation_no, total_amount };
+}
+
+// เช็คร่วมกันทั้ง 3 endpoint ด้านล่าง — งานต้องยังไม่มีใบเสนอราคาผูกอยู่ (ถ้ามีแล้ว
+// เช่นมาจากไลน์บอทที่สร้างใบเสนอราคาให้ตั้งแต่ต้น ให้ใช้หน้า/endpoint ของใบเสนอราคา
+// ปกติแทน — ดู handleApprove/handleSchedule/handleDeclineConfirm ใน
+// frontend/src/pages/JobDetailPage.jsx ที่แยกเส้นทางตาม job.quotation_id) และต้องมี
+// รถผูกอยู่แล้ว (ใบเสนอราคาต้องมีรถเสมอ)
+function assertPromotable(job, res) {
+  if (job.quotation_id) {
+    res.status(400).json({ error: 'งานนี้มีใบเสนอราคาอยู่แล้ว กรุณาใช้หน้าจัดการใบเสนอราคาปกติ' });
+    return false;
+  }
+  if (!job.vehicle_id) {
+    res.status(400).json({ error: 'งานนี้ยังไม่มีข้อมูลรถ ไม่สามารถสร้างใบเสนอราคาได้' });
+    return false;
+  }
+  return true;
+}
+
+// ── อนุมัติ: โปรโมท quote_draft เป็นใบเสนอราคาจริง + สร้างใบเสร็จ ในทีเดียว ──
+router.post('/:id/quotation/approve', async (req, res) => {
+  let conn;
+  try {
+    conn = await pool.getConnection();
+    await conn.beginTransaction();
+
+    const [[job]] = await conn.query('SELECT * FROM jobs WHERE id = ? FOR UPDATE', [req.params.id]);
+    if (!job) { await conn.rollback(); return res.status(404).json({ error: 'ไม่พบงานนี้' }); }
+    if (!assertPromotable(job, res)) { await conn.rollback(); return; }
+
+    let promoted;
+    try {
+      promoted = await promoteDraftToQuotation(conn, job, { status: 'approved' });
+    } catch (err) {
+      await conn.rollback();
+      return res.status(err.statusCode || 500).json({ error: err.message });
+    }
+    const { quotation_id, total_amount } = promoted;
+    const draft = parseDraft(job.quote_draft);
+
+    const receipt_no = await generateReceiptNo(conn);
+    const [receiptResult] = await conn.execute(
+      `INSERT INTO receipts (receipt_no, receipt_date, customer_id, vehicle_id, mileage, remark, total_amount, customer_signature, deposit_amount, deposit_date)
+       VALUES (?, CURDATE(), ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [receipt_no, job.customer_id, job.vehicle_id, job.mileage_in || 0, draft.remark || null, total_amount, draft.customer_signature || null, draft.deposit_amount ?? null, draft.deposit_date || null]
+    );
+    const receiptId = receiptResult.insertId;
+
+    const validItems = buildValidItems(draft.items || []);
+    for (const item of validItems) {
+      const qty = parseInt(item.quantity || 1);
+      const price = parseFloat(item.unit_price || 0);
+      await conn.execute(
+        `INSERT INTO receipt_items (receipt_id, service_item_id, product_name_snapshot, qty, price, amount, warranty_name, warranty_year, warranty_month, warranty_km)
+         VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [receiptId, item.product_name, qty, price, qty * price, null, 0, 0, 0]
+      );
+    }
+
+    await conn.execute("UPDATE quotations SET status = 'approved', converted_receipt_id = ? WHERE id = ?", [receiptId, quotation_id]);
+    await conn.execute('UPDATE jobs SET quotation_id = ?, status = ?, quote_draft = NULL WHERE id = ?', [quotation_id, 'approved', job.id]);
+    await conn.execute('INSERT INTO job_status_history (job_id, status, changed_by) VALUES (?,?,?)', [job.id, 'approved', req.user.id]);
+
+    await conn.commit();
+
+    emitQuotationEvent('quotation:updated', { quotationId: quotation_id, status: 'approved', actorId: req.user.id });
+    emitReceiptEvent('receipt:created', { receiptId, actorId: req.user.id });
+    emitJobEvent('job:status-changed', { jobId: job.id, jobDate: job.job_date, status: 'approved', actorId: req.user.id });
+
+    res.json({ success: true, quotation_id, receipt_id: receiptId });
+  } catch (err) {
+    if (conn) await conn.rollback();
+    console.error(err);
+    res.status(500).json({ error: 'อนุมัติไม่สำเร็จ' });
+  } finally {
+    if (conn) conn.release();
+  }
+});
+
+// ── นัดวันมาทำ: โปรโมท quote_draft เป็นใบเสนอราคาจริง สถานะ scheduled ──
+router.post('/:id/quotation/schedule', async (req, res) => {
+  const { scheduled_date } = req.body || {};
+  if (!scheduled_date) return res.status(400).json({ error: 'กรุณาระบุวันที่' });
+
+  let conn;
+  try {
+    conn = await pool.getConnection();
+    await conn.beginTransaction();
+
+    const [[job]] = await conn.query('SELECT * FROM jobs WHERE id = ? FOR UPDATE', [req.params.id]);
+    if (!job) { await conn.rollback(); return res.status(404).json({ error: 'ไม่พบงานนี้' }); }
+    if (!assertPromotable(job, res)) { await conn.rollback(); return; }
+
+    let promoted;
+    try {
+      promoted = await promoteDraftToQuotation(conn, job, { status: 'scheduled', scheduledDate: scheduled_date });
+    } catch (err) {
+      await conn.rollback();
+      return res.status(err.statusCode || 500).json({ error: err.message });
+    }
+
+    await conn.execute('UPDATE jobs SET quotation_id = ?, status = ?, quote_draft = NULL WHERE id = ?', [promoted.quotation_id, 'scheduled', job.id]);
+    await conn.execute('INSERT INTO job_status_history (job_id, status, changed_by) VALUES (?,?,?)', [job.id, 'scheduled', req.user.id]);
+
+    await conn.commit();
+
+    emitQuotationEvent('quotation:updated', { quotationId: promoted.quotation_id, status: 'scheduled', actorId: req.user.id });
+    emitJobEvent('job:status-changed', { jobId: job.id, jobDate: job.job_date, status: 'scheduled', actorId: req.user.id });
+
+    res.json({ success: true, quotation_id: promoted.quotation_id });
+  } catch (err) {
+    if (conn) await conn.rollback();
+    console.error(err);
+    res.status(500).json({ error: 'บันทึกวันนัดหมายไม่สำเร็จ' });
+  } finally {
+    if (conn) conn.release();
+  }
+});
+
+// เหตุผลที่ลูกค้าไม่ได้ทำ — mirror DECLINE_REASON_VALUES ใน quotations.routes.js
+// (ต้องแก้พร้อมกันทั้งคู่ถ้าจะเพิ่ม/ลดตัวเลือก — ดูคอมเมนต์ต้นทางที่นั่น)
+const DECLINE_REASON_VALUES = ['price_high', 'budget', 'quote_only', 'other_day', 'other'];
+
+// ── ไม่ทำ: โปรโมท quote_draft เป็นใบเสนอราคาจริง สถานะ declined ──
+router.post('/:id/quotation/decline', async (req, res) => {
+  const { reason, note } = req.body || {};
+  if (!DECLINE_REASON_VALUES.includes(reason)) {
+    return res.status(400).json({ error: 'กรุณาเลือกเหตุผลที่ลูกค้าไม่ได้ทำ' });
+  }
+  if (reason === 'other' && !note?.trim()) {
+    return res.status(400).json({ error: 'กรุณาระบุรายละเอียดเหตุผล' });
+  }
+
+  let conn;
+  try {
+    conn = await pool.getConnection();
+    await conn.beginTransaction();
+
+    const [[job]] = await conn.query('SELECT * FROM jobs WHERE id = ? FOR UPDATE', [req.params.id]);
+    if (!job) { await conn.rollback(); return res.status(404).json({ error: 'ไม่พบงานนี้' }); }
+    if (!assertPromotable(job, res)) { await conn.rollback(); return; }
+
+    let promoted;
+    try {
+      promoted = await promoteDraftToQuotation(conn, job, {
+        status: 'declined',
+        declineReason: reason,
+        declineNote: reason === 'other' ? note.trim() : null,
+      });
+    } catch (err) {
+      await conn.rollback();
+      return res.status(err.statusCode || 500).json({ error: err.message });
+    }
+
+    await conn.execute('UPDATE jobs SET quotation_id = ?, status = ?, quote_draft = NULL WHERE id = ?', [promoted.quotation_id, 'rejected', job.id]);
+    await conn.execute('INSERT INTO job_status_history (job_id, status, changed_by) VALUES (?,?,?)', [job.id, 'rejected', req.user.id]);
+
+    await conn.commit();
+
+    emitQuotationEvent('quotation:updated', { quotationId: promoted.quotation_id, status: 'declined', actorId: req.user.id });
+    emitJobEvent('job:status-changed', { jobId: job.id, jobDate: job.job_date, status: 'rejected', actorId: req.user.id });
+
+    res.json({ success: true, quotation_id: promoted.quotation_id });
+  } catch (err) {
+    if (conn) await conn.rollback();
+    console.error(err);
+    res.status(500).json({ error: 'บันทึกไม่สำเร็จ' });
+  } finally {
+    if (conn) conn.release();
   }
 });
 

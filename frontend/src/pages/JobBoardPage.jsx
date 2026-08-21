@@ -42,7 +42,7 @@ export default function JobBoardPage() {
   // list without a manual reload. Guarded by `date` — staff browsing a past
   // date shouldn't have their view silently overwritten by "today" activity.
   useRealtimeEvent(
-    ['job:created', 'job:updated', 'job:status-changed', 'job:quotation-linked'],
+    ['job:created', 'job:updated', 'job:status-changed', 'job:quotation-linked', 'job:deleted'],
     (payload) => { if (payload.jobDate === date) load({ silent: true }); }
   );
 

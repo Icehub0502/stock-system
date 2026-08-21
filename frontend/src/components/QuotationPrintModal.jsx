@@ -6,7 +6,17 @@ import SignatureModal from "./SignatureModal";
 import useFitToWidth from "../hooks/useFitToWidth";
 import { buildLineQuoteText, copyTextToClipboard } from "../utils/lineQuoteText";
 
-export default function QuotationPrintModal({ quotation, onClose, onPrinted }) {
+// signatureUrl/staffSignatureUrl/markPrintedUrl/skipFetch: ให้ผู้เรียกที่ไม่ใช่
+// ใบเสนอราคาจริง (เช่น JobDetailPage.jsx ตอนแสดง quote_draft ก่อนตัดสินใจ) ชี้ปลายทาง
+// บันทึกลายเซ็น/ไม่ต้อง fetch/ไม่ต้อง mark-printed ไปที่อื่นแทนได้ — ไม่ระบุ (ปกติ)
+// = พฤติกรรมเดิมทุกอย่าง คำนวณจาก quotation.id เหมือนเดิม
+export default function QuotationPrintModal({
+  quotation, onClose, onPrinted,
+  signatureUrl, staffSignatureUrl, markPrintedUrl, skipFetch = false,
+}) {
+  const sigUrl = signatureUrl || `/quotations/${quotation.id}/signature`;
+  const staffSigUrl = staffSignatureUrl || `/quotations/${quotation.id}/staff-signature`;
+  const printedUrl = markPrintedUrl === undefined ? `/quotations/${quotation.id}/mark-printed` : markPrintedUrl;
   const [detail, setDetail] = useState(quotation);
   // Shrink the A4 preview to fit the modal on phones (see useFitToWidth). Only
   // the on-screen preview is scaled; the PrintPortal copy prints full A4.
@@ -29,17 +39,17 @@ export default function QuotationPrintModal({ quotation, onClose, onPrinted }) {
   };
 
   const handleSaveSignature = async (dataUrl) => {
-    await client.patch(`/quotations/${quotation.id}/signature`, { signature: dataUrl });
+    await client.patch(sigUrl, { signature: dataUrl });
     setDetail((prev) => ({ ...prev, customer_signature: dataUrl }));
   };
 
   const handleSaveStaffSignature = async (dataUrl) => {
-    await client.patch(`/quotations/${quotation.id}/staff-signature`, { signature: dataUrl });
+    await client.patch(staffSigUrl, { signature: dataUrl });
     setDetail((prev) => ({ ...prev, staff_signature: dataUrl }));
   };
 
   useEffect(() => {
-    if (!quotation?.items) {
+    if (!quotation?.items && !skipFetch) {
       fetchDetail();
     }
   }, []);
@@ -57,16 +67,18 @@ export default function QuotationPrintModal({ quotation, onClose, onPrinted }) {
   // this modal closes, not just the button flash while it's still open.
   useEffect(() => {
     const handleAfterPrint = async () => {
-      try {
-        await client.patch(`/quotations/${quotation.id}/mark-printed`);
-      } catch (err) {
-        console.error('Error marking quotation as printed:', err);
+      if (printedUrl) {
+        try {
+          await client.patch(printedUrl);
+        } catch (err) {
+          console.error('Error marking quotation as printed:', err);
+        }
       }
       if (onPrinted) onPrinted(quotation.id);
     };
     window.addEventListener('afterprint', handleAfterPrint);
     return () => window.removeEventListener('afterprint', handleAfterPrint);
-  }, [quotation.id, onPrinted]);
+  }, [printedUrl, onPrinted]);
 
   const fetchDetail = async () => {
     try {

@@ -942,3 +942,8 @@ router.delete('/:id', async (req, res) => {
 });
 
 module.exports = router;
+module.exports.generateQuotationNo = generateQuotationNo; // ให้ jobs.routes.js ใช้เลขที่ชุดเดียวกันตอนโปรโมท quote_draft เป็นใบเสนอราคาจริง
+module.exports.generateReceiptNo = generateReceiptNo; // ให้ jobs.routes.js สร้างใบเสร็จตอนอนุมัติ ด้วยตรรกะออกเลขเดียวกับ /:id/approve
+module.exports.generateRepairNoticeCode = generateRepairNoticeCode; // ให้ jobs.routes.js สร้างใบแจ้งซ่อมคู่กันเหมือน POST /quotations เดิม
+module.exports.buildValidItems = buildValidItems; // ให้ jobs.routes.js กรองรายการจาก quote_draft ด้วยกติกาเดียวกัน
+module.exports.findInvalidItems = findInvalidItems; // ให้ jobs.routes.js ตรวจสอบ quote_draft.items ก่อนโปรโมท

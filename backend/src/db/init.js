@@ -739,6 +739,19 @@ async function initDatabase() {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
 
+  // quote_draft: ร่างรายการ/ราคา/ลายเซ็นก่อนตัดสินใจ (อนุมัติ/นัดวันมาทำ/ไม่ทำ) —
+  // ยังไม่ใช่ใบเสนอราคาจริง เก็บเป็น JSON บนงานเอง กันไม่ให้ทุกครั้งที่พนักงานติ๊ก
+  // เลือกอะไหล่ในหน้ารายละเอียดงานสร้างแถวจริงใน quotations ทันที (เจ้าของร้านขอ —
+  // เห็นว่ารกพื้นที่ถ้ายังไม่ตัดสินใจอะไรเลย) โครงสร้าง: { items:[{product_name,
+  // quantity,unit_price}], remark, deposit_amount, deposit_date,
+  // customer_signature, staff_signature, staff_name } — ถูกเคลียร์ทิ้งเมื่อ
+  // "โปรโมท" กลายเป็นใบเสนอราคาจริงแล้ว (ดู POST /jobs/:id/quotation/* ใน
+  // jobs.routes.js)
+  await conn.query(`
+    ALTER TABLE jobs
+    ADD COLUMN quote_draft JSON DEFAULT NULL
+  `).catch(ignoreIfAlreadyApplied);
+
   const [userRows] = await conn.query(
     'SELECT COUNT(*) AS c FROM users'
   );

@@ -64,6 +64,7 @@ export default function JobDetailPage() {
   const [scheduleDate, setScheduleDate] = useState(todayStr());
   const [showDecline, setShowDecline] = useState(false);
   const [showPrintModal, setShowPrintModal] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const load = async ({ silent } = {}) => {
     try {
@@ -115,14 +116,31 @@ export default function JobDetailPage() {
       .finally(() => setCatalogLoading(false));
   }, [job?.id]);
 
-  // มีใบเสนอราคาอยู่แล้ว — โหลดรายการที่มีอยู่มา seed selectedParts (คีย์
-  // existing-<quotation_items.id>) พร้อมเก็บฟิลด์อื่นของใบเสนอราคาไว้ใน
-  // quotationMeta ไว้ส่งกลับตอนบันทึกทับ (PUT ต้องส่งฟิลด์ครบ ไม่งั้นข้อมูลเดิม
-  // เช่นมัดจำ/หมายเหตุจะหาย) — ผูก dependency กับ job?.quotation_id เท่านั้น
-  // (ไม่ใช่ทั้ง job object) กัน effect นี้รันซ้ำทุกครั้งที่ job ถูก reload เบื้องหลัง
-  // (เช่นจาก realtime) ซึ่งจะทับรายการที่กำลังแก้ไขอยู่ทิ้ง
+  // มีใบเสนอราคาจริงอยู่แล้ว (งานเก่าที่ผ่านขั้นตอนเดิม หรือมาจากไลน์บอท) — โหลด
+  // รายการที่มีอยู่มา seed selectedParts (คีย์ existing-<quotation_items.id>)
+  // พร้อมเก็บฟิลด์อื่นของใบเสนอราคาไว้ใน quotationMeta ไว้ส่งกลับตอนบันทึกทับ (PUT
+  // ต้องส่งฟิลด์ครบ ไม่งั้นข้อมูลเดิมเช่นมัดจำ/หมายเหตุจะหาย) — ถ้ายังไม่มีใบเสนอราคา
+  // จริง seed จาก job.quote_draft แทน (ร่างที่ยังไม่ตัดสินใจ เก็บไว้บนตัวงานเอง ดู
+  // PATCH /jobs/:id/quote-draft) คีย์ draft-<index> ผูก dependency กับ
+  // job?.quotation_id เท่านั้น (ไม่ใช่ทั้ง job object หรือ job?.quote_draft) กัน
+  // effect นี้รันซ้ำทุกครั้งที่ job ถูก reload เบื้องหลัง (เช่นจาก realtime) ซึ่งจะทับ
+  // รายการที่กำลังแก้ไขอยู่ทิ้ง — จึงรันใหม่แค่ตอนโหลดครั้งแรก หรือตอน quotation_id
+  // เปลี่ยน (เช่นหลังโปรโมท draft เป็นใบจริงสำเร็จ)
   useEffect(() => {
-    if (!job?.quotation_id) { setQuotationMeta(null); setSelectedParts({}); return; }
+    if (!job?.quotation_id) {
+      setQuotationMeta(null);
+      const draftItems = job?.quote_draft?.items || [];
+      const seeded = {};
+      draftItems.forEach((it, idx) => {
+        seeded[`draft-${idx}`] = {
+          part_name: it.product_name,
+          quantity: it.quantity,
+          unitPrice: String(it.unit_price),
+        };
+      });
+      setSelectedParts(seeded);
+      return;
+    }
     setItemsLoading(true);
     client.get(`/quotations/${job.quotation_id}`)
       .then((res) => {
@@ -332,11 +350,12 @@ export default function JobDetailPage() {
     }
   }
 
-  // บันทึกรายการที่ติ๊กเลือกไว้ — ยังไม่มีใบเสนอราคาก็สร้างใหม่ (ใช้ลูกค้า/รถของ
-  // งานนี้เลย ไม่ต้องค้นหาใหม่) แล้วผูกกลับเข้างานทันที; ถ้ามีใบเสนอราคาอยู่แล้ว
-  // ก็แก้ไขรายการทับของเดิมทั้งชุดผ่าน PUT ปกติ (endpoint เดียวกับที่หน้าคีออส/
-  // หน้าใบเสนอราคาใช้แก้ไข ไม่ใช่ endpoint พิเศษ) ทำให้หน้านี้แก้ไขรายการได้ตลอด
-  // แม้จะกดสร้างใบเสนอราคาไปแล้ว เช่นทำไปแล้วเจอว่าต้องเปลี่ยนอะไหล่เพิ่ม
+  // บันทึกรายการที่ติ๊กเลือกไว้ — ถ้ามีใบเสนอราคาจริงอยู่แล้ว (งานเก่า/มาจากไลน์บอท)
+  // แก้ไขรายการทับของเดิมทั้งชุดผ่าน PUT ปกติเหมือนเดิมทุกอย่าง; ถ้ายังไม่มี ไม่สร้าง
+  // ใบเสนอราคาจริงอีกต่อไป — บันทึกเป็นแค่ "ร่าง" ไว้บนตัวงานเอง (quote_draft) แล้ว
+  // เปิดหน้าต่างเซ็น/พิมพ์ให้ทันที ลูกค้าดู/เซ็น/ขอใบพิมพ์ได้โดยยังไม่ต้องมีใบเสนอ
+  // ราคาจริงในระบบ จนกว่าจะกด อนุมัติ/นัดวันมาทำ/ไม่ทำ อย่างใดอย่างหนึ่ง (เจ้าของร้าน
+  // ขอ — ไม่อยากให้ทุกครั้งที่ติ๊กเลือกอะไหล่กลายเป็นใบเสนอราคาจริงรกพื้นที่ทันที)
   async function saveQuotationItems() {
     if (selectedPartsList.length === 0) {
       setError('กรุณาเลือกรายการอย่างน้อย 1 รายการ');
@@ -363,19 +382,12 @@ export default function JobDetailPage() {
           deposit_date: quotationMeta?.deposit_date,
           items,
         });
+        await load();
       } else {
-        const res = await client.post('/quotations', {
-          customer_id: job.customer_id,
-          vehicle_id: job.vehicle_id,
-          quotation_date: todayStr(),
-          mileage: job.mileage_in || 0,
-          queue_no: job.queue_no || null,
-          symptom: job.symptom || null,
-          items,
-        });
-        await client.patch(`/jobs/${id}/quotation`, { quotation_id: res.data.quotation_id });
+        await client.patch(`/jobs/${id}/quote-draft`, { items });
+        await load();
+        setShowPrintModal(true);
       }
-      await load();
     } catch (err) {
       setError(err.response?.data?.error || 'บันทึกรายการไม่สำเร็จ');
     } finally {
@@ -383,13 +395,20 @@ export default function JobDetailPage() {
     }
   }
 
+  // อนุมัติ/นัดวันมาทำ/ไม่ทำ: งานเก่าที่มีใบเสนอราคาจริงอยู่แล้วใช้ endpoint เดิมของ
+  // ใบเสนอราคา (ไม่เปลี่ยนพฤติกรรม); งานที่ยังเป็นแค่ร่าง (ปกติตอนนี้) ใช้ endpoint
+  // ใหม่ที่ "โปรโมท" quote_draft เป็นใบเสนอราคาจริงในทีเดียวกับการตัดสินใจ (ดู
+  // POST /jobs/:id/quotation/* ใน backend/src/routes/jobs.routes.js)
   async function handleApprove() {
-    if (!job.quotation_id) return;
     setBusy(true);
     setError('');
     try {
-      await client.patch(`/quotations/${job.quotation_id}/approve`);
-      await client.patch(`/jobs/${id}/status`, { status: 'approved' });
+      if (job.quotation_id) {
+        await client.patch(`/quotations/${job.quotation_id}/approve`);
+        await client.patch(`/jobs/${id}/status`, { status: 'approved' });
+      } else {
+        await client.post(`/jobs/${id}/quotation/approve`);
+      }
       await load();
     } catch (err) {
       setError(err.response?.data?.error || 'อนุมัติไม่สำเร็จ');
@@ -399,12 +418,16 @@ export default function JobDetailPage() {
   }
 
   async function handleSchedule() {
-    if (!job.quotation_id || !scheduleDate) return;
+    if (!scheduleDate) return;
     setBusy(true);
     setError('');
     try {
-      await client.patch(`/quotations/${job.quotation_id}/schedule`, { scheduled_date: scheduleDate });
-      await client.patch(`/jobs/${id}/status`, { status: 'scheduled' });
+      if (job.quotation_id) {
+        await client.patch(`/quotations/${job.quotation_id}/schedule`, { scheduled_date: scheduleDate });
+        await client.patch(`/jobs/${id}/status`, { status: 'scheduled' });
+      } else {
+        await client.post(`/jobs/${id}/quotation/schedule`, { scheduled_date: scheduleDate });
+      }
       setShowSchedule(false);
       await load();
     } catch (err) {
@@ -415,12 +438,15 @@ export default function JobDetailPage() {
   }
 
   async function handleDeclineConfirm({ reason, note }) {
-    if (!job.quotation_id) return;
     setBusy(true);
     setError('');
     try {
-      await client.patch(`/quotations/${job.quotation_id}/decline`, { reason, note });
-      await client.patch(`/jobs/${id}/status`, { status: 'rejected' });
+      if (job.quotation_id) {
+        await client.patch(`/quotations/${job.quotation_id}/decline`, { reason, note });
+        await client.patch(`/jobs/${id}/status`, { status: 'rejected' });
+      } else {
+        await client.post(`/jobs/${id}/quotation/decline`, { reason, note });
+      }
       setShowDecline(false);
       navigate('/quotations/declined-summary');
     } catch (err) {
@@ -430,16 +456,37 @@ export default function JobDetailPage() {
     }
   }
 
+  async function handleDeleteJob() {
+    setBusy(true);
+    setError('');
+    try {
+      await client.delete(`/jobs/${id}`);
+      navigate('/jobs');
+    } catch (err) {
+      setError(err.response?.data?.error || 'ลบงานไม่สำเร็จ');
+      setBusy(false);
+      setShowDeleteConfirm(false);
+    }
+  }
+
   if (loading) return <div className="office-dashboard container"><div className="loading">กำลังโหลด...</div></div>;
   if (!job) return <div className="office-dashboard container"><div className="error-message">{error || 'ไม่พบงานนี้'}</div></div>;
 
   const isDecisionPoint = job.status === 'quoted';
+  // มีข้อมูลให้ตัดสินใจแล้วหรือยัง — ใบเสนอราคาจริง (งานเก่า/ไลน์บอท) หรือร่างที่
+  // บันทึกไว้แล้ว (ปกติตอนนี้) อย่างใดอย่างหนึ่งก็พอ
+  const hasQuoteData = Boolean(job.quotation_id) || (job.quote_draft?.items?.length > 0);
+  // ลายเซ็นลูกค้า: อ่านจากใบเสนอราคาจริงถ้ามีแล้ว ไม่งั้นอ่านจากร่าง
+  const customerSigned = job.quotation_id ? Boolean(job.customer_signature) : Boolean(job.quote_draft?.customer_signature);
 
   return (
     <div className="office-dashboard container">
       <div className="dashboard-header">
         <h2>{job.job_no} <span className="dashboard-header-sub">— คิว {job.queue_no || '-'}</span></h2>
-        <button type="button" onClick={() => navigate('/jobs')}>← กลับรายการงาน</button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button type="button" className="btn-danger" onClick={() => setShowDeleteConfirm(true)}>ลบงานนี้</button>
+          <button type="button" onClick={() => navigate('/jobs')}>← กลับรายการงาน</button>
+        </div>
       </div>
 
       <div className="dash-panel">
@@ -518,7 +565,7 @@ export default function JobDetailPage() {
         <div className="dash-panel">
           <div className="dash-panel-title">ตัดสินใจใบเสนอราคา</div>
           {error && <p className="error-text">{error}</p>}
-          {job.quotation_id ? (
+          {hasQuoteData ? (
             <>
               <div className="modal-actions" style={{ marginBottom: 10 }}>
                 <button type="button" onClick={() => setShowPrintModal(true)}>
@@ -526,7 +573,7 @@ export default function JobDetailPage() {
                 </button>
               </div>
               <div className="modal-actions">
-                <button type="button" className="btn-primary" disabled={busy || !job.customer_signature} onClick={handleApprove}>
+                <button type="button" className="btn-primary" disabled={busy || !customerSigned} onClick={handleApprove}>
                   อนุมัติ
                 </button>
                 <button type="button" disabled={busy} onClick={() => setShowSchedule(true)}>
@@ -536,12 +583,12 @@ export default function JobDetailPage() {
                   ไม่ทำ
                 </button>
               </div>
-              {!job.customer_signature && (
+              {!customerSigned && (
                 <p style={{ color: '#92400e', fontSize: 12.5, marginTop: 6 }}>กรุณาเซ็นเอกสารก่อนกดอนุมัติ</p>
               )}
             </>
           ) : (
-            <p style={{ color: '#92400e', fontSize: 13 }}>⚠️ เพิ่มรายการอะไหล่แล้วสร้างใบเสนอราคาก่อน ถึงจะตัดสินใจได้</p>
+            <p style={{ color: '#92400e', fontSize: 13 }}>⚠️ เพิ่มรายการอะไหล่แล้วกดบันทึกข้อมูลก่อน ถึงจะตัดสินใจได้</p>
           )}
         </div>
       )}
@@ -692,7 +739,7 @@ export default function JobDetailPage() {
             disabled={busy || itemsLoading || selectedPartsList.length === 0}
             onClick={saveQuotationItems}
           >
-            {busy ? 'กำลังบันทึก...' : job.quotation_id ? '+ เพิ่มรายการเข้าใบเสนอราคา' : 'สร้างใบเสนอราคา'}
+            {busy ? 'กำลังบันทึก...' : job.quotation_id ? '+ เพิ่มรายการเข้าใบเสนอราคา' : 'บันทึกข้อมูล'}
           </button>
         </div>
       </div>
@@ -743,6 +790,57 @@ export default function JobDetailPage() {
           quotation={{ id: job.quotation_id }}
           onClose={() => { setShowPrintModal(false); load({ silent: true }); }}
         />
+      )}
+
+      {/* ยังไม่มีใบเสนอราคาจริง — ประกอบข้อมูลแสดงผล/พิมพ์จากงาน+ร่าง (quote_draft)
+          ตรงๆ ไม่ fetch จาก /quotations/:id (ยังไม่มีให้ fetch) ลายเซ็นบันทึกกลับไป
+          ที่ร่างบนงานนี้แทน ไม่ใช่ใบเสนอราคา (skipFetch/markPrintedUrl=null เพราะ
+          ยังไม่ใช่เอกสารจริงที่ต้องติดตามว่า "พิมพ์แล้ว") */}
+      {showPrintModal && !job.quotation_id && job.quote_draft?.items?.length > 0 && (
+        <QuotationPrintModal
+          quotation={{
+            id: null,
+            quotation_no: null,
+            quotation_date: todayStr(),
+            queue_no: job.queue_no,
+            symptom: job.symptom,
+            customer_name: job.customer_name,
+            phone: job.phone,
+            brand: job.brand,
+            model: job.model,
+            color: job.color,
+            license_plate: job.license_plate,
+            mileage: job.mileage_in,
+            items: job.quote_draft.items,
+            remark: job.quote_draft.remark,
+            customer_signature: job.quote_draft.customer_signature,
+            staff_signature: job.quote_draft.staff_signature,
+            staff_name: job.quote_draft.staff_name,
+            deposit_amount: job.quote_draft.deposit_amount,
+            deposit_date: job.quote_draft.deposit_date,
+          }}
+          skipFetch
+          signatureUrl={`/jobs/${id}/quote-draft/signature`}
+          staffSignatureUrl={`/jobs/${id}/quote-draft/staff-signature`}
+          markPrintedUrl={null}
+          onClose={() => { setShowPrintModal(false); load({ silent: true }); }}
+        />
+      )}
+
+      {showDeleteConfirm && (
+        <div className="modal-backdrop" onClick={() => setShowDeleteConfirm(false)}>
+          <div className="modal-card" style={{ maxWidth: 380 }} onClick={(e) => e.stopPropagation()}>
+            <h3 className="modal-title">ลบงานนี้?</h3>
+            <p>ยืนยันลบงาน {job.job_no} — คิว {job.queue_no || '-'} ของ {job.customer_name || 'ลูกค้า'} ข้อมูลนี้จะหายถาวร กู้คืนไม่ได้</p>
+            {error && <p className="error-text">{error}</p>}
+            <div className="modal-actions">
+              <button type="button" className="btn-danger" disabled={busy} onClick={handleDeleteJob}>
+                {busy ? 'กำลังลบ...' : 'ยืนยันลบ'}
+              </button>
+              <button type="button" onClick={() => setShowDeleteConfirm(false)} disabled={busy}>ยกเลิก</button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
