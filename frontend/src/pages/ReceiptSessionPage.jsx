@@ -1,7 +1,8 @@
-import React, { useEffect, useState, useMemo, useCallback } from 'react';
+import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import client from '../api/client';
 import { formatDbTime, formatDbDateTime, todayStr } from '../utils/format';
+import useRealtimeEvent from '../hooks/useRealtimeEvent';
 
 // ── Icons ──
 const IconDoc = () => (
@@ -64,31 +65,62 @@ export default function ReceiptSessionPage() {
   const [range, setRange] = useState('today');
   const [pickedDate, setPickedDate] = useState(todayStr());
 
-  const loadSessions = useCallback(async () => {
+  const loadSessions = useCallback(async ({ silent } = {}) => {
     try {
-      setLoading(true);
+      if (!silent) setLoading(true);
       const res = await client.get('/transactions/receipt-sessions');
       setSessions(res.data || []);
     } catch (err) {
-      setError(err?.response?.data?.error || 'โหลดบิลไม่สำเร็จ');
+      // รีเฟรชเบื้องหลัง (silent) ไม่ควรโชว์ error ทับหน้าจอผู้ใช้ที่ไม่ได้กดอะไรเลย
+      if (!silent) setError(err?.response?.data?.error || 'โหลดบิลไม่สำเร็จ');
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, []);
 
   useEffect(() => { loadSessions(); }, [loadSessions]);
 
-  const openDetail = async (id) => {
-    setDetailLoading(true);
+  const openDetail = async (id, { silent } = {}) => {
+    if (!silent) setDetailLoading(true);
     try {
       const res = await client.get(`/transactions/receipt-sessions/${id}`);
       setSelected(res.data);
     } catch (err) {
-      setError(err?.response?.data?.error || 'โหลดรายละเอียดบิลไม่สำเร็จ');
+      // ตอน silent ถ้าบิลถูกลบไปแล้ว (404) ให้ปิด modal เงียบ ๆ แทนโชว์ error
+      if (silent) {
+        setSelected(null);
+      } else {
+        setError(err?.response?.data?.error || 'โหลดรายละเอียดบิลไม่สำเร็จ');
+      }
     } finally {
-      setDetailLoading(false);
+      if (!silent) setDetailLoading(false);
     }
   };
+
+  // รีเฟรชเบื้องหลังเมื่อมีการเปิดบิลใหม่/สแกนของเข้า-ออก/ลบรายการจากที่อื่น (เช่น
+  // เครื่องอื่นสแกนของเข้าบิลเดียวกันอยู่) เลื่อนไว้ก่อนด้วย ref แทนที่จะทิ้ง ถ้าติด
+  // guard (กำลังลบรายการ/ลบบิล/กำลังโหลดรายละเอียดอยู่) กันไม่ให้ race กับ optimistic
+  // update ของ handleDeleteItem/handleDeleteBill
+  const pendingRefreshRef = useRef(false);
+  useRealtimeEvent(
+    ['stock:tx-created', 'stock:tx-deleted', 'stock:item-updated', 'stock:receipt-session-created'],
+    () => {
+      if (deletingId !== null || deletingBill || detailLoading) {
+        pendingRefreshRef.current = true;
+        return;
+      }
+      loadSessions({ silent: true });
+      if (selected) openDetail(selected.session.id, { silent: true });
+    }
+  );
+
+  useEffect(() => {
+    if (deletingId === null && !deletingBill && !detailLoading && pendingRefreshRef.current) {
+      pendingRefreshRef.current = false;
+      loadSessions({ silent: true });
+      if (selected) openDetail(selected.session.id, { silent: true });
+    }
+  }, [deletingId, deletingBill, detailLoading]);
 
   // ลบรายการในบิล — backend คืนสต็อกให้เองในทรานแซกชันเดียว (DELETE /transactions/:id)
   const handleDeleteItem = async (item) => {

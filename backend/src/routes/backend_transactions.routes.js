@@ -3,7 +3,7 @@ const pool = require('../db/pool');
 const { authenticate, requireRole } = require('../middleware/auth');
 const { vehicleModelFromRackName } = require('../utils/vehicleModelFromName');
 const { resolveTransactionDate } = require('../utils/resolveTransactionDate');
-const { emitStockEvent, emitStockTxEvent } = require('../realtime');
+const { emitStockEvent, emitStockTxEvent, emitReceiptSessionEvent } = require('../realtime');
 
 const router = express.Router();
 router.use(authenticate);
@@ -31,6 +31,12 @@ router.post('/receipt-session', async (req, res) => {
        WHERE s.id = ?`,
       [result.insertId]
     );
+
+    emitReceiptSessionEvent('stock:receipt-session-created', {
+      sessionId: result.insertId,
+      actorId: req.user.id,
+    });
+
     res.status(201).json(rows[0]);
   } catch (err) {
     console.error(err);

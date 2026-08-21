@@ -95,6 +95,10 @@ function emitProductCostEvent(event, { productId, actorId }) {
   emitStaffEvent(event, { productId, actorId }, { room: 'office' });
 }
 
+function emitReceiptSessionEvent(event, { sessionId, actorId }) {
+  emitStaffEvent(event, { sessionId, actorId }, { room: 'office' });
+}
+
 module.exports = {
   initRealtime,
   emitJobEvent,
@@ -103,4 +107,5 @@ module.exports = {
   emitStockEvent,
   emitStockTxEvent,
   emitProductCostEvent,
+  emitReceiptSessionEvent,
 };
