@@ -448,6 +448,24 @@ button:disabled { background: #f3f4f6; color: #9ca3af; cursor: not-allowed; }
 .dashboard-header h2 { margin: 0; font-size: 1.2rem; color: #111111; }
 .dashboard-header-sub { font-size: 0.85rem; font-weight: 400; color: #9ca3af; }
 
+/* ── JobBoardPage.jsx — วันที่ + ปุ่มเพิ่มคิว อยู่แถวเดียวกับหัวข้อ ชิดขวา ──
+   .form-group ปกติมี label อยู่เหนือ input ทำให้สูงกว่าปุ่มเปล่า ๆ — จัด
+   align-items: flex-end ให้ขอบล่างของ input/ปุ่มเสมอกันแทนที่จะกึ่งกลางทั้งบล็อก
+   ปุ่มใช้ .btn.btn-primary ธรรมดา (ไม่ใช้ .btn-fab-mobile ซึ่งลอยเป็นวงกลมมุมจอ
+   บนมือถือ ไม่เหมาะกับที่ต้องอยู่แถวเดียวกับช่องวันที่) */
+.job-board-header-actions {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.job-board-header-actions .form-group {
+  gap: 4px;
+}
+.job-board-header-actions .form-group label {
+  font-size: 0.78rem;
+}
+
 .table-wrapper {
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
@@ -5527,43 +5545,10 @@ body:has(.modal-backdrop) .page-fade-in {
   color: #f5c400;
   letter-spacing: 0.02em;
 }
-.board-clock {
-  font-size: 1.6rem;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
-.board-bays {
-  display: grid;
-  grid-template-columns: repeat(6, 1fr);
-  gap: 12px;
-  margin-bottom: 28px;
-}
-.board-bay {
-  background: #18181f;
-  border: 2px solid #2a2a33;
-  border-radius: 12px;
-  padding: 16px 10px;
-  text-align: center;
-}
-.board-bay.occupied {
-  border-color: #f5c400;
-  background: #1f1c0d;
-}
-.board-bay-label {
-  font-size: 1rem;
-  font-weight: 700;
-  color: #9a9aa5;
-  margin-bottom: 8px;
-}
-.board-bay.occupied .board-bay-label { color: #f5c400; }
-.board-bay-plate {
-  font-size: 1.3rem;
-  font-weight: 800;
-  color: #fff;
-}
-.board-bay-empty {
-  font-size: 1rem;
-  color: #55555f;
+/* ── หัวจอบอร์ด — ใช้สไตล์เดียวกับ .navbar-brand-text (Champ ไล่เฉดเงิน, power
+   ทองล้วน, SPK ทองตัวเล็กยกบน) แค่ขยายขนาดให้เหมาะกับจอ TV ระยะไกล ── */
+.board-brand-text {
+  font-size: 2.4rem;
 }
 .board-loading, .board-empty {
   text-align: center;
@@ -5609,7 +5594,6 @@ body:has(.modal-backdrop) .page-fade-in {
 }
 
 @media (max-width: 900px) {
-  .board-bays { grid-template-columns: repeat(3, 1fr); }
   .board-row { grid-template-columns: 50px 100px 1fr 70px; }
   .board-row-bay { display: none; }
 }
@@ -5752,6 +5736,82 @@ body:has(.modal-backdrop) .page-fade-in {
   -webkit-box-orient: vertical;
 }
 .job-card-model { color: #9ca3af; font-size: 0.8rem; margin-top: 4px; }
+
+/* ── JobDetailPage.jsx — เลือกอะไหล่จากแคตตาล็อกแบบติ๊กเลือก (แทนตารางกรอกมือ
+   เดิม) ยืมโครง .kiosk-part/.kiosk-grid-part/.kiosk-category-* มาจาก
+   PartsCatalogKioskPage.jsx ตรง ๆ (พฤติกรรม tick-select + qty stepper เดียวกัน)
+   แต่หน้านี้เป็นธีมสว่างเหมือนแผงอื่น ๆ ใน dash-panel ไม่ใช่ธีมมืดของคีออส จึง
+   override สีให้เข้ากับหน้าแทนที่จะสร้างกริด/การ์ดใหม่ทั้งหมด ── */
+.jdp-part-picker {
+  /* กันล้นจอมือถือ (bug เดิม: ตารางกรอกมือกว้างเกิน 375px) — เผื่อไว้เป็นตาข่าย
+     นิรภัยแม้กริดด้านล่างจะ wrap เองอยู่แล้วก็ตาม */
+  overflow-x: auto;
+}
+.jdp-category-bar {
+  margin-bottom: 12px;
+  padding-bottom: 0;
+}
+.jdp-part-grid {
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  margin-bottom: 14px;
+}
+.jdp-part {
+  background: #fff;
+  border-color: #e5e7eb;
+  color: #111111;
+}
+.jdp-part.kiosk-part-selected {
+  border-color: #111111;
+  box-shadow: 0 0 0 1px #111111;
+}
+.jdp-part .kiosk-part-check {
+  background: #111111;
+  color: #fff;
+}
+.jdp-part .kiosk-part-image { background: #f3f4f6; }
+.jdp-part .kiosk-part-desc { color: #6b7280; }
+.jdp-part .kiosk-part-price { color: #16a34a; font-size: 1.1rem; }
+.jdp-part .kiosk-part-qty button {
+  background: #f3f4f6;
+  border-color: #d1d5db;
+  color: #111111;
+}
+.jdp-part .kiosk-part-qty button:active { background: #e5e7eb; }
+.jdp-part-disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.jdp-part-needs-price {
+  padding: 8px 0 2px;
+  font-size: 0.82rem;
+  color: #92400e;
+  font-weight: 600;
+}
+.jdp-part-selected-controls {
+  padding: 0 14px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.jdp-part-price-input {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  padding: 2px 8px;
+  font-size: 0.85rem;
+}
+.jdp-part-price-input input {
+  border: none;
+  min-height: unset;
+  padding: 4px 2px;
+  width: 100%;
+  font-size: 0.9rem;
+}
+.jdp-part-price-input input:focus { outline: none; }
+.jdp-add-part { margin: 4px 0 16px; }
+.jdp-add-part-form { max-width: 360px; }
 
 /* ── AddJobModal.jsx — เลือก/ถ่ายรูปตอนเพิ่มคิว ── */
 .job-photo-picker {

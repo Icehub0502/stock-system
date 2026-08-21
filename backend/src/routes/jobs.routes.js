@@ -117,7 +117,8 @@ router.get('/:id', async (req, res) => {
     const [rows] = await pool.execute(`
       SELECT j.*, c.customer_name, c.phone, c.customer_code,
              v.license_plate, v.brand, v.model, v.color,
-             q.quotation_no, q.status AS quotation_status, q.total_amount
+             q.quotation_no, q.status AS quotation_status, q.total_amount,
+             q.customer_signature, q.staff_signature
       FROM jobs j
       LEFT JOIN customers c ON c.id = j.customer_id
       LEFT JOIN vehicles v ON v.id = j.vehicle_id

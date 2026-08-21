@@ -1,12 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import client from '../api/client';
 import { jobStatusDef } from '../utils/jobStatus';
 import { formatDbDateTime, todayStr } from '../utils/format';
 import DeclineReasonModal from '../components/DeclineReasonModal';
+import QuotationPrintModal from '../components/QuotationPrintModal';
 import useRealtimeEvent from '../hooks/useRealtimeEvent';
-
-const emptyItem = () => ({ product_name: '', quantity: 1, unit_price: '' });
 
 /**
  * รายละเอียดงาน 1 คัน — ข้อมูลรถ/ลูกค้า, รายการอะไหล่/ใบเสนอราคา, ประวัติสถานะ
@@ -34,10 +33,22 @@ export default function JobDetailPage() {
   const [models, setModels] = useState([]);
   const [form, setForm] = useState(null);
 
-  const [items, setItems] = useState([emptyItem()]);
+  // เลือกอะไหล่จากแคตตาล็อกของยี่ห้อ/รุ่นรถงานนี้ (tick-select เหมือน
+  // PartsCatalogKioskPage.jsx) แทนตารางกรอกมือแบบเดิม — คีย์ด้วย part.id
+  const [catalogParts, setCatalogParts] = useState([]);
+  const [catalogLoading, setCatalogLoading] = useState(false);
+  const [catalogError, setCatalogError] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('');
+  const [selectedParts, setSelectedParts] = useState({});
+  const [showAddPart, setShowAddPart] = useState(false);
+  const [newPart, setNewPart] = useState({ part_name: '', category: '', price: '' });
+  const [addingPart, setAddingPart] = useState(false);
+  const [addPartError, setAddPartError] = useState('');
+
   const [showSchedule, setShowSchedule] = useState(false);
   const [scheduleDate, setScheduleDate] = useState(todayStr());
   const [showDecline, setShowDecline] = useState(false);
+  const [showPrintModal, setShowPrintModal] = useState(false);
 
   const load = async ({ silent } = {}) => {
     try {
@@ -71,6 +82,18 @@ export default function JobDetailPage() {
     if (!form?.brand?.trim()) { setModels([]); return; }
     client.get('/vehicle-models/models', { params: { brand: form.brand.trim() } }).then((res) => setModels(res.data.data || []));
   }, [form?.brand]);
+
+  // โหลดแคตตาล็อกอะไหล่ของยี่ห้อ/รุ่นรถงานนี้โดยตรง (ข้ามขั้นเลือกยี่ห้อ/รุ่น
+  // แบบ kiosk เพราะรู้ข้อมูลรถของงานนี้อยู่แล้ว) เฉพาะตอนยังไม่มีใบเสนอราคา
+  useEffect(() => {
+    if (!job || job.quotation_id || !job.brand || !job.model) return;
+    setCatalogLoading(true);
+    setCatalogError('');
+    client.get('/quote-parts/parts', { params: { brand: job.brand, model: job.model } })
+      .then((res) => setCatalogParts(res.data.data || []))
+      .catch((err) => setCatalogError(err.response?.data?.error || 'โหลดรายการอะไหล่ไม่สำเร็จ'))
+      .finally(() => setCatalogLoading(false));
+  }, [job?.id, job?.quotation_id, job?.brand, job?.model]);
 
   function startEdit() {
     setForm({
@@ -120,24 +143,113 @@ export default function JobDetailPage() {
     }
   }
 
-  function updateItem(idx, patch) {
-    setItems((prev) => prev.map((it, i) => (i === idx ? { ...it, ...patch } : it)));
+  // จิ้มเลือก/ถอนอะไหล่ (เหมือน PartsCatalogKioskPage.jsx) — ข้ามการ์ดที่ยัง
+  // ไม่ตั้งราคา (needs_price) กันเสนอราคา 0 บาทโดยไม่ตั้งใจ ต้องไปตั้งราคาที่
+  // เมนู "ราคาอะไหล่ตามรุ่นรถ" ก่อน
+  function togglePart(part) {
+    if (part.needs_price) return;
+    setSelectedParts((prev) => {
+      const key = part.id;
+      if (prev[key]) {
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      }
+      return {
+        ...prev,
+        [key]: { ...part, quantity: 1, unitPrice: Number(part.price) > 0 ? String(part.price) : '' },
+      };
+    });
   }
-  function addItemRow() {
-    setItems((prev) => [...prev, emptyItem()]);
-  }
-  function removeItemRow(idx) {
-    setItems((prev) => (prev.length === 1 ? prev : prev.filter((_, i) => i !== idx)));
-  }
-  const itemsTotal = items.reduce((sum, it) => sum + (Number(it.quantity) || 0) * (Number(it.unit_price) || 0), 0);
 
-  // สร้างใบเสนอราคาจากรายการที่กรอกในนี้ตรง ๆ (ใช้ลูกค้า/รถของงานนี้เลย ไม่ต้อง
+  function changePartQty(key, delta) {
+    setSelectedParts((prev) => {
+      const current = prev[key];
+      if (!current) return prev;
+      const nextQty = current.quantity + delta;
+      if (nextQty <= 0) {
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      }
+      return { ...prev, [key]: { ...current, quantity: nextQty } };
+    });
+  }
+
+  function updatePartPrice(key, value) {
+    setSelectedParts((prev) => (prev[key] ? { ...prev, [key]: { ...prev[key], unitPrice: value } } : prev));
+  }
+
+  const catalogCategories = useMemo(() => {
+    const seen = new Set();
+    const list = [];
+    catalogParts.forEach((p) => {
+      if (p.category && !seen.has(p.category)) {
+        seen.add(p.category);
+        list.push(p.category);
+      }
+    });
+    return list;
+  }, [catalogParts]);
+
+  const filteredCatalogParts = categoryFilter
+    ? catalogParts.filter((p) => p.category === categoryFilter)
+    : catalogParts;
+
+  const selectedPartsList = Object.values(selectedParts);
+  const selectedPartsCount = selectedPartsList.reduce((sum, p) => sum + p.quantity, 0);
+  const selectedPartsTotal = selectedPartsList.reduce((sum, p) => sum + p.quantity * (Number(p.unitPrice) || 0), 0);
+
+  // เพิ่มอะไหล่ที่ไม่มีในแคตตาล็อกวันนี้ (ดู backend/src/routes/quotePartPrices.routes.js
+  // POST / — รับ brand/model/part_name/description/price/image_data เท่านั้น ยังไม่
+  // รองรับ category ในการบันทึกจริง ส่งไปด้วยไว้เผื่ออนาคต แต่ backend จะเพิกเฉยฟิลด์นี้)
+  async function submitNewPart(e) {
+    e.preventDefault();
+    if (!newPart.part_name.trim()) {
+      setAddPartError('กรุณากรอกชื่ออะไหล่');
+      return;
+    }
+    setAddingPart(true);
+    setAddPartError('');
+    try {
+      const res = await client.post('/quote-parts', {
+        brand: job.brand,
+        model: job.model,
+        part_name: newPart.part_name.trim(),
+        category: newPart.category.trim() || undefined,
+        price: Number(newPart.price) || 0,
+      });
+      const created = {
+        id: res.data.data.id,
+        brand: job.brand,
+        model: job.model,
+        part_name: newPart.part_name.trim(),
+        description: '',
+        price: Number(newPart.price) || 0,
+        image_data: null,
+        needs_price: 0,
+        category: newPart.category.trim() || null,
+      };
+      setCatalogParts((prev) => [...prev, created]);
+      setSelectedParts((prev) => ({
+        ...prev,
+        [created.id]: { ...created, quantity: 1, unitPrice: Number(created.price) > 0 ? String(created.price) : '' },
+      }));
+      setNewPart({ part_name: '', category: '', price: '' });
+      setShowAddPart(false);
+    } catch (err) {
+      setAddPartError(err.response?.data?.error || 'เพิ่มอะไหล่ไม่สำเร็จ');
+    } finally {
+      setAddingPart(false);
+    }
+  }
+
+  // สร้างใบเสนอราคาจากอะไหล่ที่ติ๊กเลือกไว้ (ใช้ลูกค้า/รถของงานนี้เลย ไม่ต้อง
   // ค้นหาใหม่) แล้วผูกกลับเข้างานทันที — ทำให้เสร็จในหน้าเดียว ไม่ต้องสลับไป
   // /quotations เพื่อสร้างแล้วย้อนกลับมาผูกอีกที
   async function createQuotationFromItems() {
-    const validItems = items.filter((it) => it.product_name.trim() && Number(it.quantity) > 0);
-    if (validItems.length === 0) {
-      setError('กรุณากรอกรายการอะไหล่อย่างน้อย 1 รายการ');
+    if (selectedPartsList.length === 0) {
+      setError('กรุณาเลือกรายการอะไหล่อย่างน้อย 1 รายการ');
       return;
     }
     setBusy(true);
@@ -150,10 +262,14 @@ export default function JobDetailPage() {
         mileage: job.mileage_in || 0,
         queue_no: job.queue_no || null,
         symptom: job.symptom || null,
-        items: validItems,
+        items: selectedPartsList.map((p) => ({
+          product_name: p.part_name,
+          quantity: p.quantity,
+          unit_price: Number(p.unitPrice) || 0,
+        })),
       });
       await client.patch(`/jobs/${id}/quotation`, { quotation_id: res.data.quotation_id });
-      setItems([emptyItem()]);
+      setSelectedParts({});
       await load();
     } catch (err) {
       setError(err.response?.data?.error || 'สร้างใบเสนอราคาไม่สำเร็จ');
@@ -299,17 +415,27 @@ export default function JobDetailPage() {
           <div className="dash-panel-title">ตัดสินใจใบเสนอราคา</div>
           {error && <p className="error-text">{error}</p>}
           {job.quotation_id ? (
-            <div className="modal-actions">
-              <button type="button" className="btn-primary" disabled={busy} onClick={handleApprove}>
-                อนุมัติ
-              </button>
-              <button type="button" disabled={busy} onClick={() => setShowSchedule(true)}>
-                นัดวันมาทำ
-              </button>
-              <button type="button" className="btn-danger" disabled={busy} onClick={() => setShowDecline(true)}>
-                ไม่ทำ
-              </button>
-            </div>
+            <>
+              <div className="modal-actions" style={{ marginBottom: 10 }}>
+                <button type="button" onClick={() => setShowPrintModal(true)}>
+                  เซ็นเอกสาร / พิมพ์ใบเสนอราคา
+                </button>
+              </div>
+              <div className="modal-actions">
+                <button type="button" className="btn-primary" disabled={busy || !job.customer_signature} onClick={handleApprove}>
+                  อนุมัติ
+                </button>
+                <button type="button" disabled={busy} onClick={() => setShowSchedule(true)}>
+                  นัดวันมาทำ
+                </button>
+                <button type="button" className="btn-danger" disabled={busy} onClick={() => setShowDecline(true)}>
+                  ไม่ทำ
+                </button>
+              </div>
+              {!job.customer_signature && (
+                <p style={{ color: '#92400e', fontSize: 12.5, marginTop: 6 }}>กรุณาเซ็นเอกสารก่อนกดอนุมัติ</p>
+              )}
+            </>
           ) : (
             <p style={{ color: '#92400e', fontSize: 13 }}>⚠️ เพิ่มรายการอะไหล่แล้วสร้างใบเสนอราคาก่อน ถึงจะตัดสินใจได้</p>
           )}
@@ -324,43 +450,158 @@ export default function JobDetailPage() {
             {' '}(<Link to="/quotations">ไปหน้าใบเสนอราคา / พิมพ์</Link>)
           </p>
         ) : (
-          <>
-            <table className="quotation-table" style={{ marginBottom: 10 }}>
-              <thead>
-                <tr>
-                  <th>รายการอะไหล่</th>
-                  <th style={{ width: 80 }}>จำนวน</th>
-                  <th style={{ width: 120 }}>ราคา/หน่วย</th>
-                  <th style={{ width: 40 }}></th>
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((it, idx) => (
-                  <tr key={idx}>
-                    <td data-label="รายการอะไหล่">
-                      <input type="text" value={it.product_name} onChange={(e) => updateItem(idx, { product_name: e.target.value })} />
-                    </td>
-                    <td data-label="จำนวน">
-                      <input type="number" min="1" value={it.quantity} onChange={(e) => updateItem(idx, { quantity: e.target.value })} />
-                    </td>
-                    <td data-label="ราคา/หน่วย">
-                      <input type="number" min="0" value={it.unit_price} onChange={(e) => updateItem(idx, { unit_price: e.target.value })} />
-                    </td>
-                    <td data-label="">
-                      <button type="button" onClick={() => removeItemRow(idx)} disabled={items.length === 1}>✕</button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-              <button type="button" onClick={addItemRow}>+ เพิ่มรายการ</button>
-              <strong>รวม {itemsTotal.toLocaleString('th-TH')} บาท</strong>
+          <div className="jdp-part-picker">
+            {error && <p className="error-text">{error}</p>}
+            {catalogError && <p className="error-text">{catalogError}</p>}
+
+            {(!job.brand || !job.model) ? (
+              <p className="empty-message">กรุณาระบุยี่ห้อ/รุ่นรถก่อน (กด "แก้ไข" ด้านบน) ถึงจะเลือกอะไหล่จากแคตตาล็อกได้</p>
+            ) : catalogLoading ? (
+              <div className="loading">กำลังโหลดรายการอะไหล่...</div>
+            ) : (
+              <>
+                {catalogCategories.length > 0 && (
+                  <div className="kiosk-category-bar jdp-category-bar">
+                    <button
+                      type="button"
+                      className={`kiosk-category-chip ${!categoryFilter ? 'active' : ''}`}
+                      onClick={() => setCategoryFilter('')}
+                    >
+                      ทั้งหมด
+                    </button>
+                    {catalogCategories.map((cat) => (
+                      <button
+                        type="button"
+                        key={cat}
+                        className={`kiosk-category-chip ${categoryFilter === cat ? 'active' : ''}`}
+                        onClick={() => setCategoryFilter(cat)}
+                      >
+                        {cat}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {filteredCatalogParts.length === 0 ? (
+                  <p className="empty-message">ยังไม่มีรายการอะไหล่ของ {job.brand} {job.model} ในแคตตาล็อก — เพิ่มใหม่ได้ด้านล่าง</p>
+                ) : (
+                  <div className="kiosk-grid kiosk-grid-part jdp-part-grid">
+                    {filteredCatalogParts.map((part) => {
+                      const selected = selectedParts[part.id];
+                      return (
+                        <article
+                          key={part.id}
+                          className={`kiosk-part jdp-part ${selected ? 'kiosk-part-selected' : ''} ${part.needs_price ? 'jdp-part-disabled' : ''}`}
+                          onClick={() => togglePart(part)}
+                          role="button"
+                          tabIndex={0}
+                        >
+                          {selected && <span className="kiosk-part-check">✓</span>}
+                          <div className="kiosk-part-image">
+                            {part.image_data ? (
+                              <img src={part.image_data} alt={part.part_name} />
+                            ) : (
+                              <span className="kiosk-part-noimage">ไม่มีรูป</span>
+                            )}
+                          </div>
+                          <div className="kiosk-part-body">
+                            <div className="kiosk-part-name">{part.part_name}</div>
+                            {part.description && <div className="kiosk-part-desc">{part.description}</div>}
+                            {part.needs_price ? (
+                              <div className="jdp-part-needs-price">ยังไม่ตั้งราคา</div>
+                            ) : Number(part.price) > 0 ? (
+                              <div className="kiosk-part-price">฿{Number(part.price).toLocaleString('th-TH')}</div>
+                            ) : null}
+                          </div>
+
+                          {selected && (
+                            <div className="jdp-part-selected-controls" onClick={(e) => e.stopPropagation()}>
+                              <div className="kiosk-part-qty">
+                                <button type="button" onClick={() => changePartQty(part.id, -1)} aria-label="ลดจำนวน">−</button>
+                                <span>{selected.quantity}</span>
+                                <button type="button" onClick={() => changePartQty(part.id, 1)} aria-label="เพิ่มจำนวน">+</button>
+                              </div>
+                              <label className="jdp-part-price-input">
+                                <span>฿</span>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  placeholder="ราคา/หน่วย"
+                                  value={selected.unitPrice}
+                                  onChange={(e) => updatePartPrice(part.id, e.target.value)}
+                                />
+                              </label>
+                            </div>
+                          )}
+                        </article>
+                      );
+                    })}
+                  </div>
+                )}
+              </>
+            )}
+
+            <div className="jdp-add-part">
+              {!showAddPart ? (
+                <button type="button" onClick={() => setShowAddPart(true)} disabled={!job.brand || !job.model}>
+                  + เพิ่มอะไหล่ใหม่
+                </button>
+              ) : (
+                <form className="modal-form jdp-add-part-form" onSubmit={submitNewPart}>
+                  <label>ชื่ออะไหล่</label>
+                  <input
+                    type="text"
+                    value={newPart.part_name}
+                    onChange={(e) => setNewPart({ ...newPart, part_name: e.target.value })}
+                  />
+                  <label>หมวดหมู่</label>
+                  <input
+                    type="text"
+                    list="jdp-category-options"
+                    value={newPart.category}
+                    onChange={(e) => setNewPart({ ...newPart, category: e.target.value })}
+                  />
+                  <datalist id="jdp-category-options">
+                    {catalogCategories.map((c) => <option key={c} value={c} />)}
+                  </datalist>
+                  <label>ราคา</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={newPart.price}
+                    onChange={(e) => setNewPart({ ...newPart, price: e.target.value })}
+                  />
+                  {addPartError && <p className="error-text">{addPartError}</p>}
+                  <div className="modal-actions">
+                    <button type="submit" className="btn-primary" disabled={addingPart}>
+                      {addingPart ? 'กำลังเพิ่ม...' : 'เพิ่ม'}
+                    </button>
+                    <button type="button" onClick={() => { setShowAddPart(false); setAddPartError(''); }} disabled={addingPart}>
+                      ยกเลิก
+                    </button>
+                  </div>
+                </form>
+              )}
             </div>
-            <button type="button" className="btn-primary" disabled={busy} onClick={createQuotationFromItems}>
+
+            {selectedPartsList.length > 0 && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '4px 0 12px' }}>
+                <span>เลือกแล้ว {selectedPartsCount} ชิ้น</span>
+                <strong>รวม {selectedPartsTotal.toLocaleString('th-TH')} บาท</strong>
+              </div>
+            )}
+
+            <button
+              type="button"
+              className="btn-primary"
+              disabled={busy || selectedPartsList.length === 0}
+              onClick={createQuotationFromItems}
+            >
               {busy ? 'กำลังสร้าง...' : 'สร้างใบเสนอราคา'}
             </button>
-          </>
+          </div>
         )}
       </div>
 
@@ -402,6 +643,13 @@ export default function JobDetailPage() {
           loading={busy}
           onConfirm={handleDeclineConfirm}
           onCancel={() => setShowDecline(false)}
+        />
+      )}
+
+      {showPrintModal && job.quotation_id && (
+        <QuotationPrintModal
+          quotation={{ id: job.quotation_id }}
+          onClose={() => { setShowPrintModal(false); load({ silent: true }); }}
         />
       )}
     </div>

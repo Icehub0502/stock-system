@@ -1,6 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import axios from 'axios';
-import { WORK_BAYS, ALIGN_BAY } from '../utils/workBays';
 import useRealtimeEvent from '../hooks/useRealtimeEvent';
 
 // axios ตรง ๆ ไม่ผ่าน ../api/client — client.js แนบ Bearer token จาก localStorage
@@ -20,15 +19,12 @@ const POLL_MS = 30000;
  * — คิวเยอะแค่ไหนก็ปล่อยให้ยาวลงไปเป็นหน้าจอเดียว ลูกค้าเลื่อนดูเองได้ถ้าจำเป็น
  */
 export default function BoardPage() {
-  const [bays, setBays] = useState(WORK_BAYS);
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [now, setNow] = useState(new Date());
 
   const load = useCallback(async () => {
     try {
       const res = await boardClient.get('/board');
-      setBays(res.data.bays || WORK_BAYS);
       setRows(res.data.data || []);
     } catch (err) {
       // จอสาธารณะ ไม่มีใครกดปิด error ได้ — เงียบไว้แล้วลองรอบถัดไปพอ
@@ -47,35 +43,15 @@ export default function BoardPage() {
   // if the socket never connects.
   useRealtimeEvent('board:changed', () => load(), { channel: 'board' });
 
-  useEffect(() => {
-    const id = setInterval(() => setNow(new Date()), 1000);
-    return () => clearInterval(id);
-  }, []);
-
-  const bayOccupant = (bay) => rows.find((r) => r.bay === bay);
-
   return (
     <div className="board-page">
       <header className="board-header">
-        <span className="board-title">Champpower SPK</span>
-        <span className="board-clock">{now.toLocaleTimeString('th-TH')}</span>
+        <span className="navbar-brand-text board-brand-text">
+          <span className="brand-champ">Champ</span>
+          <span className="brand-power">power</span>
+          <span className="brand-spk">SPK</span>
+        </span>
       </header>
-
-      <div className="board-bays">
-        {bays.map((bay) => {
-          const occupant = bayOccupant(bay);
-          return (
-            <div className={`board-bay ${occupant ? 'occupied' : ''} ${bay === ALIGN_BAY ? 'board-bay-align' : ''}`} key={bay}>
-              <div className="board-bay-label">{bay}</div>
-              {occupant ? (
-                <div className="board-bay-plate">{occupant.plate || '-'}</div>
-              ) : (
-                <div className="board-bay-empty">ว่าง</div>
-              )}
-            </div>
-          );
-        })}
-      </div>
 
       {loading ? (
         <div className="board-loading">กำลังโหลด...</div>

@@ -76,16 +76,15 @@ export default function JobBoardPage() {
     <div className="office-dashboard container">
       <div className="dashboard-header">
         <h2>รายการงานวันนี้ <span className="dashboard-header-sub">— ระบบคิวรับรถ</span></h2>
-      </div>
-
-      <div className="decline-summary-filters">
-        <div className="form-group">
-          <label>วันที่</label>
-          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+        <div className="job-board-header-actions">
+          <div className="form-group">
+            <label>วันที่</label>
+            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+          </div>
+          <button type="button" className="btn btn-primary" onClick={() => setShowAddModal(true)}>
+            + เพิ่มคิว
+          </button>
         </div>
-        <button type="button" className="btn btn-primary btn-fab-mobile" onClick={() => setShowAddModal(true)}>
-          + เพิ่มคิว
-        </button>
       </div>
 
       {error && <div className="error-message">{error}</div>}
@@ -106,6 +105,23 @@ export default function JobBoardPage() {
                 <div className="job-card-top">
                   <span className="job-card-queue">คิว {j.queue_no || '-'}</span>
                   {j.quotation_no && <span className="job-card-quote-no">{j.quotation_no}</span>}
+                </div>
+
+                <div className="job-card-vehicle">
+                  {j.photo_thumb ? (
+                    <img src={j.photo_thumb} alt="" className="job-card-photo" />
+                  ) : (
+                    <CarIcon className="job-card-car-icon" />
+                  )}
+                  <div className="plate-badge">
+                    <span className="plate-badge-no">{j.license_plate || '-'}</span>
+                  </div>
+                </div>
+
+                <div className="job-card-info">
+                  <div className="job-card-customer">{j.customer_name || '-'}</div>
+                  {j.symptom && <div className="job-card-symptom">{j.symptom}</div>}
+                  <div className="job-card-model">{j.brand} {j.model} {j.color && `· ${j.color}`}</div>
                 </div>
 
                 <div className="job-card-status-block" onClick={(e) => e.stopPropagation()}>
@@ -133,23 +149,6 @@ export default function JobBoardPage() {
                     <option value="">ช่องยก: -</option>
                     {WORK_BAYS.map((b) => <option key={b} value={b}>ช่องยก: {b}</option>)}
                   </select>
-                </div>
-
-                <div className="job-card-vehicle">
-                  {j.photo_thumb ? (
-                    <img src={j.photo_thumb} alt="" className="job-card-photo" />
-                  ) : (
-                    <CarIcon className="job-card-car-icon" />
-                  )}
-                  <div className="plate-badge">
-                    <span className="plate-badge-no">{j.license_plate || '-'}</span>
-                  </div>
-                </div>
-
-                <div className="job-card-info">
-                  <div className="job-card-customer">{j.customer_name || '-'}</div>
-                  {j.symptom && <div className="job-card-symptom">{j.symptom}</div>}
-                  <div className="job-card-model">{j.brand} {j.model} {j.color && `· ${j.color}`}</div>
                 </div>
               </div>
             );

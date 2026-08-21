@@ -85,15 +85,15 @@ router.get('/', async (req, res) => {
 
 // POST / — เพิ่มรายการราคาอะไหล่ใหม่
 router.post('/', async (req, res) => {
-  const { brand, model, part_name, description, price, image_data } = req.body;
+  const { brand, model, part_name, description, price, image_data, category } = req.body;
   if (!brand?.trim() || !model?.trim() || !part_name?.trim()) {
     return res.status(400).json({ error: 'กรุณากรอกยี่ห้อ รุ่นรถ และชื่ออะไหล่ให้ครบถ้วน' });
   }
   try {
     const [result] = await pool.execute(
-      `INSERT INTO quote_part_prices (brand, model, part_name, description, price, image_data)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [brand.trim(), model.trim(), part_name.trim(), description?.trim() || null, Number(price) || 0, image_data || null]
+      `INSERT INTO quote_part_prices (brand, model, part_name, description, price, image_data, category)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [brand.trim(), model.trim(), part_name.trim(), description?.trim() || null, Number(price) || 0, image_data || null, category?.trim() || null]
     );
     res.status(201).json({ success: true, data: { id: result.insertId } });
   } catch (err) {
