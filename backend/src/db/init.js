@@ -629,10 +629,24 @@ async function initDatabase() {
   // เข้ามาทำจริง (ถ้ายืนยันแล้วค่อยตั้ง scheduled_date ผ่าน /schedule ตามปกติ ซึ่ง
   // จะเปลี่ยน status เป็น 'scheduled' ไปเลย) แยกจาก 'no_date' เพื่อให้หน้านัดหมาย
   // (AppointmentsPage.jsx) แสดง 3 กลุ่มชัดเจน: รอของ/โทรแจ้งแล้ว/มีวันนัดแล้ว
-  await conn.query(`
-    ALTER TABLE quotations
-    MODIFY COLUMN status ENUM('pending','approved','scheduled','no_date','declined','parts_ready') NOT NULL DEFAULT 'pending'
-  `).catch(ignoreIfAlreadyApplied);
+  //
+  // เช็คก่อนว่ามี 'parts_ready' ในนิยามคอลัมน์อยู่แล้วหรือยัง แทนที่จะรัน MODIFY
+  // COLUMN แบบ .catch(ignoreIfAlreadyApplied) เหมือนคอลัมน์อื่น ๆ — เพราะ MODIFY
+  // COLUMN บน ENUM ทำให้ MySQL re-validate ข้อมูลทุกแถวในตารางใหม่ทุกครั้งที่รันคำสั่ง
+  // นี้ (ไม่ใช่แค่ครั้งแรก) ถ้ามีแถวไหนมีค่า status ที่ไม่ตรงกับ ENUM พอดี (เช่น
+  // ค่าว่างที่หลุดมาจากบั๊กเก่า/การเขียนข้อมูลผิดพลาดที่ไหนสักที่) จะทำให้ ALTER
+  // ล้มเหลวด้วย error "Data truncated" ทุกครั้งที่บูต เซิร์ฟเวอร์รันไม่ขึ้นเลย (เกิด
+  // เหตุการณ์นี้จริงบนโปรดักชัน 22 ส.ค. 69 — ทั้งที่ตอน deploy ครั้งแรกผ่านฉลุย)
+  const [[statusColumnInfo]] = await conn.query(`
+    SELECT COLUMN_TYPE FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'quotations' AND COLUMN_NAME = 'status'
+  `);
+  if (statusColumnInfo && !statusColumnInfo.COLUMN_TYPE.includes("'parts_ready'")) {
+    await conn.query(`
+      ALTER TABLE quotations
+      MODIFY COLUMN status ENUM('pending','approved','scheduled','no_date','declined','parts_ready') NOT NULL DEFAULT 'pending'
+    `).catch(ignoreIfAlreadyApplied);
+  }
 
   // ในตารางอื่นเพราะเป็น config ระดับระบบ ไม่ผูกกับ entity ไหนโดยเฉพาะ
   await conn.query(`
