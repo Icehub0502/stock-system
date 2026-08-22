@@ -5643,9 +5643,20 @@ body:has(.modal-backdrop) .page-fade-in {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 .job-card-queue { font-weight: 700; font-size: 1.05rem; color: #111827; }
 .job-card-quote-no { font-size: 0.78rem; color: #6b7280; white-space: nowrap; }
+.job-card-deposit-badge {
+  font-size: 0.72rem;
+  white-space: nowrap;
+  background: #fef3c7;
+  color: #92400e;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-weight: 600;
+}
 
 /* ── หลอดสถานะ + ควบคุมสถานะ/ช่องยก — ย้ายมาไว้หน้าการ์ดแทนที่จะอยู่ในหน้า
    รายละเอียด กดเปลี่ยนได้จากตรงนี้เลย (stopPropagation กันไม่ให้กดแล้วเด้งเข้า
@@ -5756,6 +5767,15 @@ body:has(.modal-backdrop) .page-fade-in {
   border: 1px solid #bbf7d0;
   border-radius: 8px;
   font-size: 0.9rem;
+}
+.jdp-deposit-meta {
+  padding: 8px 12px;
+  margin: 0 0 14px;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  color: #92400e;
 }
 
 /* แถบตัวกรองหมวดหมู่ — ปล่อยให้ wrap ลงบรรทัดใหม่แทนสกอลล์แนวนอนอย่างเดียว (ของ

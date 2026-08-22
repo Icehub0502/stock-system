@@ -105,6 +105,9 @@ export default function JobBoardPage() {
                 <div className="job-card-top">
                   <span className="job-card-queue">คิว {j.queue_no || '-'}</span>
                   {j.quotation_no && <span className="job-card-quote-no">{j.quotation_no}</span>}
+                  {j.deposit_amount > 0 && (
+                    <span className="job-card-deposit-badge">💰 มัดจำ ฿{Number(j.deposit_amount).toLocaleString('th-TH')}</span>
+                  )}
                 </div>
 
                 <div className="job-card-vehicle">

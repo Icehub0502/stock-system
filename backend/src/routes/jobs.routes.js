@@ -85,6 +85,7 @@ router.get('/', async (req, res) => {
              c.customer_name, c.phone,
              v.license_plate, v.brand, v.model, v.color,
              q.quotation_no, q.status AS quotation_status, q.total_amount,
+             q.deposit_amount, q.deposit_date,
              (SELECT p.photo_data FROM job_photos p WHERE p.job_id = j.id ORDER BY p.sort_order LIMIT 1) AS photo_thumb
       FROM jobs j
       LEFT JOIN customers c ON c.id = j.customer_id
@@ -139,6 +140,7 @@ router.get('/:id', async (req, res) => {
       SELECT j.*, c.customer_name, c.phone, c.customer_code,
              v.license_plate, v.brand, v.model, v.color,
              q.quotation_no, q.status AS quotation_status, q.total_amount,
+             q.deposit_amount, q.deposit_date,
              q.customer_signature, q.staff_signature
       FROM jobs j
       LEFT JOIN customers c ON c.id = j.customer_id

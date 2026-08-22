@@ -601,6 +601,12 @@ export default function JobDetailPage() {
             {' '}(<Link to="/quotations">ไปหน้าใบเสนอราคา / พิมพ์</Link>)
           </p>
         )}
+        {job.deposit_amount > 0 && (
+          <p className="jdp-deposit-meta">
+            💰 มัดจำแล้ว <strong>฿{Number(job.deposit_amount).toLocaleString('th-TH')}</strong>
+            {job.deposit_date && ` เมื่อวันที่ ${new Date(job.deposit_date).toLocaleDateString('th-TH')}`}
+          </p>
+        )}
 
         <div className="jdp-part-picker">
           {error && <p className="error-text">{error}</p>}
