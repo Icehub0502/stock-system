@@ -360,28 +360,18 @@ async function initDatabase() {
     ADD COLUMN customer_signature LONGTEXT DEFAULT NULL
   `).catch(ignoreIfAlreadyApplied);
 
-  // เพิ่มค่า 'no_date' + 'declined' ให้ status ในทีเดียว (รวม 2 ขั้นตอนเดิมเข้าด้วย
-  // กัน — เดิมมี MODIFY COLUMN แยก 2 รอบ: รอบแรกใส่แค่ 'no_date' รอบสองค่อยเติม
-  // 'declined' แต่เพราะ migration ทุกอันรันซ้ำทุกครั้งที่บูต พอมีข้อมูลจริงที่
-  // status='declined' อยู่แล้ว (จาก migration รอบสองที่เคยรันผ่านไปแล้วก่อนหน้านี้)
-  // รอบแรก (ที่ ENUM ไม่มี 'declined') จะ MODIFY ทับใหม่ทุกครั้งแล้ว truncate ข้อมูล
-  // แถวที่เป็น 'declined' อยู่ทันที ทำให้ boot fail ทุกรอบ (ignoreIfAlreadyApplied
-  // เห็นว่าไม่ใช่ error แบบ "มีอยู่แล้ว" เลย throw ต่อ) — แก้โดยรวมเป็น MODIFY เดียว
-  // ที่มีค่าสุดท้ายครบทั้งคู่ตั้งแต่แรก ปลอดภัยกับข้อมูลทุกสถานะที่มีอยู่จริงตอนนี้
-  // (pending/approved/scheduled/no_date/declined) และยังรันซ้ำได้ทุกบูตเหมือนเดิม
-  await conn.query(`
-    ALTER TABLE quotations
-    MODIFY COLUMN status ENUM('pending','approved','scheduled','no_date','declined') NOT NULL DEFAULT 'pending'
-  `).catch(ignoreIfAlreadyApplied);
-
-  // เพิ่มค่า 'declined' ให้ status — ใช้เมื่อลูกค้าขอใบเสนอราคาแล้วไม่ได้ทำจริง
-  // (สำนักงานกดปุ่ม "ลูกค้าไม่ได้ทำ" บนหน้ารายการใบเสนอราคา) ต่างจาก 'no_date' ที่
-  // แปลว่ายังรอนัดหมายอยู่ — ใบที่ declined ถือว่าจบงานแล้ว (ไม่ทำต่อ) แต่เก็บไว้ดู
-  // ประวัติ ไม่ลบทิ้ง
-  await conn.query(`
-    ALTER TABLE quotations
-    MODIFY COLUMN status ENUM('pending','approved','scheduled','no_date','declined') NOT NULL DEFAULT 'pending'
-  `).catch(ignoreIfAlreadyApplied);
+  // เพิ่มค่า 'no_date' + 'declined' ให้ status — เคยมี MODIFY COLUMN ตรงนี้ 2 ครั้ง
+  // ประกาศ ENUM แค่ ('pending','approved','scheduled','no_date','declined') ตรงๆ
+  // ซึ่งกลายเป็นบั๊กซ้ำสองรอบแล้ว (ครั้งแรก: รันซ้ำทุกบูตแล้ว truncate แถวที่เป็น
+  // 'declined' ที่เพิ่งมีจริง — แก้โดยรวมเป็นก้อนเดียว แต่ยังไม่ได้ป้องกันรอบต่อไป;
+  // ครั้งที่สอง 22 ส.ค. 69: พอเพิ่ม 'parts_ready' ในการ์ด quote_draft/มัดจำ
+  // (promoteDraftToQuotation) แล้วมีแถวจริงเป็น 'parts_ready' MODIFY สองก้อนนี้ที่
+  // ยัง MODIFY กลับไปเป็น ENUM แคบแบบเดิมทุกบูต ก็ไป truncate แถวนั้นซ้ำ ทำให้
+  // production ขึ้น 502 ค้าง restart loop ทั้งวัน) — บทเรียนคือ MODIFY COLUMN บน
+  // ENUM ต้องมีแค่ "ก้อนเดียวที่ประกาศชุดค่าสุดท้ายจริง" เท่านั้นในทั้งไฟล์ ห้ามมี
+  // ก้อนเก่าที่ประกาศ ENUM แคบกว่าหลงเหลือให้รันซ้ำอีกเด็ดขาด จึงลบทั้งสองก้อนทิ้ง
+  // (ปลอดภัย — ฐานข้อมูลใหม่ล้วนก็กระโดดจาก ENUM เดิมตอน CREATE TABLE ไปเป็นชุด
+  // ค่าสุดท้ายที่ก้อน MODIFY แบบมีการ์ดด้านล่าง (ค้นหา 'parts_ready') ได้ในทีเดียว)
 
   // Mirrors receipts.printed_at — lets the list show a persisted "พิมพ์แล้ว"
   // state per quotation instead of forgetting as soon as the modal closes.
