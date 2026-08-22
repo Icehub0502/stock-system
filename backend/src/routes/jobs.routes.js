@@ -4,6 +4,7 @@ const { authenticate } = require('../middleware/auth');
 const {
   isValidJobStatus,
   CLOSED_STATUSES,
+  MAIN_PATH,
 } = require('../utils/jobStatusFlow');
 const { ALIGN_BAY, isValidBay } = require('../utils/workBays');
 const { emitJobEvent, emitQuotationEvent, emitReceiptEvent } = require('../realtime');
@@ -86,7 +87,7 @@ router.get('/', async (req, res) => {
              v.license_plate, v.brand, v.model, v.color,
              q.quotation_no, q.status AS quotation_status, q.total_amount,
              q.deposit_amount, q.deposit_date,
-             (SELECT p.photo_data FROM job_photos p WHERE p.job_id = j.id ORDER BY p.sort_order LIMIT 1) AS photo_thumb
+             (SELECT p.photo_data FROM job_photos p WHERE p.job_id = j.id AND p.photo_type = 'intake' ORDER BY p.sort_order LIMIT 1) AS photo_thumb
       FROM jobs j
       LEFT JOIN customers c ON c.id = j.customer_id
       LEFT JOIN vehicles v ON v.id = j.vehicle_id
@@ -159,7 +160,7 @@ router.get('/:id', async (req, res) => {
     `, [req.params.id]);
 
     const [photos] = await pool.execute(
-      'SELECT id, photo_data, sort_order FROM job_photos WHERE job_id = ? ORDER BY sort_order',
+      'SELECT id, photo_data, sort_order, photo_type FROM job_photos WHERE job_id = ? ORDER BY photo_type, sort_order',
       [req.params.id]
     );
 
@@ -434,6 +435,122 @@ router.delete('/:id', async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'ลบงานไม่สำเร็จ' });
+  }
+});
+
+// รูปอะไหล่ของใหม่ (photo_type='part') เพิ่ม/ดูได้เฉพาะงานที่ผ่านจุดอนุมัติไปแล้ว
+// เท่านั้น (อนุมัติ/กำลังซ่อม/รอตั้งศูนย์/พร้อมส่ง/ส่งแล้ว) — ก่อนหน้านั้นยังไม่รู้ว่า
+// จะได้ทำจริงไหม (อาจเป็นแค่ร่าง/รอลูกค้าตัดสินใจ) ถ่ายรูปอะไหล่ไปก็ไม่มีประโยชน์
+const PART_PHOTO_ALLOWED_STATUSES = MAIN_PATH.slice(MAIN_PATH.indexOf('approved'));
+
+function assertPartPhotosAllowed(job, res) {
+  if (!PART_PHOTO_ALLOWED_STATUSES.includes(job.status)) {
+    res.status(400).json({ error: 'เพิ่มรูปอะไหล่ได้หลังอนุมัติใบเสนอราคาแล้วเท่านั้น' });
+    return false;
+  }
+  return true;
+}
+
+// ── รูปอะไหล่ของใหม่ก่อนใส่ — เพิ่ม/ลบ/จัดลำดับได้ตลอด ต่างจากรูปรถตอนรับเข้าคิว
+// (intake) ที่ตั้งครั้งเดียวตอนสร้างงาน ให้ลูกค้าดูภายหลังว่าเปลี่ยนอะไหล่ของจริง
+// ตรงตามที่เสนอราคาไว้ (ดู PART_PHOTO_ALLOWED_STATUSES ด้านบน) ──
+router.post('/:id/part-photos', async (req, res) => {
+  const { photos } = req.body || {};
+  if (!Array.isArray(photos) || photos.length === 0) {
+    return res.status(400).json({ error: 'กรุณาแนบรูปอย่างน้อย 1 รูป' });
+  }
+  try {
+    const [[job]] = await pool.query('SELECT id, job_date, status FROM jobs WHERE id = ?', [req.params.id]);
+    if (!job) return res.status(404).json({ error: 'ไม่พบงานนี้' });
+    if (!assertPartPhotosAllowed(job, res)) return;
+
+    const [[maxRow]] = await pool.query(
+      "SELECT MAX(sort_order) AS maxOrder FROM job_photos WHERE job_id = ? AND photo_type = 'part'",
+      [job.id]
+    );
+    let nextOrder = (maxRow?.maxOrder ?? -1) + 1;
+
+    const insertedIds = [];
+    for (const dataUrl of photos) {
+      if (typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image/')) continue;
+      const [result] = await pool.execute(
+        "INSERT INTO job_photos (job_id, photo_data, sort_order, photo_type) VALUES (?,?,?,'part')",
+        [job.id, dataUrl, nextOrder]
+      );
+      insertedIds.push(result.insertId);
+      nextOrder += 1;
+    }
+
+    emitJobEvent('job:updated', { jobId: job.id, jobDate: job.job_date, status: job.status, actorId: req.user.id });
+    res.status(201).json({ success: true, ids: insertedIds });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'เพิ่มรูปอะไหล่ไม่สำเร็จ' });
+  }
+});
+
+router.delete('/:id/part-photos/:photoId', async (req, res) => {
+  try {
+    const [[job]] = await pool.query('SELECT id, job_date, status FROM jobs WHERE id = ?', [req.params.id]);
+    if (!job) return res.status(404).json({ error: 'ไม่พบงานนี้' });
+    if (!assertPartPhotosAllowed(job, res)) return;
+
+    const [result] = await pool.execute(
+      "DELETE FROM job_photos WHERE id = ? AND job_id = ? AND photo_type = 'part'",
+      [req.params.photoId, job.id]
+    );
+    if (!result.affectedRows) return res.status(404).json({ error: 'ไม่พบรูปนี้' });
+
+    emitJobEvent('job:updated', { jobId: job.id, jobDate: job.job_date, status: job.status, actorId: req.user.id });
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'ลบรูปอะไหล่ไม่สำเร็จ' });
+  }
+});
+
+// สลับลำดับกับรูปอะไหล่ข้างเคียง (direction: -1 ถอยขึ้น / 1 เลื่อนลง) — เหมือน
+// movePhoto ฝั่ง AddJobModal.jsx แต่ต้องยิง API ทีละคู่ เพราะรูปเหล่านี้ถูกบันทึก
+// ทีละรูปแล้ว (ไม่ใช่ก้อนเดียวตอนสร้างงานที่ยังจัดเรียงในหน่วยความจำได้ก่อนบันทึก)
+router.patch('/:id/part-photos/:photoId/move', async (req, res) => {
+  const direction = Number(req.body?.direction);
+  if (direction !== -1 && direction !== 1) {
+    return res.status(400).json({ error: 'ทิศทางไม่ถูกต้อง' });
+  }
+  let conn;
+  try {
+    conn = await pool.getConnection();
+    await conn.beginTransaction();
+
+    const [[job]] = await conn.query('SELECT id, job_date, status FROM jobs WHERE id = ? FOR UPDATE', [req.params.id]);
+    if (!job) { await conn.rollback(); return res.status(404).json({ error: 'ไม่พบงานนี้' }); }
+    if (!assertPartPhotosAllowed(job, res)) { await conn.rollback(); return; }
+
+    const [rows] = await conn.query(
+      "SELECT id, sort_order FROM job_photos WHERE job_id = ? AND photo_type = 'part' ORDER BY sort_order",
+      [job.id]
+    );
+    const idx = rows.findIndex((r) => r.id === Number(req.params.photoId));
+    const targetIdx = idx + direction;
+    if (idx === -1 || targetIdx < 0 || targetIdx >= rows.length) {
+      await conn.rollback();
+      return res.status(400).json({ error: 'ไม่สามารถย้ายรูปนี้ได้' });
+    }
+
+    const current = rows[idx];
+    const target = rows[targetIdx];
+    await conn.execute('UPDATE job_photos SET sort_order = ? WHERE id = ?', [target.sort_order, current.id]);
+    await conn.execute('UPDATE job_photos SET sort_order = ? WHERE id = ?', [current.sort_order, target.id]);
+
+    await conn.commit();
+    emitJobEvent('job:updated', { jobId: job.id, jobDate: job.job_date, status: job.status, actorId: req.user.id });
+    res.json({ success: true });
+  } catch (err) {
+    if (conn) await conn.rollback();
+    console.error(err);
+    res.status(500).json({ error: 'จัดลำดับรูปไม่สำเร็จ' });
+  } finally {
+    if (conn) conn.release();
   }
 });
 

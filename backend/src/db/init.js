@@ -753,6 +753,19 @@ async function initDatabase() {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
 
+  // photo_type: แยก "รูปรถตอนรับเข้าคิว" (intake — เดิม เก็บครั้งเดียวตอนสร้างงาน)
+  // ออกจาก "รูปอะไหล่ของใหม่ก่อนใส่" (part — เพิ่ม/ลบ/จัดลำดับได้ตลอดหลังอนุมัติ
+  // ให้ลูกค้าดูว่าเปลี่ยนอะไหล่ของจริงตามที่เสนอราคาไว้ ดู POST/DELETE
+  // /jobs/:id/part-photos) ใช้ ADD COLUMN ธรรมดา (ไม่ใช่ MODIFY COLUMN บน ENUM ที่
+  // มีอยู่แล้ว) เพื่อไม่ให้ซ้ำรอยบั๊กเดิม (ดูคอมเมนต์ยาวที่ ALTER TABLE quotations
+  // ด้านบน — MODIFY COLUMN บน ENUM ที่มีข้อมูลจริงอยู่แล้ว re-validate ทุกแถวใหม่
+  // ทุกครั้งที่รัน อันตรายกว่า ADD COLUMN ที่พอมีคอลัมน์แล้วจะ error แบบ "มีอยู่แล้ว"
+  // เฉย ๆ ที่ ignoreIfAlreadyApplied ดักได้ปลอดภัย)
+  await conn.query(`
+    ALTER TABLE job_photos
+    ADD COLUMN photo_type ENUM('intake','part') NOT NULL DEFAULT 'intake'
+  `).catch(ignoreIfAlreadyApplied);
+
   // quote_draft: ร่างรายการ/ราคา/ลายเซ็นก่อนตัดสินใจ (อนุมัติ/นัดวันมาทำ/ไม่ทำ) —
   // ยังไม่ใช่ใบเสนอราคาจริง เก็บเป็น JSON บนงานเอง กันไม่ให้ทุกครั้งที่พนักงานติ๊ก
   // เลือกอะไหล่ในหน้ารายละเอียดงานสร้างแถวจริงใน quotations ทันที (เจ้าของร้านขอ —

@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import client from '../api/client';
-import { jobStatusDef } from '../utils/jobStatus';
+import { jobStatusDef, MAIN_PATH } from '../utils/jobStatus';
 import { formatDbDateTime, todayStr } from '../utils/format';
+import { resizeImageToDataUrl } from '../utils/resizeImage';
 import DeclineReasonModal from '../components/DeclineReasonModal';
 import QuotationPrintModal from '../components/QuotationPrintModal';
 import useRealtimeEvent from '../hooks/useRealtimeEvent';
@@ -68,6 +69,8 @@ export default function JobDetailPage() {
   const [showDeposit, setShowDeposit] = useState(false);
   const [depositAmount, setDepositAmount] = useState('');
   const [depositDate, setDepositDate] = useState(todayStr());
+  const [partPhotosBusy, setPartPhotosBusy] = useState(false);
+  const [partPhotosError, setPartPhotosError] = useState('');
 
   const load = async ({ silent } = {}) => {
     try {
@@ -469,6 +472,53 @@ export default function JobDetailPage() {
     }
   }
 
+  // รูปอะไหล่ของใหม่ก่อนใส่ — เพิ่ม/ลบ/จัดลำดับได้ตลอด (หลังอนุมัติแล้วเท่านั้น ดู
+  // canAddPartPhotos ด้านล่าง) mirror utils/resizeImage.js เดียวกับ AddJobModal.jsx
+  // ที่ใช้ตอนถ่ายรูปรถรับเข้าคิว แต่ยิงเข้า API ทันทีทีละครั้ง ไม่รอกดบันทึกฟอร์ม
+  // เพราะรูปพวกนี้เพิ่มเข้าไปทีหลังหลังงานสร้างไปนานแล้ว ไม่มีฟอร์มให้รอบันทึกรวม
+  async function handleAddPartPhotos(e) {
+    const files = Array.from(e.target.files || []);
+    e.target.value = '';
+    if (files.length === 0) return;
+    setPartPhotosBusy(true);
+    setPartPhotosError('');
+    try {
+      const resized = await Promise.all(files.map((f) => resizeImageToDataUrl(f)));
+      await client.post(`/jobs/${id}/part-photos`, { photos: resized });
+      await load({ silent: true });
+    } catch (err) {
+      setPartPhotosError(err.response?.data?.error || 'เพิ่มรูปอะไหล่ไม่สำเร็จ');
+    } finally {
+      setPartPhotosBusy(false);
+    }
+  }
+
+  async function handleDeletePartPhoto(photoId) {
+    setPartPhotosBusy(true);
+    setPartPhotosError('');
+    try {
+      await client.delete(`/jobs/${id}/part-photos/${photoId}`);
+      await load({ silent: true });
+    } catch (err) {
+      setPartPhotosError(err.response?.data?.error || 'ลบรูปอะไหล่ไม่สำเร็จ');
+    } finally {
+      setPartPhotosBusy(false);
+    }
+  }
+
+  async function handleMovePartPhoto(photoId, direction) {
+    setPartPhotosBusy(true);
+    setPartPhotosError('');
+    try {
+      await client.patch(`/jobs/${id}/part-photos/${photoId}/move`, { direction });
+      await load({ silent: true });
+    } catch (err) {
+      setPartPhotosError(err.response?.data?.error || 'จัดลำดับรูปไม่สำเร็จ');
+    } finally {
+      setPartPhotosBusy(false);
+    }
+  }
+
   async function handleDeclineConfirm({ reason, note }) {
     setBusy(true);
     setError('');
@@ -510,6 +560,12 @@ export default function JobDetailPage() {
   const hasQuoteData = Boolean(job.quotation_id) || (job.quote_draft?.items?.length > 0);
   // ลายเซ็นลูกค้า: อ่านจากใบเสนอราคาจริงถ้ามีแล้ว ไม่งั้นอ่านจากร่าง
   const customerSigned = job.quotation_id ? Boolean(job.customer_signature) : Boolean(job.quote_draft?.customer_signature);
+
+  const intakePhotos = (job.photos || []).filter((p) => p.photo_type !== 'part');
+  const partPhotos = (job.photos || []).filter((p) => p.photo_type === 'part');
+  // ถ่ายรูปอะไหล่ได้ตั้งแต่อนุมัติเป็นต้นไป (อนุมัติ/กำลังซ่อม/รอตั้งศูนย์/พร้อมส่ง/
+  // ส่งแล้ว) — mirror PART_PHOTO_ALLOWED_STATUSES ฝั่ง backend/src/routes/jobs.routes.js
+  const canAddPartPhotos = MAIN_PATH.indexOf(job.status) >= MAIN_PATH.indexOf('approved');
 
   return (
     <div className="office-dashboard container">
@@ -574,9 +630,9 @@ export default function JobDetailPage() {
           </form>
         ) : (
           <>
-            {job.photos && job.photos.length > 0 && (
+            {intakePhotos.length > 0 && (
               <div className="job-detail-photos">
-                {job.photos.map((p) => (
+                {intakePhotos.map((p) => (
                   <img key={p.id} src={p.photo_data} alt="" />
                 ))}
               </div>
@@ -784,6 +840,42 @@ export default function JobDetailPage() {
           </button>
         </div>
       </div>
+
+      {canAddPartPhotos && (
+        <div className="dash-panel">
+          <div className="dash-panel-title">รูปอะไหล่ของใหม่</div>
+          <p style={{ fontSize: 13, color: '#6b7280', marginTop: -6 }}>
+            ถ่ายรูปอะไหล่ของใหม่ตามรายการที่เปลี่ยน ให้ลูกค้าดูได้ว่าเปลี่ยนของจริงตามที่เสนอราคาไว้
+          </p>
+          {partPhotosError && <p className="error-text">{partPhotosError}</p>}
+          {partPhotos.length > 0 && (
+            <div className="job-photo-picker">
+              {partPhotos.map((p, idx) => (
+                <div className="job-photo-thumb" key={p.id}>
+                  <span className="job-photo-num">{idx + 1}</span>
+                  <img src={p.photo_data} alt="" />
+                  <div className="job-photo-thumb-actions">
+                    <button type="button" disabled={partPhotosBusy || idx === 0} onClick={() => handleMovePartPhoto(p.id, -1)}>◀</button>
+                    <button type="button" disabled={partPhotosBusy} onClick={() => handleDeletePartPhoto(p.id)}>✕</button>
+                    <button type="button" disabled={partPhotosBusy || idx === partPhotos.length - 1} onClick={() => handleMovePartPhoto(p.id, 1)}>▶</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="job-photo-add-row">
+            <label className="btn job-photo-add-btn">
+              📷 ถ่ายรูป
+              <input type="file" accept="image/*" capture="environment" multiple hidden disabled={partPhotosBusy} onChange={handleAddPartPhotos} />
+            </label>
+            <label className="btn job-photo-add-btn">
+              🖼️ เลือกรูป
+              <input type="file" accept="image/*" multiple hidden disabled={partPhotosBusy} onChange={handleAddPartPhotos} />
+            </label>
+            {partPhotosBusy && <span style={{ fontSize: 13, color: '#6b7280' }}>กำลังบันทึก...</span>}
+          </div>
+        </div>
+      )}
 
       <div className="dash-panel">
         <div className="dash-panel-title">ประวัติสถานะ</div>
