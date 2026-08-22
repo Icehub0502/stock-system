@@ -55,6 +55,9 @@ export default function QueueNavBar() {
             <Link to="/jobs" className={location.pathname === '/jobs' ? 'active' : ''}>
               รายการงานวันนี้
             </Link>
+            <Link to="/appointments" className={location.pathname === '/appointments' ? 'active' : ''}>
+              มัดจำ
+            </Link>
             <a href="/board" target="_blank" rel="noreferrer">จอบอร์ด ↗</a>
           </div>
         )}

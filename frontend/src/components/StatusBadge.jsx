@@ -23,6 +23,9 @@ export default function StatusBadge({ status, scheduledDate, closedAt }) {
     }
     return <span className="status-badge status-badge-warning">📅 รอทำ {dateText}</span>;
   }
+  if (status === 'parts_ready') {
+    return <span className="status-badge status-badge-warning">📞 โทรแจ้งแล้ว รอยืนยันวันมา</span>;
+  }
   if (status === 'no_date') {
     return <span className="status-badge status-badge-danger">⚠️ ไม่ระบุวันนัดหมาย</span>;
   }

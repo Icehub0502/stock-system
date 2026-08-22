@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
+import { useNavigate, Link } from "react-router-dom";
 import client from "../api/client";
 import QuotationFormModal from "../components/QuotationFormModal";
 import QuotationPrintModal from "../components/QuotationPrintModal";
 import ScheduleDateDialog from "../components/ScheduleDateDialog";
 import StatusBadge from "../components/StatusBadge";
+import AddJobModal from "../components/AddJobModal";
 import { todayStr } from "../utils/format";
 import useRealtimeEvent from "../hooks/useRealtimeEvent";
 
@@ -12,6 +14,7 @@ import useRealtimeEvent from "../hooks/useRealtimeEvent";
 // (status='no_date') — ใช้ endpoint/คอมโพเนนต์เดียวกับ QuotationListPage
 // (โมดัลแก้ไข/ตั้งวันนัด) ไม่สร้างซ้ำ ต่างกันแค่ตัวกรอง+การจัดกลุ่ม
 export default function AppointmentsPage() {
+  const navigate = useNavigate();
   const [quotations, setQuotations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -22,6 +25,7 @@ export default function AppointmentsPage() {
   const [selectedQuotation, setSelectedQuotation] = useState(null);
   const [editingQuotation, setEditingQuotation] = useState(null);
   const [schedulingQuotation, setSchedulingQuotation] = useState(null);
+  const [creatingJobFor, setCreatingJobFor] = useState(null);
 
   const fetchQuotations = async ({ silent } = {}) => {
     try {
@@ -63,7 +67,7 @@ export default function AppointmentsPage() {
 
   // ปิดบิล/อนุมัติไปแล้วไม่ใช่ "รอนัดหมาย" อีกต่อไป — กรองเฉพาะที่ยังค้างจริง ๆ
   const openAppointments = useMemo(
-    () => quotations.filter((q) => !q.closed_at && (q.status === 'scheduled' || q.status === 'no_date')),
+    () => quotations.filter((q) => !q.closed_at && ['scheduled', 'parts_ready', 'no_date'].includes(q.status)),
     [quotations]
   );
 
@@ -72,6 +76,13 @@ export default function AppointmentsPage() {
       openAppointments
         .filter((q) => q.status === 'scheduled')
         .sort((a, b) => new Date(a.scheduled_date) - new Date(b.scheduled_date)),
+    [openAppointments]
+  );
+
+  // อะไหล่มาถึงร้านแล้ว โทรแจ้งลูกค้าแล้ว แต่ยังไม่ได้วันที่แน่นอน — แยกจาก noDate
+  // (ยังไม่ได้โทรแจ้งเลย) ให้เห็นชัดว่ากลุ่มไหนต้องติดตามลูกค้าต่อ
+  const calledPartsReady = useMemo(
+    () => openAppointments.filter((q) => q.status === 'parts_ready'),
     [openAppointments]
   );
 
@@ -106,6 +117,41 @@ export default function AppointmentsPage() {
     } finally {
       setActioningId(null);
     }
+  };
+
+  const handleMarkCalled = async (q) => {
+    setActioningId(q.id);
+    try {
+      await client.patch(`/quotations/${q.id}/mark-called`);
+      fetchQuotations();
+    } catch (err) {
+      alert(err.response?.data?.error || "บันทึกไม่สำเร็จ");
+    } finally {
+      setActioningId(null);
+    }
+  };
+
+  // สร้างงาน (คิว) จากใบเสนอราคาเดิม — เติมข้อมูลลูกค้า/รถ/อาการให้ AddJobModal
+  // อัตโนมัติ ไม่ต้องพิมพ์ใหม่ (ดู prefill ใน AddJobModal.jsx) ผูก quotation_id
+  // ตั้งแต่ตอนสร้างงานเลย
+  const buildJobPrefill = (q) => ({
+    quotation_id: q.id,
+    quotation_no: q.quotation_no,
+    customer_id: q.customer_id,
+    vehicle_id: q.vehicle_id,
+    customer_name: q.customer_name,
+    phone: q.phone,
+    brand: q.brand || q.car_brand,
+    model: q.model || q.car_model,
+    color: q.color || q.car_color,
+    license_plate: q.license_plate,
+    mileage: q.mileage,
+    symptom: q.symptom,
+  });
+
+  const handleJobCreated = (jobId) => {
+    setCreatingJobFor(null);
+    navigate(`/jobs/${jobId}`);
   };
 
   const handleNoDate = async () => {
@@ -143,6 +189,7 @@ export default function AppointmentsPage() {
             <th>ชื่อลูกค้า</th>
             <th>รุ่น/สี/ทะเบียน</th>
             <th>จำนวนรวม</th>
+            <th>มัดจำ</th>
             <th>สถานะ</th>
             <th>จัดการ</th>
           </tr>
@@ -156,6 +203,11 @@ export default function AppointmentsPage() {
                 {q.brand || q.car_brand} {q.model || q.car_model} / {q.color || q.car_color} / {q.license_plate}
               </td>
               <td className="amount" data-label="จำนวนรวม">฿{parseFloat(q.total_amount).toFixed(2)}</td>
+              <td data-label="มัดจำ">
+                {q.deposit_amount
+                  ? `฿${parseFloat(q.deposit_amount).toFixed(2)}${q.deposit_date ? ` (${new Date(q.deposit_date).toLocaleDateString('th-TH')})` : ''}`
+                  : '-'}
+              </td>
               <td data-label="สถานะ">
                 <StatusBadge status={q.status} scheduledDate={q.scheduled_date} closedAt={q.closed_at} />
               </td>
@@ -186,6 +238,28 @@ export default function AppointmentsPage() {
                 >
                   วันที่
                 </button>
+                {q.status === 'no_date' && (
+                  <button
+                    className="btn-icon-small"
+                    onClick={() => handleMarkCalled(q)}
+                    disabled={actioningId === q.id}
+                  >
+                    📞 โทรแจ้งแล้ว
+                  </button>
+                )}
+                {q.linked_job_id ? (
+                  <Link className="btn-icon-small" to={`/jobs/${q.linked_job_id}`}>
+                    ไปหน้างาน
+                  </Link>
+                ) : (
+                  <button
+                    className="btn-icon-small btn-primary"
+                    onClick={() => setCreatingJobFor(q)}
+                    disabled={actioningId === q.id}
+                  >
+                    สร้างคิว
+                  </button>
+                )}
               </td>
             </tr>
           ))}
@@ -211,6 +285,13 @@ export default function AppointmentsPage() {
             <div className="empty-message">ไม่มีลูกค้าที่นัดหมายไว้</div>
           ) : (
             renderTable(scheduled)
+          )}
+
+          <h2 className="appointments-section-title">📞 โทรแจ้งแล้ว รอยืนยันวันมา ({calledPartsReady.length})</h2>
+          {calledPartsReady.length === 0 ? (
+            <div className="empty-message">ไม่มีรายการที่โทรแจ้งลูกค้าแล้ว</div>
+          ) : (
+            renderTable(calledPartsReady)
           )}
 
           <h2 className="appointments-section-title">⚠️ ยังไม่ระบุวันนัดหมาย ({noDate.length})</h2>
@@ -249,6 +330,14 @@ export default function AppointmentsPage() {
           onConfirm={handleScheduleConfirm}
           onNoDate={handleNoDate}
           onCancel={() => setSchedulingQuotation(null)}
+        />
+      )}
+
+      {creatingJobFor && (
+        <AddJobModal
+          prefill={buildJobPrefill(creatingJobFor)}
+          onClose={() => setCreatingJobFor(null)}
+          onCreated={handleJobCreated}
         />
       )}
     </div>

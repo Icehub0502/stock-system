@@ -177,6 +177,7 @@ router.post('/', async (req, res) => {
     vehicle_id = null, customer_id = null, queue_no = null,
     job_date = null, mileage_in = null, symptom = '', note = '',
     technician = null, bay = null, est_minutes = null, photos = [],
+    quotation_id = null,
   } = req.body || {};
 
   if (!vehicle_id) return res.status(400).json({ error: 'กรุณาเลือกรถ' });
@@ -196,16 +197,33 @@ router.post('/', async (req, res) => {
       }
     }
 
+    // สร้างงานจากใบเสนอราคาเดิม (เช่นลูกค้ามัดจำไว้แล้ว วันนัดถึงแล้วมาทำจริง) —
+    // ผูก quotation_id ตั้งแต่ตอนสร้างเลย แทนที่จะต้องเรียก PATCH /:id/quotation
+    // แยกอีกที (ดู "สร้างคิว" ใน AppointmentsPage.jsx) เช็คว่ายังไม่เคยมีงานอื่น
+    // ผูกใบนี้ไปแล้วก่อนเสมอ กันกดซ้ำสองแท็บแล้วได้งานซ้อนกันสองใบจากใบเดียว
+    if (quotation_id) {
+      const [[quote]] = await conn.query('SELECT id FROM quotations WHERE id = ? FOR UPDATE', [quotation_id]);
+      if (!quote) {
+        await conn.rollback();
+        return res.status(400).json({ error: 'ไม่พบใบเสนอราคาที่จะผูก' });
+      }
+      const [[existingLink]] = await conn.query('SELECT id FROM jobs WHERE quotation_id = ? LIMIT 1', [quotation_id]);
+      if (existingLink) {
+        await conn.rollback();
+        return res.status(400).json({ error: 'ใบเสนอราคานี้ถูกสร้างเป็นงานไปแล้ว' });
+      }
+    }
+
     const jobNo = await generateJobNo(conn, jobDate);
     const queueNo = String(queue_no || '').trim() || await nextQueueNo(conn, jobDate);
 
     const [result] = await conn.execute(
       `INSERT INTO jobs
          (job_no, queue_no, job_date, customer_id, vehicle_id, mileage_in, symptom,
-          note, status, bay, technician, est_minutes, created_by)
-       VALUES (?,?,?,?,?,?,?,?, 'received', ?,?,?,?)`,
+          note, status, bay, technician, est_minutes, created_by, quotation_id)
+       VALUES (?,?,?,?,?,?,?,?, 'received', ?,?,?,?,?)`,
       [jobNo, queueNo, jobDate, customer_id, vehicle_id, mileage_in || null,
-       symptom || null, note || null, bay, technician, est_minutes || null, req.user.id]
+       symptom || null, note || null, bay, technician, est_minutes || null, req.user.id, quotation_id || null]
     );
 
     await conn.execute(

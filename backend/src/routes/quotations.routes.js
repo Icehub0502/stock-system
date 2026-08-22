@@ -323,7 +323,8 @@ router.get('/', async (req, res) => {
       `SELECT q.*, c.customer_name, c.customer_code, c.phone,
               v.brand, v.model, v.color, v.license_plate,
               rn.id AS repair_notice_id, rn.checklist AS repair_notice_checklist,
-              rn.checked_by AS repair_notice_checked_by, rn.repaired_by AS repair_notice_repaired_by
+              rn.checked_by AS repair_notice_checked_by, rn.repaired_by AS repair_notice_repaired_by,
+              (SELECT j.id FROM jobs j WHERE j.quotation_id = q.id LIMIT 1) AS linked_job_id
        FROM quotations q
        LEFT JOIN customers c ON q.customer_id = c.id
        LEFT JOIN vehicles v ON q.vehicle_id = v.id
@@ -786,6 +787,28 @@ router.patch('/:id/schedule', async (req, res) => {
   } catch (err) {
     console.error('Error scheduling quotation:', err);
     res.status(500).json({ error: 'บันทึกวันนัดหมายไม่สำเร็จ' });
+  }
+});
+
+// อะไหล่มาถึงร้านแล้ว ออฟฟิศโทรแจ้งลูกค้าแล้ว แต่ยังไม่ได้วันที่แน่นอนที่ลูกค้าจะ
+// เข้ามาทำ (กดจากกลุ่ม "ยังไม่ระบุวันนัดหมาย" ในหน้านัดหมาย) — ต่างจาก /schedule
+// ที่ต้องมีวันที่แน่นอนแล้วเท่านั้น ถ้าลูกค้ายืนยันวันมาระหว่างคุยโทรศัพท์ ให้ข้าม
+// ไปกด /schedule ตรงๆ แทนได้เลย ไม่จำเป็นต้องผ่านสถานะนี้ก่อนเสมอไป
+router.patch('/:id/mark-called', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const [result] = await pool.execute(
+      "UPDATE quotations SET status = 'parts_ready' WHERE id = ?",
+      [id]
+    );
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: 'ไม่พบใบเสนอราคา' });
+    }
+    emitQuotationEvent('quotation:updated', { quotationId: Number(id), status: 'parts_ready', actorId: req.user.id });
+    res.json({ success: true, message: 'บันทึกสถานะโทรแจ้งลูกค้าแล้วสำเร็จ' });
+  } catch (err) {
+    console.error('Error marking quotation as parts-ready:', err);
+    res.status(500).json({ error: 'บันทึกไม่สำเร็จ' });
   }
 });
 

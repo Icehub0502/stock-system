@@ -16,21 +16,27 @@ import { resizeImageToDataUrl } from '../utils/resizeImage';
  * ทะเบียน/สี/เลขไมล์/อาการ) ยี่ห้อ-รุ่นที่พิมพ์ใหม่ (ไม่มีในแคตตาล็อก) จะถูกเพิ่ม
  * เข้า vehicle_models ให้อัตโนมัติตอนบันทึก เพื่อให้ครั้งหน้าเด้งเป็นตัวเลือกได้เลย
  */
-export default function AddJobModal({ onClose, onCreated }) {
+// prefill: ใช้ตอนกด "สร้างคิว" จากใบเสนอราคาเดิมในหน้านัดหมาย (ลูกค้ามัดจำ/นัดวันไว้
+// แล้ว วันนัดถึงแล้วมาทำจริง) — เติมข้อมูลลูกค้า/รถ/อาการจากใบเดิมให้ทันที ไม่ต้อง
+// พิมพ์ใหม่ ยังแก้ไขได้ทุกช่องเหมือนโหมดปกติ ทะเบียนที่เติมมาตรงกับ vehicles ที่โหลด
+// มาอยู่แล้ว (เป็นรถเดิม) ดังนั้น matchedVehicle ด้านล่างจะ resolve เจอเองตามปกติ
+// โดยไม่ต้องเขียน branch แยก — quotation_id ต้องส่งต่อไปกับ POST /jobs ด้วยเพื่อผูก
+// งานใหม่เข้ากับใบเสนอราคาเดิมตั้งแต่ตอนสร้าง (กันสร้างใบเสนอราคาซ้ำซ้อน)
+export default function AddJobModal({ onClose, onCreated, prefill = null }) {
   const [vehicles, setVehicles] = useState([]);
   const [brands, setBrands] = useState([]);
   const [models, setModels] = useState([]);
   const [loadingVehicles, setLoadingVehicles] = useState(true);
 
   const [queueNo, setQueueNo] = useState('');
-  const [plate, setPlate] = useState('');
-  const [customerName, setCustomerName] = useState('');
-  const [customerPhone, setCustomerPhone] = useState('');
-  const [brand, setBrand] = useState('');
-  const [model, setModel] = useState('');
-  const [color, setColor] = useState('');
-  const [mileage, setMileage] = useState('');
-  const [symptom, setSymptom] = useState('');
+  const [plate, setPlate] = useState(prefill?.license_plate || '');
+  const [customerName, setCustomerName] = useState(prefill?.customer_name || '');
+  const [customerPhone, setCustomerPhone] = useState(prefill?.phone || '');
+  const [brand, setBrand] = useState(prefill?.brand || '');
+  const [model, setModel] = useState(prefill?.model || '');
+  const [color, setColor] = useState(prefill?.color || '');
+  const [mileage, setMileage] = useState(prefill?.mileage ? String(prefill.mileage) : '');
+  const [symptom, setSymptom] = useState(prefill?.symptom || '');
   const [photos, setPhotos] = useState([]);
   const [photosBusy, setPhotosBusy] = useState(false);
 
@@ -107,8 +113,12 @@ export default function AddJobModal({ onClose, onCreated }) {
 
     setSubmitting(true);
     try {
-      let vehicleId = matchedVehicle?.id;
-      let customerId = matchedVehicle?.customer_id;
+      // ยังไม่มี matchedVehicle (เช่น /vehicles ยังโหลดไม่เสร็จตอนกดบันทึกเร็วมาก)
+      // แต่ทะเบียนยังตรงกับที่ prefill มา — ใช้ id จาก prefill ไปก่อนได้เลย เพราะเป็น
+      // รถ/ลูกค้าเดิมของใบเสนอราคานั้นอยู่แล้วแน่นอน
+      const prefillStillMatches = prefill && plateUpper === (prefill.license_plate || '').trim().toUpperCase();
+      let vehicleId = matchedVehicle?.id || (prefillStillMatches ? prefill.vehicle_id : undefined);
+      let customerId = matchedVehicle?.customer_id || (prefillStillMatches ? prefill.customer_id : undefined);
 
       if (!vehicleId) {
         const custRes = await client.post('/customers', { customer_name: customerName.trim(), phone: customerPhone.trim() });
@@ -127,7 +137,7 @@ export default function AddJobModal({ onClose, onCreated }) {
           color: color.trim(), license_plate: plateUpper, mileage: Number(mileage) || 0,
         });
         vehicleId = vehRes.data.data.id;
-      } else if (customerName.trim() !== matchedVehicle.customer_name) {
+      } else if (customerName.trim() !== (matchedVehicle?.customer_name ?? prefill?.customer_name)) {
         // แก้ชื่อลูกค้าตรงนี้ก่อนบันทึก (พิมพ์ทับค่าที่เติมมาให้อัตโนมัติ) — อัปเดต
         // ลูกค้าเดิมไปด้วยเลย กันข้อมูลไม่ตรงกันระหว่างตารางลูกค้ากับที่กรอกจริง
         await client.put(`/customers/${customerId}`, { customer_name: customerName.trim(), phone: customerPhone.trim() }).catch(() => {});
@@ -140,6 +150,7 @@ export default function AddJobModal({ onClose, onCreated }) {
         mileage_in: Number(mileage) || null,
         symptom: symptom.trim(),
         photos,
+        quotation_id: prefill?.quotation_id || null,
       });
 
       onCreated(res.data.id);
@@ -153,10 +164,15 @@ export default function AddJobModal({ onClose, onCreated }) {
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal-card" style={{ maxWidth: 480 }} onClick={(e) => e.stopPropagation()}>
-        <h3 className="modal-title">+ เพิ่มคิวรับรถ</h3>
+        <h3 className="modal-title">{prefill ? '+ สร้างคิวจากใบเสนอราคาเดิม' : '+ เพิ่มคิวรับรถ'}</h3>
         <p style={{ marginBottom: 12, color: '#6b7280', fontSize: 14 }}>
           คิว {queueNo || '-'} — {formatDateTh(todayStr())}
         </p>
+        {prefill && (
+          <p style={{ margin: '-4px 0 12px', color: '#15803d', fontSize: 13 }}>
+            ✅ เติมข้อมูลจากใบเสนอราคา {prefill.quotation_no} ให้แล้ว แก้ไขได้ตามจริง
+          </p>
+        )}
 
         <form onSubmit={handleSubmit} className="modal-form">
           <label>ทะเบียนรถ</label>

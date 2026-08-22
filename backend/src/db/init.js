@@ -624,6 +624,16 @@ async function initDatabase() {
     ADD COLUMN decline_note TEXT DEFAULT NULL
   `).catch(ignoreIfAlreadyApplied);
 
+  // 'parts_ready': ลูกค้ามัดจำรออะไหล่เข้า (status='no_date' เดิม ยังไม่รู้วันแน่นอน)
+  // แล้วอะไหล่มาถึงร้าน — ออฟฟิศโทรแจ้งลูกค้าแล้ว แต่ลูกค้ายังไม่ได้ยืนยันวันที่จะ
+  // เข้ามาทำจริง (ถ้ายืนยันแล้วค่อยตั้ง scheduled_date ผ่าน /schedule ตามปกติ ซึ่ง
+  // จะเปลี่ยน status เป็น 'scheduled' ไปเลย) แยกจาก 'no_date' เพื่อให้หน้านัดหมาย
+  // (AppointmentsPage.jsx) แสดง 3 กลุ่มชัดเจน: รอของ/โทรแจ้งแล้ว/มีวันนัดแล้ว
+  await conn.query(`
+    ALTER TABLE quotations
+    MODIFY COLUMN status ENUM('pending','approved','scheduled','no_date','declined','parts_ready') NOT NULL DEFAULT 'pending'
+  `).catch(ignoreIfAlreadyApplied);
+
   // ในตารางอื่นเพราะเป็น config ระดับระบบ ไม่ผูกกับ entity ไหนโดยเฉพาะ
   await conn.query(`
     CREATE TABLE IF NOT EXISTS app_settings (
