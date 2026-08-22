@@ -65,6 +65,9 @@ export default function JobDetailPage() {
   const [showDecline, setShowDecline] = useState(false);
   const [showPrintModal, setShowPrintModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showDeposit, setShowDeposit] = useState(false);
+  const [depositAmount, setDepositAmount] = useState('');
+  const [depositDate, setDepositDate] = useState(todayStr());
 
   const load = async ({ silent } = {}) => {
     try {
@@ -437,6 +440,35 @@ export default function JobDetailPage() {
     }
   }
 
+  // มัดจำ: ลูกค้าวางเงินแล้วขับรถกลับไปก่อน (รออะไหล่) ยังไม่รู้วันที่จะกลับมาทำ —
+  // ใบเสนอราคาไปอยู่สถานะ "ยังไม่ระบุวันนัดหมาย" ในหน้ามัดจำ ส่วนงานจบเป็น "เอารถลง"
+  // หลุดจากคิววันนี้ พอถึงวันนัดค่อยกด "สร้างคิว" จากหน้ามัดจำเพื่อรับรถกลับเข้ามาใหม่
+  async function handleDeposit() {
+    if (!(Number(depositAmount) > 0)) {
+      setError('กรุณากรอกยอดมัดจำให้ถูกต้อง');
+      return;
+    }
+    setBusy(true);
+    setError('');
+    try {
+      if (job.quotation_id) {
+        await client.patch(`/quotations/${job.quotation_id}/no-date`);
+        await client.patch(`/jobs/${id}/status`, { status: 'carout' });
+      } else {
+        await client.post(`/jobs/${id}/quotation/deposit`, {
+          deposit_amount: Number(depositAmount),
+          deposit_date: depositDate,
+        });
+      }
+      setShowDeposit(false);
+      navigate('/appointments');
+    } catch (err) {
+      setError(err.response?.data?.error || 'บันทึกมัดจำไม่สำเร็จ');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function handleDeclineConfirm({ reason, note }) {
     setBusy(true);
     setError('');
@@ -578,6 +610,9 @@ export default function JobDetailPage() {
                 </button>
                 <button type="button" disabled={busy} onClick={() => setShowSchedule(true)}>
                   นัดวันมาทำ
+                </button>
+                <button type="button" disabled={busy} onClick={() => { setError(''); setShowDeposit(true); }}>
+                  มัดจำ
                 </button>
                 <button type="button" className="btn-danger" disabled={busy} onClick={() => setShowDecline(true)}>
                   ไม่ทำ
@@ -782,9 +817,38 @@ export default function JobDetailPage() {
         </div>
       )}
 
-      {showDecline && job.quotation_id && (
+      {showDeposit && (
+        <div className="modal-backdrop" onClick={() => setShowDeposit(false)}>
+          <div className="modal-card" style={{ maxWidth: 380 }} onClick={(e) => e.stopPropagation()}>
+            <h3 className="modal-title">รับมัดจำ</h3>
+            <p style={{ color: '#6b7280', fontSize: 13, marginTop: -4 }}>
+              ลูกค้าวางมัดจำแล้วขับรถกลับไปก่อน (รออะไหล่) — รถจะออกจากคิววันนี้ ไปรออยู่หน้ามัดจำ
+              พอนัดวันได้แล้วค่อยกด "สร้างคิว" จากหน้านั้น
+            </p>
+            <div className="modal-form">
+              <label>ยอดมัดจำ (บาท)</label>
+              <input
+                type="number" min="0" step="0.01" autoFocus
+                value={depositAmount}
+                onChange={(e) => setDepositAmount(e.target.value)}
+              />
+              <label>วันที่มัดจำ</label>
+              <input type="date" value={depositDate} onChange={(e) => setDepositDate(e.target.value)} />
+              {error && <p className="error-text">{error}</p>}
+              <div className="modal-actions">
+                <button type="button" className="btn-primary" disabled={busy} onClick={handleDeposit}>
+                  {busy ? 'กำลังบันทึก...' : 'บันทึกมัดจำ'}
+                </button>
+                <button type="button" onClick={() => setShowDeposit(false)} disabled={busy}>ยกเลิก</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showDecline && (
         <DeclineReasonModal
-          quotation={{ quotation_no: job.quotation_no, customer_name: job.customer_name }}
+          quotation={{ quotation_no: job.quotation_no || job.job_no, customer_name: job.customer_name }}
           loading={busy}
           onConfirm={handleDeclineConfirm}
           onCancel={() => setShowDecline(false)}

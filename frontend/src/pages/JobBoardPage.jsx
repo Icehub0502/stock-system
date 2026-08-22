@@ -24,11 +24,17 @@ export default function JobBoardPage() {
   const [busyId, setBusyId] = useState(null);
   const [showAddModal, setShowAddModal] = useState(false);
 
+  // รถที่ออกจากอู่ไปแล้วโดยยังไม่ได้ทำ ไม่ควรค้างอยู่ในคิววันนี้ให้พนักงานสับสน —
+  // ทั้ง 3 ทางแยกนี้ยังตามต่อได้จากหน้าอื่นอยู่แล้ว: มัดจำ/นัดวันมาทำ → หน้ามัดจำ
+  // (/appointments), ลูกค้าไม่ได้ทำ → หน้าสรุปลูกค้าที่ไม่ได้ทำ ส่วน 'delivered'
+  // (ส่งรถแล้ว) ยังโชว์อยู่ตามเดิม เพราะเป็นงานที่ทำเสร็จจริงในวันนั้น
+  const HIDDEN_STATUSES = ['carout', 'scheduled', 'rejected'];
+
   const load = async ({ silent } = {}) => {
     try {
       if (!silent) setLoading(true);
       const res = await client.get('/jobs', { params: { date } });
-      setJobs(res.data.data || []);
+      setJobs((res.data.data || []).filter((j) => !HIDDEN_STATUSES.includes(j.status)));
     } catch (err) {
       setError(err.response?.data?.error || 'โหลดรายการงานไม่สำเร็จ');
     } finally {

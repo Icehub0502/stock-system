@@ -209,10 +209,17 @@ router.post('/', async (req, res) => {
         await conn.rollback();
         return res.status(400).json({ error: 'ไม่พบใบเสนอราคาที่จะผูก' });
       }
-      const [[existingLink]] = await conn.query('SELECT id FROM jobs WHERE quotation_id = ? LIMIT 1', [quotation_id]);
+      // บล็อกเฉพาะกรณีที่ยังมีงาน "เปิดอยู่" ผูกใบนี้ค้างอยู่ — ใบที่ลูกค้ามัดจำแล้ว
+      // ขับรถกลับไปก่อน (งานเดิมจบเป็น carout) ต้องรับรถกลับเข้าคิวใหม่ได้เมื่อถึงวันนัด
+      const [[existingLink]] = await conn.query(
+        `SELECT id FROM jobs
+         WHERE quotation_id = ? AND status NOT IN (${CLOSED_STATUSES.map(() => '?').join(',')})
+         LIMIT 1`,
+        [quotation_id, ...CLOSED_STATUSES]
+      );
       if (existingLink) {
         await conn.rollback();
-        return res.status(400).json({ error: 'ใบเสนอราคานี้ถูกสร้างเป็นงานไปแล้ว' });
+        return res.status(400).json({ error: 'ใบเสนอราคานี้มีงานที่กำลังดำเนินการอยู่แล้ว' });
       }
     }
 
@@ -517,7 +524,7 @@ router.patch('/:id/quote-draft/staff-signature', async (req, res) => {
 // ด้านล่าง: approve/schedule/decline) — mirror ตรรกะ POST /quotations เดิมเท่าที่
 // จำเป็น (ไม่รองรับ newCustomer/newVehicle เพราะงานมีลูกค้า/รถอยู่แล้วเสมอตอนถึง
 // จุดนี้) ต้องเรียกภายใน transaction ของผู้เรียกเท่านั้น (รับ conn เข้ามา ไม่เปิดเอง)
-async function promoteDraftToQuotation(conn, job, { status, scheduledDate, declineReason, declineNote } = {}) {
+async function promoteDraftToQuotation(conn, job, { status, scheduledDate, declineReason, declineNote, depositAmount, depositDate } = {}) {
   const draft = parseDraft(job.quote_draft);
   const validItems = buildValidItems(draft.items || []);
   if (validItems.length === 0) {
@@ -538,7 +545,9 @@ async function promoteDraftToQuotation(conn, job, { status, scheduledDate, decli
     [
       quotation_no, todayStr(), job.customer_id, job.vehicle_id, job.mileage_in || 0,
       draft.remark || null, validItems.map((i) => i.product_name).join(', '), total_amount,
-      job.queue_no || null, job.symptom || null, draft.deposit_amount ?? null, draft.deposit_date || null,
+      job.queue_no || null, job.symptom || null,
+      depositAmount !== undefined ? depositAmount : (draft.deposit_amount ?? null),
+      depositDate !== undefined ? depositDate : (draft.deposit_date || null),
       draft.customer_signature || null, draft.staff_signature || null, draft.staff_name || null,
       status, scheduledDate || null, declineReason || null, declineNote || null,
     ]
@@ -679,6 +688,55 @@ router.post('/:id/quotation/schedule', async (req, res) => {
     if (conn) await conn.rollback();
     console.error(err);
     res.status(500).json({ error: 'บันทึกวันนัดหมายไม่สำเร็จ' });
+  } finally {
+    if (conn) conn.release();
+  }
+});
+
+// ── มัดจำ: โปรโมท quote_draft เป็นใบเสนอราคาจริง สถานะ no_date + บันทึกยอดมัดจำ ──
+// ลูกค้าวางมัดจำแล้วขับรถกลับบ้านไปก่อน (รออะไหล่เข้า) ยังไม่รู้วันที่จะกลับมาทำจริง —
+// จึงเป็น 'no_date' ไม่ใช่ 'scheduled' (ถ้ารู้วันแน่นอนแล้วให้กด "นัดวันมาทำ" แทน)
+// ฝั่งงานตั้งเป็น 'carout' (เอารถลง) รถออกจากอู่ไปแล้ว หลุดจากคิววันนี้/จอบอร์ด —
+// พอถึงวันนัดค่อยกด "สร้างคิว" จากหน้ามัดจำเพื่อรับรถกลับเข้าคิวใหม่
+router.post('/:id/quotation/deposit', async (req, res) => {
+  const { deposit_amount, deposit_date } = req.body || {};
+  const amount = Number(deposit_amount);
+  if (!(amount > 0)) return res.status(400).json({ error: 'กรุณากรอกยอดมัดจำให้ถูกต้อง' });
+
+  let conn;
+  try {
+    conn = await pool.getConnection();
+    await conn.beginTransaction();
+
+    const [[job]] = await conn.query('SELECT * FROM jobs WHERE id = ? FOR UPDATE', [req.params.id]);
+    if (!job) { await conn.rollback(); return res.status(404).json({ error: 'ไม่พบงานนี้' }); }
+    if (!assertPromotable(job, res)) { await conn.rollback(); return; }
+
+    let promoted;
+    try {
+      promoted = await promoteDraftToQuotation(conn, job, {
+        status: 'no_date',
+        depositAmount: amount,
+        depositDate: deposit_date || todayStr(),
+      });
+    } catch (err) {
+      await conn.rollback();
+      return res.status(err.statusCode || 500).json({ error: err.message });
+    }
+
+    await conn.execute('UPDATE jobs SET quotation_id = ?, status = ?, bay = NULL, closed_at = NOW(), quote_draft = NULL WHERE id = ?', [promoted.quotation_id, 'carout', job.id]);
+    await conn.execute('INSERT INTO job_status_history (job_id, status, changed_by) VALUES (?,?,?)', [job.id, 'carout', req.user.id]);
+
+    await conn.commit();
+
+    emitQuotationEvent('quotation:updated', { quotationId: promoted.quotation_id, status: 'no_date', actorId: req.user.id });
+    emitJobEvent('job:status-changed', { jobId: job.id, jobDate: job.job_date, status: 'carout', actorId: req.user.id });
+
+    res.json({ success: true, quotation_id: promoted.quotation_id });
+  } catch (err) {
+    if (conn) await conn.rollback();
+    console.error(err);
+    res.status(500).json({ error: 'บันทึกมัดจำไม่สำเร็จ' });
   } finally {
     if (conn) conn.release();
   }

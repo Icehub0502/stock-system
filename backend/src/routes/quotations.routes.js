@@ -324,7 +324,12 @@ router.get('/', async (req, res) => {
               v.brand, v.model, v.color, v.license_plate,
               rn.id AS repair_notice_id, rn.checklist AS repair_notice_checklist,
               rn.checked_by AS repair_notice_checked_by, rn.repaired_by AS repair_notice_repaired_by,
-              (SELECT j.id FROM jobs j WHERE j.quotation_id = q.id LIMIT 1) AS linked_job_id
+              -- เฉพาะงานที่ "ยังเปิดอยู่" เท่านั้น — ใบที่ลูกค้ามัดจำแล้วขับรถกลับไป
+              -- (งานเดิมจบเป็น carout) ต้องกด "สร้างคิว" ใหม่ได้อีกตอนกลับมาทำจริง
+              -- ไม่ใช่โดนล็อกให้ไปหน้างานเก่าที่ปิดไปแล้ว
+              (SELECT j.id FROM jobs j
+                WHERE j.quotation_id = q.id AND j.status NOT IN ('delivered','carout')
+                ORDER BY j.id DESC LIMIT 1) AS linked_job_id
        FROM quotations q
        LEFT JOIN customers c ON q.customer_id = c.id
        LEFT JOIN vehicles v ON q.vehicle_id = v.id
