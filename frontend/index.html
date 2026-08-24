@@ -24,6 +24,30 @@
       href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700;800&family=Chakra+Petch:wght@600;700&display=swap"
       rel="stylesheet"
     />
+    <!-- ถ้า URL นี้ไม่ใช่เส้นทางของแอปนี้เลย (เช่น /champ-power-landing.html หรือ /landing
+         — หน้าโฆษณาที่ backend/public เสิร์ฟตรง ๆ แยกจาก SPA) แต่ index.html นี้ดันโหลด
+         ขึ้นมาแทน แปลว่า service worker เก่า (ก่อนมี navigateFallbackDenylist กัน path
+         พวกนี้ไว้ — ดู vite.config.js) ยังคุมเบราว์เซอร์อยู่ แล้วแย่ง fallback ไปเสิร์ฟ
+         index.html นี้แทนของจริง (จอขาว) — deploy ใหม่แก้ที่ vite.config.js อย่างเดียวช่วย
+         ไม่ได้ เพราะ SW เวอร์ชันเก่าที่ยังไม่ activate เวอร์ชันใหม่จะยังคุมอยู่ต่อไปอีก
+         พักหนึ่ง ต้องมีสคริปต์กู้ตัวเองฝั่งนี้ (หน้าที่โดนยึดจริง) ล้าง SW เก่าทิ้งแล้วโหลด
+         ใหม่หนึ่งครั้งให้ได้หน้าจริงจาก network ตรง ๆ ทันที ไม่ต้องรอ SW อัปเดตเอง (กัน
+         loop ด้วย flag ครั้งเดียวต่อ tab) ต้องอยู่ก่อน main.jsx เพื่อดักได้ก่อนแอปเริ่ม mount -->
+    <script>
+      (function () {
+        var p = window.location.pathname;
+        var isForeignPage = p === '/champ-power-landing.html' || p.indexOf('/landing') === 0;
+        if (!isForeignPage) return;
+        if (!('serviceWorker' in navigator) || !navigator.serviceWorker.controller) return;
+        if (sessionStorage.getItem('__swRescueDone')) return;
+        sessionStorage.setItem('__swRescueDone', '1');
+        navigator.serviceWorker.getRegistrations().then(function (regs) {
+          return Promise.all(regs.map(function (r) { return r.unregister(); }));
+        }).then(function () {
+          window.location.replace(window.location.href);
+        }).catch(function () {});
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
