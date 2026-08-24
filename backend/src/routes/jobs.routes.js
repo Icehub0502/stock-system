@@ -204,8 +204,9 @@ router.post('/', async (req, res) => {
     vehicle_id = null, customer_id = null, queue_no = null,
     job_date = null, mileage_in = null, symptom = '', note = '',
     technician = null, bay = null, est_minutes = null, photos = [],
-    quotation_id = null,
+    quotation_id: explicitQuotationId = null,
   } = req.body || {};
+  let quotation_id = explicitQuotationId;
 
   if (!vehicle_id) return res.status(400).json({ error: 'กรุณาเลือกรถ' });
   const jobDate = DATE_ONLY_RE.test(job_date || '') ? job_date : todayStr();
@@ -224,10 +225,31 @@ router.post('/', async (req, res) => {
       }
     }
 
-    // สร้างงานจากใบเสนอราคาเดิม (เช่นลูกค้ามัดจำไว้แล้ว วันนัดถึงแล้วมาทำจริง) —
-    // ผูก quotation_id ตั้งแต่ตอนสร้างเลย แทนที่จะต้องเรียก PATCH /:id/quotation
-    // แยกอีกที (ดู "สร้างคิว" ใน AppointmentsPage.jsx) เช็คว่ายังไม่เคยมีงานอื่น
-    // ผูกใบนี้ไปแล้วก่อนเสมอ กันกดซ้ำสองแท็บแล้วได้งานซ้อนกันสองใบจากใบเดียว
+    // ลูกค้าอาจทักไลน์เข้ามาก่อน (บอทไลน์สร้างใบเสนอราคาที่ยังไม่มีรายการให้อัตโนมัติ
+    // — ดู lineWebhook.routes.js) แล้วค่อยขับรถมาที่ร้านจริง — ถ้าไม่เช็คตรงนี้ งานที่
+    // รับเข้าคิวจะไม่รู้จักใบเสนอราคานั้นเลย พอกดอนุมัติทีหลัง (promoteDraftToQuotation
+    // ด้านล่าง) จะสร้างใบใหม่ซ้อนขึ้นมาอีกใบ ทั้งที่ลูกค้าถือเลขที่ใบเดิมไปแล้ว (เคยเกิด
+    // จริง — ใบเสนอราคาที่บอทไลน์สร้างไว้ค้างเป็น pending ว่างเปล่าไม่มีใครอ้างอิงถึง)
+    // ผูกอัตโนมัติเฉพาะตอนไม่มีการระบุ quotation_id มาตรง ๆ เท่านั้น (ไม่ทับการเลือก
+    // ที่ตั้งใจมาจาก "สร้างคิว" ใน AppointmentsPage.jsx)
+    if (!quotation_id && customer_id && vehicle_id) {
+      // จำกัดแค่ใบที่สร้างวันเดียวกับที่รับรถเข้าคิว (quotation_date = jobDate) กันไป
+      // รื้อใบเสนอราคาเก่าที่ค้าง pending มานานเป็นเดือนของลูกค้าประจำที่ไม่เกี่ยวกับ
+      // การมาครั้งนี้เลยขึ้นมาผูกผิด ๆ
+      const [[pendingQuote]] = await conn.query(
+        `SELECT id FROM quotations
+         WHERE customer_id = ? AND vehicle_id = ? AND status = 'pending' AND quotation_date = ?
+           AND id NOT IN (SELECT quotation_id FROM jobs WHERE quotation_id IS NOT NULL)
+         ORDER BY created_at DESC LIMIT 1`,
+        [customer_id, vehicle_id, jobDate]
+      );
+      if (pendingQuote) quotation_id = pendingQuote.id;
+    }
+
+    // สร้างงานจากใบเสนอราคาเดิม (เช่นลูกค้ามัดจำไว้แล้ว วันนัดถึงแล้วมาทำจริง หรือ
+    // ผูกอัตโนมัติจากขั้นตอนด้านบน) — ผูก quotation_id ตั้งแต่ตอนสร้างเลย แทนที่จะต้อง
+    // เรียก PATCH /:id/quotation แยกอีกที เช็คว่ายังไม่เคยมีงานอื่นผูกใบนี้ไปแล้วก่อน
+    // เสมอ กันกดซ้ำสองแท็บแล้วได้งานซ้อนกันสองใบจากใบเดียว
     if (quotation_id) {
       const [[quote]] = await conn.query('SELECT id FROM quotations WHERE id = ? FOR UPDATE', [quotation_id]);
       if (!quote) {
