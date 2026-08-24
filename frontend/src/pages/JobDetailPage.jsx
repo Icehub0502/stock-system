@@ -6,6 +6,7 @@ import { formatDbDateTime, todayStr } from '../utils/format';
 import { resizeImageToDataUrl } from '../utils/resizeImage';
 import DeclineReasonModal from '../components/DeclineReasonModal';
 import QuotationPrintModal from '../components/QuotationPrintModal';
+import RepairWorksheetPrintModal from '../components/RepairWorksheetPrintModal';
 import useRealtimeEvent from '../hooks/useRealtimeEvent';
 
 /**
@@ -74,6 +75,7 @@ export default function JobDetailPage() {
   const [qrData, setQrData] = useState(null);
   const [qrLoading, setQrLoading] = useState(false);
   const [qrError, setQrError] = useState('');
+  const [showWorksheetModal, setShowWorksheetModal] = useState(false);
 
   const load = async ({ silent } = {}) => {
     try {
@@ -704,7 +706,14 @@ export default function JobDetailPage() {
       )}
 
       <div className="dash-panel">
-        <div className="dash-panel-title">ใบเสนอราคา</div>
+        <div className="dash-panel-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          ใบเสนอราคา
+          {hasQuoteData && (
+            <button type="button" onClick={() => setShowWorksheetModal(true)}>
+              🔧 พิมพ์ใบแจ้งซ่อม
+            </button>
+          )}
+        </div>
         {job.quotation_id && (
           <p className="jdp-quotation-meta">
             เลขที่ <strong>{job.quotation_no}</strong> — สถานะ {job.quotation_status}
@@ -1005,6 +1014,22 @@ export default function JobDetailPage() {
           staffSignatureUrl={`/jobs/${id}/quote-draft/staff-signature`}
           markPrintedUrl={null}
           onClose={() => { setShowPrintModal(false); load({ silent: true }); }}
+        />
+      )}
+
+      {showWorksheetModal && (
+        <RepairWorksheetPrintModal
+          data={{
+            job_no: job.job_no,
+            queue_no: job.queue_no,
+            date: todayStr(),
+            symptom: job.symptom,
+            customer_name: job.customer_name,
+            phone: job.phone,
+            vehicle: { brand: job.brand, model: job.model, color: job.color, license_plate: job.license_plate, mileage: job.mileage_in },
+            items: selectedPartsList.map((p) => ({ product_name: p.part_name, quantity: p.quantity })),
+          }}
+          onClose={() => setShowWorksheetModal(false)}
         />
       )}
 
