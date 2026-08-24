@@ -5559,43 +5559,61 @@ body:has(.modal-backdrop) .page-fade-in {
 .board-rows {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 14px;
 }
+/* การ์ด 2 แถว: บนสุดข้อมูลคิว/รถ/ช่องยก/สถานะเป็นตัวหนังสือ ล่างเป็นแถบความคืบหน้า
+   (StatusTrack) ขนาดใหญ่ ให้อ่านจากระยะไกลในห้องรับรองได้ง่าย ไม่ต้องเพ่งอ่านตัวอักษร */
 .board-row {
-  display: grid;
-  grid-template-columns: 70px 140px 1fr 90px 150px;
-  align-items: center;
+  display: flex;
+  flex-direction: column;
   gap: 14px;
   background: #16161d;
   border: 1px solid #26262f;
-  border-radius: 10px;
-  padding: 14px 18px;
+  border-radius: 14px;
+  padding: 20px 26px;
 }
+.board-row-top {
+  display: grid;
+  grid-template-columns: 84px 1fr 110px 190px;
+  align-items: center;
+  gap: 18px;
+}
+.board-row-info { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .board-row-queue-n {
-  font-size: 1.6rem;
+  font-size: 2.1rem;
   font-weight: 800;
   color: #f5c400;
 }
-.board-row-queue-dash { color: #55555f; font-size: 1.4rem; }
+.board-row-queue-dash { color: #55555f; font-size: 1.6rem; }
 .board-row-plate {
-  font-size: 1.2rem;
+  font-size: 1.55rem;
   font-weight: 700;
   color: #fff;
 }
 .board-row-model {
-  font-size: 1rem;
+  font-size: 1.2rem;
   color: #c5c5cd;
 }
 .board-row-bay {
-  font-size: 1rem;
+  font-size: 1.15rem;
   font-weight: 600;
   color: #9a9aa5;
   text-align: center;
 }
+.board-row-badge { font-size: 1.1rem; padding: 8px 16px; justify-self: end; white-space: nowrap; }
+
+.board-row-track { padding: 0 4px; }
+.board-row-track .status-track-dot { width: 18px; height: 18px; }
+.board-row-track .status-track-dot.current { box-shadow: 0 0 0 6px rgba(37, 99, 235, 0.28); }
+.board-row-track .status-track-line { height: 5px; }
 
 @media (max-width: 900px) {
-  .board-row { grid-template-columns: 50px 100px 1fr 70px; }
+  .board-row-top { grid-template-columns: 60px 1fr 130px; }
   .board-row-bay { display: none; }
+}
+@media (max-width: 560px) {
+  .board-row-top { grid-template-columns: 50px 1fr; row-gap: 8px; }
+  .board-row-badge { grid-column: 1 / -1; justify-self: start; }
 }
 
 /* ── ระบบคิวรับรถ: หน้ารับรถ / รายละเอียดงาน ── */

@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import axios from 'axios';
 import useRealtimeEvent from '../hooks/useRealtimeEvent';
+import StatusTrack from '../components/StatusTrack';
 
 // axios ตรง ๆ ไม่ผ่าน ../api/client — client.js แนบ Bearer token จาก localStorage
 // ให้ทุก request และ redirect ไป /login ทันทีที่เจอ 401 ซึ่งพังกับหน้านี้ที่ตั้งใจ
@@ -61,15 +62,25 @@ export default function BoardPage() {
         <div className="board-rows">
           {rows.map((r) => (
             <div className="board-row" key={r.id}>
-              <div className="board-row-queue">
-                {r.queue_no ? <span className="board-row-queue-n">{r.queue_no}</span> : <span className="board-row-queue-dash">—</span>}
+              <div className="board-row-top">
+                <div className="board-row-queue">
+                  {r.queue_no ? <span className="board-row-queue-n">{r.queue_no}</span> : <span className="board-row-queue-dash">—</span>}
+                </div>
+                <div className="board-row-info">
+                  <div className="board-row-plate">{r.plate || '-'}</div>
+                  <div className="board-row-model">
+                    {r.brand} {r.model} {r.color && `· ${r.color}`}
+                  </div>
+                </div>
+                <div className="board-row-bay">{r.bay || '-'}</div>
+                <div className={`status-badge ${statusBadgeCls(r.status)} board-row-badge`}>{r.status_label}</div>
               </div>
-              <div className="board-row-plate">{r.plate || '-'}</div>
-              <div className="board-row-model">
-                {r.brand} {r.model} {r.color && `· ${r.color}`}
+              {/* แถบความคืบหน้า — ให้ลูกค้าที่นั่งรอในห้องรับรองเห็น "ใกล้เสร็จยัง" ได้
+                  จากระยะไกลโดยไม่ต้องอ่านข้อความ ใช้คอมโพเนนต์เดียวกับที่พนักงานเห็น
+                  ในหน้ารายการงาน (StatusTrack.jsx) แค่ปรับขนาดใหญ่ขึ้นสำหรับจอ TV */}
+              <div className="board-row-track">
+                <StatusTrack status={r.status} />
               </div>
-              <div className="board-row-bay">{r.bay || '-'}</div>
-              <div className={`status-badge ${statusBadgeCls(r.status)}`}>{r.status_label}</div>
             </div>
           ))}
         </div>
