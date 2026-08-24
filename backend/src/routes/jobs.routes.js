@@ -460,27 +460,39 @@ router.patch('/:id/quotation', async (req, res) => {
 // อยู่ (ยังไม่มีใบเสร็จ) ปล่อยให้ลบได้ตามปกติ ใบเสนอราคานั้นจะกลายเป็นรายการลอย
 // จัดการต่อได้ที่หน้าใบเสนอราคาโดยตรง ไม่ต้องพึ่งงานนี้อีกต่อไป
 router.delete('/:id', async (req, res) => {
+  let conn;
   try {
-    const [[job]] = await pool.query(
+    conn = await pool.getConnection();
+    await conn.beginTransaction();
+
+    // ล็อกแถว jobs ก่อน (FOR UPDATE) กันแข่งกับ /quotation/approve ที่กำลังผูก
+    // ใบเสร็จให้งานนี้พอดี — ถ้าไม่ล็อก อาจเช็คผ่านตอนยังไม่มีใบเสร็จ แล้วมาลบ
+    // ทับหลังใบเสร็จเพิ่งถูกสร้างจริง (เช็คแล้วค่อยลบไม่ atomic)
+    const [[job]] = await conn.query(
       `SELECT j.id, j.job_date, j.quotation_id, q.status AS quotation_status, q.converted_receipt_id
        FROM jobs j
        LEFT JOIN quotations q ON q.id = j.quotation_id
-       WHERE j.id = ?`,
+       WHERE j.id = ? FOR UPDATE`,
       [req.params.id]
     );
-    if (!job) return res.status(404).json({ error: 'ไม่พบงานนี้' });
+    if (!job) { await conn.rollback(); return res.status(404).json({ error: 'ไม่พบงานนี้' }); }
     if (job.quotation_status === 'approved' && job.converted_receipt_id) {
+      await conn.rollback();
       return res.status(409).json({ error: 'งานนี้มีใบเสนอราคาที่อนุมัติและมีใบเสร็จผูกอยู่แล้ว กรุณาจัดการที่ใบเสร็จก่อน' });
     }
 
-    const [result] = await pool.execute('DELETE FROM jobs WHERE id = ?', [req.params.id]);
-    if (!result.affectedRows) return res.status(404).json({ error: 'ไม่พบงานนี้' });
+    const [result] = await conn.execute('DELETE FROM jobs WHERE id = ?', [req.params.id]);
+    if (!result.affectedRows) { await conn.rollback(); return res.status(404).json({ error: 'ไม่พบงานนี้' }); }
 
+    await conn.commit();
     emitJobEvent('job:deleted', { jobId: Number(req.params.id), jobDate: job.job_date, actorId: req.user.id });
     res.json({ success: true, message: 'ลบงานสำเร็จ' });
   } catch (err) {
+    if (conn) await conn.rollback();
     console.error(err);
     res.status(500).json({ error: 'ลบงานไม่สำเร็จ' });
+  } finally {
+    if (conn) conn.release();
   }
 });
 
@@ -505,12 +517,19 @@ router.post('/:id/part-photos', async (req, res) => {
   if (!Array.isArray(photos) || photos.length === 0) {
     return res.status(400).json({ error: 'กรุณาแนบรูปอย่างน้อย 1 รูป' });
   }
+  let conn;
   try {
-    const [[job]] = await pool.query('SELECT id, job_date, status FROM jobs WHERE id = ?', [req.params.id]);
-    if (!job) return res.status(404).json({ error: 'ไม่พบงานนี้' });
-    if (!assertPartPhotosAllowed(job, res)) return;
+    conn = await pool.getConnection();
+    await conn.beginTransaction();
 
-    const [[maxRow]] = await pool.query(
+    // ล็อกแถวงานไว้ระหว่างคำนวณ sort_order ถัดไป+อินเสิร์ต กันสองคำขออัปโหลด
+    // พร้อมกันคำนวณ MAX(sort_order) ตัวเดียวกันแล้วได้เลขซ้ำกัน และห่อทุกอินเสิร์ต
+    // ในทรานแซกชันเดียวกันกันเหลือรูปค้างครึ่งๆ กลางๆ ถ้าพังกลางทาง
+    const [[job]] = await conn.query('SELECT id, job_date, status FROM jobs WHERE id = ? FOR UPDATE', [req.params.id]);
+    if (!job) { await conn.rollback(); return res.status(404).json({ error: 'ไม่พบงานนี้' }); }
+    if (!assertPartPhotosAllowed(job, res)) { await conn.rollback(); return; }
+
+    const [[maxRow]] = await conn.query(
       "SELECT MAX(sort_order) AS maxOrder FROM job_photos WHERE job_id = ? AND photo_type = 'part'",
       [job.id]
     );
@@ -519,7 +538,7 @@ router.post('/:id/part-photos', async (req, res) => {
     const insertedIds = [];
     for (const dataUrl of photos) {
       if (typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image/')) continue;
-      const [result] = await pool.execute(
+      const [result] = await conn.execute(
         "INSERT INTO job_photos (job_id, photo_data, sort_order, photo_type) VALUES (?,?,?,'part')",
         [job.id, dataUrl, nextOrder]
       );
@@ -527,31 +546,43 @@ router.post('/:id/part-photos', async (req, res) => {
       nextOrder += 1;
     }
 
+    await conn.commit();
     emitJobEvent('job:updated', { jobId: job.id, jobDate: job.job_date, status: job.status, actorId: req.user.id });
     res.status(201).json({ success: true, ids: insertedIds });
   } catch (err) {
+    if (conn) await conn.rollback();
     console.error(err);
     res.status(500).json({ error: 'เพิ่มรูปอะไหล่ไม่สำเร็จ' });
+  } finally {
+    if (conn) conn.release();
   }
 });
 
 router.delete('/:id/part-photos/:photoId', async (req, res) => {
+  let conn;
   try {
-    const [[job]] = await pool.query('SELECT id, job_date, status FROM jobs WHERE id = ?', [req.params.id]);
-    if (!job) return res.status(404).json({ error: 'ไม่พบงานนี้' });
-    if (!assertPartPhotosAllowed(job, res)) return;
+    conn = await pool.getConnection();
+    await conn.beginTransaction();
 
-    const [result] = await pool.execute(
+    const [[job]] = await conn.query('SELECT id, job_date, status FROM jobs WHERE id = ? FOR UPDATE', [req.params.id]);
+    if (!job) { await conn.rollback(); return res.status(404).json({ error: 'ไม่พบงานนี้' }); }
+    if (!assertPartPhotosAllowed(job, res)) { await conn.rollback(); return; }
+
+    const [result] = await conn.execute(
       "DELETE FROM job_photos WHERE id = ? AND job_id = ? AND photo_type = 'part'",
       [req.params.photoId, job.id]
     );
-    if (!result.affectedRows) return res.status(404).json({ error: 'ไม่พบรูปนี้' });
+    if (!result.affectedRows) { await conn.rollback(); return res.status(404).json({ error: 'ไม่พบรูปนี้' }); }
 
+    await conn.commit();
     emitJobEvent('job:updated', { jobId: job.id, jobDate: job.job_date, status: job.status, actorId: req.user.id });
     res.json({ success: true });
   } catch (err) {
+    if (conn) await conn.rollback();
     console.error(err);
     res.status(500).json({ error: 'ลบรูปอะไหล่ไม่สำเร็จ' });
+  } finally {
+    if (conn) conn.release();
   }
 });
 
@@ -616,9 +647,16 @@ router.patch('/:id/quote-draft', async (req, res) => {
     return res.status(400).json({ error: 'กรุณาเลือกรายการอย่างน้อย 1 รายการ' });
   }
 
+  let conn;
   try {
-    const [[job]] = await pool.query('SELECT id, job_date, quote_draft FROM jobs WHERE id = ?', [req.params.id]);
-    if (!job) return res.status(404).json({ error: 'ไม่พบงานนี้' });
+    conn = await pool.getConnection();
+    await conn.beginTransaction();
+
+    // ล็อกแถวไว้ระหว่างอ่าน-แก้-เขียน quote_draft กันพนักงานบันทึกรายการชนกับ
+    // ลูกค้า/พนักงานเซ็นชื่อพร้อมกัน (endpoint ลายเซ็นด้านล่างก็ล็อกแบบเดียวกัน) —
+    // ไม่งั้นใครเขียนทีหลังจะทับข้อมูลของอีกฝั่งหายไปเงียบ ๆ
+    const [[job]] = await conn.query('SELECT id, job_date, quote_draft FROM jobs WHERE id = ? FOR UPDATE', [req.params.id]);
+    if (!job) { await conn.rollback(); return res.status(404).json({ error: 'ไม่พบงานนี้' }); }
 
     const prevDraft = parseDraft(job.quote_draft);
     const nextDraft = {
@@ -635,12 +673,16 @@ router.patch('/:id/quote-draft', async (req, res) => {
       deposit_date: deposit_date === undefined ? (prevDraft.deposit_date || null) : (deposit_date || null),
     };
 
-    await pool.execute('UPDATE jobs SET quote_draft = ? WHERE id = ?', [JSON.stringify(nextDraft), job.id]);
+    await conn.execute('UPDATE jobs SET quote_draft = ? WHERE id = ?', [JSON.stringify(nextDraft), job.id]);
+    await conn.commit();
     emitJobEvent('job:updated', { jobId: job.id, jobDate: job.job_date, status: null, actorId: req.user.id });
     res.json({ success: true, quote_draft: nextDraft });
   } catch (err) {
+    if (conn) await conn.rollback();
     console.error(err);
     res.status(500).json({ error: 'บันทึกข้อมูลไม่สำเร็จ' });
+  } finally {
+    if (conn) conn.release();
   }
 });
 
@@ -652,16 +694,24 @@ router.patch('/:id/quote-draft/signature', async (req, res) => {
   if (!signature || !signature.startsWith('data:image/')) {
     return res.status(400).json({ error: 'ข้อมูลลายเซ็นไม่ถูกต้อง' });
   }
+  let conn;
   try {
-    const [[job]] = await pool.query('SELECT id, job_date, quote_draft FROM jobs WHERE id = ?', [req.params.id]);
-    if (!job) return res.status(404).json({ error: 'ไม่พบงานนี้' });
+    conn = await pool.getConnection();
+    await conn.beginTransaction();
+
+    const [[job]] = await conn.query('SELECT id, job_date, quote_draft FROM jobs WHERE id = ? FOR UPDATE', [req.params.id]);
+    if (!job) { await conn.rollback(); return res.status(404).json({ error: 'ไม่พบงานนี้' }); }
     const nextDraft = { ...parseDraft(job.quote_draft), customer_signature: signature };
-    await pool.execute('UPDATE jobs SET quote_draft = ? WHERE id = ?', [JSON.stringify(nextDraft), job.id]);
+    await conn.execute('UPDATE jobs SET quote_draft = ? WHERE id = ?', [JSON.stringify(nextDraft), job.id]);
+    await conn.commit();
     emitJobEvent('job:updated', { jobId: job.id, jobDate: job.job_date, status: null, actorId: req.user.id });
     res.json({ success: true });
   } catch (err) {
+    if (conn) await conn.rollback();
     console.error(err);
     res.status(500).json({ error: 'บันทึกลายเซ็นไม่สำเร็จ' });
+  } finally {
+    if (conn) conn.release();
   }
 });
 
@@ -670,16 +720,24 @@ router.patch('/:id/quote-draft/staff-signature', async (req, res) => {
   if (!signature || !signature.startsWith('data:image/')) {
     return res.status(400).json({ error: 'ข้อมูลลายเซ็นไม่ถูกต้อง' });
   }
+  let conn;
   try {
-    const [[job]] = await pool.query('SELECT id, job_date, quote_draft FROM jobs WHERE id = ?', [req.params.id]);
-    if (!job) return res.status(404).json({ error: 'ไม่พบงานนี้' });
+    conn = await pool.getConnection();
+    await conn.beginTransaction();
+
+    const [[job]] = await conn.query('SELECT id, job_date, quote_draft FROM jobs WHERE id = ? FOR UPDATE', [req.params.id]);
+    if (!job) { await conn.rollback(); return res.status(404).json({ error: 'ไม่พบงานนี้' }); }
     const nextDraft = { ...parseDraft(job.quote_draft), staff_signature: signature, staff_name: staff_name?.trim() || null };
-    await pool.execute('UPDATE jobs SET quote_draft = ? WHERE id = ?', [JSON.stringify(nextDraft), job.id]);
+    await conn.execute('UPDATE jobs SET quote_draft = ? WHERE id = ?', [JSON.stringify(nextDraft), job.id]);
+    await conn.commit();
     emitJobEvent('job:updated', { jobId: job.id, jobDate: job.job_date, status: null, actorId: req.user.id });
     res.json({ success: true });
   } catch (err) {
+    if (conn) await conn.rollback();
     console.error(err);
     res.status(500).json({ error: 'บันทึกลายเซ็นไม่สำเร็จ' });
+  } finally {
+    if (conn) conn.release();
   }
 });
 
