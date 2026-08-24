@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import client from '../api/client';
 import { getNameInitials } from '../utils/format';
 
@@ -141,6 +142,7 @@ export default function CustomerManagementPage() {
                   </td>
                   <td data-label="โทรศัพท์">{customer.phone || '-'}</td>
                   <td className="actions" data-label="จัดการ">
+                    <Link to={`/customers/${customer.id}/history`} className="btn-icon-small">ดูประวัติ</Link>
                     <button onClick={() => openEdit(customer)}>แก้ไข</button>
                     <button className="btn-danger" onClick={() => deleteCustomer(customer.id)}>
                       ลบ

@@ -5,6 +5,7 @@ const { authenticate, requireRole } = require('../middleware/auth');
 // หน้า Vehicle Management (เจ้าของร้านยืนยันเองว่าการแก้ทะเบียน/ยี่ห้อ/รุ่นเกิดที่
 // หน้านี้ ไม่ใช่ผ่านฟอร์มใบเสนอราคา) ดู PUT /:id ด้านล่าง
 const { pushQuotationUpdate } = require('./lineWebhook.routes');
+const { buildVisitHistory } = require('../utils/visitHistory');
 
 const router = express.Router();
 router.use(authenticate);
@@ -37,6 +38,25 @@ router.get('/:id', async (req, res) => {
   } catch (err) {
     console.error('Error fetching vehicle:', err);
     res.status(500).json({ error: 'โหลดข้อมูลรถไม่สำเร็จ' });
+  }
+});
+
+// ── ประวัติการเข้ารับบริการของรถคันนี้ (ทุกครั้ง) ──
+router.get('/:id/history', requireRole('office'), async (req, res) => {
+  try {
+    const [[vehicle]] = await pool.query(
+      `SELECT v.*, c.customer_name, c.customer_code, c.phone
+       FROM vehicles v JOIN customers c ON c.id = v.customer_id
+       WHERE v.id = ?`,
+      [req.params.id]
+    );
+    if (!vehicle) return res.status(404).json({ error: 'ไม่พบรถ' });
+
+    const visits = await buildVisitHistory('vehicle_id', req.params.id);
+    res.json({ success: true, data: { vehicle, visits } });
+  } catch (err) {
+    console.error('Error fetching vehicle history:', err);
+    res.status(500).json({ error: 'โหลดประวัติไม่สำเร็จ' });
   }
 });
 

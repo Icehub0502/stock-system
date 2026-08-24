@@ -6264,3 +6264,64 @@ body:has(.modal-backdrop) .page-fade-in {
   border-radius: 8px;
   border: 1px solid #e5e7eb;
 }
+
+/* ── ประวัติลูกค้า/รถ (CustomerHistoryPage.jsx, VehicleHistoryPage.jsx,
+   VisitTimeline.jsx) ── */
+.history-vehicle-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.history-vehicle-chip {
+  display: inline-block;
+  padding: 6px 12px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1d4ed8;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  text-decoration: none;
+}
+.history-vehicle-chip:hover { background: #dbeafe; }
+
+.visit-timeline { display: flex; flex-direction: column; gap: 12px; }
+.visit-card {
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 14px 16px;
+}
+.visit-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.visit-card-date { font-weight: 700; }
+.visit-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  font-size: 0.82rem;
+  color: #6b7280;
+  margin-top: 6px;
+}
+.visit-card-symptom, .visit-card-mileage { font-size: 0.85rem; color: #374151; margin-top: 6px; }
+.visit-item-list {
+  list-style: none;
+  margin-top: 10px;
+  border-top: 1px solid #f3f4f6;
+  padding-top: 8px;
+}
+.visit-item-list li {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.85rem;
+  padding: 3px 0;
+}
+.visit-item-price { color: #6b7280; }
+.visit-card-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 16px;
+  margin-top: 10px;
+  font-size: 0.85rem;
+  color: #6b7280;
+}
+.visit-card-total { font-weight: 700; color: #111827; }

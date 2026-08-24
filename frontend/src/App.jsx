@@ -46,6 +46,8 @@ const JobDetailPage = lazy(() => import("./pages/JobDetailPage"));
 // หน้าลูกค้าติดตามสถานะรถของตัวเอง — สาธารณะ ไม่ต้องล็อกอิน (สแกน QR ที่พนักงาน
 // พิมพ์/โชว์ให้ ดู track.routes.js ฝั่ง backend)
 const TrackPage = lazy(() => import("./pages/TrackPage"));
+const CustomerHistoryPage = lazy(() => import("./pages/CustomerHistoryPage"));
+const VehicleHistoryPage = lazy(() => import("./pages/VehicleHistoryPage"));
 
 function Home() {
   const { user } = useAuth();
@@ -151,6 +153,22 @@ function AppRoutes() {
             element={
               <ProtectedRoute roles={["office"]}>
                 <VehicleManagementPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/customers/:id/history"
+            element={
+              <ProtectedRoute roles={["office"]}>
+                <CustomerHistoryPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/vehicles/:id/history"
+            element={
+              <ProtectedRoute roles={["office"]}>
+                <VehicleHistoryPage />
               </ProtectedRoute>
             }
           />

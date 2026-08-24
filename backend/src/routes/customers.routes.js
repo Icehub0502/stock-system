@@ -5,6 +5,7 @@ const { formatPhone } = require('../utils/parseLineQueueMessage');
 // pushQuotationUpdate: ดันข้อมูลอัปเดตกลับเข้ากลุ่มไลน์ของร้าน — ใช้ตอนแก้ไขลูกค้า
 // ผ่านหน้า Customer Management ดู PUT /:id ด้านล่าง
 const { pushQuotationUpdate } = require('./lineWebhook.routes');
+const { buildVisitHistory } = require('../utils/visitHistory');
 
 // normalize เบอร์โทรก่อนบันทึกเสมอ (ตัดอักขระอื่นออก ใส่ขีดรูปแบบเดียวกับที่บอทไลน์
 // ใช้) กันเบอร์แบบไม่มีขีดหลุดเข้าฐานจากหน้าเว็บ — ทำให้ WHERE phone = ? แบบตรง ๆ ใน
@@ -113,6 +114,24 @@ router.get('/:id', async (req, res) => {
   } catch (err) {
     console.error('Error fetching customer:', err);
     res.status(500).json({ error: 'โหลดข้อมูลลูกค้าไม่สำเร็จ' });
+  }
+});
+
+// ── ประวัติการเข้ารับบริการของลูกค้าคนนี้ (ทุกรถ ทุกครั้ง) ──
+router.get('/:id/history', async (req, res) => {
+  try {
+    const [[customer]] = await pool.query('SELECT * FROM customers WHERE id = ?', [req.params.id]);
+    if (!customer) return res.status(404).json({ error: 'ไม่พบลูกค้า' });
+
+    const [vehicles] = await pool.query(
+      'SELECT id, brand, model, color, license_plate, mileage FROM vehicles WHERE customer_id = ? ORDER BY created_at',
+      [req.params.id]
+    );
+    const visits = await buildVisitHistory('customer_id', req.params.id);
+    res.json({ success: true, data: { customer, vehicles, visits } });
+  } catch (err) {
+    console.error('Error fetching customer history:', err);
+    res.status(500).json({ error: 'โหลดประวัติไม่สำเร็จ' });
   }
 });
 

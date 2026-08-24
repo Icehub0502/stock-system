@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import client from '../api/client';
 import { getNameInitials } from '../utils/format';
 
@@ -172,6 +173,7 @@ export default function VehicleManagementPage() {
                   <td data-label="ทะเบียน">{vehicle.license_plate || '-'}</td>
                   <td data-label="ไมล์">{vehicle.mileage ?? 0}</td>
                   <td className="actions" data-label="จัดการ">
+                    <Link to={`/vehicles/${vehicle.id}/history`} className="btn-icon-small">ดูประวัติ</Link>
                     <button onClick={() => openEdit(vehicle)}>แก้ไข</button>
                     <button className="btn-danger" onClick={() => deleteVehicle(vehicle.id)}>
                       ลบ
