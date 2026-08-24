@@ -32,9 +32,14 @@ export default defineConfig({
       },
       workbox: {
         // App shell only — /api is handled separately below with NetworkFirst
-        // so stock/price data is never served stale-by-default.
+        // so stock/price data is never served stale-by-default. The ad
+        // landing page (backend/public/champ-power-landing.html, served
+        // straight from Express, not part of this SPA) must also be
+        // denylisted — otherwise the SW's navigateFallback hijacks that URL
+        // and serves the React app shell instead, leaving visitors with a
+        // blank page under the dashboard navbar.
         navigateFallback: '/index.html',
-        navigateFallbackDenylist: [/^\/api\//],
+        navigateFallbackDenylist: [/^\/api\//, /^\/landing/, /^\/champ-power-landing/],
         globPatterns: ['**/*.{js,css,html,png,svg,ico,woff2}'],
         runtimeCaching: [
           {
