@@ -1,4 +1,5 @@
 const express = require('express');
+const QRCode = require('qrcode');
 const pool = require('../db/pool');
 const { authenticate } = require('../middleware/auth');
 const {
@@ -168,6 +169,29 @@ router.get('/:id', async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'โหลดข้อมูลงานไม่สำเร็จ' });
+  }
+});
+
+// ── QR ติดตามสถานะรถ (ให้พนักงานพิมพ์/โชว์ลูกค้า) ──
+// ลิงก์พาไปหน้าสาธารณะ /track เติมทะเบียนให้อัตโนมัติ แต่ลูกค้ายังต้องพิมพ์เบอร์โทร
+// 4 ตัวท้ายเองอยู่ดี (ดู track.routes.js) — ทะเบียนอย่างเดียวไม่ใช่ความลับ เพราะ
+// มองเห็นได้จากตัวรถจริงอยู่แล้ว จึงใส่ลง URL ตรง ๆ ได้โดยไม่ทำให้ความปลอดภัยลดลง
+router.get('/:id/qr', async (req, res) => {
+  try {
+    const [[job]] = await pool.query(
+      `SELECT v.license_plate FROM jobs j LEFT JOIN vehicles v ON v.id = j.vehicle_id WHERE j.id = ?`,
+      [req.params.id]
+    );
+    if (!job) return res.status(404).json({ error: 'ไม่พบงานนี้' });
+    if (!job.license_plate) return res.status(400).json({ error: 'งานนี้ยังไม่มีทะเบียนรถ' });
+
+    const trackingUrl = `${req.protocol}://${req.get('host')}/track?plate=${encodeURIComponent(job.license_plate)}`;
+    const qrDataUrl = await QRCode.toDataURL(trackingUrl, { margin: 1, width: 300 });
+
+    res.json({ success: true, tracking_url: trackingUrl, qr_data_url: qrDataUrl });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'สร้าง QR ไม่สำเร็จ' });
   }
 });
 

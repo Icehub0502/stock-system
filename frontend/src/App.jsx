@@ -43,6 +43,9 @@ const StockUsageReportPage = lazy(() => import("./pages/StockUsageReportPage"));
 const BoardPage = lazy(() => import("./pages/BoardPage"));
 const JobBoardPage = lazy(() => import("./pages/JobBoardPage"));
 const JobDetailPage = lazy(() => import("./pages/JobDetailPage"));
+// หน้าลูกค้าติดตามสถานะรถของตัวเอง — สาธารณะ ไม่ต้องล็อกอิน (สแกน QR ที่พนักงาน
+// พิมพ์/โชว์ให้ ดู track.routes.js ฝั่ง backend)
+const TrackPage = lazy(() => import("./pages/TrackPage"));
 
 function Home() {
   const { user } = useAuth();
@@ -61,7 +64,7 @@ function AppRoutes() {
   const location = useLocation();
   // หน้ารายการอะไหล่บนแท็บเล็ตใช้เต็มจอแบบแอป — ซ่อนแถบเมนูบน/ล่างและ
   // ยกเลิก padding ของ .container เพื่อให้เนื้อหาเต็มพื้นที่จริง ๆ
-  const isKiosk = location.pathname.startsWith("/catalog") || location.pathname.startsWith("/board");
+  const isKiosk = location.pathname.startsWith("/catalog") || location.pathname.startsWith("/board") || location.pathname.startsWith("/track");
   // subdomain คิวรับรถ ใช้แถบเมนูของตัวเอง (QueueNavBar) แทน NavBar เต็มรูปแบบ —
   // login/session เดียวกัน แค่ไม่โชว์เมนูสต๊อก/ใบเสนอราคา/รายงานที่ไม่เกี่ยวข้อง
   // (ดู utils/isQueueHost.js) BottomNav (แถบล่างมือถือ) ก็ผูกกับเมนูระบบหลัก
@@ -271,9 +274,10 @@ function AppRoutes() {
               </ProtectedRoute>
             }
           />
-          {/* /board เปิดสาธารณะ ไม่ต้องล็อกอิน (จอ TV ห้องรับรอง) — ตั้งใจไม่มี
-              ProtectedRoute ห่อ ต่างจากทุก route อื่นในไฟล์นี้ */}
+          {/* /board, /track เปิดสาธารณะ ไม่ต้องล็อกอิน (จอ TV ห้องรับรอง, หน้าลูกค้า
+              ติดตามสถานะรถ) — ตั้งใจไม่มี ProtectedRoute ห่อ ต่างจากทุก route อื่นในไฟล์นี้ */}
           <Route path="/board" element={<BoardPage />} />
+          <Route path="/track" element={<TrackPage />} />
           <Route
             path="/jobs"
             element={

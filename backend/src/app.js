@@ -42,6 +42,7 @@ const quotePartPricesRoutes = require('./routes/quotePartPrices.routes');
 const vehicleModelsRoutes = require('./routes/vehicleModels.routes');
 const jobsRoutes = require('./routes/jobs.routes');
 const boardRoutes = require('./routes/board.routes');
+const trackRoutes = require('./routes/track.routes');
 
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 const FRONTEND_DIST = path.join(__dirname, '..', '..', 'frontend', 'dist');
@@ -144,6 +145,7 @@ function createApp() {
   // เตือนในไฟล์ board.routes.js ก่อนแก้ query)
   app.use('/api/jobs', jobsRoutes);
   app.use('/api/board', boardRoutes);
+  app.use('/api/track', trackRoutes);
 
   app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
   app.get('/api/landing-images', (req, res) => {

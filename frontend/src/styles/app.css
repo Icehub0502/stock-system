@@ -6177,3 +6177,90 @@ body:has(.modal-backdrop) .page-fade-in {
   .queue-navbar { padding: 10px 14px; padding-top: calc(10px + env(safe-area-inset-top, 0px)); }
   .queue-navbar-links { gap: 12px; margin-left: 0; width: 100%; }
 }
+
+/* ── หน้าลูกค้าติดตามสถานะรถ (/track) — สาธารณะ มือถือเป็นหลัก โทนสว่างต่างจาก
+   จอบอร์ด TV (.board-page) เพราะเป็นหน้าที่ลูกค้าเปิดเองบนมือถือ ── */
+.track-page {
+  min-height: 100vh;
+  background: #f4f5f7;
+  padding: 20px 16px 48px;
+  max-width: 480px;
+  margin: 0 auto;
+}
+.track-header {
+  text-align: center;
+  margin-bottom: 20px;
+}
+.track-header p {
+  color: #6b7280;
+  font-size: 0.95rem;
+  margin-top: 4px;
+}
+.track-form {
+  background: #fff;
+  border-radius: 12px;
+  padding: 18px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.track-form label { font-size: 0.85rem; font-weight: 600; color: #374151; margin-top: 8px; }
+.track-form input {
+  padding: 10px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 1rem;
+}
+.track-form button { margin-top: 14px; }
+.track-result { margin-top: 20px; display: flex; flex-direction: column; gap: 16px; }
+.track-vehicle-card {
+  background: #111111;
+  color: #fff;
+  border-radius: 12px;
+  padding: 18px;
+  text-align: center;
+}
+.track-vehicle-plate { font-size: 1.5rem; font-weight: 800; letter-spacing: 0.03em; }
+.track-vehicle-model { font-size: 0.9rem; color: #d1d5db; margin-top: 4px; }
+.track-vehicle-customer { font-size: 0.85rem; color: #9ca3af; margin-top: 6px; }
+.track-status-block {
+  background: #fff;
+  border-radius: 12px;
+  padding: 18px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  text-align: center;
+}
+.track-status-badge { margin-top: 10px; font-size: 0.95rem; }
+.track-symptom { margin-top: 10px; font-size: 0.85rem; color: #6b7280; }
+.track-deposit {
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  color: #92400e;
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-size: 0.9rem;
+  text-align: center;
+}
+.track-section {
+  background: #fff;
+  border-radius: 12px;
+  padding: 16px 18px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+}
+.track-section h3 { font-size: 0.95rem; margin-bottom: 10px; }
+.track-item-list { list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.track-item-list li { font-size: 0.9rem; color: #374151; padding-bottom: 6px; border-bottom: 1px solid #f3f4f6; }
+.track-item-list li:last-child { border-bottom: none; }
+.track-photo-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+  gap: 8px;
+}
+.track-photo-grid img {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+}
