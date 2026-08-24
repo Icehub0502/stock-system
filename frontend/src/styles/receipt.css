@@ -1807,6 +1807,17 @@
   }
 }
 
+/* ใบแจ้งซ่อมแบบใหม่ (rw-page) พิมพ์ครึ่ง A4 แนวนอนแบบเดียวกับของเดิม (.rnf-page
+   ด้านบน) — สูตรเดียวกันเป๊ะ ๆ ต่างกันแค่คนละ class เพราะรองรับหลายหน้าได้ (แต่ละ
+   .doc-page ที่มี page-break-after ของตัวเองอยู่แล้วยังทำงานปกติ transform นี้แค่ย่อ/
+   หมุนตอนพิมพ์ ไม่กระทบตำแหน่งแบ่งหน้า) */
+@media print {
+  .rw-page {
+    transform-origin: top left;
+    transform: scale(0.707) rotate(90deg) translateY(-100%);
+  }
+}
+
 @media print {
   * {
     -webkit-print-color-adjust: exact !important;
