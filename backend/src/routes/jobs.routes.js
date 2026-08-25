@@ -149,22 +149,15 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// ── QR ติดตามสถานะรถ (ให้พนักงานพิมพ์/โชว์ลูกค้า) ──
-// ลิงก์พาไปหน้าสาธารณะ /track เติมทะเบียนให้อัตโนมัติ แต่ลูกค้ายังต้องพิมพ์เบอร์โทร
-// 4 ตัวท้ายเองอยู่ดี (ดู track.routes.js) — ทะเบียนอย่างเดียวไม่ใช่ความลับ เพราะ
-// มองเห็นได้จากตัวรถจริงอยู่แล้ว จึงใส่ลง URL ตรง ๆ ได้โดยไม่ทำให้ความปลอดภัยลดลง
-router.get('/:id/qr', async (req, res) => {
+// ── QR ติดตามสถานะรถ (ให้พนักงานพิมพ์แปะห้องรับรอง) ──
+// เดิมสร้าง QR แยกต่อคัน (เติมทะเบียนอัตโนมัติ) ต้องพิมพ์ใหม่ทุกครั้งที่มีรถเข้า —
+// เจ้าของร้านขอเปลี่ยนเป็น QR เดียวคงที่ ลิงก์แค่หน้า /track เฉย ๆ (ลูกค้าพิมพ์
+// ทะเบียน+เบอร์โทร 4 ตัวท้ายเองที่หน้านั้น) พิมพ์ครั้งเดียวแปะทิ้งไว้ถาวรได้เลย —
+// ไม่ผูกกับงาน/id ไหนอีกต่อไป ย้ายปุ่มมาไว้ที่หน้ารายการงานวันนี้แทนหน้ารายละเอียดงาน
+router.get('/qr/track', async (req, res) => {
   try {
-    const [[job]] = await pool.query(
-      `SELECT v.license_plate FROM jobs j LEFT JOIN vehicles v ON v.id = j.vehicle_id WHERE j.id = ?`,
-      [req.params.id]
-    );
-    if (!job) return res.status(404).json({ error: 'ไม่พบงานนี้' });
-    if (!job.license_plate) return res.status(400).json({ error: 'งานนี้ยังไม่มีทะเบียนรถ' });
-
-    const trackingUrl = `${req.protocol}://${req.get('host')}/track?plate=${encodeURIComponent(job.license_plate)}`;
+    const trackingUrl = `${req.protocol}://${req.get('host')}/track`;
     const qrDataUrl = await QRCode.toDataURL(trackingUrl, { margin: 1, width: 300 });
-
     res.json({ success: true, tracking_url: trackingUrl, qr_data_url: qrDataUrl });
   } catch (err) {
     console.error(err);

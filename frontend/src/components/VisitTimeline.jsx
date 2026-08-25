@@ -1,10 +1,15 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { formatDateTh } from '../utils/dateGroups';
+import PhotoLightbox from './PhotoLightbox';
 
 // ใช้ร่วมกันทั้ง CustomerHistoryPage.jsx และ VehicleHistoryPage.jsx — โครงสร้าง
 // visits มาจาก buildVisitHistory ฝั่ง backend (backend/src/utils/visitHistory.js)
-// เหมือนกันทั้งคู่ ต่างกันแค่ filter (customer_id / vehicle_id)
+// เหมือนกันทั้งคู่ ต่างกันแค่ filter (customer_id / vehicle_id) — รูปรถ/รูปอะไหล่
+// (v.photos) เพิ่มเข้ามาให้พนักงานคนอื่น/ลูกค้าที่มาดูย้อนหลังเห็นได้จากตรงนี้เลย
+// ไม่ต้องเปิดหน้างานเดิม คลิกรูปแล้วขยายใหญ่ดูชัด ๆ ได้ (ดู PhotoLightbox.jsx)
 export default function VisitTimeline({ visits }) {
+  const [lightboxSrc, setLightboxSrc] = useState(null);
+
   if (!visits || visits.length === 0) {
     return <div className="empty-message">ยังไม่มีประวัติการเข้ารับบริการ</div>;
   }
@@ -42,12 +47,27 @@ export default function VisitTimeline({ visits }) {
             </ul>
           )}
 
+          {v.photos && v.photos.length > 0 && (
+            <div className="visit-card-photos">
+              {v.photos.map((p) => (
+                <img
+                  key={p.id}
+                  src={p.photo_data}
+                  alt={p.photo_type === 'part' ? 'รูปอะไหล่' : 'รูปรถ'}
+                  className="visit-card-photo-thumb"
+                  onClick={() => setLightboxSrc(p.photo_data)}
+                />
+              ))}
+            </div>
+          )}
+
           <div className="visit-card-footer">
             {v.deposit_amount > 0 && <span>มัดจำ ฿{Number(v.deposit_amount).toLocaleString('th-TH')}</span>}
             {v.total_amount != null && <span className="visit-card-total">รวม ฿{Number(v.total_amount).toLocaleString('th-TH')}</span>}
           </div>
         </div>
       ))}
+      {lightboxSrc && <PhotoLightbox src={lightboxSrc} onClose={() => setLightboxSrc(null)} />}
     </div>
   );
 }

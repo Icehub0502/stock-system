@@ -23,6 +23,9 @@ export default function JobBoardPage() {
   const [busyId, setBusyId] = useState(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [technicians, setTechnicians] = useState([]);
+  const [qrData, setQrData] = useState(null);
+  const [qrLoading, setQrLoading] = useState(false);
+  const [qrError, setQrError] = useState('');
 
   // รถที่ออกจากอู่ไปแล้วโดยยังไม่ได้ทำ ไม่ควรค้างอยู่ในคิววันนี้ให้พนักงานสับสน —
   // ทั้ง 3 ทางแยกนี้ยังตามต่อได้จากหน้าอื่นอยู่แล้ว: มัดจำ/นัดวันมาทำ → หน้ามัดจำ
@@ -110,6 +113,22 @@ export default function JobBoardPage() {
     }
   }
 
+  // QR ติดตามสถานะรถ — คงที่ ไม่ผูกกับงานไหนเลย (ลิงก์แค่หน้า /track เฉย ๆ ลูกค้า
+  // พิมพ์ทะเบียน+เบอร์โทร 4 ตัวท้ายเอง) พิมพ์ครั้งเดียวแปะห้องรับรองถาวรได้เลย — ย้าย
+  // มาจากหน้ารายละเอียดงานเดิม (เจ้าของร้านสั่ง — ของเดิมสร้างใหม่ทุกครั้งไม่จำเป็น)
+  async function handleShowQr() {
+    setQrLoading(true);
+    setQrError('');
+    try {
+      const res = await client.get('/jobs/qr/track');
+      setQrData(res.data);
+    } catch (err) {
+      setQrError(err.response?.data?.error || 'สร้าง QR ไม่สำเร็จ');
+    } finally {
+      setQrLoading(false);
+    }
+  }
+
   return (
     <div className="office-dashboard container">
       <div className="dashboard-header">
@@ -121,6 +140,9 @@ export default function JobBoardPage() {
           </div>
           <button type="button" className="btn btn-primary" onClick={() => setShowAddModal(true)}>
             + เพิ่มคิว
+          </button>
+          <button type="button" onClick={handleShowQr} disabled={qrLoading}>
+            {qrLoading ? 'กำลังสร้าง QR...' : '📱 QR ติดตามสถานะ'}
           </button>
         </div>
       </div>
@@ -203,6 +225,29 @@ export default function JobBoardPage() {
           onClose={() => setShowAddModal(false)}
           onCreated={() => { setShowAddModal(false); load(); }}
         />
+      )}
+
+      {(qrData || qrError) && (
+        <div className="modal-backdrop" onClick={() => { setQrData(null); setQrError(''); }}>
+          <div className="modal-card" style={{ maxWidth: 360, textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
+            <h3 className="modal-title">QR ติดตามสถานะรถ</h3>
+            {qrError ? (
+              <p className="error-text">{qrError}</p>
+            ) : (
+              <>
+                <p style={{ fontSize: 13, color: '#6b7280' }}>
+                  พิมพ์แปะห้องรับรอง — ลูกค้าสแกนแล้วพิมพ์ทะเบียน+เบอร์โทร 4 ตัวท้ายเองเพื่อดูสถานะรถ
+                </p>
+                <img src={qrData.qr_data_url} alt="QR ติดตามสถานะ" style={{ width: '100%', maxWidth: 260, margin: '12px auto' }} />
+                <p style={{ fontSize: 12, color: '#6b7280', wordBreak: 'break-all' }}>{qrData.tracking_url}</p>
+              </>
+            )}
+            <div className="modal-actions">
+              {qrData && <button type="button" className="btn-primary" onClick={() => window.print()}>🖨️ พิมพ์</button>}
+              <button type="button" onClick={() => { setQrData(null); setQrError(''); }}>ปิด</button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

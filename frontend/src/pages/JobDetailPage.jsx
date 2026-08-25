@@ -6,6 +6,7 @@ import { formatDbDateTime, todayStr } from '../utils/format';
 import { resizeImageToDataUrl } from '../utils/resizeImage';
 import DeclineReasonModal from '../components/DeclineReasonModal';
 import ExtraBillModal from '../components/ExtraBillModal';
+import PhotoLightbox from '../components/PhotoLightbox';
 import QuotationPrintModal from '../components/QuotationPrintModal';
 import RepairWorksheetPrintModal from '../components/RepairWorksheetPrintModal';
 import useRealtimeEvent from '../hooks/useRealtimeEvent';
@@ -75,10 +76,8 @@ export default function JobDetailPage() {
   const [partPhotosError, setPartPhotosError] = useState('');
   const [intakePhotosBusy, setIntakePhotosBusy] = useState(false);
   const [intakePhotosError, setIntakePhotosError] = useState('');
-  const [qrData, setQrData] = useState(null);
-  const [qrLoading, setQrLoading] = useState(false);
-  const [qrError, setQrError] = useState('');
   const [showWorksheetModal, setShowWorksheetModal] = useState(false);
+  const [lightboxSrc, setLightboxSrc] = useState(null);
   const [siblingQuotations, setSiblingQuotations] = useState([]);
   const [showExtraBillModal, setShowExtraBillModal] = useState(false);
 
@@ -588,19 +587,6 @@ export default function JobDetailPage() {
     }
   }
 
-  async function handleShowQr() {
-    setQrLoading(true);
-    setQrError('');
-    try {
-      const res = await client.get(`/jobs/${id}/qr`);
-      setQrData(res.data);
-    } catch (err) {
-      setQrError(err.response?.data?.error || 'สร้าง QR ไม่สำเร็จ');
-    } finally {
-      setQrLoading(false);
-    }
-  }
-
   async function handleDeclineConfirm({ reason, note }) {
     setBusy(true);
     setError('');
@@ -654,9 +640,6 @@ export default function JobDetailPage() {
       <div className="dashboard-header">
         <h2>{job.job_no} <span className="dashboard-header-sub">— คิว {job.queue_no || '-'}</span></h2>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button type="button" onClick={handleShowQr} disabled={qrLoading}>
-            {qrLoading ? 'กำลังสร้าง QR...' : '📱 QR ติดตามสถานะ'}
-          </button>
           <button type="button" className="btn-danger" onClick={() => setShowDeleteConfirm(true)}>ลบงานนี้</button>
           <button type="button" onClick={() => navigate('/jobs')}>← กลับรายการงาน</button>
         </div>
@@ -983,7 +966,7 @@ export default function JobDetailPage() {
             {intakePhotos.map((p, idx) => (
               <div className="job-photo-thumb" key={p.id}>
                 <span className="job-photo-num">{idx + 1}</span>
-                <img src={p.photo_data} alt="" />
+                <img src={p.photo_data} alt="" onClick={() => setLightboxSrc(p.photo_data)} />
                 <div className="job-photo-thumb-actions">
                   <button type="button" disabled={intakePhotosBusy || idx === 0} onClick={() => handleMoveIntakePhoto(p.id, -1)}>◀</button>
                   <button type="button" disabled={intakePhotosBusy} onClick={() => handleDeleteIntakePhoto(p.id)}>✕</button>
@@ -1018,7 +1001,7 @@ export default function JobDetailPage() {
               {partPhotos.map((p, idx) => (
                 <div className="job-photo-thumb" key={p.id}>
                   <span className="job-photo-num">{idx + 1}</span>
-                  <img src={p.photo_data} alt="" />
+                  <img src={p.photo_data} alt="" onClick={() => setLightboxSrc(p.photo_data)} />
                   <div className="job-photo-thumb-actions">
                     <button type="button" disabled={partPhotosBusy || idx === 0} onClick={() => handleMovePartPhoto(p.id, -1)}>◀</button>
                     <button type="button" disabled={partPhotosBusy} onClick={() => handleDeletePartPhoto(p.id)}>✕</button>
@@ -1170,26 +1153,7 @@ export default function JobDetailPage() {
         />
       )}
 
-      {(qrData || qrError) && (
-        <div className="modal-backdrop" onClick={() => { setQrData(null); setQrError(''); }}>
-          <div className="modal-card" style={{ maxWidth: 360, textAlign: 'center' }} onClick={(e) => e.stopPropagation()}>
-            <h3 className="modal-title">QR ติดตามสถานะรถ</h3>
-            {qrError ? (
-              <p className="error-text">{qrError}</p>
-            ) : (
-              <>
-                <p style={{ fontSize: 13, color: '#6b7280' }}>ให้ลูกค้าสแกนเพื่อดูสถานะรถ (ต้องกรอกเบอร์โทร 4 ตัวท้ายยืนยันตัวตนด้วย)</p>
-                <img src={qrData.qr_data_url} alt="QR ติดตามสถานะ" style={{ width: '100%', maxWidth: 260, margin: '12px auto' }} />
-                <p style={{ fontSize: 12, color: '#6b7280', wordBreak: 'break-all' }}>{qrData.tracking_url}</p>
-              </>
-            )}
-            <div className="modal-actions">
-              {qrData && <button type="button" className="btn-primary" onClick={() => window.print()}>🖨️ พิมพ์</button>}
-              <button type="button" onClick={() => { setQrData(null); setQrError(''); }}>ปิด</button>
-            </div>
-          </div>
-        </div>
-      )}
+      {lightboxSrc && <PhotoLightbox src={lightboxSrc} onClose={() => setLightboxSrc(null)} />}
 
       {showDeleteConfirm && (
         <div className="modal-backdrop" onClick={() => setShowDeleteConfirm(false)}>

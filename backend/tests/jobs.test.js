@@ -494,6 +494,26 @@ describe('GET /api/jobs/:id/quotations — บิลอื่นๆ ของง
   });
 });
 
+// QR คงที่แปะห้องรับรอง — ย้ายจาก QR ต่อคัน (เดิม /:id/qr เติมทะเบียนอัตโนมัติ)
+// เป็น QR เดียวลิงก์แค่หน้า /track เฉย ๆ พิมพ์ครั้งเดียวใช้ถาวรได้ ไม่ผูกกับ job id
+describe('GET /api/jobs/qr/track — QR คงที่ ลิงก์หน้า /track เฉยๆ ไม่ผูกกับงานไหน', () => {
+  let token;
+
+  beforeAll(async () => {
+    token = await getOfficeToken();
+  });
+
+  test('คืน tracking_url ที่ลงท้ายด้วย /track เฉยๆ ไม่มี query param ผูกรถคันไหน', async () => {
+    const res = await request(app)
+      .get('/api/jobs/qr/track')
+      .set('Authorization', `Bearer ${token}`)
+      .send();
+    expect(res.status).toBe(200);
+    expect(res.body.tracking_url).toMatch(/\/track$/);
+    expect(res.body.qr_data_url).toMatch(/^data:image\/png;base64,/);
+  });
+});
+
 afterAll(async () => {
   await pool.end();
 });

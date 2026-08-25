@@ -25,6 +25,22 @@ async function buildVisitHistory(filterColumn, filterId) {
     [filterId]
   );
 
+  // รูปรถตอนรับเข้า/รูปอะไหล่ที่เปลี่ยน — ให้พนักงานคนอื่น (หรือลูกค้าที่มาดูย้อนหลัง)
+  // เห็นได้จากประวัติโดยตรง ไม่ต้องเปิดหน้างานเดิมทีละใบ (ดู PhotoLightbox.jsx ฝั่ง
+  // หน้าเว็บที่ใช้แสดง/ขยายรูปพวกนี้)
+  const jobIds = jobRows.map((r) => r.job_id).filter(Boolean);
+  let photosByJob = {};
+  if (jobIds.length > 0) {
+    const [photoRows] = await pool.query(
+      'SELECT job_id, id, photo_data, photo_type, sort_order FROM job_photos WHERE job_id IN (?) ORDER BY job_id, photo_type, sort_order',
+      [jobIds]
+    );
+    photosByJob = photoRows.reduce((acc, p) => {
+      (acc[p.job_id] ||= []).push({ id: p.id, photo_data: p.photo_data, photo_type: p.photo_type });
+      return acc;
+    }, {});
+  }
+
   const [standaloneRows] = await pool.execute(
     `SELECT q.id AS quotation_id, q.quotation_no, q.quotation_date, q.status AS quotation_status,
             q.total_amount, q.deposit_amount, q.deposit_date, r.receipt_no
@@ -69,6 +85,7 @@ async function buildVisitHistory(filterColumn, filterId) {
       deposit_date: r.deposit_date,
       receipt_no: r.receipt_no,
       items: r.quotation_id ? (itemsByQuotation[r.quotation_id] || []) : [],
+      photos: photosByJob[r.job_id] || [],
     })),
     ...standaloneRows.map((r) => ({
       type: 'quotation',
@@ -85,6 +102,7 @@ async function buildVisitHistory(filterColumn, filterId) {
       deposit_date: r.deposit_date,
       receipt_no: r.receipt_no,
       items: itemsByQuotation[r.quotation_id] || [],
+      photos: [],
     })),
   ].sort((a, b) => new Date(b.date) - new Date(a.date));
 
