@@ -8,6 +8,7 @@ const {
   MAIN_PATH,
 } = require('../utils/jobStatusFlow');
 const { ALIGN_BAY, isValidBay } = require('../utils/workBays');
+const { generateJobNo } = require('../utils/generateJobNo');
 const { emitJobEvent, emitQuotationEvent, emitReceiptEvent } = require('../realtime');
 // ใช้ตรรกะออกเลขที่/กรองรายการชุดเดียวกับ quotations.routes.js — กันไม่ให้เลขที่
 // เอกสาร/กติกากรองรายการแยกกันเป็น 2 ชุดที่อาจเพี้ยนไม่ตรงกันในอนาคต (ดู
@@ -39,20 +40,6 @@ function parseDraft(raw) {
 function todayStr() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
-// JB-YYMMDD-NNN — เลขรันต่อวัน (รีเซ็ตทุกวัน) ต่างจาก quotation_no ที่รันต่อวันเหมือน
-// กันแต่คนละชุด ล็อกด้วย FOR UPDATE ในทรานแซกชันเหมือน generateQuotationNo/
-// generateCustomerCode เพื่อกันสองคนกดรับรถพร้อมกันแล้วได้เลขชนกัน
-async function generateJobNo(conn, jobDate) {
-  const [y, m, d] = jobDate.split('-');
-  const prefix = `JB-${y.slice(-2)}${m}${d}-`;
-  const [rows] = await conn.execute(
-    'SELECT MAX(CAST(SUBSTRING(job_no, -3) AS UNSIGNED)) AS maxNo FROM jobs WHERE job_no LIKE ? FOR UPDATE',
-    [`${prefix}%`]
-  );
-  const next = (rows[0]?.maxNo || 0) + 1;
-  return `${prefix}${String(next).padStart(3, '0')}`;
 }
 
 // เลขคิวถัดไปของวันนั้น — ใช้ MAX ไม่ใช่ COUNT เพื่อไม่ให้เลขที่พนักงานแก้เอง/ข้ามไป

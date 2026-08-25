@@ -15,7 +15,8 @@ const express = require('express');
 const pool = require('../db/pool');
 const parseLineQueueMessage = require('../utils/parseLineQueueMessage');
 const { parseItemSectionLines } = require('../utils/parseLineQueueMessage');
-const { emitQuotationEvent, emitReceiptEvent } = require('../realtime');
+const { emitQuotationEvent, emitReceiptEvent, emitJobEvent } = require('../realtime');
+const { generateJobNo } = require('../utils/generateJobNo');
 
 const router = express.Router();
 
@@ -872,6 +873,37 @@ async function createQuotationFromQueue(parsed) {
          VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?)`,
         [quotationId, item.product_name, item.quantity, item.unit_price, item.warranty_name, item.warranty_year, item.warranty_month, item.warranty_km]
       );
+    }
+
+    // ── สร้าง/อัปเดตงานในหน้าคิว (jobs) คู่กันไปเลย — เดิมข้อความไลน์สร้างแค่ใบเสนอ
+    // ราคา ไม่ขึ้นหน้าคิว/จอบอร์ดห้องรับรองจนกว่าพนักงานจะกด "รับรถเข้าคิว" อีกที
+    // ที่หน้าเว็บ (พิมพ์ข้อมูลซ้ำสองที่) ตอนนี้พิมพ์ผ่านไลน์ครั้งเดียวพอ ขึ้นหน้าคิว
+    // ทันที ต้องมีรถแล้วเท่านั้น (jobs.vehicle_id เป็น NOT NULL — ข้อความที่ไม่บอก
+    // ทะเบียน/ยี่ห้อเลยจะยังไม่มี vehicleId ตอนนี้ ข้ามการสร้างงานไปก่อน แก้ไขใบ
+    // เพิ่มรถทีหลังจะสร้างงานให้เองตอนนั้น) รูปรถตอนรับเข้าไม่มีให้ตอนนี้ (ไม่มีคน
+    // ถ่ายจากมือถือตรงหน้า) พนักงานแนบเพิ่มทีหลังตอนรถมาถึงจริงได้ที่หน้ารายละเอียด
+    // งานแทน (PATCH /jobs/:id/... รองรับแก้ไขอยู่แล้ว) ใช้เลขคิวเดียวกับใบเสนอราคา
+    // (actualQueueNo) ตรงๆ ให้เลขที่บอกลูกค้าทางไลน์ตรงกับที่ขึ้นจอบอร์ดเป๊ะ ๆ
+    let jobId = null;
+    if (vehicleId) {
+      const [[existingJob]] = await conn.query('SELECT id FROM jobs WHERE quotation_id = ? LIMIT 1', [quotationId]);
+      if (existingJob) {
+        jobId = existingJob.id;
+        await conn.execute(
+          `UPDATE jobs SET vehicle_id = ?, queue_no = COALESCE(?, queue_no), mileage_in = COALESCE(?, mileage_in), symptom = COALESCE(?, symptom) WHERE id = ?`,
+          [vehicleId, actualQueueNo || null, parsed.mileage ?? null, parsed.symptom || null, jobId]
+        );
+        emitJobEvent('job:updated', { jobId, jobDate: quotationDate, status: null, actorId: null });
+      } else {
+        const jobNo = await generateJobNo(conn, quotationDate);
+        const [jobResult] = await conn.execute(
+          `INSERT INTO jobs (job_no, queue_no, job_date, customer_id, vehicle_id, quotation_id, mileage_in, symptom, status)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'received')`,
+          [jobNo, actualQueueNo || null, quotationDate, customerId, vehicleId, quotationId, parsed.mileage ?? null, parsed.symptom || null]
+        );
+        jobId = jobResult.insertId;
+        emitJobEvent('job:created', { jobId, jobDate: quotationDate, status: 'received', actorId: null });
+      }
     }
 
     // แก้ไขใบที่อนุมัติไปแล้ว (มีใบเสร็จผูกอยู่) → sync ใบเสร็จให้ตรงกันด้วยเลย

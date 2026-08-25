@@ -133,6 +133,7 @@ describe('POST /api/line/webhook', () => {
 
   afterAll(async () => {
     for (const customerId of createdCustomerIds) {
+      await pool.execute('DELETE FROM jobs WHERE customer_id = ?', [customerId]);
       await pool.execute('UPDATE repair_notices SET quotation_id = NULL WHERE customer_id = ?', [customerId]);
       const [quotations] = await pool.query('SELECT id FROM quotations WHERE customer_id = ?', [customerId]);
       for (const q of quotations) {
@@ -1577,6 +1578,96 @@ describe('POST /api/line/webhook', () => {
       );
       expect(Number(receipt.deposit_amount)).toBe(4000);
       expect(Number(receipt.total_amount)).toBe(10500); // ยอดรวมทั้งบิล ไม่ใช่ยอดที่จ่าย 6500
+    });
+  });
+
+  // ข้อความไลน์ที่มีข้อมูลรถแล้วต้องขึ้นหน้าคิว/จอบอร์ดทันที ไม่ต้องรอพนักงานกด
+  // "รับรถเข้าคิว" ที่หน้าเว็บซ้ำอีกที (ดู lineWebhook.routes.js บล็อก "สร้าง/อัปเดต
+  // งานในหน้าคิว (jobs) คู่กันไปเลย")
+  describe('ข้อความไลน์ที่มีข้อมูลรถ → สร้างงานในหน้าคิว (jobs) คู่กับใบเสนอราคาทันที', () => {
+    test('ข้อความแรกมีทะเบียนรถ → สร้าง jobs แถวใหม่ผูกกับใบเสนอราคา สถานะ received', async () => {
+      const uniq = Date.now().toString().slice(-7);
+      const phone = `081${uniq}`;
+      const queueNo = `50${uniq}`;
+      const plate = `8กก${uniq.slice(0, 4)}`;
+
+      const res = await postWebhook(eventsBody([messageEvent(
+        templateText({
+          queueNo,
+          name: 'คุณทดสอบสร้างคิวคู่',
+          phone,
+          plate,
+          items: [{ name: 'ลูกหมากปลาย', price: 800 }],
+        }),
+        `msg-jobauto1-${uniq}`
+      )]));
+      expect(res.status).toBe(200);
+      expect(res.body.created).toHaveLength(1);
+
+      const [[quotation]] = await pool.query('SELECT * FROM quotations WHERE quotation_no = ?', [res.body.created[0]]);
+      createdCustomerIds.push(quotation.customer_id);
+
+      const [[job]] = await pool.query('SELECT * FROM jobs WHERE quotation_id = ?', [quotation.id]);
+      expect(job).toBeTruthy();
+      expect(job.status).toBe('received');
+      expect(job.queue_no).toBe(queueNo);
+      expect(job.customer_id).toBe(quotation.customer_id);
+      expect(job.vehicle_id).toBe(quotation.vehicle_id);
+      expect(job.job_date).toBe(quotation.quotation_date);
+    });
+
+    test('ข้อความแรกไม่มีทะเบียน/ยี่ห้อรถเลย → ยังไม่สร้าง jobs (ไม่รู้จะผูกรถคันไหน)', async () => {
+      const uniq = Date.now().toString().slice(-7);
+      const phone = `082${uniq}`;
+      const queueNo = `51${uniq}`;
+
+      const res = await postWebhook(eventsBody([messageEvent(
+        `คิว:${queueNo}\nชื่อลูกค้า:คุณไม่มีข้อมูลรถ\nเบอร์โทร:${phone}\nอาการ:สอบถามราคา`,
+        `msg-jobauto2-${uniq}`
+      )]));
+      expect(res.status).toBe(200);
+      expect(res.body.created).toHaveLength(1);
+
+      const [[quotation]] = await pool.query('SELECT * FROM quotations WHERE quotation_no = ?', [res.body.created[0]]);
+      createdCustomerIds.push(quotation.customer_id);
+      expect(quotation.vehicle_id).toBeNull();
+
+      const [jobs] = await pool.query('SELECT id FROM jobs WHERE quotation_id = ?', [quotation.id]);
+      expect(jobs).toHaveLength(0);
+    });
+
+    test('resend ข้อความเดิม (เพิ่มรายการ/แก้อาการ) → อัปเดตงานเดิม ไม่สร้างซ้ำ', async () => {
+      const uniq = Date.now().toString().slice(-7);
+      const phone = `083${uniq}`;
+      const queueNo = `52${uniq}`;
+      const plate = `9ขข${uniq.slice(0, 4)}`;
+
+      const first = await postWebhook(eventsBody([messageEvent(
+        templateText({
+          queueNo,
+          name: 'คุณทดสอบresendงาน',
+          phone,
+          plate,
+          items: [{ name: 'ผ้าเบรค', price: 1200 }],
+        }),
+        `msg-jobauto3a-${uniq}`
+      )]));
+      const [[quotation]] = await pool.query('SELECT * FROM quotations WHERE quotation_no = ?', [first.body.created[0]]);
+      createdCustomerIds.push(quotation.customer_id);
+      const [[jobBefore]] = await pool.query('SELECT id FROM jobs WHERE quotation_id = ?', [quotation.id]);
+      expect(jobBefore).toBeTruthy();
+
+      const second = await postWebhook(eventsBody([messageEvent(
+        `คิว:${queueNo}\nชื่อลูกค้า:คุณทดสอบresendงาน\nเบอร์โทร:${phone}\nทะเบียนรถ:${plate}\nอาการ:เปลี่ยนผ้าเบรคหน้า-หลัง\nรายการ:\nผ้าเบรค 1200\nจานเบรค 900`,
+        `msg-jobauto3b-${uniq}`
+      )]));
+      expect(second.body.created).toHaveLength(1);
+      expect(second.body.created[0]).toBe(first.body.created[0]);
+
+      const [jobsAfter] = await pool.query('SELECT id, symptom FROM jobs WHERE quotation_id = ?', [quotation.id]);
+      expect(jobsAfter).toHaveLength(1); // ยังมีแถวเดียว ไม่สร้างซ้ำ
+      expect(jobsAfter[0].id).toBe(jobBefore.id);
+      expect(jobsAfter[0].symptom).toBe('เปลี่ยนผ้าเบรคหน้า-หลัง');
     });
   });
 });
