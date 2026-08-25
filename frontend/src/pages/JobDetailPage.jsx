@@ -72,6 +72,8 @@ export default function JobDetailPage() {
   const [depositDate, setDepositDate] = useState(todayStr());
   const [partPhotosBusy, setPartPhotosBusy] = useState(false);
   const [partPhotosError, setPartPhotosError] = useState('');
+  const [intakePhotosBusy, setIntakePhotosBusy] = useState(false);
+  const [intakePhotosError, setIntakePhotosError] = useState('');
   const [qrData, setQrData] = useState(null);
   const [qrLoading, setQrLoading] = useState(false);
   const [qrError, setQrError] = useState('');
@@ -477,6 +479,53 @@ export default function JobDetailPage() {
     }
   }
 
+  // รูปรถตอนรับเข้า — เดิมตั้งได้ครั้งเดียวตอนสร้างงานที่หน้า "เพิ่มคิว" เท่านั้น ไม่มี
+  // ทางเพิ่ม/ลบทีหลังเลย พังกับงานที่สร้างจากไลน์ (ยังไม่มีรูปตอนสร้าง ตั้งใจให้มา
+  // แนบทีหลังตอนรถถึงร้านจริง) เพิ่ม/ลบ/จัดลำดับได้ทุกสถานะงาน (mirror รูปอะไหล่ด้านล่าง
+  // ทุกอย่างยกเว้นไม่ต้องเช็คสถานะอนุมัติ)
+  async function handleAddIntakePhotos(e) {
+    const files = Array.from(e.target.files || []);
+    e.target.value = '';
+    if (files.length === 0) return;
+    setIntakePhotosBusy(true);
+    setIntakePhotosError('');
+    try {
+      const resized = await Promise.all(files.map((f) => resizeImageToDataUrl(f)));
+      await client.post(`/jobs/${id}/photos`, { photos: resized });
+      await load({ silent: true });
+    } catch (err) {
+      setIntakePhotosError(err.response?.data?.error || 'เพิ่มรูปรถไม่สำเร็จ');
+    } finally {
+      setIntakePhotosBusy(false);
+    }
+  }
+
+  async function handleDeleteIntakePhoto(photoId) {
+    setIntakePhotosBusy(true);
+    setIntakePhotosError('');
+    try {
+      await client.delete(`/jobs/${id}/photos/${photoId}`);
+      await load({ silent: true });
+    } catch (err) {
+      setIntakePhotosError(err.response?.data?.error || 'ลบรูปรถไม่สำเร็จ');
+    } finally {
+      setIntakePhotosBusy(false);
+    }
+  }
+
+  async function handleMoveIntakePhoto(photoId, direction) {
+    setIntakePhotosBusy(true);
+    setIntakePhotosError('');
+    try {
+      await client.patch(`/jobs/${id}/photos/${photoId}/move`, { direction });
+      await load({ silent: true });
+    } catch (err) {
+      setIntakePhotosError(err.response?.data?.error || 'จัดลำดับรูปไม่สำเร็จ');
+    } finally {
+      setIntakePhotosBusy(false);
+    }
+  }
+
   // รูปอะไหล่ของใหม่ก่อนใส่ — เพิ่ม/ลบ/จัดลำดับได้ตลอด (หลังอนุมัติแล้วเท่านั้น ดู
   // canAddPartPhotos ด้านล่าง) mirror utils/resizeImage.js เดียวกับ AddJobModal.jsx
   // ที่ใช้ตอนถ่ายรูปรถรับเข้าคิว แต่ยิงเข้า API ทันทีทีละครั้ง ไม่รอกดบันทึกฟอร์ม
@@ -651,13 +700,6 @@ export default function JobDetailPage() {
           </form>
         ) : (
           <>
-            {intakePhotos.length > 0 && (
-              <div className="job-detail-photos">
-                {intakePhotos.map((p) => (
-                  <img key={p.id} src={p.photo_data} alt="" />
-                ))}
-              </div>
-            )}
             <p><strong>ชื่อลูกค้า:</strong> {job.customer_name || '-'} {job.phone && `(${job.phone})`}</p>
             <p><strong>ยี่ห้อรถ:</strong> {job.brand || '-'}</p>
             <p><strong>รุ่นรถ:</strong> {job.model || '-'} {job.color && `· ${job.color}`}</p>
@@ -866,6 +908,40 @@ export default function JobDetailPage() {
           >
             {busy ? 'กำลังบันทึก...' : job.quotation_id ? '+ เพิ่มรายการเข้าใบเสนอราคา' : 'บันทึกข้อมูล'}
           </button>
+        </div>
+      </div>
+
+      <div className="dash-panel">
+        <div className="dash-panel-title">รูปรถตอนรับเข้า</div>
+        <p style={{ fontSize: 13, color: '#6b7280', marginTop: -6 }}>
+          เพิ่มรูปรถได้ทุกเมื่อ — เช่นงานที่รับคิวมาจากไลน์ยังไม่มีรูปตอนสร้าง หรือถ่ายตอนรับรถไม่ครบ
+        </p>
+        {intakePhotosError && <p className="error-text">{intakePhotosError}</p>}
+        {intakePhotos.length > 0 && (
+          <div className="job-photo-picker">
+            {intakePhotos.map((p, idx) => (
+              <div className="job-photo-thumb" key={p.id}>
+                <span className="job-photo-num">{idx + 1}</span>
+                <img src={p.photo_data} alt="" />
+                <div className="job-photo-thumb-actions">
+                  <button type="button" disabled={intakePhotosBusy || idx === 0} onClick={() => handleMoveIntakePhoto(p.id, -1)}>◀</button>
+                  <button type="button" disabled={intakePhotosBusy} onClick={() => handleDeleteIntakePhoto(p.id)}>✕</button>
+                  <button type="button" disabled={intakePhotosBusy || idx === intakePhotos.length - 1} onClick={() => handleMoveIntakePhoto(p.id, 1)}>▶</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="job-photo-add-row">
+          <label className="btn job-photo-add-btn">
+            📷 ถ่ายรูป
+            <input type="file" accept="image/*" capture="environment" multiple hidden disabled={intakePhotosBusy} onChange={handleAddIntakePhotos} />
+          </label>
+          <label className="btn job-photo-add-btn">
+            🖼️ เลือกรูป
+            <input type="file" accept="image/*" multiple hidden disabled={intakePhotosBusy} onChange={handleAddIntakePhotos} />
+          </label>
+          {intakePhotosBusy && <span style={{ fontSize: 13, color: '#6b7280' }}>กำลังบันทึก...</span>}
         </div>
       </div>
 

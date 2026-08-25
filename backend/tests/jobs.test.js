@@ -303,6 +303,106 @@ describe('POST /api/jobs — เลขคิวไม่ชนกัน แม�
   });
 });
 
+// เจ้าของร้านแจ้งบั๊กจริงอีกจุด: งานที่รับคิวมาจากไลน์ (ไม่มีรูปตอนสร้าง) ไม่มีทาง
+// เพิ่มรูปรถทีหลังได้เลยจากหน้าเว็บ — ต่างจากรูปอะไหล่ (part-photos) ที่มี endpoint
+// เพิ่ม/ลบ/จัดลำดับอยู่แล้ว รูปรถตอนรับเข้า (intake) ไม่เคยมี endpoint พวกนี้มาก่อน
+describe('POST/DELETE/PATCH /api/jobs/:id/photos — เพิ่ม/ลบ/จัดลำดับรูปรถตอนรับเข้าได้ทุกสถานะงาน', () => {
+  let token;
+  let fixture;
+  let jobId;
+
+  beforeAll(async () => {
+    token = await getOfficeToken();
+  });
+
+  beforeEach(async () => {
+    fixture = await createCustomerWithVehicle({ namePrefix: 'Intake Photo Test Customer' });
+    const createRes = await request(app)
+      .post('/api/jobs')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ vehicle_id: fixture.vehicleId, customer_id: fixture.customerId, job_date: todayStr() });
+    jobId = createRes.body.id;
+  });
+
+  afterEach(async () => {
+    await pool.execute('DELETE FROM jobs WHERE id = ?', [jobId]);
+    await cleanupCustomer(fixture.customerId);
+  });
+
+  test('เพิ่มรูปได้ตั้งแต่สถานะ received (ไม่ต้องรออนุมัติ ต่างจากรูปอะไหล่)', async () => {
+    const png = 'data:image/png;base64,iVBORw0KGgo=';
+    const [[jobBefore]] = await pool.query('SELECT status FROM jobs WHERE id = ?', [jobId]);
+    expect(jobBefore.status).toBe('received');
+
+    const res = await request(app)
+      .post(`/api/jobs/${jobId}/photos`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ photos: [png, png] });
+    expect(res.status).toBe(201);
+    expect(res.body.ids).toHaveLength(2);
+
+    const [rows] = await pool.query(
+      "SELECT id, sort_order FROM job_photos WHERE job_id = ? AND photo_type = 'intake' ORDER BY sort_order",
+      [jobId]
+    );
+    expect(rows).toHaveLength(2);
+    expect(rows.map((r) => r.sort_order)).toEqual([0, 1]);
+  });
+
+  test('ลบรูปแล้วหายจริง ไม่กระทบรูปอะไหล่ (photo_type คนละชนิด)', async () => {
+    const png = 'data:image/png;base64,iVBORw0KGgo=';
+    const addRes = await request(app)
+      .post(`/api/jobs/${jobId}/photos`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ photos: [png] });
+    const photoId = addRes.body.ids[0];
+
+    const delRes = await request(app)
+      .delete(`/api/jobs/${jobId}/photos/${photoId}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send();
+    expect(delRes.status).toBe(200);
+
+    const [rows] = await pool.query('SELECT id FROM job_photos WHERE id = ?', [photoId]);
+    expect(rows).toHaveLength(0);
+  });
+
+  test('ลบรูปอะไหล่ไม่ได้ผ่าน endpoint นี้ (photo_type ไม่ตรง)', async () => {
+    await pool.execute("UPDATE jobs SET status = 'approved' WHERE id = ?", [jobId]);
+    const [partResult] = await pool.execute(
+      "INSERT INTO job_photos (job_id, photo_data, sort_order, photo_type) VALUES (?, 'data:image/png;base64,x', 0, 'part')",
+      [jobId]
+    );
+    const res = await request(app)
+      .delete(`/api/jobs/${jobId}/photos/${partResult.insertId}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send();
+    expect(res.status).toBe(404);
+  });
+
+  test('จัดลำดับ (move) สลับตำแหน่งกับรูปข้างเคียงได้', async () => {
+    const png = 'data:image/png;base64,iVBORw0KGgo=';
+    const addRes = await request(app)
+      .post(`/api/jobs/${jobId}/photos`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ photos: [png, png] });
+    const [firstId, secondId] = addRes.body.ids;
+
+    const moveRes = await request(app)
+      .patch(`/api/jobs/${jobId}/photos/${secondId}/move`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ direction: -1 });
+    expect(moveRes.status).toBe(200);
+
+    const [rows] = await pool.query(
+      "SELECT id, sort_order FROM job_photos WHERE job_id = ? AND photo_type = 'intake' ORDER BY sort_order",
+      [jobId]
+    );
+    expect(rows[0].id).toBe(secondId);
+    expect(rows[1].id).toBe(firstId);
+  });
+});
+
 afterAll(async () => {
   await pool.end();
 });
