@@ -235,6 +235,74 @@ describe('POST /api/jobs/:id/part-photos — concurrent uploads do not collide o
   });
 });
 
+// เจ้าของร้านแจ้งบั๊กจริง: พนักงาน 2 คนกรอกข้อมูลรถ "กดพร้อมกัน" ได้เลขคิวชนกัน
+// สาเหตุ: ฟอร์มเดาเลขคิวถัดไปจาก GET /jobs/next-queue-no (อ่านเฉย ๆ ไม่ล็อก) ตอน
+// เปิดฟอร์ม แล้วส่งเลขนั้นมาตอน submit — เดิมโค้ดเชื่อเลขที่ client ส่งมาตรง ๆ เลย
+// ข้าม FOR UPDATE ที่ควรกันชนไปทั้งหมด ถ้าเปิดฟอร์มพร้อมกันสองคนเลยได้เลขแนะนำ
+// เดียวกัน แล้วชนกันจริงตอน insert
+describe('POST /api/jobs — เลขคิวไม่ชนกัน แม้ client ส่งเลขคิวเดียวกันมาพร้อมกัน (บั๊กที่เจ้าของร้านแจ้ง)', () => {
+  let token;
+  let fixtureA;
+  let fixtureB;
+
+  beforeAll(async () => {
+    token = await getOfficeToken();
+  });
+
+  beforeEach(async () => {
+    fixtureA = await createCustomerWithVehicle({ namePrefix: 'Queue Race Customer A' });
+    fixtureB = await createCustomerWithVehicle({ namePrefix: 'Queue Race Customer B' });
+  });
+
+  afterEach(async () => {
+    await cleanupCustomer(fixtureA.customerId);
+    await cleanupCustomer(fixtureB.customerId);
+  });
+
+  test('สองคำขอพร้อมกัน ส่งเลขคิวเดียวกันมาทั้งคู่ (เหมือนสองคนเปิดฟอร์มพร้อมกันได้เลขแนะนำเดียวกัน) → ได้เลขคิวคนละเลข', async () => {
+    const staleQueueNo = '777'; // เลขที่ทั้งสองฟอร์มบังเอิญเดามาเหมือนกัน
+    const submitA = request(app)
+      .post('/api/jobs')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ vehicle_id: fixtureA.vehicleId, customer_id: fixtureA.customerId, job_date: todayStr(), queue_no: staleQueueNo });
+    const submitB = request(app)
+      .post('/api/jobs')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ vehicle_id: fixtureB.vehicleId, customer_id: fixtureB.customerId, job_date: todayStr(), queue_no: staleQueueNo });
+
+    const [resA, resB] = await Promise.all([submitA, submitB]);
+    expect(resA.status).toBe(201);
+    expect(resB.status).toBe(201);
+
+    const [[jobA]] = await pool.query('SELECT queue_no FROM jobs WHERE id = ?', [resA.body.id]);
+    const [[jobB]] = await pool.query('SELECT queue_no FROM jobs WHERE id = ?', [resB.body.id]);
+    expect(jobA.queue_no).not.toBe(jobB.queue_no); // จุดที่เคยพังจริง — ต้องได้คนละเลข
+
+    await pool.execute('DELETE FROM jobs WHERE id IN (?, ?)', [resA.body.id, resB.body.id]);
+  });
+
+  test('พิมพ์เลขคิวเองแล้วชนกับงานที่เปิดอยู่แล้วของวันนี้ → เลื่อนไปเลขถัดไปที่ว่างให้อัตโนมัติ', async () => {
+    const first = await request(app)
+      .post('/api/jobs')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ vehicle_id: fixtureA.vehicleId, customer_id: fixtureA.customerId, job_date: todayStr(), queue_no: '888' });
+    expect(first.status).toBe(201);
+
+    const second = await request(app)
+      .post('/api/jobs')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ vehicle_id: fixtureB.vehicleId, customer_id: fixtureB.customerId, job_date: todayStr(), queue_no: '888' });
+    expect(second.status).toBe(201);
+
+    const [[jobFirst]] = await pool.query('SELECT queue_no FROM jobs WHERE id = ?', [first.body.id]);
+    const [[jobSecond]] = await pool.query('SELECT queue_no FROM jobs WHERE id = ?', [second.body.id]);
+    expect(jobFirst.queue_no).toBe('888'); // คนแรกได้เลขที่พิมพ์จริง
+    expect(jobSecond.queue_no).not.toBe('888'); // คนหลังชน เลื่อนไปเลขอื่นแทน
+
+    await pool.execute('DELETE FROM jobs WHERE id IN (?, ?)', [first.body.id, second.body.id]);
+  });
+});
+
 afterAll(async () => {
   await pool.end();
 });

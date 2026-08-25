@@ -42,16 +42,6 @@ function todayStr() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-// เลขคิวถัดไปของวันนั้น — ใช้ MAX ไม่ใช่ COUNT เพื่อไม่ให้เลขที่พนักงานแก้เอง/ข้ามไป
-// ถูกนำกลับมาใช้ซ้ำกับรถคันถัดไป (หลักการเดียวกับ genQueueNo ของ ChamppowerD)
-async function nextQueueNo(conn, jobDate) {
-  const [rows] = await conn.execute(
-    'SELECT MAX(CAST(queue_no AS UNSIGNED)) AS maxQ FROM jobs WHERE job_date = ? FOR UPDATE',
-    [jobDate]
-  );
-  return String((rows[0]?.maxQ || 0) + 1);
-}
-
 // รถ 1 คันอยู่ได้ช่องเดียว และงานที่จบแล้ว (ส่งรถ/เอารถลง) ไม่ถือว่ากินช่อง แม้ค่า bay
 // จะยังค้างอยู่ในแถว — ผังช่องยกจะได้ไม่โกหกว่ามีรถจอดอยู่ทั้งที่ออกไปแล้ว
 async function bayOccupant(conn, bay, excludeJobId = null) {
@@ -258,7 +248,30 @@ router.post('/', async (req, res) => {
     }
 
     const jobNo = await generateJobNo(conn, jobDate);
-    const queueNo = String(queue_no || '').trim() || await nextQueueNo(conn, jobDate);
+
+    // เลขคิวที่ client ส่งมา (เดาไว้ตอนเปิดฟอร์ม จาก GET /next-queue-no แบบไม่ล็อก)
+    // อาจเก่าไปแล้วตอนกด submit จริง — ถ้าพนักงาน 2 คนเปิดฟอร์มพร้อมกันจะได้เลข
+    // แนะนำเดียวกัน แล้วทั้งคู่ส่งเลขเดียวกันมาโดยไม่รู้ตัว เดิมโค้ดเชื่อเลขที่ client
+    // ส่งมาตรง ๆ เลย (ข้าม nextQueueNo/FOR UPDATE ไปทั้งหมดถ้ามีเลขส่งมา) ทำให้ได้
+    // คิวซ้ำกันจริงตามที่เจ้าของร้านแจ้ง — ตอนนี้ล็อกแถวคิววันนี้ไว้ก่อนเสมอ (ไม่ว่า
+    // client จะส่งเลขมาหรือไม่) แล้วเช็คว่าเลขที่ขอมาชนกับงานอื่นที่มีอยู่แล้วไหม ถ้าชน
+    // เลื่อนไปเลขถัดไปที่ว่างให้อัตโนมัติ (mirror ตรรกะเดียวกับที่ lineWebhook.routes.js
+    // ใช้กันคิวจากไลน์ชนกัน)
+    const [todayQueueRows] = await conn.execute(
+      `SELECT queue_no FROM jobs WHERE job_date = ? AND queue_no REGEXP '^[0-9]+$' FOR UPDATE`,
+      [jobDate]
+    );
+    const requestedQueueNo = String(queue_no || '').trim();
+    let queueNo;
+    if (requestedQueueNo && /^\d+$/.test(requestedQueueNo) && todayQueueRows.some((r) => r.queue_no === requestedQueueNo)) {
+      const maxQ = todayQueueRows.reduce((max, r) => Math.max(max, Number(r.queue_no)), 0);
+      queueNo = String(maxQ + 1);
+    } else if (requestedQueueNo) {
+      queueNo = requestedQueueNo;
+    } else {
+      const maxQ = todayQueueRows.reduce((max, r) => Math.max(max, Number(r.queue_no)), 0);
+      queueNo = String(maxQ + 1);
+    }
 
     const [result] = await conn.execute(
       `INSERT INTO jobs
