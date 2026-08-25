@@ -172,6 +172,37 @@ router.get('/:id/qr', async (req, res) => {
   }
 });
 
+// ── บิลอื่นๆ ของงานนี้ — เจ้าของร้านขอให้แยกบิลได้เรื่อยๆ ในคิวเดียว (เช่นลูกค้าทำ
+// รายการ 1-3 วันนี้ อีกบิลแยกไว้มัดจำ/นัดวันหลัง หรือแค่ขอใบเสนอราคาไว้เฉยๆ) แทนที่
+// จะเพิ่มคอลัมน์ผูกใหม่ ใช้ลูกค้า+รถ+วันเดียวกับงานนี้ค้นหาใบเสนอราคาอื่นที่ตรงกัน
+// เอาเลย (ใบเสนอราคาทุกใบมี customer_id/vehicle_id/quotation_date อยู่แล้ว) —
+// jobs.quotation_id (ถ้ามี) คือ "บิลหลัก" ที่ผูกกับสถานะคิว ส่วนที่เหลือเป็นบิลแยก
+// อิสระ ไม่กระทบสถานะคิว สร้างผ่าน POST /quotations ตรงๆ (ดู ExtraBillModal.jsx)
+router.get('/:id/quotations', async (req, res) => {
+  try {
+    const [[job]] = await pool.query(
+      'SELECT customer_id, vehicle_id, job_date, quotation_id FROM jobs WHERE id = ?',
+      [req.params.id]
+    );
+    if (!job) return res.status(404).json({ error: 'ไม่พบงานนี้' });
+    if (!job.customer_id || !job.vehicle_id) return res.json({ success: true, data: [] });
+
+    const [rows] = await pool.execute(
+      `SELECT id, quotation_no, status, total_amount, deposit_amount, deposit_date,
+              scheduled_date, closed_at, converted_receipt_id
+       FROM quotations
+       WHERE customer_id = ? AND vehicle_id = ? AND quotation_date = ?
+       ORDER BY created_at ASC`,
+      [job.customer_id, job.vehicle_id, job.job_date]
+    );
+    const data = rows.map((r) => ({ ...r, is_primary: r.id === job.quotation_id }));
+    res.json({ success: true, data });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'โหลดรายการบิลไม่สำเร็จ' });
+  }
+});
+
 // ── รับรถเข้าคิว ──
 // รับ vehicle_id/customer_id ที่มีอยู่แล้วเป็นหลัก (หน้ารับรถค้นทะเบียนเจอก่อน) — ถ้า
 // เป็นรถใหม่ หน้าเว็บสร้างลูกค้า/รถผ่าน endpoint เดิม (/customers, /vehicles) ก่อน

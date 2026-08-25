@@ -5,6 +5,7 @@ import { jobStatusDef, MAIN_PATH } from '../utils/jobStatus';
 import { formatDbDateTime, todayStr } from '../utils/format';
 import { resizeImageToDataUrl } from '../utils/resizeImage';
 import DeclineReasonModal from '../components/DeclineReasonModal';
+import ExtraBillModal from '../components/ExtraBillModal';
 import QuotationPrintModal from '../components/QuotationPrintModal';
 import RepairWorksheetPrintModal from '../components/RepairWorksheetPrintModal';
 import useRealtimeEvent from '../hooks/useRealtimeEvent';
@@ -78,6 +79,8 @@ export default function JobDetailPage() {
   const [qrLoading, setQrLoading] = useState(false);
   const [qrError, setQrError] = useState('');
   const [showWorksheetModal, setShowWorksheetModal] = useState(false);
+  const [siblingQuotations, setSiblingQuotations] = useState([]);
+  const [showExtraBillModal, setShowExtraBillModal] = useState(false);
 
   const load = async ({ silent } = {}) => {
     try {
@@ -90,6 +93,18 @@ export default function JobDetailPage() {
       if (!silent) setLoading(false);
     }
   };
+
+  // บิลอื่นๆ ของงานนี้ (ลูกค้า+รถ+วันเดียวกัน แต่แยกจากบิลหลัก) — ดู
+  // GET /jobs/:id/quotations ฝั่ง backend และ ExtraBillModal.jsx ที่สร้างบิลพวกนี้
+  const loadSiblingQuotations = async () => {
+    try {
+      const res = await client.get(`/jobs/${id}/quotations`);
+      setSiblingQuotations((res.data.data || []).filter((q) => !q.is_primary));
+    } catch (err) {
+      // เงียบไว้พอ — แค่แผงเสริม ไม่บล็อกการทำงานหลักของหน้านี้
+    }
+  };
+  useEffect(() => { loadSiblingQuotations(); }, [id]);
 
   useEffect(() => { load(); }, [id]);
 
@@ -910,6 +925,52 @@ export default function JobDetailPage() {
           </button>
         </div>
       </div>
+
+      <div className="dash-panel">
+        <div className="dash-panel-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          บิลอื่นๆ ของงานนี้ {siblingQuotations.length > 0 && `(${siblingQuotations.length})`}
+          <button type="button" onClick={() => setShowExtraBillModal(true)}>+ เพิ่มบิลใหม่</button>
+        </div>
+        <p style={{ fontSize: 13, color: '#6b7280', marginTop: -6 }}>
+          แยกรายการที่ลูกค้าอยากทำวันหลัง/ขอใบเสนอราคาไว้ก่อนออกเป็นบิลต่างหาก ไม่กระทบบิลหลัก/สถานะคิวนี้
+        </p>
+        {siblingQuotations.length === 0 ? (
+          <p className="empty-message">ยังไม่มีบิลแยก</p>
+        ) : (
+          <table className="quotation-table">
+            <thead>
+              <tr>
+                <th>เลขที่</th>
+                <th>สถานะ</th>
+                <th>ยอดรวม</th>
+                <th>มัดจำ</th>
+              </tr>
+            </thead>
+            <tbody>
+              {siblingQuotations.map((q) => (
+                <tr key={q.id}>
+                  <td>{q.quotation_no}</td>
+                  <td>{q.status}{q.scheduled_date && ` — นัด ${new Date(q.scheduled_date).toLocaleDateString('th-TH')}`}</td>
+                  <td>฿{Number(q.total_amount).toLocaleString('th-TH')}</td>
+                  <td>{q.deposit_amount > 0 ? `฿${Number(q.deposit_amount).toLocaleString('th-TH')}` : '-'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+        <p style={{ fontSize: 12, color: '#9ca3af', marginTop: 6 }}>
+          ดูรายละเอียด/พิมพ์บิลเหล่านี้ได้ที่ <Link to="/quotations">หน้าใบเสนอราคา</Link>
+        </p>
+      </div>
+
+      {showExtraBillModal && (
+        <ExtraBillModal
+          job={job}
+          catalogParts={catalogParts}
+          onClose={() => setShowExtraBillModal(false)}
+          onCreated={() => { setShowExtraBillModal(false); loadSiblingQuotations(); }}
+        />
+      )}
 
       <div className="dash-panel">
         <div className="dash-panel-title">รูปรถตอนรับเข้า</div>

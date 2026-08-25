@@ -403,6 +403,97 @@ describe('POST/DELETE/PATCH /api/jobs/:id/photos — เพิ่ม/ลบ/จ�
   });
 });
 
+// เจ้าของร้านขอให้แยกบิลได้เรื่อยๆ ในคิวเดียว (เช่นบิลวันนี้ + บิลมัดจำนัดวันหลัง +
+// บิลขอใบเสนอราคาเฉยๆ) — endpoint นี้รวบรวมใบเสนอราคาทั้งหมดของลูกค้า+รถ+วันเดียว
+// กับงานนี้มาให้ ไม่ต้องเพิ่มคอลัมน์ผูกใหม่
+describe('GET /api/jobs/:id/quotations — บิลอื่นๆ ของงานนี้ (ลูกค้า+รถ+วันเดียวกัน)', () => {
+  let token;
+  let fixture;
+  let jobId;
+
+  beforeAll(async () => {
+    token = await getOfficeToken();
+  });
+
+  beforeEach(async () => {
+    fixture = await createCustomerWithVehicle({ namePrefix: 'Sibling Bill Test Customer' });
+    const createRes = await request(app)
+      .post('/api/jobs')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ vehicle_id: fixture.vehicleId, customer_id: fixture.customerId, job_date: todayStr() });
+    jobId = createRes.body.id;
+  });
+
+  afterEach(async () => {
+    await pool.execute('DELETE FROM jobs WHERE id = ?', [jobId]);
+    await cleanupCustomer(fixture.customerId);
+  });
+
+  test('ไม่มีบิลอื่นเลย → คืน array ว่าง', async () => {
+    const res = await request(app)
+      .get(`/api/jobs/${jobId}/quotations`)
+      .set('Authorization', `Bearer ${token}`)
+      .send();
+    expect(res.status).toBe(200);
+    expect(res.body.data).toEqual([]);
+  });
+
+  test('มีบิลแยกต่างหาก (ลูกค้า+รถ+วันเดียวกัน) → เห็นในรายการ พร้อม flag is_primary ถูกต้อง', async () => {
+    // บิลหลัก — ผูกกับ job.quotation_id ผ่านช่องทางปกติ
+    await request(app)
+      .patch(`/api/jobs/${jobId}/quote-draft`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ items: [{ product_name: 'ค่าแรง', quantity: 1, unit_price: 500 }] });
+    const approveRes = await request(app)
+      .post(`/api/jobs/${jobId}/quotation/approve`)
+      .set('Authorization', `Bearer ${token}`)
+      .send();
+    const primaryQuotationId = approveRes.body.quotation_id;
+
+    // บิลแยก — สร้างตรงผ่าน POST /quotations เหมือนที่ ExtraBillModal.jsx จะเรียก
+    const extraRes = await request(app)
+      .post('/api/quotations')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        customer_id: fixture.customerId,
+        vehicle_id: fixture.vehicleId,
+        quotation_date: todayStr(),
+        items: [{ product_name: 'โช๊คอัพ', quantity: 2, unit_price: 1500 }],
+        deposit_amount: 1000,
+        deposit_date: todayStr(),
+      });
+    expect(extraRes.status).toBe(201);
+
+    const res = await request(app)
+      .get(`/api/jobs/${jobId}/quotations`)
+      .set('Authorization', `Bearer ${token}`)
+      .send();
+    expect(res.status).toBe(200);
+    expect(res.body.data).toHaveLength(2);
+
+    const primary = res.body.data.find((q) => q.id === primaryQuotationId);
+    const extra = res.body.data.find((q) => q.id === extraRes.body.quotation_id);
+    expect(primary.is_primary).toBe(true);
+    expect(extra.is_primary).toBe(false);
+    expect(Number(extra.deposit_amount)).toBe(1000);
+
+    // เคลียร์บิลแยกที่สร้างเอง (afterEach เคลียร์ได้แค่บิลที่ job ผูกอยู่ผ่าน quotation_id)
+    await pool.execute('DELETE FROM repair_notices WHERE quotation_id = ?', [extraRes.body.quotation_id]);
+    await pool.execute('DELETE FROM quotation_items WHERE quotation_id = ?', [extraRes.body.quotation_id]);
+    await pool.execute('DELETE FROM quotations WHERE id = ?', [extraRes.body.quotation_id]);
+    // และบิลหลักที่ approve สร้าง receipt ไว้ด้วย
+    const [[quotation]] = await pool.query('SELECT converted_receipt_id FROM quotations WHERE id = ?', [primaryQuotationId]);
+    if (quotation?.converted_receipt_id) {
+      await pool.execute('DELETE FROM receipt_items WHERE receipt_id = ?', [quotation.converted_receipt_id]);
+      await pool.execute('DELETE FROM receipts WHERE id = ?', [quotation.converted_receipt_id]);
+    }
+    await pool.execute('DELETE FROM repair_notices WHERE quotation_id = ?', [primaryQuotationId]);
+    await pool.execute('DELETE FROM quotation_items WHERE quotation_id = ?', [primaryQuotationId]);
+    await pool.execute('UPDATE jobs SET quotation_id = NULL WHERE id = ?', [jobId]);
+    await pool.execute('DELETE FROM quotations WHERE id = ?', [primaryQuotationId]);
+  });
+});
+
 afterAll(async () => {
   await pool.end();
 });
