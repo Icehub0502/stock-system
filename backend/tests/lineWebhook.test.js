@@ -1669,5 +1669,56 @@ describe('POST /api/line/webhook', () => {
       expect(jobsAfter[0].id).toBe(jobBefore.id);
       expect(jobsAfter[0].symptom).toBe('เปลี่ยนผ้าเบรคหน้า-หลัง');
     });
+
+    // เจ้าของร้านเจอบั๊กจริง: พนักงานกดรับรถเข้าคิวที่หน้าเว็บก่อน (ยังไม่มีใบเสนอราคา
+    // ผูก) แล้วลูกค้า/พนักงานพิมพ์ไลน์ตามทีหลัง — เดิมโค้ดเช็คแค่ "มีงานที่ผูกใบนี้
+    // อยู่แล้วไหม" (จะไม่เจอ เพราะใบเพิ่งสร้าง) เลยสร้างงานที่สองซ้อนขึ้นมาสำหรับรถ
+    // คันเดียวกันวันเดียวกัน แทนที่จะผูกเข้ากับงานเดิมที่มีอยู่แล้ว
+    test('มีงานที่หน้าเว็บอยู่ก่อนแล้ว (ยังไม่มีใบเสนอราคา) แล้วพิมพ์ไลน์ตามทีหลัง → ผูกเข้างานเดิม ไม่สร้างซ้อน', async () => {
+      const officeToken = await helpers.getOfficeToken();
+      const fixture = await helpers.createCustomerWithVehicle({ namePrefix: 'Retro Match Test Customer' });
+      const today = new Date();
+      const jobDate = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+
+      const jobRes = await request(app)
+        .post('/api/jobs')
+        .set('Authorization', `Bearer ${officeToken}`)
+        .send({ vehicle_id: fixture.vehicleId, customer_id: fixture.customerId, job_date: jobDate });
+      expect(jobRes.status).toBe(201);
+      const preexistingJobId = jobRes.body.id;
+
+      const [[vehicle]] = await pool.query('SELECT license_plate FROM vehicles WHERE id = ?', [fixture.vehicleId]);
+      // customers.phone ต้องอยู่ในรูปแบบ XXX-XXX-XXXX เดียวกับที่ formatPhone() ผลิต
+      // ให้ตรงกับที่ lineWebhook.routes.js เทียบตรง ๆ ตอนหาลูกค้าเดิม (ไม่งั้นจะไม่
+      // เจอลูกค้าคนนี้ แล้วสร้างใหม่ซ้อนแทน ทำให้เทสต์นี้ผิดจุดประสงค์)
+      const uniq = Date.now().toString().slice(-7);
+      const rawPhone = `081${uniq}`;
+      const formattedPhone = `${rawPhone.slice(0, 3)}-${rawPhone.slice(3, 6)}-${rawPhone.slice(6)}`;
+      await pool.execute('UPDATE customers SET phone = ? WHERE id = ?', [formattedPhone, fixture.customerId]);
+
+      const lineRes = await postWebhook(eventsBody([messageEvent(
+        templateText({
+          queueNo: `60${uniq}`,
+          name: 'คุณทดสอบจับคู่ย้อนหลัง',
+          phone: rawPhone,
+          plate: vehicle.license_plate,
+          items: [{ name: 'ลูกหมากปลาย', price: 900 }],
+        }),
+        `msg-retro-${uniq}`
+      )]));
+      expect(lineRes.status).toBe(200);
+      expect(lineRes.body.created).toHaveLength(1);
+
+      const [jobsForVehicle] = await pool.query(
+        'SELECT id, quotation_id FROM jobs WHERE vehicle_id = ? AND job_date = ?',
+        [fixture.vehicleId, jobDate]
+      );
+      expect(jobsForVehicle).toHaveLength(1); // ต้องยังมีงานเดียว ไม่ใช่สอง
+      expect(jobsForVehicle[0].id).toBe(preexistingJobId);
+      expect(jobsForVehicle[0].quotation_id).not.toBeNull(); // ผูกใบจากไลน์เข้ากับงานเดิมแล้ว
+
+      await pool.execute('DELETE FROM jobs WHERE id = ?', [preexistingJobId]);
+      createdCustomerIds.push(fixture.customerId);
+    });
   });
 });

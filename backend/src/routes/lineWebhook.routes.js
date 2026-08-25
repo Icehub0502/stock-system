@@ -886,12 +886,28 @@ async function createQuotationFromQueue(parsed) {
     // (actualQueueNo) ตรงๆ ให้เลขที่บอกลูกค้าทางไลน์ตรงกับที่ขึ้นจอบอร์ดเป๊ะ ๆ
     let jobId = null;
     if (vehicleId) {
-      const [[existingJob]] = await conn.query('SELECT id FROM jobs WHERE quotation_id = ? LIMIT 1', [quotationId]);
+      let existingJob;
+      const [[byQuotation]] = await conn.query('SELECT id, quotation_id FROM jobs WHERE quotation_id = ? LIMIT 1', [quotationId]);
+      existingJob = byQuotation;
+      // ไม่เจองานที่ผูกใบนี้ไว้แล้ว — เช็คต่อว่าลูกค้ามาสร้างงานไว้ที่หน้าเว็บก่อนแล้ว
+      // หรือเปล่า (กดรับรถเข้าคิวที่เคาน์เตอร์ก่อน ยังไม่ทันผูกใบเสนอราคา แล้วค่อยพิมพ์
+      // ไลน์ตามทีหลัง) เดิมจับคู่แค่ทิศทางเดียว (POST /jobs เช็คตอนสร้างงานว่ามีใบ
+      // pending อยู่ก่อนไหม) แต่ไม่เคยย้อนกลับมาเช็คฝั่งนี้เลย ทำให้ได้งานซ้อนสองคิว
+      // สำหรับรถคันเดียวกันวันเดียวกัน (เจ้าของร้านเจอปัญหานี้จริง — ใบเสนอราคาลอย
+      // แยกจากงานที่มีอยู่แล้ว) จับคู่ด้วยลูกค้า+รถ+วันเดียวกัน ที่ยังไม่มีใบเสนอราคา
+      // ผูกอยู่เลย (quotation_id IS NULL) เท่านั้น กันทับงานที่มีใบอื่นอยู่แล้วโดยไม่ตั้งใจ
+      if (!existingJob) {
+        const [[byVisit]] = await conn.query(
+          `SELECT id FROM jobs WHERE customer_id = ? AND vehicle_id = ? AND job_date = ? AND quotation_id IS NULL ORDER BY id DESC LIMIT 1`,
+          [customerId, vehicleId, quotationDate]
+        );
+        existingJob = byVisit;
+      }
       if (existingJob) {
         jobId = existingJob.id;
         await conn.execute(
-          `UPDATE jobs SET vehicle_id = ?, queue_no = COALESCE(?, queue_no), mileage_in = COALESCE(?, mileage_in), symptom = COALESCE(?, symptom) WHERE id = ?`,
-          [vehicleId, actualQueueNo || null, parsed.mileage ?? null, parsed.symptom || null, jobId]
+          `UPDATE jobs SET vehicle_id = ?, quotation_id = ?, queue_no = COALESCE(?, queue_no), mileage_in = COALESCE(?, mileage_in), symptom = COALESCE(?, symptom) WHERE id = ?`,
+          [vehicleId, quotationId, actualQueueNo || null, parsed.mileage ?? null, parsed.symptom || null, jobId]
         );
         emitJobEvent('job:updated', { jobId, jobDate: quotationDate, status: null, actorId: null });
       } else {
