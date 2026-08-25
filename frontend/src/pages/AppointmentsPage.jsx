@@ -105,11 +105,11 @@ export default function AppointmentsPage() {
     }
   };
 
-  const handleScheduleConfirm = async (date) => {
+  const handleScheduleConfirm = async (date, depositPayload = {}) => {
     if (!schedulingQuotation) return;
     setActioningId(schedulingQuotation.id);
     try {
-      await client.patch(`/quotations/${schedulingQuotation.id}/schedule`, { scheduled_date: date });
+      await client.patch(`/quotations/${schedulingQuotation.id}/schedule`, { scheduled_date: date, ...depositPayload });
       setSchedulingQuotation(null);
       fetchQuotations();
     } catch (err) {
@@ -154,11 +154,11 @@ export default function AppointmentsPage() {
     navigate(`/jobs/${jobId}`);
   };
 
-  const handleNoDate = async () => {
+  const handleNoDate = async (depositPayload = {}) => {
     if (!schedulingQuotation) return;
     setActioningId(schedulingQuotation.id);
     try {
-      await client.patch(`/quotations/${schedulingQuotation.id}/no-date`);
+      await client.patch(`/quotations/${schedulingQuotation.id}/no-date`, depositPayload);
       setSchedulingQuotation(null);
       fetchQuotations();
     } catch (err) {
@@ -326,6 +326,8 @@ export default function AppointmentsPage() {
       {schedulingQuotation && (
         <ScheduleDateDialog
           initialDate={schedulingQuotation.scheduled_date}
+          initialDepositAmount={schedulingQuotation.deposit_amount}
+          initialDepositDate={schedulingQuotation.deposit_date}
           loading={actioningId === schedulingQuotation.id}
           onConfirm={handleScheduleConfirm}
           onNoDate={handleNoDate}

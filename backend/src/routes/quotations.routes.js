@@ -771,18 +771,29 @@ router.patch('/:id/close', async (req, res) => {
 });
 
 // PATCH - Mark a quotation as "customer will come back later" with a date
+// deposit_amount/deposit_date เป็น optional — เดิม endpoint นี้ตั้งได้แค่วันนัด
+// อย่างเดียว พนักงานต้องไปกดแก้ไขใบเสนอราคาแยกอีกทีเพื่อใส่มัดจำ (ถ้าลืมทำ มัดจำ
+// จะไม่ถูกบันทึกแม้จะมีวันนัดแล้วก็ตาม) ให้ใส่มัดจำพร้อมวันนัดในขั้นตอนเดียวกันได้เลย
+// จากหน้าใบเสนอราคา/หน้านัดหมาย (ScheduleDateDialog.jsx) — ไม่ส่งมาก็แก้ไขแค่วันนัด
+// เหมือนเดิมทุกอย่าง (COALESCE เก็บมัดจำเดิมไว้ ไม่ล้างทิ้งถ้าไม่ได้ส่งมาใหม่)
 router.patch('/:id/schedule', async (req, res) => {
   const { id } = req.params;
-  const { scheduled_date } = req.body || {};
+  const { scheduled_date, deposit_amount, deposit_date } = req.body || {};
 
   if (!scheduled_date) {
     return res.status(400).json({ error: 'กรุณาระบุวันที่' });
   }
 
+  const depositAmount = deposit_amount !== undefined && deposit_amount !== '' && deposit_amount !== null
+    ? Number(deposit_amount)
+    : undefined;
+
   try {
     const [result] = await pool.execute(
-      "UPDATE quotations SET status = 'scheduled', scheduled_date = ? WHERE id = ?",
-      [scheduled_date, id]
+      `UPDATE quotations SET status = 'scheduled', scheduled_date = ?,
+              deposit_amount = COALESCE(?, deposit_amount), deposit_date = COALESCE(?, deposit_date)
+       WHERE id = ?`,
+      [scheduled_date, depositAmount ?? null, deposit_date || null, id]
     );
     if (result.affectedRows === 0) {
       return res.status(404).json({ error: 'ไม่พบใบเสนอราคา' });
@@ -818,14 +829,21 @@ router.patch('/:id/mark-called', async (req, res) => {
 });
 
 // สำนักงานกดยืนยันชัดเจนว่าลูกค้าไม่ระบุวันนัดหมาย (ต่างจาก pending เฉยๆ ที่แปลว่า
-// ยังไม่ได้ดำเนินการอะไรเลยกับใบเสนอราคานี้)
+// ยังไม่ได้ดำเนินการอะไรเลยกับใบเสนอราคานี้) — รับมัดจำ optional เหมือน /schedule
+// ด้านบน (COALESCE เก็บของเดิมไว้ถ้าไม่ได้ส่งมาใหม่)
 router.patch('/:id/no-date', async (req, res) => {
   const { id } = req.params;
+  const { deposit_amount, deposit_date } = req.body || {};
+  const depositAmount = deposit_amount !== undefined && deposit_amount !== '' && deposit_amount !== null
+    ? Number(deposit_amount)
+    : undefined;
 
   try {
     const [result] = await pool.execute(
-      "UPDATE quotations SET status = 'no_date', scheduled_date = NULL WHERE id = ?",
-      [id]
+      `UPDATE quotations SET status = 'no_date', scheduled_date = NULL,
+              deposit_amount = COALESCE(?, deposit_amount), deposit_date = COALESCE(?, deposit_date)
+       WHERE id = ?`,
+      [depositAmount ?? null, deposit_date || null, id]
     );
     if (result.affectedRows === 0) {
       return res.status(404).json({ error: 'ไม่พบใบเสนอราคา' });

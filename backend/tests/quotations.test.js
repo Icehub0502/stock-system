@@ -539,10 +539,6 @@ describe('POST/PUT /quotations — deposit_amount/deposit_date รับค่�
     await cleanupCustomer(fixture.customerId);
   });
 
-  afterAll(async () => {
-    await pool.end();
-  });
-
   test('POST /quotations พร้อม deposit_amount/deposit_date → บันทึกลง DB ตรงกัน', async () => {
     const createRes = await request(app)
       .post('/api/quotations')
@@ -618,5 +614,84 @@ describe('POST/PUT /quotations — deposit_amount/deposit_date รับค่�
     );
     expect(Number(row.deposit_amount)).toBe(1200);
     expect(new Date(row.deposit_date).toISOString().slice(0, 10)).toBe('2026-07-09');
+  });
+});
+
+// เจ้าของร้านขอ: ปุ่ม "วันที่" (ตั้งวันนัด) ที่หน้าใบเสนอราคา/หน้านัดหมาย ควรใส่มัดจำ
+// พร้อมกันได้เลยในขั้นตอนเดียว ไม่ต้องแยกไปกด "แก้ไข" อีกที (ก่อนหน้านี้ลืมทำแล้ว
+// มัดจำไม่ถูกบันทึกไปเลยทั้งที่ตั้งวันนัดแล้ว) — ดู ScheduleDateDialog.jsx
+describe('PATCH /quotations/:id/schedule และ /no-date — ใส่มัดจำพร้อมกับตั้งวันนัดได้ในคำขอเดียว', () => {
+  let token;
+  let fixture;
+  let quotationId;
+
+  beforeAll(async () => {
+    token = await getOfficeToken();
+  });
+
+  beforeEach(async () => {
+    fixture = await createCustomerWithVehicle({ namePrefix: 'Schedule Deposit Test Customer' });
+    const createRes = await request(app)
+      .post('/api/quotations')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        customer_id: fixture.customerId,
+        vehicle_id: fixture.vehicleId,
+        quotation_date: '2026-07-10',
+        items: [{ product_name: 'ทดสอบ', quantity: 1, unit_price: 1000 }],
+      });
+    quotationId = createRes.body.quotation_id;
+  });
+
+  afterEach(async () => {
+    await cleanupCustomer(fixture.customerId);
+  });
+
+  afterAll(async () => {
+    await pool.end();
+  });
+
+  test('/schedule พร้อม deposit_amount/deposit_date → ตั้งวันนัดและมัดจำพร้อมกัน', async () => {
+    const res = await request(app)
+      .patch(`/api/quotations/${quotationId}/schedule`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ scheduled_date: '2026-08-01', deposit_amount: 500, deposit_date: '2026-07-11' });
+    expect(res.status).toBe(200);
+
+    const [[row]] = await pool.query(
+      'SELECT status, scheduled_date, deposit_amount, deposit_date FROM quotations WHERE id = ?',
+      [quotationId]
+    );
+    expect(row.status).toBe('scheduled');
+    expect(Number(row.deposit_amount)).toBe(500);
+  });
+
+  test('/schedule ไม่ส่งมัดจำมา → ไม่ล้างมัดจำเดิมทิ้ง (COALESCE เก็บของเดิมไว้)', async () => {
+    await pool.execute('UPDATE quotations SET deposit_amount = 999, deposit_date = "2026-07-01" WHERE id = ?', [quotationId]);
+
+    const res = await request(app)
+      .patch(`/api/quotations/${quotationId}/schedule`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ scheduled_date: '2026-08-01' });
+    expect(res.status).toBe(200);
+
+    const [[row]] = await pool.query('SELECT deposit_amount FROM quotations WHERE id = ?', [quotationId]);
+    expect(Number(row.deposit_amount)).toBe(999);
+  });
+
+  test('/no-date พร้อม deposit_amount/deposit_date → ตั้งสถานะ no_date และมัดจำพร้อมกัน', async () => {
+    const res = await request(app)
+      .patch(`/api/quotations/${quotationId}/no-date`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ deposit_amount: 700, deposit_date: '2026-07-12' });
+    expect(res.status).toBe(200);
+
+    const [[row]] = await pool.query(
+      'SELECT status, scheduled_date, deposit_amount FROM quotations WHERE id = ?',
+      [quotationId]
+    );
+    expect(row.status).toBe('no_date');
+    expect(row.scheduled_date).toBeNull();
+    expect(Number(row.deposit_amount)).toBe(700);
   });
 });
