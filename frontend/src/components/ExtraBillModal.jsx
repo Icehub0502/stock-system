@@ -18,6 +18,7 @@ export default function ExtraBillModal({ job, catalogParts, onClose, onCreated }
   const [mode, setMode] = useState('deposit'); // 'deposit' | 'quote_only'
   const [depositAmount, setDepositAmount] = useState('');
   const [depositDate, setDepositDate] = useState(todayStr());
+  const [scheduledDate, setScheduledDate] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
@@ -122,7 +123,7 @@ export default function ExtraBillModal({ job, catalogParts, onClose, onCreated }
     setBusy(true);
     setError('');
     try {
-      await client.post('/quotations', {
+      const res = await client.post('/quotations', {
         customer_id: job.customer_id,
         vehicle_id: job.vehicle_id,
         quotation_date: job.job_date,
@@ -133,6 +134,19 @@ export default function ExtraBillModal({ job, catalogParts, onClose, onCreated }
         })),
         ...(mode === 'deposit' ? { deposit_amount: Number(depositAmount), deposit_date: depositDate } : {}),
       });
+
+      // มัดจำอย่างเดียวไม่พอ — ต้องตั้งสถานะให้ไปโผล่หน้า "ลูกค้าที่นัดหมาย" ด้วย
+      // ไม่งั้นค้างเป็น pending เฉยๆ เหมือนยังไม่มีใครทำอะไรกับบิลนี้เลย (มัดจำหายไป
+      // จากสายตา หาไม่เจอว่าต้องติดตามต่อที่ไหน) ถ้ารู้วันนัดแล้วตั้ง "มีวันนัดหมาย"
+      // เลย ถ้ายังไม่รู้ตั้ง "ยังไม่ระบุวันนัดหมาย" ไว้ก่อน (ปุ่มตั้งวันทีหลังได้ที่นั่น)
+      if (mode === 'deposit') {
+        const quotationId = res.data.quotation_id;
+        if (scheduledDate) {
+          await client.patch(`/quotations/${quotationId}/schedule`, { scheduled_date: scheduledDate });
+        } else {
+          await client.patch(`/quotations/${quotationId}/no-date`);
+        }
+      }
       onCreated();
     } catch (err) {
       setError(err.response?.data?.error || 'สร้างบิลไม่สำเร็จ');
@@ -233,6 +247,8 @@ export default function ExtraBillModal({ job, catalogParts, onClose, onCreated }
               <input type="number" min="0" value={depositAmount} onChange={(e) => setDepositAmount(e.target.value)} />
               <label>วันที่วางมัดจำ</label>
               <input type="date" value={depositDate} onChange={(e) => setDepositDate(e.target.value)} />
+              <label>วันนัดมาทำ (ถ้ายังไม่รู้ ปล่อยว่างไว้ได้ — ตั้งทีหลังได้ที่หน้า "ลูกค้าที่นัดหมาย")</label>
+              <input type="date" value={scheduledDate} onChange={(e) => setScheduledDate(e.target.value)} />
             </>
           )}
         </div>
