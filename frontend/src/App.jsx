@@ -30,7 +30,6 @@ const ServiceItemManagementPage = lazy(() => import("./pages/ServiceItemManageme
 const WarrantyManagementPage = lazy(() => import("./pages/WarrantyManagementPage"));
 const ProductCostPage = lazy(() => import("./pages/ProductCostPage"));
 const QuotePartPriceManagementPage = lazy(() => import("./pages/QuotePartPriceManagementPage"));
-const PartsCatalogKioskPage = lazy(() => import("./pages/PartsCatalogKioskPage"));
 const WingArmDashboard = lazy(() => import("./pages/WingArmDashboard"));
 const DailySalesSummaryPage = lazy(() => import("./pages/DailySalesSummaryPage"));
 const RepairNoticeListPage = lazy(() => import("./pages/RepairNoticeListPage"));
@@ -66,7 +65,7 @@ function AppRoutes() {
   const location = useLocation();
   // หน้ารายการอะไหล่บนแท็บเล็ตใช้เต็มจอแบบแอป — ซ่อนแถบเมนูบน/ล่างและ
   // ยกเลิก padding ของ .container เพื่อให้เนื้อหาเต็มพื้นที่จริง ๆ
-  const isKiosk = location.pathname.startsWith("/catalog") || location.pathname.startsWith("/board") || location.pathname.startsWith("/track");
+  const isKiosk = location.pathname.startsWith("/board") || location.pathname.startsWith("/track");
   // subdomain คิวรับรถ ใช้แถบเมนูของตัวเอง (QueueNavBar) แทน NavBar เต็มรูปแบบ —
   // login/session เดียวกัน แค่ไม่โชว์เมนูสต๊อก/ใบเสนอราคา/รายงานที่ไม่เกี่ยวข้อง
   // (ดู utils/isQueueHost.js) BottomNav (แถบล่างมือถือ) ก็ผูกกับเมนูระบบหลัก
@@ -233,14 +232,6 @@ function AppRoutes() {
             element={
               <ProtectedRoute roles={["office"]}>
                 <QuotePartPriceManagementPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/catalog"
-            element={
-              <ProtectedRoute roles={["office", "technician"]}>
-                <PartsCatalogKioskPage />
               </ProtectedRoute>
             }
           />
