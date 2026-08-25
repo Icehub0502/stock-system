@@ -721,6 +721,21 @@ async function initDatabase() {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
 
+  // รายชื่อช่าง — ใช้เติม dropdown "มอบหมายให้ช่าง" ที่การ์ดงาน (JobBoardPage.jsx)
+  // แทนที่ dropdown ช่องยกเดิม (เจ้าของร้านสั่งตัดออก ไม่ได้ใช้ประโยชน์) เพิ่มชื่อใหม่
+  // ได้เองจากหน้าเว็บเมื่อรับช่างเข้าใหม่ — ไม่ผูกกับ users (บัญชีล็อกอิน) เพราะช่าง
+  // ส่วนใหญ่ไม่มีบัญชีของตัวเอง แค่เป็นชื่อให้เลือกมอบหมายงานเฉย ๆ
+  await conn.query(`
+    CREATE TABLE IF NOT EXISTS technicians (
+      id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+      name VARCHAR(100) NOT NULL UNIQUE,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+  for (const name of ['เอ็ม', 'ไทด์', 'ปอนด์', 'เจย์', 'ไป่', 'ต๊อด', 'ควา']) {
+    await conn.query('INSERT IGNORE INTO technicians (name) VALUES (?)', [name]);
+  }
+
   // ประวัติการเปลี่ยนสถานะ — เก็บทุกครั้งที่เปลี่ยน ใครเปลี่ยน เมื่อไหร่ ใช้ดูย้อนหลัง
   // ว่ารถคันนี้ค้างอยู่ขั้นไหนนานเกินไป และคำนวณเวลาที่ใช้ซ่อมจริงต่อคัน
   await conn.query(`

@@ -41,6 +41,7 @@ const lineWebhookBot3Routes = require('./routes/lineWebhookBot3.routes');
 const quotePartPricesRoutes = require('./routes/quotePartPrices.routes');
 const vehicleModelsRoutes = require('./routes/vehicleModels.routes');
 const jobsRoutes = require('./routes/jobs.routes');
+const techniciansRoutes = require('./routes/technicians.routes');
 const boardRoutes = require('./routes/board.routes');
 const trackRoutes = require('./routes/track.routes');
 
@@ -144,6 +145,7 @@ function createApp() {
   // เปิดสาธารณะสำหรับจอ TV ห้องรับรอง คืนเฉพาะข้อมูลที่ไม่ระบุตัวลูกค้า (ดูคอมเมนต์
   // เตือนในไฟล์ board.routes.js ก่อนแก้ query)
   app.use('/api/jobs', jobsRoutes);
+  app.use('/api/technicians', techniciansRoutes);
   app.use('/api/board', boardRoutes);
   app.use('/api/track', trackRoutes);
 

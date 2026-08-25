@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import client from '../api/client';
 import { jobStatusDef, nextMainStatus, prevMainStatus } from '../utils/jobStatus';
-import { WORK_BAYS } from '../utils/workBays';
 import { todayStr } from '../utils/format';
 import AddJobModal from '../components/AddJobModal';
 import CarIcon from '../components/CarIcon';
@@ -23,6 +22,7 @@ export default function JobBoardPage() {
   const [error, setError] = useState('');
   const [busyId, setBusyId] = useState(null);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [technicians, setTechnicians] = useState([]);
 
   // รถที่ออกจากอู่ไปแล้วโดยยังไม่ได้ทำ ไม่ควรค้างอยู่ในคิววันนี้ให้พนักงานสับสน —
   // ทั้ง 3 ทางแยกนี้ยังตามต่อได้จากหน้าอื่นอยู่แล้ว: มัดจำ/นัดวันมาทำ → หน้ามัดจำ
@@ -43,6 +43,16 @@ export default function JobBoardPage() {
   };
 
   useEffect(() => { load(); }, [date]);
+
+  const loadTechnicians = async () => {
+    try {
+      const res = await client.get('/technicians');
+      setTechnicians(res.data.data || []);
+    } catch (err) {
+      // เงียบไว้พอ — dropdown แค่จะว่าง ไม่ใช่ปัญหาที่บล็อกงานอื่นในหน้านี้
+    }
+  };
+  useEffect(() => { loadTechnicians(); }, []);
 
   // Realtime: other tabs/devices changing today's jobs should refresh this
   // list without a manual reload. Guarded by `date` — staff browsing a past
@@ -65,14 +75,36 @@ export default function JobBoardPage() {
     }
   }
 
-  async function changeBay(job, bay) {
+  const NEW_TECHNICIAN_OPTION = '__new__';
+
+  async function changeTechnician(job, value) {
+    if (value === NEW_TECHNICIAN_OPTION) {
+      const name = window.prompt('ชื่อช่างใหม่:');
+      if (!name || !name.trim()) return;
+      setBusyId(job.id);
+      setError('');
+      try {
+        const res = await client.post('/technicians', { name: name.trim() });
+        setTechnicians((prev) => {
+          if (prev.some((t) => t.id === res.data.data.id)) return prev;
+          return [...prev, res.data.data].sort((a, b) => a.name.localeCompare(b.name, 'th'));
+        });
+        await client.patch(`/jobs/${job.id}`, { technician: res.data.data.name });
+        await load();
+      } catch (err) {
+        setError(err.response?.data?.error || 'เพิ่มชื่อช่างไม่สำเร็จ');
+      } finally {
+        setBusyId(null);
+      }
+      return;
+    }
     setBusyId(job.id);
     setError('');
     try {
-      await client.patch(`/jobs/${job.id}`, { bay: bay || null });
+      await client.patch(`/jobs/${job.id}`, { technician: value || null });
       await load();
     } catch (err) {
-      setError(err.response?.data?.error || 'เปลี่ยนช่องยกไม่สำเร็จ');
+      setError(err.response?.data?.error || 'มอบหมายช่างไม่สำเร็จ');
     } finally {
       setBusyId(null);
     }
@@ -151,12 +183,13 @@ export default function JobBoardPage() {
                     </div>
                   </div>
                   <select
-                    value={j.bay || ''}
+                    value={j.technician || ''}
                     disabled={busy}
-                    onChange={(e) => changeBay(j, e.target.value)}
+                    onChange={(e) => changeTechnician(j, e.target.value)}
                   >
-                    <option value="">ช่องยก: -</option>
-                    {WORK_BAYS.map((b) => <option key={b} value={b}>ช่องยก: {b}</option>)}
+                    <option value="">ช่าง: -</option>
+                    {technicians.map((t) => <option key={t.id} value={t.name}>ช่าง: {t.name}</option>)}
+                    <option value={NEW_TECHNICIAN_OPTION}>+ เพิ่มชื่อช่างใหม่...</option>
                   </select>
                 </div>
               </div>
