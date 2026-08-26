@@ -650,17 +650,21 @@ async function createQuotationFromQueue(parsed) {
     }
 
     // ไม่เจอด้วยเลขคิว (เลขคิววันนี้ย่อมไม่ตรงกับเลขคิวที่พิมพ์ไว้ตอนนัด ซึ่งเป็นคน
-    // ละวัน) แต่ลูกค้าคนนี้มีใบเสนอราคาที่ "นัดทำ" (status='scheduled') ค้างอยู่ →
-    // ถือว่าเป็นลูกค้าที่มาตามนัด ไม่ใช่งานใหม่ ดึงใบเดิมมาใช้แทนการเปิดใบซ้อน (จะ
-    // อัปเดตแค่เลขคิว/สถานะที่จุด UPDATE ด้านล่าง ไม่แตะวันที่ใบเดิม)
+    // ละวัน) แต่ลูกค้าคนนี้มีใบเสนอราคาที่ "รอทำ" ค้างอยู่ — ไม่ว่าจะนัดวันไว้แล้ว
+    // (status='scheduled') หรือมัดจำไว้แต่ยังไม่ได้นัดวัน (status='no_date') → ถือว่า
+    // เป็นลูกค้าที่มาตามนัด/มาใช้มัดจำเดิม ไม่ใช่งานใหม่ ดึงใบเดิมมาใช้แทนการเปิดใบ
+    // ซ้อน (จะอัปเดตแค่เลขคิว/สถานะที่จุด UPDATE ด้านล่าง ไม่แตะวันที่ใบเดิม) — เดิม
+    // เช็คแค่ 'scheduled' ทำให้ลูกค้าที่มัดจำไว้แบบไม่มีวันนัด (no_date) พอมาจริงแล้ว
+    // ลงคิวใหม่ผ่านไลน์ กลายเป็นเปิดใบเสนอราคาซ้อนใบใหม่แทนที่จะไปแก้ใบเดิม (บั๊กที่
+    // เจ้าของร้านแจ้ง)
     // จำกัดแค่ 1 ใบล่าสุด — ถ้าลูกค้ามีนัดค้างพร้อมกันมากกว่า 1 คัน (เช่น 2 คันนัด
     // วันเดียวกัน) เคสนี้ยังจับคู่ผิดคันได้ ยอมรับเป็นข้อจำกัดที่รู้อยู่แล้ว
     let matchedScheduled = false;
     if (!existing) {
       const [scheduledRows] = await conn.execute(
         `SELECT id, quotation_no, status, converted_receipt_id, vehicle_id, deposit_amount FROM quotations
-         WHERE customer_id = ? AND status = 'scheduled' AND closed_at IS NULL
-         ORDER BY scheduled_date ASC, id DESC LIMIT 1`,
+         WHERE customer_id = ? AND status IN ('scheduled', 'no_date') AND closed_at IS NULL
+         ORDER BY (scheduled_date IS NULL) ASC, scheduled_date ASC, id DESC LIMIT 1`,
         [customerId]
       );
       if (scheduledRows.length > 0) {
@@ -900,21 +904,29 @@ async function createQuotationFromQueue(parsed) {
     let jobId = null;
     if (vehicleId) {
       let existingJob;
-      const [[byQuotation]] = await conn.query('SELECT id, quotation_id FROM jobs WHERE quotation_id = ? LIMIT 1', [quotationId]);
-      existingJob = byQuotation;
-      // ไม่เจองานที่ผูกใบนี้ไว้แล้ว — เช็คต่อว่าลูกค้ามาสร้างงานไว้ที่หน้าเว็บก่อนแล้ว
-      // หรือเปล่า (กดรับรถเข้าคิวที่เคาน์เตอร์ก่อน ยังไม่ทันผูกใบเสนอราคา แล้วค่อยพิมพ์
-      // ไลน์ตามทีหลัง) เดิมจับคู่แค่ทิศทางเดียว (POST /jobs เช็คตอนสร้างงานว่ามีใบ
-      // pending อยู่ก่อนไหม) แต่ไม่เคยย้อนกลับมาเช็คฝั่งนี้เลย ทำให้ได้งานซ้อนสองคิว
-      // สำหรับรถคันเดียวกันวันเดียวกัน (เจ้าของร้านเจอปัญหานี้จริง — ใบเสนอราคาลอย
-      // แยกจากงานที่มีอยู่แล้ว) จับคู่ด้วยลูกค้า+รถ+วันเดียวกัน ที่ยังไม่มีใบเสนอราคา
-      // ผูกอยู่เลย (quotation_id IS NULL) เท่านั้น กันทับงานที่มีใบอื่นอยู่แล้วโดยไม่ตั้งใจ
+      // เช็คก่อนว่าลูกค้ามาสร้างงานไว้ที่หน้าเว็บของ "วันนี้" แล้วหรือยัง (กดรับรถเข้า
+      // คิวที่เคาน์เตอร์ก่อน ยังไม่ทันผูกใบเสนอราคา แล้วค่อยพิมพ์ไลน์ตามทีหลัง) — เช็ค
+      // จุดนี้ก่อนเสมอ สำคัญกว่าการเช็คว่าใบเสนอราคานี้เคยผูกกับงานเก่าไว้หรือไม่
+      // เพราะถ้าใบเสนอราคาที่จับคู่ได้ (matchedScheduled) มาจากงานเก่าคนละวัน (เช่น
+      // ลูกค้ามัดจำ/นัดไว้ทางไลน์ก่อนแล้ว เพิ่งมาจริงวันนี้) งานเก่าวันนั้นควรปล่อยไว้
+      // เป็นประวัติ ไม่ควรถูกดึงมาสวมคิววันนี้ทับ (ทำให้ job_date ไม่ตรงกับที่ขึ้นจอ
+      // จริง กลายเป็นงานซ้อนกับงานที่พนักงานสร้างไว้แล้วที่หน้าเว็บ — บั๊กที่เจ้าของ
+      // ร้านแจ้ง) จับคู่ด้วยลูกค้า+รถ+วันเดียวกัน ที่ยังไม่มีใบเสนอราคาผูกอยู่เลย
+      // (quotation_id IS NULL) เท่านั้น กันทับงานที่มีใบอื่นอยู่แล้วโดยไม่ตั้งใจ
+      const [[byVisit]] = await conn.query(
+        `SELECT id FROM jobs WHERE customer_id = ? AND vehicle_id = ? AND job_date = ? AND quotation_id IS NULL ORDER BY id DESC LIMIT 1`,
+        [customerId, vehicleId, quotationDate]
+      );
+      existingJob = byVisit;
+      // ไม่มีงานวันนี้ที่ยังไม่ผูกไว้เลย — ค่อยเช็คว่าใบนี้เคยผูกงานไว้อยู่ก่อนหรือไม่
+      // (ข้อความ resend แก้ไขใบเดิมของงานเดิมวันเดียวกัน) แต่ต้องเป็นงานของ "วันนี้"
+      // เท่านั้น ไม่งั้นจะไปสวมทับงานเก่าคนละวันแทนที่จะสร้างงานใหม่ให้วันนี้
       if (!existingJob) {
-        const [[byVisit]] = await conn.query(
-          `SELECT id FROM jobs WHERE customer_id = ? AND vehicle_id = ? AND job_date = ? AND quotation_id IS NULL ORDER BY id DESC LIMIT 1`,
-          [customerId, vehicleId, quotationDate]
+        const [[byQuotation]] = await conn.query(
+          `SELECT id FROM jobs WHERE quotation_id = ? AND job_date = ? LIMIT 1`,
+          [quotationId, quotationDate]
         );
-        existingJob = byVisit;
+        existingJob = byQuotation;
       }
       if (existingJob) {
         jobId = existingJob.id;
