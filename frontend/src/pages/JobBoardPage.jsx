@@ -65,11 +65,26 @@ export default function JobBoardPage() {
     (payload) => { if (payload.jobDate === date) load({ silent: true }); }
   );
 
+  // "อนุมัติ" ไม่ใช่แค่เปลี่ยน label ของงานเฉยๆ เหมือนสถานะอื่นในเส้นทางหลัก — ต้อง
+  // สร้างใบเสร็จ + อัปเดตสถานะใบเสนอราคาไปด้วยกันในธุรกรรมเดียว (เหมือนปุ่ม "อนุมัติ"
+  // ที่หน้ารายละเอียดงาน) เดิมปุ่มนี้ที่การ์ดยิง PATCH /jobs/:id/status เฉยๆ เหมือน
+  // สถานะอื่นทุกอัน เลยเปลี่ยนแค่ label งานเป็น "อนุมัติ" แต่ใบเสนอราคาไม่ขยับตาม
+  // เลย (บั๊กที่เจ้าของร้านแจ้ง) — สถานะอื่นในเส้นทางหลัก (รับรถ/ตรวจเช็ค/เสนอราคา/
+  // กำลังซ่อม/รอตั้งศูนย์/พร้อมส่ง/ส่งแล้ว) ไม่มีผลข้างเคียงแบบนี้ ใช้ endpoint เดิมได้
   async function changeStatus(job, status) {
     setBusyId(job.id);
     setError('');
     try {
-      await client.patch(`/jobs/${job.id}/status`, { status });
+      if (status === 'approved') {
+        if (job.quotation_id) {
+          await client.patch(`/quotations/${job.quotation_id}/approve`);
+          await client.patch(`/jobs/${job.id}/status`, { status: 'approved' });
+        } else {
+          await client.post(`/jobs/${job.id}/quotation/approve`);
+        }
+      } else {
+        await client.patch(`/jobs/${job.id}/status`, { status });
+      }
       await load();
     } catch (err) {
       setError(err.response?.data?.error || 'เปลี่ยนสถานะไม่สำเร็จ');
