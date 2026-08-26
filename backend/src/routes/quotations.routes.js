@@ -462,6 +462,14 @@ router.put('/:id', async (req, res) => {
       : (deposit_amount === '' || deposit_amount === null ? null : Number(deposit_amount));
     const depositDate = deposit_date === undefined ? existingQuotation.deposit_date : (deposit_date || null);
 
+    // ใส่มัดจำเข้ามาใหม่ (ที่เดิมไม่มี) ผ่านฟอร์มแก้ไขธรรมดานี้ ตอนใบยังเป็น pending
+    // เฉยๆ (ยังไม่ตัดสินใจอะไรเลย) — ต้องดันสถานะไปเป็น "ยังไม่ระบุวันนัดหมาย" ด้วย
+    // ไม่งั้นใบจะไม่โผล่หน้า "ลูกค้าที่นัดหมาย" เลยทั้งที่มีมัดจำจริง (เจอปัญหานี้มาแล้ว
+    // กับใบที่มัดจำผ่านไลน์ตรงๆ) ไม่แตะสถานะอื่นที่ตัดสินใจไปแล้ว (approved/scheduled/
+    // no_date/declined) กันทับสถานะที่ถูกต้องอยู่แล้วโดยไม่ตั้งใจ
+    const gainedDeposit = !(Number(existingQuotation.deposit_amount) > 0) && Number(depositAmount) > 0;
+    const nextStatus = gainedDeposit && existingQuotation.status === 'pending' ? 'no_date' : existingQuotation.status;
+
     if (!selectedCustomerId) {
       const { customer_name, phone } = newCustomer;
       const normalizedNewPhone = normalizePhone(phone);
@@ -510,7 +518,7 @@ router.put('/:id', async (req, res) => {
 
     await conn.execute(
       `UPDATE quotations
-       SET customer_id = ?, vehicle_id = ?, quotation_date = ?, mileage = ?, remark = ?, product_summary = ?, total_amount = ?, queue_no = ?, symptom = ?, deposit_amount = ?, deposit_date = ?
+       SET customer_id = ?, vehicle_id = ?, quotation_date = ?, mileage = ?, remark = ?, product_summary = ?, total_amount = ?, queue_no = ?, symptom = ?, deposit_amount = ?, deposit_date = ?, status = ?
        WHERE id = ?`,
       [
         selectedCustomerId,
@@ -524,6 +532,7 @@ router.put('/:id', async (req, res) => {
         symptom || null,
         depositAmount,
         depositDate,
+        nextStatus,
         id
       ]
     );

@@ -1446,7 +1446,9 @@ describe('POST /api/line/webhook', () => {
       );
       createdCustomerIds.push(q1.customer_id);
       expect(Number(q1.deposit_amount)).toBe(3000);
-      expect(q1.status).toBe('pending');
+      // มัดจำแล้วไม่มีวันนัด → no_date ไม่ใช่ pending เฉยๆ (ให้โผล่หน้า "ลูกค้าที่
+      // นัดหมาย" — เดิมค้าง pending มาก่อน แก้ไปแล้วเพราะเป็นสาเหตุของบั๊กจริง)
+      expect(q1.status).toBe('no_date');
 
       const closeText = `คิว ${queueNo}\nช่องทางการชำระ: โอน\nลูกค้าชำระเงิน: 7000\nชำระเงินเรียบร้อย`;
       const second = await postWebhook(eventsBody([messageEvent(closeText, `msg-closeonly2-${uniq}`)]));
@@ -1578,6 +1580,67 @@ describe('POST /api/line/webhook', () => {
       );
       expect(Number(receipt.deposit_amount)).toBe(4000);
       expect(Number(receipt.total_amount)).toBe(10500); // ยอดรวมทั้งบิล ไม่ใช่ยอดที่จ่าย 6500
+    });
+  });
+
+  // เจ้าของร้านเจอบั๊กจริง: พิมพ์ "มัดจำ:" เข้าไลน์เฉยๆ ไม่มี "วันนัดหมาย:" ใบเสนอราคา
+  // ค้างเป็น pending ไม่โผล่หน้า "ลูกค้าที่นัดหมาย" ทั้งที่มัดจำแล้วจริง (สาเหตุของ
+  // IV250826014 ที่ต้องแก้มือ)
+  describe('มัดจำผ่านไลน์โดยไม่มีวันนัดหมาย → ตั้งสถานะ no_date ให้เอง ไม่ค้าง pending', () => {
+    test('ข้อความแรกมีมัดจำ ไม่มีวันนัดหมาย → สร้างใบเสนอราคาสถานะ no_date ทันที', async () => {
+      const uniq = Date.now().toString().slice(-7);
+      const phone = `084${uniq}`;
+      const res = await postWebhook(eventsBody([messageEvent(
+        templateText({
+          queueNo: `70${uniq}`,
+          name: 'คุณทดสอบมัดจำไม่มีวันนัด',
+          phone,
+          items: [{ name: 'ค่าแรง', price: 2000 }],
+          payment: { deposit: 500 },
+        }),
+        `msg-depositnodate1-${uniq}`
+      )]));
+      expect(res.status).toBe(200);
+      expect(res.body.created).toHaveLength(1);
+
+      const [[quotation]] = await pool.query('SELECT * FROM quotations WHERE quotation_no = ?', [res.body.created[0]]);
+      createdCustomerIds.push(quotation.customer_id);
+      expect(quotation.status).toBe('no_date');
+      expect(Number(quotation.deposit_amount)).toBe(500);
+    });
+
+    test('resend ข้อความเดิมต่อ (เพิ่มรายการ) → ยังจับคู่ใบเดิมได้ ไม่เปิดใบใหม่ซ้อน (ใบเดิมเป็น no_date แล้ว)', async () => {
+      const uniq = Date.now().toString().slice(-7);
+      const phone = `085${uniq}`;
+      const queueNo = `71${uniq}`;
+      const plate = `9งง${uniq.slice(0, 4)}`;
+
+      const first = await postWebhook(eventsBody([messageEvent(
+        templateText({
+          queueNo,
+          name: 'คุณทดสอบresendไม่มีวันนัด',
+          phone,
+          plate,
+          items: [{ name: 'ค่าแรง', price: 2000 }],
+          payment: { deposit: 500 },
+        }),
+        `msg-depositnodate2a-${uniq}`
+      )]));
+      expect(first.body.created).toHaveLength(1);
+      const [[quotationBefore]] = await pool.query('SELECT id, customer_id, status FROM quotations WHERE quotation_no = ?', [first.body.created[0]]);
+      createdCustomerIds.push(quotationBefore.customer_id);
+      expect(quotationBefore.status).toBe('no_date');
+
+      const second = await postWebhook(eventsBody([messageEvent(
+        `คิว:${queueNo}\nชื่อลูกค้า:คุณทดสอบresendไม่มีวันนัด\nเบอร์โทร:${phone}\nทะเบียนรถ:${plate}\nรายการ:\nค่าแรง 2000\nอะไหล่ 300`,
+        `msg-depositnodate2b-${uniq}`
+      )]));
+      expect(second.body.created).toHaveLength(1);
+      expect(second.body.created[0]).toBe(first.body.created[0]); // ใบเดิม ไม่ใช่ใบใหม่
+
+      const [[quotationAfter]] = await pool.query('SELECT status, total_amount FROM quotations WHERE id = ?', [quotationBefore.id]);
+      expect(quotationAfter.status).toBe('no_date'); // ยังเป็น no_date เหมือนเดิม
+      expect(Number(quotationAfter.total_amount)).toBe(2300);
     });
   });
 

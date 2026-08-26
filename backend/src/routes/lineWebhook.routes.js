@@ -635,9 +635,12 @@ async function createQuotationFromQueue(parsed) {
     // มีรถผูกอยู่แล้วหรือไม่ ดู vehicleId ด้านล่าง)
     let existing = null;
     if (parsed.queue_no) {
+      // 'no_date' รวมอยู่ด้วย — ใบที่มัดจำแล้วแต่ยังไม่มีวันนัด (สถานะนี้เกิดจากมัดจำ
+      // ที่ตั้งผ่านข้อความไลน์เองด้วย ดู hasDeposit ด้านล่าง) ต้อง resend/แก้ไขต่อได้
+      // เหมือน pending ปกติ ไม่งั้นข้อความถัดไปจะหาใบเดิมไม่เจอแล้วเปิดใบใหม่ซ้อน
       const [rows] = await conn.execute(
         `SELECT id, quotation_no, status, converted_receipt_id, vehicle_id, deposit_amount FROM quotations
-         WHERE customer_id = ? AND quotation_date >= DATE_SUB(?, INTERVAL 14 DAY) AND status IN ('pending', 'approved')
+         WHERE customer_id = ? AND quotation_date >= DATE_SUB(?, INTERVAL 14 DAY) AND status IN ('pending', 'approved', 'no_date')
          AND closed_at IS NULL
          AND (queue_no = ? OR requested_queue_no = ?)
          ORDER BY id DESC LIMIT 1`,
@@ -812,7 +815,7 @@ async function createQuotationFromQueue(parsed) {
       // AND closed_at IS NULL: บิลที่ปิดแล้วปล่อยเลขคิวของมันคืนให้ลูกค้าคนใหม่ใช้ได้
       // เลย ไม่ถือว่า "ชน" อีกต่อไป (งานจบแล้วจริง ๆ)
       const [takenByOther] = await conn.execute(
-        `SELECT id FROM quotations WHERE quotation_date = ? AND queue_no = ? AND customer_id != ? AND status IN ('pending', 'approved') AND closed_at IS NULL LIMIT 1`,
+        `SELECT id FROM quotations WHERE quotation_date = ? AND queue_no = ? AND customer_id != ? AND status IN ('pending', 'approved', 'no_date') AND closed_at IS NULL LIMIT 1`,
         [quotationDate, parsed.queue_no, customerId]
       );
       if (takenByOther.length > 0) {
@@ -829,6 +832,11 @@ async function createQuotationFromQueue(parsed) {
     // (AppointmentsPage.jsx) และปุ่ม "วันที่" บนหน้ารายการใช้ (PATCH /:id/schedule)
     // ไม่ได้แยกฟิลด์ใหม่ต่างหาก — พิมพ์มาแล้วโผล่ในหน้านัดหมายทันทีโดยอัตโนมัติ
     const hasAppointment = Boolean(parsed.appointment_date);
+    // มีมัดจำแต่ไม่มีวันนัด (พิมพ์ "มัดจำ:" มาเฉยๆ ไม่มี "วันนัดหมาย:") ต้องดันสถานะไป
+    // "ยังไม่ระบุวันนัดหมาย" เหมือนกับตอนตั้งมัดจำผ่านหน้าเว็บ ไม่งั้นใบจะค้างเป็น
+    // pending เฉยๆ ไม่โผล่หน้า "ลูกค้าที่นัดหมาย" ทั้งที่มัดจำแล้วจริง (เจอปัญหานี้มา
+    // แล้ว — สาเหตุของ IV250826014 ที่ต้องแก้มือ)
+    const hasDeposit = parsed.deposit_amount != null && Number(parsed.deposit_amount) > 0;
 
     let quotationId;
     let quotation_no;
@@ -846,8 +854,12 @@ async function createQuotationFromQueue(parsed) {
           [vehicleId, parsed.mileage ?? null, parsed.remark || null, product_summary, total_amount, parsed.symptom || null, parsed.deposit_amount ?? null, parsed.deposit_date || null, actualQueueNo || null, hasAppointment ? 'scheduled' : 'pending', hasAppointment ? parsed.appointment_date : null, quotationId]
         );
       } else {
+        // ดันไป no_date เฉพาะตอนใบยังเป็น pending เฉยๆ เท่านั้น (กันทับใบที่อนุมัติ
+        // ไปแล้วให้กลับไปเป็น no_date โดยไม่ตั้งใจ)
+        const willHaveDeposit = hasDeposit || Number(existing.deposit_amount) > 0;
+        const shouldBumpToNoDate = !hasAppointment && willHaveDeposit && existing.status === 'pending';
         await conn.execute(
-          `UPDATE quotations SET vehicle_id = ?, mileage = COALESCE(?, mileage), remark = ?, product_summary = ?, total_amount = ?, symptom = ?, deposit_amount = COALESCE(?, deposit_amount), deposit_date = COALESCE(?, deposit_date)${hasAppointment ? ", status = 'scheduled', scheduled_date = ?" : ''}
+          `UPDATE quotations SET vehicle_id = ?, mileage = COALESCE(?, mileage), remark = ?, product_summary = ?, total_amount = ?, symptom = ?, deposit_amount = COALESCE(?, deposit_amount), deposit_date = COALESCE(?, deposit_date)${hasAppointment ? ", status = 'scheduled', scheduled_date = ?" : (shouldBumpToNoDate ? ", status = 'no_date'" : '')}
            WHERE id = ?`,
           hasAppointment
             ? [vehicleId, parsed.mileage ?? null, parsed.remark || null, product_summary, total_amount, parsed.symptom || null, parsed.deposit_amount ?? null, parsed.deposit_date || null, parsed.appointment_date, quotationId]
@@ -857,12 +869,13 @@ async function createQuotationFromQueue(parsed) {
       await conn.execute('DELETE FROM quotation_items WHERE quotation_id = ?', [quotationId]);
     } else {
       quotation_no = await generateQuotationNo(conn);
+      const initialStatus = hasAppointment ? 'scheduled' : (hasDeposit ? 'no_date' : 'pending');
       const [quotationResult] = await conn.execute(
-        `INSERT INTO quotations (quotation_no, quotation_date, customer_id, vehicle_id, mileage, remark, product_summary, total_amount, queue_no, requested_queue_no, symptom, deposit_amount, deposit_date${hasAppointment ? ', status, scheduled_date' : ''})
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?${hasAppointment ? ', ?, ?' : ''})`,
+        `INSERT INTO quotations (quotation_no, quotation_date, customer_id, vehicle_id, mileage, remark, product_summary, total_amount, queue_no, requested_queue_no, symptom, deposit_amount, deposit_date, status${hasAppointment ? ', scheduled_date' : ''})
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?${hasAppointment ? ', ?' : ''})`,
         hasAppointment
-          ? [quotation_no, quotationDate, customerId, vehicleId, parsed.mileage ?? 0, parsed.remark || null, product_summary, total_amount, actualQueueNo || null, requestedQueueNo, parsed.symptom || null, parsed.deposit_amount ?? null, parsed.deposit_date || null, 'scheduled', parsed.appointment_date]
-          : [quotation_no, quotationDate, customerId, vehicleId, parsed.mileage ?? 0, parsed.remark || null, product_summary, total_amount, actualQueueNo || null, requestedQueueNo, parsed.symptom || null, parsed.deposit_amount ?? null, parsed.deposit_date || null]
+          ? [quotation_no, quotationDate, customerId, vehicleId, parsed.mileage ?? 0, parsed.remark || null, product_summary, total_amount, actualQueueNo || null, requestedQueueNo, parsed.symptom || null, parsed.deposit_amount ?? null, parsed.deposit_date || null, initialStatus, parsed.appointment_date]
+          : [quotation_no, quotationDate, customerId, vehicleId, parsed.mileage ?? 0, parsed.remark || null, product_summary, total_amount, actualQueueNo || null, requestedQueueNo, parsed.symptom || null, parsed.deposit_amount ?? null, parsed.deposit_date || null, initialStatus]
       );
       quotationId = quotationResult.insertId;
     }
@@ -1158,7 +1171,7 @@ async function closeQuotationByQueue(parsed) {
        FROM quotations q
        LEFT JOIN customers c ON q.customer_id = c.id
        WHERE (q.queue_no = ? OR q.requested_queue_no = ?) AND q.closed_at IS NULL
-         AND q.status IN ('pending', 'approved')`;
+         AND q.status IN ('pending', 'approved', 'no_date')`;
     let [rows] = await conn.execute(
       `${baseSelect} AND q.quotation_date = ? ORDER BY q.id DESC`,
       [parsed.queue_no, parsed.queue_no, quotationDate]
@@ -1306,7 +1319,7 @@ async function updateQuotationItemsByQueue(queueNo, itemLines, explicitDate) {
        LEFT JOIN customers c ON q.customer_id = c.id
        LEFT JOIN vehicles v ON q.vehicle_id = v.id
        WHERE (q.queue_no = ? OR q.requested_queue_no = ?) AND q.closed_at IS NULL
-         AND q.status IN ('pending', 'approved')`;
+         AND q.status IN ('pending', 'approved', 'no_date')`;
 
     let rows;
     if (explicitDate) {

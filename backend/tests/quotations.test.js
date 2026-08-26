@@ -419,6 +419,85 @@ describe('PUT /api/quotations/:id — editing an approved quotation syncs its re
   });
 });
 
+// เจ้าของร้านเจอปัญหาจริง: ใส่มัดจำผ่านฟอร์ม "แก้ไข" ธรรมดา (ไม่ใช่ปุ่ม "วันที่") ตอน
+// ใบยังเป็น pending เฉยๆ — มัดจำถูกบันทึกแต่สถานะไม่ขยับ ใบเลยไม่โผล่หน้า "ลูกค้าที่
+// นัดหมาย" เลยทั้งที่มีมัดจำจริง
+describe('PUT /api/quotations/:id — ใส่มัดจำเข้ามาใหม่ตอนใบยัง pending → ดันสถานะเป็น no_date ให้เอง', () => {
+  let token;
+  let fixture;
+
+  beforeAll(async () => {
+    token = await getOfficeToken();
+  });
+
+  beforeEach(async () => {
+    fixture = await createCustomerWithVehicle({ namePrefix: 'PUT Deposit Status Test Customer' });
+  });
+
+  afterEach(async () => {
+    await cleanupCustomer(fixture.customerId);
+  });
+
+  test('ใบ pending ไม่มีมัดจำ แก้ไขใส่มัดจำเข้ามาใหม่ → สถานะเปลี่ยนเป็น no_date อัตโนมัติ', async () => {
+    const createRes = await request(app)
+      .post('/api/quotations')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        customer_id: fixture.customerId,
+        vehicle_id: fixture.vehicleId,
+        quotation_date: '2026-07-10',
+        items: [{ product_name: 'ทดสอบ', quantity: 1, unit_price: 1000 }],
+      });
+    const quotationId = createRes.body.quotation_id;
+
+    const editRes = await request(app)
+      .put(`/api/quotations/${quotationId}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        customer_id: fixture.customerId,
+        vehicle_id: fixture.vehicleId,
+        quotation_date: '2026-07-10',
+        items: [{ product_name: 'ทดสอบ', quantity: 1, unit_price: 1000 }],
+        deposit_amount: 500,
+        deposit_date: '2026-07-10',
+      });
+    expect(editRes.status).toBe(200);
+
+    const [[row]] = await pool.query('SELECT status FROM quotations WHERE id = ?', [quotationId]);
+    expect(row.status).toBe('no_date');
+  });
+
+  test('ใบที่อนุมัติไปแล้ว แก้ไขใส่มัดจำเข้ามา → ไม่แตะสถานะ ยัง approved เหมือนเดิม', async () => {
+    const createRes = await request(app)
+      .post('/api/quotations')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        customer_id: fixture.customerId,
+        vehicle_id: fixture.vehicleId,
+        quotation_date: '2026-07-10',
+        items: [{ product_name: 'ทดสอบ', quantity: 1, unit_price: 1000 }],
+      });
+    const quotationId = createRes.body.quotation_id;
+    await request(app).patch(`/api/quotations/${quotationId}/approve`).set('Authorization', `Bearer ${token}`).send();
+
+    const editRes = await request(app)
+      .put(`/api/quotations/${quotationId}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        customer_id: fixture.customerId,
+        vehicle_id: fixture.vehicleId,
+        quotation_date: '2026-07-10',
+        items: [{ product_name: 'ทดสอบ', quantity: 1, unit_price: 1000 }],
+        deposit_amount: 500,
+        deposit_date: '2026-07-10',
+      });
+    expect(editRes.status).toBe(200);
+
+    const [[row]] = await pool.query('SELECT status FROM quotations WHERE id = ?', [quotationId]);
+    expect(row.status).toBe('approved');
+  });
+});
+
 // มัดจำ (deposit_amount/deposit_date) เป็นฟิลด์ first-class ของใบเสนอราคาแล้ว (บอทไลน์
 // เป็นคนตั้งค่าให้ตอนนี้ — ฟอร์มเว็บยังไม่มีช่องกรอกเอง เป็นงานถัดไป) ต้อง snapshot
 // ไหลลงใบเสร็จที่จุดเดียวกับ remark/mileage เสมอ (approve-insert และ PUT-triggered sync)
