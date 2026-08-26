@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import client from "../api/client";
+import TechnicianMultiSelect from "./TechnicianMultiSelect";
 
 const PAYMENT_METHODS = ['โอน', 'บัตรเครดิต', 'เงินสด', 'QRCode'];
 const PAYMENT_METHOD_CLASS = {
@@ -87,9 +88,6 @@ export default function DailySummaryDetailModal({ date, onClose, onReceiptsMoved
 
   const handleTechnicianChange = (receiptId, value) => {
     updateLocal(receiptId, { technician_name: value });
-  };
-
-  const handleTechnicianBlur = (receiptId, value) => {
     persistMeta(receiptId, { technician_name: value });
   };
 
@@ -239,6 +237,17 @@ export default function DailySummaryDetailModal({ date, onClose, onReceiptsMoved
               wrapper.replaceWith(span);
             } else {
               inp.replaceWith(span);
+            }
+          });
+          clonedDoc.querySelectorAll('.daily-summary-capture-area .tech-multiselect-trigger').forEach((btn) => {
+            const span = clonedDoc.createElement('span');
+            span.textContent = btn.textContent && btn.textContent !== 'เลือกช่าง' ? btn.textContent : '-';
+            span.style.cssText = 'display:block;padding:2px 0;color:#1f2937;font-size:0.9rem;';
+            const wrapper = btn.closest('.tech-multiselect');
+            if (wrapper) {
+              wrapper.replaceWith(span);
+            } else {
+              btn.replaceWith(span);
             }
           });
           clonedDoc.querySelectorAll('.daily-summary-capture-area input[type="text"]').forEach((inp) => {
@@ -399,14 +408,10 @@ export default function DailySummaryDetailModal({ date, onClose, onReceiptsMoved
                         </div>
                       </td>
                       <td data-label="ช่างซ่อม">
-                        <input
-                          type="text"
-                          className="daily-summary-tech-input"
-                          placeholder="กรอกชื่อช่าง"
-                          value={r.technician_name || ''}
+                        <TechnicianMultiSelect
+                          value={r.technician_name}
                           disabled={savingId === r.id}
-                          onChange={(e) => handleTechnicianChange(r.id, e.target.value)}
-                          onBlur={(e) => handleTechnicianBlur(r.id, e.target.value)}
+                          onChange={(value) => handleTechnicianChange(r.id, value)}
                         />
                       </td>
                       <td data-label="หมายเหตุ">

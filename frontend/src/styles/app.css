@@ -2006,6 +2006,72 @@ button:disabled { background: #f3f4f6; color: #9ca3af; cursor: not-allowed; }
   width: 100%;
 }
 
+.tech-multiselect {
+  position: relative;
+  width: 100%;
+}
+.tech-multiselect-trigger {
+  width: 100%;
+  min-height: unset;
+  padding: 5px 8px;
+  font-size: 0.9rem;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  background: #fff;
+  text-align: left;
+  cursor: pointer;
+  color: #374151;
+}
+.tech-multiselect-trigger:disabled {
+  background: #f3f4f6;
+  cursor: not-allowed;
+}
+.tech-multiselect-panel {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 160px;
+  background: #fff;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  padding: 6px;
+}
+.tech-multiselect-option {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  font-size: 0.9rem;
+  color: #374151;
+  cursor: pointer;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+.tech-multiselect-option:hover {
+  background: #f3f4f6;
+}
+.tech-multiselect-option input {
+  cursor: pointer;
+}
+.tech-multiselect-add {
+  display: block;
+  width: 100%;
+  margin-top: 4px;
+  padding: 4px 6px;
+  font-size: 0.85rem;
+  color: #4f46e5;
+  background: none;
+  border: none;
+  border-top: 1px solid #e5e7eb;
+  text-align: left;
+  cursor: pointer;
+}
+.tech-multiselect-add:hover {
+  background: #f3f4f6;
+}
+
 /* Scoped to this table specifically (not the shared .quotation-table used
    elsewhere) — the item-detail text was wrapping into a tall narrow column
    while the payment badge/select sat in a column much wider than it needs. */
