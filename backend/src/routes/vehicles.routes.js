@@ -6,6 +6,7 @@ const { authenticate, requireRole } = require('../middleware/auth');
 // หน้านี้ ไม่ใช่ผ่านฟอร์มใบเสนอราคา) ดู PUT /:id ด้านล่าง
 const { pushQuotationUpdate } = require('./lineWebhook.routes');
 const { buildVisitHistory } = require('../utils/visitHistory');
+const { CLOSED_STATUSES } = require('../utils/jobStatusFlow');
 
 const router = express.Router();
 router.use(authenticate);
@@ -57,6 +58,33 @@ router.get('/:id/history', requireRole('office'), async (req, res) => {
   } catch (err) {
     console.error('Error fetching vehicle history:', err);
     res.status(500).json({ error: 'โหลดประวัติไม่สำเร็จ' });
+  }
+});
+
+// ── ใบเสนอราคาเดิมที่ยังเปิดอยู่ของรถคันนี้ (ไม่จำกัดวันที่) — ใช้ตอนพนักงาน
+// พิมพ์ทะเบียนที่หน้า "เพิ่มคิว" แล้วเจอว่ามีใบเสนอราคาเดิมค้างไว้ (เช่นลูกค้าคุยไว้
+// ทางไลน์เมื่อวาน มีรายการ/มัดจำอยู่แล้ว) ให้ดึงมาผูกกับคิววันนี้ได้เลย แทนที่จะต้อง
+// พึ่งการจับคู่อัตโนมัติ (ซึ่งจำกัดแค่วันเดียวกันเท่านั้น กันจับคู่ใบเก่าที่ไม่เกี่ยวกัน
+// ผิดๆ) หรือพิมพ์ไลน์ซ้ำ (เสี่ยงไปโดน isUpdate ทับรายการเดิมถ้าข้อความใหม่ไม่มี
+// รายการ — เจอปัญหานี้จริงมาแล้ว) เกณฑ์ "ยังเปิดอยู่" เดียวกับที่ POST /jobs ใช้เช็ค
+// ก่อนผูก: ยังไม่ปิดบิล และไม่มีงานอื่นที่ยัง active ผูกอยู่แล้ว
+router.get('/:id/open-quotation', requireRole('office'), async (req, res) => {
+  try {
+    const [[quotation]] = await pool.query(
+      `SELECT id, quotation_no, quotation_date, status, total_amount, deposit_amount, deposit_date, symptom
+       FROM quotations
+       WHERE vehicle_id = ? AND closed_at IS NULL
+         AND id NOT IN (
+           SELECT quotation_id FROM jobs
+           WHERE quotation_id IS NOT NULL AND status NOT IN (${CLOSED_STATUSES.map(() => '?').join(',')})
+         )
+       ORDER BY created_at DESC LIMIT 1`,
+      [req.params.id, ...CLOSED_STATUSES]
+    );
+    res.json({ success: true, data: quotation || null });
+  } catch (err) {
+    console.error('Error fetching open quotation:', err);
+    res.status(500).json({ error: 'ค้นหาใบเสนอราคาเดิมไม่สำเร็จ' });
   }
 });
 

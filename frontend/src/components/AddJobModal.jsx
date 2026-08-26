@@ -43,6 +43,13 @@ export default function AddJobModal({ onClose, onCreated, prefill = null }) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
+  // ใบเสนอราคาเดิมที่ยังเปิดอยู่ของรถคันนี้ (ไม่จำกัดวันที่ ต่างจากการจับคู่อัตโนมัติ
+  // ตอนบันทึกที่จำกัดแค่วันเดียวกัน) — เจอทะเบียนแล้วเช็คว่ามีใบค้างไว้ไหม (เช่นคุยไว้
+  // ทางไลน์เมื่อวาน มีรายการ/มัดจำอยู่แล้ว) ให้พนักงานเลือกดึงเข้ามาผูกกับคิววันนี้ได้
+  // เอง แทนที่จะพึ่งการจับคู่อัตโนมัติ/พิมพ์ไลน์ซ้ำ (เคยเจอปัญหาไลน์ทับรายการเดิมมาแล้ว)
+  const [openQuotation, setOpenQuotation] = useState(null);
+  const [pullInQuotation, setPullInQuotation] = useState(false);
+
   useEffect(() => {
     client.get('/vehicles').then((res) => setVehicles(res.data.data || [])).finally(() => setLoadingVehicles(false));
     client.get('/vehicle-models/brands').then((res) => setBrands(res.data.data || []));
@@ -68,6 +75,15 @@ export default function AddJobModal({ onClose, onCreated, prefill = null }) {
     setBrand(matchedVehicle.brand || '');
     setModel(matchedVehicle.model || '');
     setColor(matchedVehicle.color || '');
+  }, [matchedVehicle]);
+
+  useEffect(() => {
+    setOpenQuotation(null);
+    setPullInQuotation(false);
+    if (!matchedVehicle) return;
+    client.get(`/vehicles/${matchedVehicle.id}/open-quotation`)
+      .then((res) => setOpenQuotation(res.data.data))
+      .catch(() => {});
   }, [matchedVehicle]);
 
   // อัปโหลดกี่รูปก็ได้ — ทั้งถ่ายจากกล้อง (input capture="environment") และเลือก
@@ -150,7 +166,7 @@ export default function AddJobModal({ onClose, onCreated, prefill = null }) {
         mileage_in: Number(mileage) || null,
         symptom: symptom.trim(),
         photos,
-        quotation_id: prefill?.quotation_id || null,
+        quotation_id: (pullInQuotation && openQuotation) ? openQuotation.id : (prefill?.quotation_id || null),
       });
 
       onCreated(res.data.id);
@@ -172,6 +188,26 @@ export default function AddJobModal({ onClose, onCreated, prefill = null }) {
           <p style={{ margin: '-4px 0 12px', color: '#15803d', fontSize: 13 }}>
             ✅ เติมข้อมูลจากใบเสนอราคา {prefill.quotation_no} ให้แล้ว แก้ไขได้ตามจริง
           </p>
+        )}
+
+        {!prefill && openQuotation && (
+          <div style={{ margin: '-4px 0 12px', padding: 10, borderRadius: 8, background: '#fffbeb', border: '1px solid #fde68a' }}>
+            <p style={{ margin: 0, fontSize: 13 }}>
+              📋 รถคันนี้มีใบเสนอราคาเดิมค้างอยู่ <strong>{openQuotation.quotation_no}</strong> วันที่{' '}
+              {formatDateTh(openQuotation.quotation_date)} — ฿{Number(openQuotation.total_amount).toLocaleString('th-TH')}
+              {openQuotation.deposit_amount > 0 && ` (มัดจำแล้ว ฿${Number(openQuotation.deposit_amount).toLocaleString('th-TH')})`}
+            </p>
+            <label style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 6, fontSize: 13 }}>
+              <input
+                type="checkbox" checked={pullInQuotation}
+                onChange={(e) => {
+                  setPullInQuotation(e.target.checked);
+                  if (e.target.checked && !symptom.trim() && openQuotation.symptom) setSymptom(openQuotation.symptom);
+                }}
+              />
+              ดึงใบเสนอราคานี้เข้ามาใช้กับคิวนี้เลย (รายการเดิมจะติดมาด้วย ไม่ต้องพิมพ์ใหม่)
+            </label>
+          </div>
         )}
 
         <form onSubmit={handleSubmit} className="modal-form">
