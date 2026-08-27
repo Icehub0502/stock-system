@@ -289,8 +289,8 @@ export default function JobBoardPage() {
                         <img src={qrData.qr_data_url} alt="QR ติดตามสถานะ" />
                       </div>
                       <div className="tqr-steps">
-                        <div className="tqr-step"><span className="tqr-step-no">1</span>สแกน QR ด้วยกล้องมือถือ</div>
-                        <div className="tqr-step"><span className="tqr-step-no">2</span>พิมพ์ทะเบียนรถ + เบอร์โทร 4 ตัวท้าย</div>
+                        <div className="tqr-step"><span className="tqr-step-no">1</span>สแกน <span className="tqr-latin">QR</span> ด้วยกล้องมือถือ</div>
+                        <div className="tqr-step"><span className="tqr-step-no">2</span>พิมพ์ทะเบียนรถ <span className="tqr-latin">+</span> เบอร์โทร <span className="tqr-latin">4</span> ตัวท้าย</div>
                       </div>
                       <div className="tqr-footer">{qrData.tracking_url}</div>
                     </div>
