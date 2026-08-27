@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import client from '../api/client';
 import { jobStatusDef, nextMainStatus, prevMainStatus } from '../utils/jobStatus';
@@ -266,36 +267,46 @@ export default function JobBoardPage() {
                     onChange={(e) => setQrPrintCount(Math.max(1, Math.min(40, Number(e.target.value) || 1)))}
                   />
                 </div>
-                {/* พิมพ์เฉพาะกล่องนี้ (ดู #track-qr-print-area ใน app.css) — ปุ่ม "พิมพ์"
-                    เดิมเรียก window.print() บนทั้งหน้าเฉย ๆ โดยไม่มี print-area ของตัวเอง
-                    ไปโดนกฎ "body * { visibility: hidden }" ของ QR/สต็อกอื่นที่ประกาศไว้
-                    ระดับ global (ใช้ id คนละตัวแยกกัน แต่ scope กว้างทั้ง body) เลยได้
-                    หน้าขาวตอนสั่งพิมพ์จริง — วน qrPrintCount รอบเรียงเป็นตาราง 2 คอลัมน์
-                    บน A4 แผ่นเดียว (ใช้ @page เดียวกับใบเสร็จ/ใบเสนอราคา ไม่ตั้งขนาด
-                    กระดาษเองแยกต่างหาก กันปัญหาเครื่องพิมพ์หาไซส์กระดาษไม่เจอแล้วดัน
-                    ล้นเป็น 2 หน้า) */}
-                <div id="track-qr-print-area">
-                  {Array.from({ length: qrPrintCount }).map((_, i) => (
-                    <div className="track-qr-print-cell" key={i}>
-                      <div className="tqr-brand">
-                        <span className="tqr-brand-champ">Champ</span><span className="tqr-brand-power">power</span><span className="tqr-brand-spk">SPK</span>
+                {/* พิมพ์เฉพาะกล่องนี้ (ดู #track-qr-print-area ใน app.css) — วน
+                    qrPrintCount รอบเรียงเป็นการ์ดขนาด ~12x12cm บน A4 (ใช้ @page เดียวกับ
+                    ใบเสร็จ/ใบเสนอราคา ไม่ตั้งขนาดกระดาษเองแยกต่างหาก)
+
+                    Portal ไปเป็นลูกตรงของ document.body (ไม่ซ้อนอยู่ใต้ modal) — ตอนแรก
+                    ใช้วิธี "body * { visibility:hidden } แล้วเปิดเฉพาะ id นี้" เหมือน
+                    print-area อื่นในระบบ แต่ id นี้อาจมีเนื้อหายาวเกิน 1 หน้า (พิมพ์ทีละ
+                    หลายใบ) และของเดิมต้อง position:absolute เพื่อดึงเนื้อหาออกมาจาก
+                    ตำแหน่งจริงในหน้า Job Board (ซึ่งอยู่ลึกใน modal ทำให้เหลือพื้นที่ว่าง
+                    เปล่าด้านบนถ้าไม่ absolute) — ผลคือพิมพ์ยาวกว่า 1 หน้าไม่ได้ เบราว์เซอร์
+                    ปนเนื้อหาหน้าถัดไปทับกับหน้าก่อนหน้า (การ์ด/QR ซ้อนกันเป็นภาพเลอะ ๆ
+                    ตามที่เจ้าของร้านเจอจริง) Portal ตรงเข้า body ทำให้ไม่ต้อง absolute
+                    เลย ปล่อยให้ไหลตามลำดับเอกสารปกติ พิมพ์ข้ามหลายหน้าได้ถูกต้อง (ดูกฎ
+                    body:has(#track-qr-print-area) #root ใน app.css ที่ซ่อนแอปทั้งหมด
+                    เฉพาะตอนมี portal นี้อยู่เท่านั้น ไม่กระทบการพิมพ์หน้าอื่นในระบบ) */}
+                {createPortal(
+                  <div id="track-qr-print-area">
+                    {Array.from({ length: qrPrintCount }).map((_, i) => (
+                      <div className="track-qr-print-cell" key={i}>
+                        <div className="tqr-brand">
+                          <span className="tqr-brand-champ">Champ</span><span className="tqr-brand-power">power</span><span className="tqr-brand-spk">SPK</span>
+                        </div>
+                        <div className="tqr-title">สแกนเช็คสถานะรถ</div>
+                        <div className="tqr-qr-frame">
+                          <span className="tqr-corner tqr-corner-tl" />
+                          <span className="tqr-corner tqr-corner-tr" />
+                          <span className="tqr-corner tqr-corner-bl" />
+                          <span className="tqr-corner tqr-corner-br" />
+                          <img src={qrData.qr_data_url} alt="QR ติดตามสถานะ" />
+                        </div>
+                        <div className="tqr-steps">
+                          <div className="tqr-step"><span className="tqr-step-no">1</span>สแกน <span className="tqr-latin">QR</span> ด้วยกล้องมือถือ</div>
+                          <div className="tqr-step"><span className="tqr-step-no">2</span>พิมพ์ทะเบียนรถ <span className="tqr-latin">+</span> เบอร์โทร <span className="tqr-latin">4</span> ตัวท้าย</div>
+                        </div>
+                        <div className="tqr-footer">{qrData.tracking_url}</div>
                       </div>
-                      <div className="tqr-title">สแกนเช็คสถานะรถ</div>
-                      <div className="tqr-qr-frame">
-                        <span className="tqr-corner tqr-corner-tl" />
-                        <span className="tqr-corner tqr-corner-tr" />
-                        <span className="tqr-corner tqr-corner-bl" />
-                        <span className="tqr-corner tqr-corner-br" />
-                        <img src={qrData.qr_data_url} alt="QR ติดตามสถานะ" />
-                      </div>
-                      <div className="tqr-steps">
-                        <div className="tqr-step"><span className="tqr-step-no">1</span>สแกน <span className="tqr-latin">QR</span> ด้วยกล้องมือถือ</div>
-                        <div className="tqr-step"><span className="tqr-step-no">2</span>พิมพ์ทะเบียนรถ <span className="tqr-latin">+</span> เบอร์โทร <span className="tqr-latin">4</span> ตัวท้าย</div>
-                      </div>
-                      <div className="tqr-footer">{qrData.tracking_url}</div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>,
+                  document.body
+                )}
               </>
             )}
             <div className="modal-actions">

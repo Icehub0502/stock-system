@@ -917,8 +917,14 @@ button:disabled { background: #f3f4f6; color: #9ca3af; cursor: not-allowed; }
 #track-qr-print-area { display: none; }
 
 @media print {
-  body * { visibility: hidden; }
-  #track-qr-print-area, #track-qr-print-area * { visibility: visible; }
+  /* Portal ไปเป็นลูกตรงของ document.body แล้ว (ดู JobBoardPage.jsx) — ซ่อนแอปทั้งหมด
+     (#root) เฉพาะตอนมี portal นี้อยู่จริงเท่านั้น (:has scoping) ไม่กระทบการพิมพ์หน้า
+     อื่นที่ไม่มี id นี้อยู่ในหน้าเลย เดิมใช้ "body * { visibility:hidden }" +
+     position:absolute ดึงเนื้อหาออกมาจากตำแหน่งจริงในหน้า (ซ้อนอยู่ใต้ modal) แต่
+     absolute ทำให้พิมพ์ยาวเกิน 1 หน้าไม่ได้ถูกต้อง (เนื้อหาหน้าถัดไปไปทับซ้อนกับหน้า
+     ก่อนหน้า — การ์ด/QR เลอะกันตามที่เจอจริงตอนพิมพ์หลายใบ) ปล่อยให้ไหลตามเอกสารปกติ
+     (ไม่ใช้ position:absolute) จึงพิมพ์ข้ามหลายหน้าได้ถูกต้องแล้ว */
+  body:has(#track-qr-print-area) #root { display: none !important; }
   /* การ์ดขนาด ~12x12cm ใบใหญ่ — เหลือแค่คอลัมน์เดียวต่อแถวบน A4 (2 คอลัมน์แบบเดิม
      กว้างไม่พออีกต่อไปที่ขนาดนี้) เรียงลงมาได้ 2 ใบต่อหน้าแนวตั้ง */
   #track-qr-print-area {
@@ -926,17 +932,12 @@ button:disabled { background: #f3f4f6; color: #9ca3af; cursor: not-allowed; }
     grid-template-columns: repeat(auto-fill, 120mm);
     justify-content: center;
     gap: 8mm;
-    position: absolute;
-    top: 0; left: 0;
-    width: 100%;
     padding: 10mm;
   }
   /* min-height แทน height ตายตัว — ระยะบรรทัดจริงตอนพิมพ์ (ฟอนต์/DPI ของเครื่อง
      พิมพ์แต่ละเครื่องไม่เท่ากันเป๊ะกับที่วัดบนจอ) อาจสูงกว่าที่ประมาณไว้เล็กน้อย ถ้าตั้ง
-     height ตายตัวไว้ เนื้อหาที่ล้นจะไม่ถูกบีบแต่ไหลทับการ์ดถัดไปแทน (เจอปัญหานี้จริง —
-     ภาพ QR/ข้อความซ้อนทับกันข้ามใบตอนพิมพ์จริง) ใช้ min-height ให้แถวของ grid ขยาย
-     ตามเนื้อหาจริงแทน กันการ์ดถัดไปถูกเนื้อหาการ์ดก่อนหน้าทับ ต่อให้บางเครื่องพิมพ์ได้
-     การ์ดสูงเกิน 120mm ไปเล็กน้อยก็ยังดีกว่าซ้อนทับกันจนอ่านไม่ออก */
+     height ตายตัวไว้ เนื้อหาที่ล้นจะไม่ถูกบีบแต่ไหลทับการ์ดถัดไปแทน ใช้ min-height ให้
+     แถวของ grid ขยายตามเนื้อหาจริงแทน กันการ์ดถัดไปถูกเนื้อหาการ์ดก่อนหน้าทับ */
   .track-qr-print-cell {
     display: flex;
     flex-direction: column;
