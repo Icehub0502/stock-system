@@ -163,6 +163,7 @@ export default function JobDetailPage() {
           part_name: it.product_name,
           quantity: it.quantity,
           unitPrice: String(it.unit_price),
+          enabled: true,
         };
       });
       setSelectedParts(seeded);
@@ -179,6 +180,7 @@ export default function JobDetailPage() {
             part_name: it.product_name,
             quantity: it.quantity,
             unitPrice: String(it.unit_price),
+            enabled: true,
           };
         });
         setSelectedParts(seeded);
@@ -268,6 +270,7 @@ export default function JobDetailPage() {
               part_name: comp.component_name,
               quantity: Number(comp.default_qty) > 0 ? Number(comp.default_qty) : 1,
               unitPrice: '',
+              enabled: true,
             };
           });
           return next;
@@ -287,7 +290,7 @@ export default function JobDetailPage() {
       }
       return {
         ...prev,
-        [key]: { ...part, quantity: 1, unitPrice: '' },
+        [key]: { ...part, quantity: 1, unitPrice: '', enabled: true },
       };
     });
   }
@@ -318,6 +321,14 @@ export default function JobDetailPage() {
     });
   }
 
+  // ปิดการมองเห็น/นับราคา — ไม่ได้ลบรายการทิ้ง แค่กันไม่ให้นับรวมยอด ใช้ตอนเสนอลูกค้า
+  // ที่มีตัวเลือกราคาต่างกัน (เช่นโช้ค 2 แบบ) พิมพ์ทั้งสองแบบไว้ในรายการเดียวกัน แล้ว
+  // กดปิดอันที่ลูกค้ายังไม่เลือกเพื่อให้เห็นราคาสุทธิของอันที่เปิดอยู่ — ปิดไว้ตอนกด
+  // "บันทึกรายการ" ก็จะไม่ถูกบันทึกไปด้วย (ดู saveQuotationItems ที่กรองเฉพาะ enabled)
+  function toggleEnabled(key) {
+    setSelectedParts((prev) => (prev[key] ? { ...prev, [key]: { ...prev[key], enabled: prev[key].enabled === false } } : prev));
+  }
+
   const catalogCategories = useMemo(() => {
     const seen = new Set();
     const list = [];
@@ -335,8 +346,11 @@ export default function JobDetailPage() {
     : catalogParts;
 
   const selectedPartsList = Object.values(selectedParts);
-  const selectedPartsCount = selectedPartsList.reduce((sum, p) => sum + p.quantity, 0);
-  const selectedPartsTotal = selectedPartsList.reduce((sum, p) => sum + p.quantity * (Number(p.unitPrice) || 0), 0);
+  // เฉพาะรายการที่ "เปิด" อยู่เท่านั้นที่นับเป็นจำนวน/ยอดรวม/สิ่งที่จะบันทึกจริง —
+  // รายการที่ปิดไว้ (toggleEnabled) ยังโชว์ในลิสต์เผื่อเทียบราคาต่อ แต่ไม่นับรวม
+  const activePartsList = selectedPartsList.filter((p) => p.enabled !== false);
+  const selectedPartsCount = activePartsList.reduce((sum, p) => sum + p.quantity, 0);
+  const selectedPartsTotal = activePartsList.reduce((sum, p) => sum + p.quantity * (Number(p.unitPrice) || 0), 0);
 
   // เพิ่มรายการสินค้า/บริการใหม่ที่ยังไม่มีในระบบ (POST /service-items) — ไม่มี
   // ช่องราคา เพราะ service_items ไม่เก็บราคาไว้เลย พนักงานพิมพ์ราคาเองตอนติ๊ก
@@ -384,13 +398,15 @@ export default function JobDetailPage() {
   // ราคาจริงในระบบ จนกว่าจะกด อนุมัติ/นัดวันมาทำ/ไม่ทำ อย่างใดอย่างหนึ่ง (เจ้าของร้าน
   // ขอ — ไม่อยากให้ทุกครั้งที่ติ๊กเลือกอะไหล่กลายเป็นใบเสนอราคาจริงรกพื้นที่ทันที)
   async function saveQuotationItems() {
-    if (selectedPartsList.length === 0) {
+    if (activePartsList.length === 0) {
       setError('กรุณาเลือกรายการอย่างน้อย 1 รายการ');
       return;
     }
     setBusy(true);
     setError('');
-    const items = selectedPartsList.map((p) => ({
+    // บันทึกเฉพาะรายการที่ "เปิด" อยู่ — รายการที่ปิดไว้เพื่อเทียบราคา (toggleEnabled)
+    // เป็นแค่ตัวช่วยตัดสินใจตอนคุยกับลูกค้า ไม่ควรติดไปในใบเสนอราคาจริง
+    const items = activePartsList.map((p) => ({
       product_name: p.part_name,
       quantity: p.quantity,
       unit_price: Number(p.unitPrice) || 0,
@@ -777,35 +793,47 @@ export default function JobDetailPage() {
           {selectedPartsList.length > 0 && (
             <div className="jdp-selected-list">
               <div className="jdp-selected-list-title">รายการที่เลือก ({selectedPartsCount} ชิ้น)</div>
-              {Object.entries(selectedParts).map(([key, item]) => (
-                <div className="jdp-selected-row" key={key}>
-                  <span className="jdp-selected-name">{item.part_name}</span>
-                  {/* กลุ่มควบคุมทั้งสาม (จำนวน/ราคา/ลบ) รวมเป็นก้อนเดียว ไม่แยกกัน
-                      ห่อบรรทัดใหม่ทีละปุ่ม — กันปัญหาเดิมที่จอแคบแล้วปุ่มหลุด
-                      กระจัดกระจาย/โดนตัดขอบ ถ้าพื้นที่ไม่พอก็ตกไปทั้งก้อนแทน */}
-                  <div className="jdp-selected-controls">
-                    <div className="jdp-selected-qty">
-                      <button type="button" onClick={() => changePartQty(key, -1)} aria-label="ลดจำนวน">−</button>
-                      <span>{item.quantity}</span>
-                      <button type="button" onClick={() => changePartQty(key, 1)} aria-label="เพิ่มจำนวน">+</button>
+              {Object.entries(selectedParts).map(([key, item]) => {
+                const isEnabled = item.enabled !== false;
+                return (
+                  <div className={`jdp-selected-row${isEnabled ? '' : ' jdp-selected-row--disabled'}`} key={key}>
+                    <span className="jdp-selected-name">{item.part_name}</span>
+                    {/* กลุ่มควบคุมทั้งสี่ (ปิดการมองเห็น/จำนวน/ราคา/ลบ) รวมเป็นก้อนเดียว
+                        ไม่แยกกันห่อบรรทัดใหม่ทีละปุ่ม — กันปัญหาเดิมที่จอแคบแล้วปุ่มหลุด
+                        กระจัดกระจาย/โดนตัดขอบ ถ้าพื้นที่ไม่พอก็ตกไปทั้งก้อนแทน */}
+                    <div className="jdp-selected-controls">
+                      <button
+                        type="button"
+                        className="jdp-selected-toggle"
+                        onClick={() => toggleEnabled(key)}
+                        aria-label={isEnabled ? 'ปิดการมองเห็น (ไม่นับราคา)' : 'เปิดการมองเห็น (นับราคา)'}
+                        title={isEnabled ? 'ปิดการมองเห็น (ไม่นับราคา)' : 'เปิดการมองเห็น (นับราคา)'}
+                      >
+                        {isEnabled ? '👁️' : '🚫'}
+                      </button>
+                      <div className="jdp-selected-qty">
+                        <button type="button" onClick={() => changePartQty(key, -1)} aria-label="ลดจำนวน">−</button>
+                        <span>{item.quantity}</span>
+                        <button type="button" onClick={() => changePartQty(key, 1)} aria-label="เพิ่มจำนวน">+</button>
+                      </div>
+                      <label className="jdp-selected-price">
+                        <span>฿</span>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          placeholder="ราคา/หน่วย"
+                          value={item.unitPrice}
+                          onChange={(e) => updatePartPrice(key, e.target.value)}
+                        />
+                      </label>
+                      <button type="button" className="jdp-selected-remove" onClick={() => removeSelected(key)} aria-label="ลบรายการ">
+                        ✕
+                      </button>
                     </div>
-                    <label className="jdp-selected-price">
-                      <span>฿</span>
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        placeholder="ราคา/หน่วย"
-                        value={item.unitPrice}
-                        onChange={(e) => updatePartPrice(key, e.target.value)}
-                      />
-                    </label>
-                    <button type="button" className="jdp-selected-remove" onClick={() => removeSelected(key)} aria-label="ลบรายการ">
-                      ✕
-                    </button>
                   </div>
-                </div>
-              ))}
+                );
+              })}
               <div className="jdp-selected-total">รวม {selectedPartsTotal.toLocaleString('th-TH')} บาท</div>
             </div>
           )}
@@ -901,7 +929,7 @@ export default function JobDetailPage() {
           <button
             type="button"
             className="btn-primary"
-            disabled={busy || itemsLoading || selectedPartsList.length === 0}
+            disabled={busy || itemsLoading || activePartsList.length === 0}
             onClick={saveQuotationItems}
           >
             {busy ? 'กำลังบันทึก...' : job.quotation_id ? '+ เพิ่มรายการเข้าใบเสนอราคา' : 'บันทึกข้อมูล'}
@@ -1147,7 +1175,7 @@ export default function JobDetailPage() {
             customer_name: job.customer_name,
             phone: job.phone,
             vehicle: { brand: job.brand, model: job.model, color: job.color, license_plate: job.license_plate, mileage: job.mileage_in },
-            items: selectedPartsList.map((p) => ({ product_name: p.part_name, quantity: p.quantity })),
+            items: activePartsList.map((p) => ({ product_name: p.part_name, quantity: p.quantity })),
           }}
           onClose={() => setShowWorksheetModal(false)}
         />

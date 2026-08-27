@@ -5241,6 +5241,27 @@ body:has(.modal-backdrop) .page-fade-in {
   font-size: 0.9rem;
   overflow-wrap: break-word;
 }
+/* ปิดการมองเห็น (toggleEnabled) — ตัวรายการยังอยู่แต่จางลง+ขีดฆ่า ไม่นับรวมยอด ใช้
+   เทียบราคาระหว่างตัวเลือกตอนเสนอลูกค้า (เช่นโช้ค 2 แบบ ราคาต่างกัน) */
+.jdp-selected-row--disabled { opacity: 0.5; }
+.jdp-selected-row--disabled .jdp-selected-name { text-decoration: line-through; }
+.jdp-selected-toggle {
+  width: 28px;
+  height: 28px;
+  min-height: 28px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border-radius: 6px;
+  border: 1px solid #d1d5db;
+  background: #fff;
+  cursor: pointer;
+  line-height: 1;
+  font-size: 0.95rem;
+}
+.jdp-selected-toggle:hover { background: #f3f4f6; }
 /* กลุ่มควบคุมทั้งก้อน (จำนวน/ราคา/ลบ) — ให้ทุกปุ่มสูงเท่ากัน (28px) เป๊ะ ๆ แล้วใช้
    align-items: center ที่นี่ด้วยอีกชั้น กันกรณีที่ปุ่มหรือกล่องราคาสูงไม่เท่ากัน
    ทำให้เคยดู "ไม่กลาง" แนวตั้ง — ตัวก้อนนี้ไม่แตกออกจากกันเวลาห่อบรรทัดใหม่ด้วย
