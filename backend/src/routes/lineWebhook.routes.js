@@ -849,13 +849,16 @@ async function createQuotationFromQueue(parsed) {
       quotationId = existing.id;
       quotation_no = existing.quotation_no;
       if (matchedScheduled) {
-        // ลูกค้ามาตามนัดแล้ว — เปลี่ยนแค่เลขคิวเป็นของวันนี้ + เอาสถานะ "รอทำ"
-        // ออก (กลับเป็น pending ปกติ) ไม่แตะ quotation_date/วันที่ใบเดิมเลย เว้นแต่
-        // ข้อความนี้พิมพ์ "วันนัดหมาย:" ใหม่มาด้วย (เช่นเลื่อนนัด) ก็ตั้งนัดใหม่แทน
+        // ลูกค้ามาตามนัด/มาใช้มัดจำเดิมแล้ว จริง — ต้องลงคิวใหม่ของวันนี้จริง ๆ (เลขคิว
+        // รันใหม่ทุกวัน) จึงย้าย quotation_date มาเป็นวันนี้ด้วย ไม่ใช่แค่เปลี่ยนเลขคิว/
+        // สถานะเฉย ๆ เหมือนเดิม — ไม่งั้นใบจะค้างวันที่เดิม (วันที่มัดจำ) ทำให้จุดอื่นที่
+        // ค้นหาด้วยวันที่+เลขคิวของวันนี้ (เช่นบอทกลุ่ม "รายการ" ที่ลงรายการอะไหล่ต่อ)
+        // หาใบนี้ไม่เจอ กลายเป็นเปิดใบใหม่ซ้อน/รายการที่มัดจำไว้หายไปตามที่เจ้าของร้าน
+        // แจ้ง (deposit_date ยังคงเดิมแยกต่างหากอยู่แล้ว จึงยังสืบได้ว่ามัดจำวันไหนจริง)
         await conn.execute(
-          `UPDATE quotations SET vehicle_id = ?, mileage = COALESCE(?, mileage), remark = ?, product_summary = ?, total_amount = ?, symptom = ?, deposit_amount = COALESCE(?, deposit_amount), deposit_date = COALESCE(?, deposit_date), queue_no = ?, status = ?, scheduled_date = ?
+          `UPDATE quotations SET vehicle_id = ?, mileage = COALESCE(?, mileage), remark = ?, product_summary = ?, total_amount = ?, symptom = ?, deposit_amount = COALESCE(?, deposit_amount), deposit_date = COALESCE(?, deposit_date), queue_no = ?, status = ?, scheduled_date = ?, quotation_date = ?
            WHERE id = ?`,
-          [vehicleId, parsed.mileage ?? null, parsed.remark || null, product_summary, total_amount, parsed.symptom || null, parsed.deposit_amount ?? null, parsed.deposit_date || null, actualQueueNo || null, hasAppointment ? 'scheduled' : 'pending', hasAppointment ? parsed.appointment_date : null, quotationId]
+          [vehicleId, parsed.mileage ?? null, parsed.remark || null, product_summary, total_amount, parsed.symptom || null, parsed.deposit_amount ?? null, parsed.deposit_date || null, actualQueueNo || null, hasAppointment ? 'scheduled' : 'pending', hasAppointment ? parsed.appointment_date : null, quotationDate, quotationId]
         );
       } else {
         // ดันไป no_date เฉพาะตอนใบยังเป็น pending เฉยๆ เท่านั้น (กันทับใบที่อนุมัติ

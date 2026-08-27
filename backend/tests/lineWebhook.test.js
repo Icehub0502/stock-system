@@ -650,7 +650,7 @@ describe('POST /api/line/webhook', () => {
     expect(qB.requested_queue_no).toBe(queueNo); // เก็บเลขที่พิมพ์มาจริงไว้
   });
 
-  test('ลูกค้ามีใบเสนอราคา "นัดทำ" ค้างอยู่ (คนละวัน คนละเลขคิว) → วันที่นัดมาถึง ดึงใบเดิมมาใช้แทนเปิดใบใหม่ เปลี่ยนแค่เลขคิว/สถานะ ไม่แตะวันที่เดิม', async () => {
+  test('ลูกค้ามีใบเสนอราคา "นัดทำ" ค้างอยู่ (คนละวัน คนละเลขคิว) → วันที่นัดมาถึง ดึงใบเดิมมาใช้แทนเปิดใบใหม่ เปลี่ยนเลขคิว/สถานะ/วันที่มาเป็นวันนี้', async () => {
     const uniq = Date.now().toString().slice(-7);
     const phone = `079${uniq}`;
     const oldQueueNo = `5${uniq}`; // เลขคิวตอนนัด (เมื่อวาน)
@@ -686,7 +686,8 @@ describe('POST /api/line/webhook', () => {
     expect(quotations[0].queue_no).toBe(newQueueNo); // เปลี่ยนเป็นเลขคิวของวันนี้แล้ว
     expect(quotations[0].status).toBe('pending'); // เอาสถานะ "นัดทำ" ออกแล้ว
     expect(quotations[0].scheduled_date).toBeNull(); // เคลียร์วันนัดทิ้ง (มาแล้ว)
-    expect(new Date(quotations[0].quotation_date).toISOString().slice(0, 10)).toBe(oldDate); // ไม่แตะวันที่ใบเดิมเลย
+    const todayIso = new Date().toISOString().slice(0, 10);
+    expect(new Date(quotations[0].quotation_date).toISOString().slice(0, 10)).toBe(todayIso); // ย้ายมาเป็นวันนี้ ให้ลงคิวใหม่ได้จริง
   });
 
   test('ใบเดิมเลยกำหนด 14 วัน (pending ค้างนาน) → ไม่ถือว่าเป็นการแก้ไข เปิดใบใหม่แทน', async () => {
