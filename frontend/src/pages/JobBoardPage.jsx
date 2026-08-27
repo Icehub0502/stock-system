@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import client from '../api/client';
 import { jobStatusDef, nextMainStatus, prevMainStatus } from '../utils/jobStatus';
@@ -257,16 +258,27 @@ export default function JobBoardPage() {
                 <p style={{ fontSize: 12, color: '#6b7280', wordBreak: 'break-all' }}>{qrData.tracking_url}</p>
                 {/* พิมพ์เฉพาะกล่องนี้ (ดู #track-qr-print-area ใน app.css) — ตรึงไว้ที่
                     2 ใบต่อแผ่น A4 เสมอ (ขนาดการ์ด ~12x12cm พอดี 2 ใบต่อหน้าแนวตั้งพอดี)
-                    แทนที่จะให้พิมพ์ได้ตามจำนวนที่กรอกแบบไม่จำกัด — เคยลองทำให้พิมพ์ได้
-                    หลายหน้าด้วย React Portal + ซ่อนทั้งแอป (#root) แต่เจอปัญหาอื่นตามมา
-                    อีก (หน้าขาวเพราะกฎ "body * { visibility:hidden }" ของ print-area
-                    อื่นในไฟล์เดียวกันกวาดไปด้วย) เจ้าของร้านสั่งให้ตัดความซับซ้อนตรงนี้
-                    ทิ้งไปเลย ใช้วิธีเดิมที่ระบบพิมพ์เอกสารอื่นในนี้ใช้อยู่แล้วและพิสูจน์
-                    แล้วว่าทำงานได้จริง (visibility:hidden/visible + position:absolute)
-                    เพราะพิมพ์แค่ 1 หน้าเสมอไม่มีปัญหาแบ่งหน้าให้ต้องแก้ */}
-                <div id="track-qr-print-area">
-                  {[0, 1].map((i) => (
-                    <div className="track-qr-print-cell" key={i}>
+
+                    Portal ไปเป็นลูกตรงของ document.body — ตอนแรกลองใช้ pattern เดียวกับ
+                    print-area อื่นในระบบ (visibility:hidden ทั้งหน้า + position:absolute
+                    ดึงกล่องนี้มาไว้บนสุด) ดูเหมือนน่าจะโอเคเพราะมีแค่ 2 ใบพอดี 1 หน้า แต่
+                    เจอปัญหาจริง: เนื้อหาจริงของหน้า Job Board (การ์ดงานทั้งหมดที่ถูกซ่อน
+                    ด้วย visibility:hidden แต่ "ยังกินพื้นที่อยู่" เพราะ visibility ไม่ยุบ
+                    layout) สูงเกิน 1 หน้ากระดาษ เบราว์เซอร์เลยแบ่งเป็น 2 หน้าให้เนื้อหาที่
+                    มองไม่เห็นนี้ และ position:absolute (ไม่ผูกกับหน้าไหนหน้าหนึ่งโดยเฉพาะ)
+                    ถูกวาดซ้ำในทุกหน้าที่เบราว์เซอร์สร้างขึ้น กลายเป็นพิมพ์ QR ซ้ำ 2 รอบ
+                    (4 ใบ 2 หน้า) ตามที่เจ้าของร้านเจอจริง
+
+                    แก้โดยซ่อนแอปทั้งหมด (#root) ด้วย display:none แทน (ไม่ใช่ visibility)
+                    — display:none ยุบพื้นที่จริง ทำให้ไม่มีเนื้อหาที่มองไม่เห็นเหลือให้
+                    ต้องแบ่งหน้าอีก เอกสารที่พิมพ์จริงจึงมีแค่ #track-qr-print-area (2 ใบ)
+                    พอดี 1 หน้าเป๊ะ ไม่ต้องพึ่ง position:absolute เลย (ดูกฎ
+                    body:has(#track-qr-print-area) #root ใน app.css — ซ่อนเฉพาะตอนมี
+                    portal นี้อยู่จริงเท่านั้น ไม่กระทบการพิมพ์หน้าอื่นในระบบ) */}
+                {createPortal(
+                  <div id="track-qr-print-area">
+                    {[0, 1].map((i) => (
+                      <div className="track-qr-print-cell" key={i}>
                         <div className="tqr-brand">
                           <span className="tqr-brand-champ">Champ</span><span className="tqr-brand-power">power</span><span className="tqr-brand-spk">SPK</span>
                         </div>
@@ -284,8 +296,10 @@ export default function JobBoardPage() {
                         </div>
                         <div className="tqr-footer">{qrData.tracking_url}</div>
                       </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>,
+                  document.body
+                )}
               </>
             )}
             <div className="modal-actions">

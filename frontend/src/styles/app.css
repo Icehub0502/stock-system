@@ -909,26 +909,33 @@ button:disabled { background: #f3f4f6; color: #9ca3af; cursor: not-allowed; }
    พิมพ์ QR ติดตามสถานะรถ (JobBoardPage) — ตรึงไว้ที่ 2 ใบต่อแผ่น A4 เสมอ (ขนาดการ์ด
    ~12x12cm พอดี 2 ใบต่อหน้าแนวตั้ง) คนละแบบกับ #qr-print-area ด้านบน (นั่นคือของ
    WingArm/StockRack ที่โชว์รหัส+ชื่อคู่กับ QR) จึงแยก id คนละตัว ใช้ @page เดียวกับ
-   ใบเสร็จ/ใบเสนอราคา (ไม่ตั้งขนาดกระดาษเองแยกต่างหาก) — เคยลองทำให้พิมพ์ได้หลาย
-   หน้าตามจำนวนที่กรอก (ทั้งแบบ named @page 52x74mm และแบบ React Portal ไปที่
-   document.body) แต่เจอปัญหาซ้อนทับ/หน้าขาวตามมาเรื่อย ๆ เจ้าของร้านสั่งตัดความ
-   ซับซ้อนทิ้ง ใช้ pattern เดียวกับ #qr-print-area/#stock-doc-print-area ด้านบน/
-   ด้านล่างในไฟล์นี้ (visibility:hidden/visible + position:absolute) ซึ่งพิสูจน์แล้วว่า
-   ทำงานได้จริงในระบบนี้ — ใช้ได้เพราะพิมพ์แค่ 1 หน้าเสมอ ไม่มีปัญหาแบ่งหน้าให้ต้องแก้
+   ใบเสร็จ/ใบเสนอราคา (ไม่ตั้งขนาดกระดาษเองแยกต่างหาก)
+
+   ใช้ pattern เดียวกับ #qr-print-area/#stock-doc-print-area (visibility:hidden/
+   visible + position:absolute) ไม่ได้จริง ๆ แม้จะพิมพ์แค่ 2 ใบพอดี 1 หน้า — เนื้อหา
+   จริงของหน้า Job Board ที่ถูกซ่อนด้วย visibility:hidden ยังกินพื้นที่อยู่ (visibility
+   ไม่ยุบ layout) ถ้าการ์ดงานทั้งหมดสูงเกิน 1 หน้ากระดาษ เบราว์เซอร์จะแบ่งเป็นหลายหน้า
+   ให้เนื้อหาที่มองไม่เห็นนั้น และ position:absolute (ไม่ผูกกับหน้าไหนหน้าหนึ่ง) ถูกวาด
+   ซ้ำในทุกหน้าที่เกิดขึ้น กลายเป็นพิมพ์ QR ซ้ำ (เจอจริง — 4 ใบใน 2 หน้าทั้งที่ตั้งไว้แค่
+   2 ใบ) จึง portal ไปเป็นลูกตรงของ document.body แทน (ดู JobBoardPage.jsx) แล้วซ่อน
+   แอปทั้งหมด (#root) ด้วย display:none ซึ่งยุบพื้นที่จริง ไม่เหลือเนื้อหาที่มองไม่เห็นให้
+   ต้องแบ่งหน้า เอกสารที่พิมพ์จริงจึงมีแค่การ์ด 2 ใบพอดี 1 หน้า ไม่ต้องพึ่ง
+   position:absolute เลย
    ════════════════════════════════════════ */
 #track-qr-print-area { display: none; }
 
 @media print {
-  body * { visibility: hidden; }
+  /* ยังต้องประกาศ visibility:visible ตรงนี้ด้วย — #qr-print-area/#stock-doc-print-area
+     ในไฟล์นี้ประกาศ "body * { visibility:hidden }" แบบไม่ scope (มีผลกับทุกหน้าที่สั่ง
+     พิมพ์ ไม่ใช่แค่หน้าตัวเอง) ถ้าไม่ยืนยัน visible คืน กฎของ id อื่นจะซ่อน
+     #track-qr-print-area (เป็นลูก body เหมือนกัน) ไปด้วย ได้หน้าขาว */
   #track-qr-print-area, #track-qr-print-area * { visibility: visible; }
+  body:has(#track-qr-print-area) #root { display: none !important; }
   #track-qr-print-area {
     display: flex !important;
     flex-direction: column;
     align-items: center;
     gap: 8mm;
-    position: absolute;
-    top: 0; left: 0;
-    width: 100%;
     padding: 10mm;
   }
   .track-qr-print-cell {
