@@ -923,7 +923,14 @@ button:disabled { background: #f3f4f6; color: #9ca3af; cursor: not-allowed; }
      position:absolute ดึงเนื้อหาออกมาจากตำแหน่งจริงในหน้า (ซ้อนอยู่ใต้ modal) แต่
      absolute ทำให้พิมพ์ยาวเกิน 1 หน้าไม่ได้ถูกต้อง (เนื้อหาหน้าถัดไปไปทับซ้อนกับหน้า
      ก่อนหน้า — การ์ด/QR เลอะกันตามที่เจอจริงตอนพิมพ์หลายใบ) ปล่อยให้ไหลตามเอกสารปกติ
-     (ไม่ใช้ position:absolute) จึงพิมพ์ข้ามหลายหน้าได้ถูกต้องแล้ว */
+     (ไม่ใช้ position:absolute) จึงพิมพ์ข้ามหลายหน้าได้ถูกต้องแล้ว
+
+     ยังต้องคง "visibility: visible" ไว้ตรงนี้ด้วย — #qr-print-area/#stock-doc-print-area
+     ด้านบน/ด้านล่างในไฟล์นี้ประกาศ "body * { visibility: hidden }" แบบไม่ scope (ใช้
+     กับทุกหน้าที่สั่งพิมพ์ ไม่ใช่แค่หน้าตัวเอง) ถ้าไม่ประกาศ visible คืนตรงนี้ กฎของ id
+     อื่นจะซ่อน #track-qr-print-area (เป็นลูก body เหมือนกัน) ไปด้วย ได้หน้าขาวตอนพิมพ์
+     (เจอปัญหานี้จริงหลังตัด position:absolute ออก — ลืม re-declare จุดนี้ไปตอนแรก) */
+  #track-qr-print-area, #track-qr-print-area * { visibility: visible; }
   body:has(#track-qr-print-area) #root { display: none !important; }
   /* การ์ดขนาด ~12x12cm ใบใหญ่ — เหลือแค่คอลัมน์เดียวต่อแถวบน A4 (2 คอลัมน์แบบเดิม
      กว้างไม่พออีกต่อไปที่ขนาดนี้) เรียงลงมาได้ 2 ใบต่อหน้าแนวตั้ง */
