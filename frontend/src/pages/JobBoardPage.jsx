@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react';
-import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import client from '../api/client';
 import { jobStatusDef, nextMainStatus, prevMainStatus } from '../utils/jobStatus';
@@ -27,7 +26,6 @@ export default function JobBoardPage() {
   const [qrData, setQrData] = useState(null);
   const [qrLoading, setQrLoading] = useState(false);
   const [qrError, setQrError] = useState('');
-  const [qrPrintCount, setQrPrintCount] = useState(1);
 
   // รถที่ออกจากอู่ไปแล้วโดยยังไม่ได้ทำ ไม่ควรค้างอยู่ในคิววันนี้ให้พนักงานสับสน —
   // ทั้ง 3 ทางแยกนี้ยังตามต่อได้จากหน้าอื่นอยู่แล้ว: มัดจำ/นัดวันมาทำ → หน้ามัดจำ
@@ -257,35 +255,18 @@ export default function JobBoardPage() {
                 </p>
                 <img src={qrData.qr_data_url} alt="QR ติดตามสถานะ" style={{ width: '100%', maxWidth: 260, margin: '12px auto' }} />
                 <p style={{ fontSize: 12, color: '#6b7280', wordBreak: 'break-all' }}>{qrData.tracking_url}</p>
-                <div className="form-group" style={{ textAlign: 'left', marginTop: 8 }}>
-                  <label>จำนวนที่จะพิมพ์ (ต่อแผ่น A4)</label>
-                  <input
-                    type="number"
-                    min={1}
-                    max={40}
-                    value={qrPrintCount}
-                    onChange={(e) => setQrPrintCount(Math.max(1, Math.min(40, Number(e.target.value) || 1)))}
-                  />
-                </div>
-                {/* พิมพ์เฉพาะกล่องนี้ (ดู #track-qr-print-area ใน app.css) — วน
-                    qrPrintCount รอบเรียงเป็นการ์ดขนาด ~12x12cm บน A4 (ใช้ @page เดียวกับ
-                    ใบเสร็จ/ใบเสนอราคา ไม่ตั้งขนาดกระดาษเองแยกต่างหาก)
-
-                    Portal ไปเป็นลูกตรงของ document.body (ไม่ซ้อนอยู่ใต้ modal) — ตอนแรก
-                    ใช้วิธี "body * { visibility:hidden } แล้วเปิดเฉพาะ id นี้" เหมือน
-                    print-area อื่นในระบบ แต่ id นี้อาจมีเนื้อหายาวเกิน 1 หน้า (พิมพ์ทีละ
-                    หลายใบ) และของเดิมต้อง position:absolute เพื่อดึงเนื้อหาออกมาจาก
-                    ตำแหน่งจริงในหน้า Job Board (ซึ่งอยู่ลึกใน modal ทำให้เหลือพื้นที่ว่าง
-                    เปล่าด้านบนถ้าไม่ absolute) — ผลคือพิมพ์ยาวกว่า 1 หน้าไม่ได้ เบราว์เซอร์
-                    ปนเนื้อหาหน้าถัดไปทับกับหน้าก่อนหน้า (การ์ด/QR ซ้อนกันเป็นภาพเลอะ ๆ
-                    ตามที่เจ้าของร้านเจอจริง) Portal ตรงเข้า body ทำให้ไม่ต้อง absolute
-                    เลย ปล่อยให้ไหลตามลำดับเอกสารปกติ พิมพ์ข้ามหลายหน้าได้ถูกต้อง (ดูกฎ
-                    body:has(#track-qr-print-area) #root ใน app.css ที่ซ่อนแอปทั้งหมด
-                    เฉพาะตอนมี portal นี้อยู่เท่านั้น ไม่กระทบการพิมพ์หน้าอื่นในระบบ) */}
-                {createPortal(
-                  <div id="track-qr-print-area">
-                    {Array.from({ length: qrPrintCount }).map((_, i) => (
-                      <div className="track-qr-print-cell" key={i}>
+                {/* พิมพ์เฉพาะกล่องนี้ (ดู #track-qr-print-area ใน app.css) — ตรึงไว้ที่
+                    2 ใบต่อแผ่น A4 เสมอ (ขนาดการ์ด ~12x12cm พอดี 2 ใบต่อหน้าแนวตั้งพอดี)
+                    แทนที่จะให้พิมพ์ได้ตามจำนวนที่กรอกแบบไม่จำกัด — เคยลองทำให้พิมพ์ได้
+                    หลายหน้าด้วย React Portal + ซ่อนทั้งแอป (#root) แต่เจอปัญหาอื่นตามมา
+                    อีก (หน้าขาวเพราะกฎ "body * { visibility:hidden }" ของ print-area
+                    อื่นในไฟล์เดียวกันกวาดไปด้วย) เจ้าของร้านสั่งให้ตัดความซับซ้อนตรงนี้
+                    ทิ้งไปเลย ใช้วิธีเดิมที่ระบบพิมพ์เอกสารอื่นในนี้ใช้อยู่แล้วและพิสูจน์
+                    แล้วว่าทำงานได้จริง (visibility:hidden/visible + position:absolute)
+                    เพราะพิมพ์แค่ 1 หน้าเสมอไม่มีปัญหาแบ่งหน้าให้ต้องแก้ */}
+                <div id="track-qr-print-area">
+                  {[0, 1].map((i) => (
+                    <div className="track-qr-print-cell" key={i}>
                         <div className="tqr-brand">
                           <span className="tqr-brand-champ">Champ</span><span className="tqr-brand-power">power</span><span className="tqr-brand-spk">SPK</span>
                         </div>
@@ -303,10 +284,8 @@ export default function JobBoardPage() {
                         </div>
                         <div className="tqr-footer">{qrData.tracking_url}</div>
                       </div>
-                    ))}
-                  </div>,
-                  document.body
-                )}
+                  ))}
+                </div>
               </>
             )}
             <div className="modal-actions">

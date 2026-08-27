@@ -906,45 +906,31 @@ button:disabled { background: #f3f4f6; color: #9ca3af; cursor: not-allowed; }
 }
 
 /* ════════════════════════════════════════
-   พิมพ์ QR ติดตามสถานะรถ (JobBoardPage) — พิมพ์ได้หลายดวงต่อแผ่น A4 เดียว
-   (เจ้าของร้านกำหนดจำนวนได้จากช่องกรอกก่อนกดพิมพ์ — ดู qrPrintCount ใน
-   JobBoardPage.jsx) คนละแบบกับ #qr-print-area ด้านบน (นั่นคือของ WingArm/
-   StockRack ที่โชว์รหัส+ชื่อคู่กับ QR) จึงแยก id คนละตัว ใช้ @page เดียวกับใบเสร็จ/
-   ใบเสนอราคา (ไม่ตั้งขนาดกระดาษเองแยกต่างหาก) — เคยลองตั้งเป็น named @page ขนาด
-   52x74mm เพื่อพิมพ์เป็นสติกเกอร์ใบเดียว แต่เครื่องพิมพ์บางเครื่องหาไซส์กระดาษที่
-   ขอไม่เจอแล้วดันล้นเป็น 2 หน้าเปล่า ๆ จึงกลับมาใช้ A4 ร่วมกับที่อื่นแทน
+   พิมพ์ QR ติดตามสถานะรถ (JobBoardPage) — ตรึงไว้ที่ 2 ใบต่อแผ่น A4 เสมอ (ขนาดการ์ด
+   ~12x12cm พอดี 2 ใบต่อหน้าแนวตั้ง) คนละแบบกับ #qr-print-area ด้านบน (นั่นคือของ
+   WingArm/StockRack ที่โชว์รหัส+ชื่อคู่กับ QR) จึงแยก id คนละตัว ใช้ @page เดียวกับ
+   ใบเสร็จ/ใบเสนอราคา (ไม่ตั้งขนาดกระดาษเองแยกต่างหาก) — เคยลองทำให้พิมพ์ได้หลาย
+   หน้าตามจำนวนที่กรอก (ทั้งแบบ named @page 52x74mm และแบบ React Portal ไปที่
+   document.body) แต่เจอปัญหาซ้อนทับ/หน้าขาวตามมาเรื่อย ๆ เจ้าของร้านสั่งตัดความ
+   ซับซ้อนทิ้ง ใช้ pattern เดียวกับ #qr-print-area/#stock-doc-print-area ด้านบน/
+   ด้านล่างในไฟล์นี้ (visibility:hidden/visible + position:absolute) ซึ่งพิสูจน์แล้วว่า
+   ทำงานได้จริงในระบบนี้ — ใช้ได้เพราะพิมพ์แค่ 1 หน้าเสมอ ไม่มีปัญหาแบ่งหน้าให้ต้องแก้
    ════════════════════════════════════════ */
 #track-qr-print-area { display: none; }
 
 @media print {
-  /* Portal ไปเป็นลูกตรงของ document.body แล้ว (ดู JobBoardPage.jsx) — ซ่อนแอปทั้งหมด
-     (#root) เฉพาะตอนมี portal นี้อยู่จริงเท่านั้น (:has scoping) ไม่กระทบการพิมพ์หน้า
-     อื่นที่ไม่มี id นี้อยู่ในหน้าเลย เดิมใช้ "body * { visibility:hidden }" +
-     position:absolute ดึงเนื้อหาออกมาจากตำแหน่งจริงในหน้า (ซ้อนอยู่ใต้ modal) แต่
-     absolute ทำให้พิมพ์ยาวเกิน 1 หน้าไม่ได้ถูกต้อง (เนื้อหาหน้าถัดไปไปทับซ้อนกับหน้า
-     ก่อนหน้า — การ์ด/QR เลอะกันตามที่เจอจริงตอนพิมพ์หลายใบ) ปล่อยให้ไหลตามเอกสารปกติ
-     (ไม่ใช้ position:absolute) จึงพิมพ์ข้ามหลายหน้าได้ถูกต้องแล้ว
-
-     ยังต้องคง "visibility: visible" ไว้ตรงนี้ด้วย — #qr-print-area/#stock-doc-print-area
-     ด้านบน/ด้านล่างในไฟล์นี้ประกาศ "body * { visibility: hidden }" แบบไม่ scope (ใช้
-     กับทุกหน้าที่สั่งพิมพ์ ไม่ใช่แค่หน้าตัวเอง) ถ้าไม่ประกาศ visible คืนตรงนี้ กฎของ id
-     อื่นจะซ่อน #track-qr-print-area (เป็นลูก body เหมือนกัน) ไปด้วย ได้หน้าขาวตอนพิมพ์
-     (เจอปัญหานี้จริงหลังตัด position:absolute ออก — ลืม re-declare จุดนี้ไปตอนแรก) */
+  body * { visibility: hidden; }
   #track-qr-print-area, #track-qr-print-area * { visibility: visible; }
-  body:has(#track-qr-print-area) #root { display: none !important; }
-  /* การ์ดขนาด ~12x12cm ใบใหญ่ — เหลือแค่คอลัมน์เดียวต่อแถวบน A4 (2 คอลัมน์แบบเดิม
-     กว้างไม่พออีกต่อไปที่ขนาดนี้) เรียงลงมาได้ 2 ใบต่อหน้าแนวตั้ง */
   #track-qr-print-area {
-    display: grid !important;
-    grid-template-columns: repeat(auto-fill, 120mm);
-    justify-content: center;
+    display: flex !important;
+    flex-direction: column;
+    align-items: center;
     gap: 8mm;
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%;
     padding: 10mm;
   }
-  /* min-height แทน height ตายตัว — ระยะบรรทัดจริงตอนพิมพ์ (ฟอนต์/DPI ของเครื่อง
-     พิมพ์แต่ละเครื่องไม่เท่ากันเป๊ะกับที่วัดบนจอ) อาจสูงกว่าที่ประมาณไว้เล็กน้อย ถ้าตั้ง
-     height ตายตัวไว้ เนื้อหาที่ล้นจะไม่ถูกบีบแต่ไหลทับการ์ดถัดไปแทน ใช้ min-height ให้
-     แถวของ grid ขยายตามเนื้อหาจริงแทน กันการ์ดถัดไปถูกเนื้อหาการ์ดก่อนหน้าทับ */
   .track-qr-print-cell {
     display: flex;
     flex-direction: column;
