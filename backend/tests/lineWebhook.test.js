@@ -1522,6 +1522,72 @@ describe('POST /api/line/webhook', () => {
       expect(qBAfter.status).toBe('pending');
       expect(qBAfter.closed_at).toBeNull();
     });
+
+    test('เจอมากกว่า 1 ใบ แต่ข้อความมีเบอร์โทรลูกค้ามาด้วย (เทมเพลตเต็ม+วลีปิดบิล จากบอท 3) → แยกจากเบอร์โทรได้เอง ไม่ต้องเดา', async () => {
+      // จำลองบั๊กจริง: ลูกค้า B ขอคิว 2 ชนกับ A ที่ครองคิว 2 อยู่ก่อน เลยถูกเลื่อนไป
+      // คิวอื่น แต่ requested_queue_no ยังเป็น 2 ค้างไว้ (พฤติกรรมปกติของกลไกกันชน
+      // คิว) พอลูกค้า A พิมพ์ปิดบิล "คิว 2" ทีหลัง — closeQuotationByQueue (เรียกตรง ๆ
+      // จากบอท 3 ไม่ผ่าน close_only เพราะบอท 3 เรียกฟังก์ชันนี้ทุกครั้งที่มีวลีปิดบิล
+      // ไม่ว่าข้อความจะมีชื่อลูกค้ามาด้วยหรือไม่ — ดู lineWebhookBot3.routes.js) ต้อง
+      // ใช้เบอร์โทรที่แนบมาแยกใบของ A ออกจากใบของ B ได้ ไม่ใช่ตอบว่าเจอ 2 ใบเหมือนเดิม
+      const uniq = Date.now().toString().slice(-7);
+      const queueNo = `96${uniq}`;
+      const phoneA = `074${uniq}`;
+      const phoneB = `076${uniq}`;
+
+      const [custA] = await pool.query(
+        'INSERT INTO customers (customer_code, customer_name, phone) VALUES (?, ?, ?)',
+        [`CMM-TEST${uniq}A`, 'คุณเจ้าของคิวจริง', phoneA]
+      );
+      const [custB] = await pool.query(
+        'INSERT INTO customers (customer_code, customer_name, phone) VALUES (?, ?, ?)',
+        [`CMM-TEST${uniq}B`, 'คุณถูกเลื่อนคิว', phoneB]
+      );
+      createdCustomerIds.push(custA.insertId, custB.insertId);
+
+      const [vehA] = await pool.query(
+        "INSERT INTO vehicles (customer_id, brand, model, license_plate) VALUES (?, 'Toyota', 'Vios', ?)",
+        [custA.insertId, `9กฉ${uniq.slice(0, 4)}A`]
+      );
+      const [vehB] = await pool.query(
+        "INSERT INTO vehicles (customer_id, brand, model, license_plate) VALUES (?, 'Toyota', 'Vios', ?)",
+        [custB.insertId, `9กฉ${uniq.slice(0, 4)}B`]
+      );
+
+      const [qA] = await pool.query(
+        `INSERT INTO quotations (quotation_no, quotation_date, customer_id, vehicle_id, mileage, product_summary, total_amount, queue_no)
+         VALUES (?, CURDATE(), ?, ?, 0, 'ค่าแรง', 1000, ?)`,
+        [`IVTEST${uniq}A`, custA.insertId, vehA.insertId, queueNo]
+      );
+      await pool.execute(
+        `INSERT INTO quotation_items (quotation_id, product_id, product_name, quantity, unit_price)
+         VALUES (?, NULL, 'ค่าแรง', 1, 1000)`,
+        [qA.insertId]
+      );
+      // B ขอคิวเดียวกันแต่โดนเลื่อนไปคิวอื่นจริง — queue_no ไม่ตรง 2 แต่ requested_queue_no ยังเป็น 2
+      const [qB] = await pool.query(
+        `INSERT INTO quotations (quotation_no, quotation_date, customer_id, vehicle_id, mileage, product_summary, total_amount, queue_no, requested_queue_no)
+         VALUES (?, CURDATE(), ?, ?, 0, 'ค่าแรง', 2000, ?, ?)`,
+        [`IVTEST${uniq}B`, custB.insertId, vehB.insertId, `99${uniq}`, queueNo]
+      );
+
+      const parsed = parseLineQueueMessage(
+        `คิว ${queueNo}\nชื่อลูกค้า:คุณเจ้าของคิวจริง\nเบอร์โทร:${phoneA}\nยี่ห้อรถ:Toyota\nรุ่นรถ:Vios\nทะเบียนรถ:9กฉ${uniq.slice(0, 4)}A\nช่องทางการชำระ: เงินสด\nลูกค้าชำระเงิน: 1000\nชำระเงินเรียบร้อย`
+      );
+      expect(parsed.close_only).toBeFalsy(); // มีชื่อลูกค้ามาด้วย ไม่ใช่ close_only
+      expect(parsed.paid_confirmed).toBe(true);
+
+      const result = await lineWebhookRouter.closeQuotationByQueue(parsed);
+      expect(result.matchCount).toBe(1); // แยกได้จากเบอร์โทร ไม่ใช่ ambiguous อีกต่อไป
+      expect(result.quotation_no).toBe(`IVTEST${uniq}A`);
+
+      const [[qAAfter]] = await pool.query('SELECT status, closed_at FROM quotations WHERE id = ?', [qA.insertId]);
+      const [[qBAfter]] = await pool.query('SELECT status, closed_at FROM quotations WHERE id = ?', [qB.insertId]);
+      expect(qAAfter.status).toBe('approved');
+      expect(qAAfter.closed_at).toBeTruthy();
+      expect(qBAfter.status).toBe('pending'); // ใบของ B ไม่ถูกแตะเลย
+      expect(qBAfter.closed_at).toBeNull();
+    });
   });
 
   describe('มัดจำ (deposit_amount/deposit_date) ไหลผ่าน create → resend แก้ไข → ปิดบิล → ใบเสร็จ', () => {

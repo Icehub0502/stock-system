@@ -1182,7 +1182,7 @@ async function closeQuotationByQueue(parsed) {
     // ค่อย fallback ไปหาในช่วง 14 วันย้อนหลังเหมือนเดิม (เผื่องานที่ค้างข้ามวันจริง ๆ)
     const quotationDate = parsed.quotation_date || todayStr();
     const baseSelect = `SELECT q.id, q.customer_id, q.quotation_no, q.converted_receipt_id, q.status, q.total_amount,
-              q.deposit_amount, q.deposit_date, q.vehicle_id, c.customer_name
+              q.deposit_amount, q.deposit_date, q.vehicle_id, c.customer_name, c.phone
        FROM quotations q
        LEFT JOIN customers c ON q.customer_id = c.id
        WHERE (q.queue_no = ? OR q.requested_queue_no = ?) AND q.closed_at IS NULL
@@ -1201,6 +1201,22 @@ async function closeQuotationByQueue(parsed) {
     if (rows.length === 0) {
       await conn.commit(); // ยังไม่ได้แก้อะไรเลย — commit เก็บไว้เฉย ๆ
       return { matchCount: 0 };
+    }
+
+    // เจอมากกว่า 1 ใบ — เกิดได้เพราะ requested_queue_no ยังจับคู่ใบที่เคยขอเลขคิวนี้
+    // แล้วโดนเลื่อนไปเลขอื่นตอนชนคิว (เจ้าของร้านเจอจริง: ลูกค้า A จองคิว 2 ชนกับ B
+    // ที่ได้คิว 2 อยู่ก่อน เลยถูกเลื่อนไปคิว 3 แต่ requested_queue_no ยังเป็น 2 ค้างไว้
+    // — พอมีคนอื่นพิมพ์ "ปิดบิล คิว 2" ทีหลัง เจอทั้งใบของ B (queue_no ตรง) และใบของ A
+    // (requested_queue_no ตรง) พร้อมกัน) ข้อความเต็มที่มีชื่อลูกค้า/เบอร์โทรมาด้วย (ต่าง
+    // จาก close_only ที่ไม่มี) ใช้แยกได้ทันทีโดยไม่ต้องเดา — ลองกรองด้วยเบอร์โทรก่อน (แม่น
+    // กว่า) แล้วค่อยชื่อลูกค้า เหลือแค่ 1 แถวเมื่อไหร่ถือว่าหาเจอแล้วจริง ๆ
+    if (rows.length > 1 && parsed.phone) {
+      const byPhone = rows.filter((r) => r.phone === parsed.phone);
+      if (byPhone.length === 1) rows = byPhone;
+    }
+    if (rows.length > 1 && parsed.customer_name) {
+      const byName = rows.filter((r) => r.customer_name === parsed.customer_name);
+      if (byName.length === 1) rows = byName;
     }
     if (rows.length > 1) {
       await conn.commit();
