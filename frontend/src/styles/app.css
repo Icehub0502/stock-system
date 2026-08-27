@@ -949,11 +949,11 @@ button:disabled { background: #f3f4f6; color: #9ca3af; cursor: not-allowed; }
   }
 
   /* โลโก้ร้าน — สีเดียวกับที่ใช้ในใบแจ้งซ่อม (.rw-champ/.rw-power) ให้ดูเป็นชุดเดียวกัน */
-  .tqr-brand { font-style: italic; font-weight: 800; font-size: 4mm; letter-spacing: -0.02em; margin-bottom: 2mm; }
+  .tqr-brand { font-style: italic; font-weight: 800; font-size: 4.2mm; letter-spacing: -0.02em; margin-bottom: 2mm; }
   .tqr-brand-champ { color: #59606b; }
   .tqr-brand-power, .tqr-brand-spk { color: #eab308; }
 
-  .tqr-title { font-size: 6mm; font-weight: 800; color: #111; margin-bottom: 5mm; }
+  .tqr-title { font-size: 8mm; font-weight: 800; color: #111; margin-bottom: 4mm; }
 
   /* ตัวเลข/อักษรละติน (QR, +, 4) ในฟอนต์ Sarabun ดูเล็กกว่าตัวอักษรไทยรอบข้างที่
      font-size เท่ากัน (ความสูงตัวอักษรไทยรวมสระ/วรรณยุกต์ทำให้ตาเห็นว่าใหญ่กว่า) —
@@ -961,8 +961,9 @@ button:disabled { background: #f3f4f6; color: #9ca3af; cursor: not-allowed; }
   .tqr-latin { font-size: 1.2em; font-weight: 800; }
 
   /* กรอบมุมสไตล์ช่องเล็งสแกน QR — ทำให้ QR ดูเป็น "จุดที่ต้องสแกน" ชัดเจนขึ้น
-     แทนที่จะเป็นแค่รูปสี่เหลี่ยมลอย ๆ */
-  .tqr-qr-frame { position: relative; width: 60mm; height: 60mm; margin: 0 auto 5mm; }
+     แทนที่จะเป็นแค่รูปสี่เหลี่ยมลอย ๆ — ย่อลงจาก 60mm เหลือ 54mm เพื่อเปิดที่ให้
+     หัวข้อ/ขั้นตอนตัวใหญ่ขึ้นได้โดยยังพอดีกับการ์ด 120x120mm */
+  .tqr-qr-frame { position: relative; width: 54mm; height: 54mm; margin: 0 auto 4mm; }
   .tqr-qr-frame img { width: 100%; height: 100%; display: block; }
   .tqr-corner { position: absolute; width: 8mm; height: 8mm; border: 1.2mm solid #eab308; }
   .tqr-corner-tl { top: -3mm; left: -3mm; border-right: none; border-bottom: none; border-radius: 2mm 0 0 0; }
@@ -970,14 +971,14 @@ button:disabled { background: #f3f4f6; color: #9ca3af; cursor: not-allowed; }
   .tqr-corner-bl { bottom: -3mm; left: -3mm; border-right: none; border-top: none; border-radius: 0 0 0 2mm; }
   .tqr-corner-br { bottom: -3mm; right: -3mm; border-left: none; border-top: none; border-radius: 0 0 2mm 0; }
 
-  .tqr-steps { text-align: left; width: 100%; font-size: 3.6mm; color: #333; line-height: 1.5; }
-  .tqr-step { display: flex; align-items: center; gap: 3mm; margin-bottom: 2mm; }
+  .tqr-steps { text-align: left; width: 100%; font-size: 4.5mm; color: #333; line-height: 1.4; }
+  .tqr-step { display: flex; align-items: center; gap: 3mm; margin-bottom: 1.8mm; }
   .tqr-step-no {
-    flex-shrink: 0; width: 6mm; height: 6mm; border-radius: 50%;
-    background: #111; color: #fff; font-size: 3.2mm; font-weight: 800;
+    flex-shrink: 0; width: 7mm; height: 7mm; border-radius: 50%;
+    background: #111; color: #fff; font-size: 3.8mm; font-weight: 800;
     display: inline-flex; align-items: center; justify-content: center;
   }
-  .tqr-footer { margin-top: 4mm; font-size: 2.6mm; color: #9ca3af; word-break: break-all; }
+  .tqr-footer { margin-top: 3mm; font-size: 2.6mm; color: #9ca3af; word-break: break-all; }
 }
 
 /* ════════════════════════════════════════
