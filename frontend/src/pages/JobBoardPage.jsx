@@ -255,6 +255,15 @@ export default function JobBoardPage() {
                 </p>
                 <img src={qrData.qr_data_url} alt="QR ติดตามสถานะ" style={{ width: '100%', maxWidth: 260, margin: '12px auto' }} />
                 <p style={{ fontSize: 12, color: '#6b7280', wordBreak: 'break-all' }}>{qrData.tracking_url}</p>
+                {/* พิมพ์เฉพาะกล่องนี้เป็นสติกเกอร์ขนาด 52x74mm (ดู #track-qr-print-area
+                    ใน app.css) — ปุ่ม "พิมพ์" เดิมเรียก window.print() บนทั้งหน้าเฉย ๆ
+                    โดยไม่มี print-area ของตัวเอง ไปโดนกฎ "body * { visibility: hidden }"
+                    ของ QR/สต็อกอื่นที่ประกาศไว้ระดับ global (ใช้ id คนละตัวแยกกัน แต่
+                    scope กว้างทั้ง body) เลยได้หน้าขาวตอนสั่งพิมพ์จริง */}
+                <div id="track-qr-print-area">
+                  <img src={qrData.qr_data_url} alt="QR ติดตามสถานะ" />
+                  <div className="track-qr-print-url">{qrData.tracking_url}</div>
+                </div>
               </>
             )}
             <div className="modal-actions">

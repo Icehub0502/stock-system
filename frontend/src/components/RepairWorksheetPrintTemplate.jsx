@@ -45,8 +45,9 @@ export default function RepairWorksheetPrintTemplate({ data }) {
         return (
           <div className="doc-page rw-page" key={pageIndex}>
             <div className="rw-header">
-              <div className="rw-spk">
+              <div className="rw-spk-wrap">
                 <div className="rw-spk-label">SPK</div>
+                <div className="rw-spk" />
               </div>
 
               <div className="rw-title">
