@@ -931,13 +931,19 @@ button:disabled { background: #f3f4f6; color: #9ca3af; cursor: not-allowed; }
     width: 100%;
     padding: 10mm;
   }
+  /* min-height แทน height ตายตัว — ระยะบรรทัดจริงตอนพิมพ์ (ฟอนต์/DPI ของเครื่อง
+     พิมพ์แต่ละเครื่องไม่เท่ากันเป๊ะกับที่วัดบนจอ) อาจสูงกว่าที่ประมาณไว้เล็กน้อย ถ้าตั้ง
+     height ตายตัวไว้ เนื้อหาที่ล้นจะไม่ถูกบีบแต่ไหลทับการ์ดถัดไปแทน (เจอปัญหานี้จริง —
+     ภาพ QR/ข้อความซ้อนทับกันข้ามใบตอนพิมพ์จริง) ใช้ min-height ให้แถวของ grid ขยาย
+     ตามเนื้อหาจริงแทน กันการ์ดถัดไปถูกเนื้อหาการ์ดก่อนหน้าทับ ต่อให้บางเครื่องพิมพ์ได้
+     การ์ดสูงเกิน 120mm ไปเล็กน้อยก็ยังดีกว่าซ้อนทับกันจนอ่านไม่ออก */
   .track-qr-print-cell {
     display: flex;
     flex-direction: column;
     align-items: center;
     text-align: center;
     width: 120mm;
-    height: 120mm;
+    min-height: 120mm;
     box-sizing: border-box;
     justify-content: center;
     border: 1.5px dashed #b0b0b0;
@@ -946,6 +952,7 @@ button:disabled { background: #f3f4f6; color: #9ca3af; cursor: not-allowed; }
     page-break-inside: avoid;
     break-inside: avoid;
     background: #fff;
+    overflow: visible;
   }
 
   /* โลโก้ร้าน — สีเดียวกับที่ใช้ในใบแจ้งซ่อม (.rw-champ/.rw-power) ให้ดูเป็นชุดเดียวกัน */
