@@ -906,33 +906,42 @@ button:disabled { background: #f3f4f6; color: #9ca3af; cursor: not-allowed; }
 }
 
 /* ════════════════════════════════════════
-   พิมพ์ QR ติดตามสถานะรถ (JobBoardPage) — สติกเกอร์ใบเดียว ขนาด 52x74mm
-   (เครื่องพิมพ์ label ในร้าน) คนละแบบกับ #qr-print-area ด้านบน (นั่นคือหลายดวง
-   ต่อแผ่น A4 สำหรับ WingArm/StockRack) จึงแยก id คนละตัว ใช้ named @page
-   (page: trackQr) กำหนดขนาดกระดาษเฉพาะกล่องนี้ ไม่ไปแตะ @page ตัวหลักที่ใช้ร่วม
-   กับใบเสร็จ/ใบเสนอราคา (ดูคำอธิบายเรื่อง @page ไม่ scope ที่ receipt.css)
+   พิมพ์ QR ติดตามสถานะรถ (JobBoardPage) — พิมพ์ได้หลายดวงต่อแผ่น A4 เดียว
+   (เจ้าของร้านกำหนดจำนวนได้จากช่องกรอกก่อนกดพิมพ์ — ดู qrPrintCount ใน
+   JobBoardPage.jsx) คนละแบบกับ #qr-print-area ด้านบน (นั่นคือของ WingArm/
+   StockRack ที่โชว์รหัส+ชื่อคู่กับ QR) จึงแยก id คนละตัว ใช้ @page เดียวกับใบเสร็จ/
+   ใบเสนอราคา (ไม่ตั้งขนาดกระดาษเองแยกต่างหาก) — เคยลองตั้งเป็น named @page ขนาด
+   52x74mm เพื่อพิมพ์เป็นสติกเกอร์ใบเดียว แต่เครื่องพิมพ์บางเครื่องหาไซส์กระดาษที่
+   ขอไม่เจอแล้วดันล้นเป็น 2 หน้าเปล่า ๆ จึงกลับมาใช้ A4 ร่วมกับที่อื่นแทน
    ════════════════════════════════════════ */
 #track-qr-print-area { display: none; }
 
 @media print {
-  @page trackQr {
-    size: 52mm 74mm;
-    margin: 3mm;
-  }
   body * { visibility: hidden; }
   #track-qr-print-area, #track-qr-print-area * { visibility: visible; }
   #track-qr-print-area {
-    display: flex !important;
-    flex-direction: column;
-    align-items: center;
-    gap: 4mm;
+    display: grid !important;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 14px;
     position: absolute;
     top: 0; left: 0;
-    width: 52mm;
-    page: trackQr;
+    width: 100%;
+    padding: 16px;
   }
-  #track-qr-print-area img { width: 44mm; height: 44mm; }
-  .track-qr-print-url { font-size: 8pt; text-align: center; word-break: break-all; color: #000; }
+  .track-qr-print-cell {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    border: 1px solid #000;
+    border-radius: 6px;
+    padding: 14px;
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+  .track-qr-print-title { font-size: 16px; font-weight: 800; margin-bottom: 6px; }
+  .track-qr-print-cell img { width: 140px; height: 140px; margin: 4px 0; }
+  .track-qr-print-sub { font-size: 12px; color: #333; line-height: 1.4; margin-top: 4px; }
 }
 
 /* ════════════════════════════════════════

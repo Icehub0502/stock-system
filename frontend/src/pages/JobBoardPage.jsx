@@ -26,6 +26,7 @@ export default function JobBoardPage() {
   const [qrData, setQrData] = useState(null);
   const [qrLoading, setQrLoading] = useState(false);
   const [qrError, setQrError] = useState('');
+  const [qrPrintCount, setQrPrintCount] = useState(1);
 
   // รถที่ออกจากอู่ไปแล้วโดยยังไม่ได้ทำ ไม่ควรค้างอยู่ในคิววันนี้ให้พนักงานสับสน —
   // ทั้ง 3 ทางแยกนี้ยังตามต่อได้จากหน้าอื่นอยู่แล้ว: มัดจำ/นัดวันมาทำ → หน้ามัดจำ
@@ -255,14 +256,32 @@ export default function JobBoardPage() {
                 </p>
                 <img src={qrData.qr_data_url} alt="QR ติดตามสถานะ" style={{ width: '100%', maxWidth: 260, margin: '12px auto' }} />
                 <p style={{ fontSize: 12, color: '#6b7280', wordBreak: 'break-all' }}>{qrData.tracking_url}</p>
-                {/* พิมพ์เฉพาะกล่องนี้เป็นสติกเกอร์ขนาด 52x74mm (ดู #track-qr-print-area
-                    ใน app.css) — ปุ่ม "พิมพ์" เดิมเรียก window.print() บนทั้งหน้าเฉย ๆ
-                    โดยไม่มี print-area ของตัวเอง ไปโดนกฎ "body * { visibility: hidden }"
-                    ของ QR/สต็อกอื่นที่ประกาศไว้ระดับ global (ใช้ id คนละตัวแยกกัน แต่
-                    scope กว้างทั้ง body) เลยได้หน้าขาวตอนสั่งพิมพ์จริง */}
+                <div className="form-group" style={{ textAlign: 'left', marginTop: 8 }}>
+                  <label>จำนวนที่จะพิมพ์ (ต่อแผ่น A4)</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={40}
+                    value={qrPrintCount}
+                    onChange={(e) => setQrPrintCount(Math.max(1, Math.min(40, Number(e.target.value) || 1)))}
+                  />
+                </div>
+                {/* พิมพ์เฉพาะกล่องนี้ (ดู #track-qr-print-area ใน app.css) — ปุ่ม "พิมพ์"
+                    เดิมเรียก window.print() บนทั้งหน้าเฉย ๆ โดยไม่มี print-area ของตัวเอง
+                    ไปโดนกฎ "body * { visibility: hidden }" ของ QR/สต็อกอื่นที่ประกาศไว้
+                    ระดับ global (ใช้ id คนละตัวแยกกัน แต่ scope กว้างทั้ง body) เลยได้
+                    หน้าขาวตอนสั่งพิมพ์จริง — วน qrPrintCount รอบเรียงเป็นตาราง 2 คอลัมน์
+                    บน A4 แผ่นเดียว (ใช้ @page เดียวกับใบเสร็จ/ใบเสนอราคา ไม่ตั้งขนาด
+                    กระดาษเองแยกต่างหาก กันปัญหาเครื่องพิมพ์หาไซส์กระดาษไม่เจอแล้วดัน
+                    ล้นเป็น 2 หน้า) */}
                 <div id="track-qr-print-area">
-                  <img src={qrData.qr_data_url} alt="QR ติดตามสถานะ" />
-                  <div className="track-qr-print-url">{qrData.tracking_url}</div>
+                  {Array.from({ length: qrPrintCount }).map((_, i) => (
+                    <div className="track-qr-print-cell" key={i}>
+                      <div className="track-qr-print-title">QR ติดตามสถานะรถ</div>
+                      <img src={qrData.qr_data_url} alt="QR ติดตามสถานะ" />
+                      <div className="track-qr-print-sub">ลูกค้าสแกนแล้วพิมพ์ทะเบียน+เบอร์โทร 4 ตัวท้ายเองเพื่อดูสถานะรถ</div>
+                    </div>
+                  ))}
                 </div>
               </>
             )}
