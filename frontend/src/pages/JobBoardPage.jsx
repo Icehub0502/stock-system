@@ -277,9 +277,22 @@ export default function JobBoardPage() {
                 <div id="track-qr-print-area">
                   {Array.from({ length: qrPrintCount }).map((_, i) => (
                     <div className="track-qr-print-cell" key={i}>
-                      <div className="track-qr-print-title">QR ติดตามสถานะรถ</div>
-                      <img src={qrData.qr_data_url} alt="QR ติดตามสถานะ" />
-                      <div className="track-qr-print-sub">ลูกค้าสแกนแล้วพิมพ์ทะเบียน+เบอร์โทร 4 ตัวท้ายเองเพื่อดูสถานะรถ</div>
+                      <div className="tqr-brand">
+                        <span className="tqr-brand-champ">Champ</span><span className="tqr-brand-power">power</span><span className="tqr-brand-spk">SPK</span>
+                      </div>
+                      <div className="tqr-title">สแกนเช็คสถานะรถ</div>
+                      <div className="tqr-qr-frame">
+                        <span className="tqr-corner tqr-corner-tl" />
+                        <span className="tqr-corner tqr-corner-tr" />
+                        <span className="tqr-corner tqr-corner-bl" />
+                        <span className="tqr-corner tqr-corner-br" />
+                        <img src={qrData.qr_data_url} alt="QR ติดตามสถานะ" />
+                      </div>
+                      <div className="tqr-steps">
+                        <div className="tqr-step"><span className="tqr-step-no">1</span>สแกน QR ด้วยกล้องมือถือ</div>
+                        <div className="tqr-step"><span className="tqr-step-no">2</span>พิมพ์ทะเบียนรถ + เบอร์โทร 4 ตัวท้าย</div>
+                      </div>
+                      <div className="tqr-footer">{qrData.tracking_url}</div>
                     </div>
                   ))}
                 </div>

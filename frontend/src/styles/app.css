@@ -933,15 +933,39 @@ button:disabled { background: #f3f4f6; color: #9ca3af; cursor: not-allowed; }
     flex-direction: column;
     align-items: center;
     text-align: center;
-    border: 1px solid #000;
-    border-radius: 6px;
-    padding: 14px;
+    border: 1.5px dashed #b0b0b0;
+    border-radius: 16px;
+    padding: 18px 16px 14px;
     page-break-inside: avoid;
     break-inside: avoid;
+    background: #fff;
   }
-  .track-qr-print-title { font-size: 16px; font-weight: 800; margin-bottom: 6px; }
-  .track-qr-print-cell img { width: 140px; height: 140px; margin: 4px 0; }
-  .track-qr-print-sub { font-size: 12px; color: #333; line-height: 1.4; margin-top: 4px; }
+
+  /* โลโก้ร้าน — สีเดียวกับที่ใช้ในใบแจ้งซ่อม (.rw-champ/.rw-power) ให้ดูเป็นชุดเดียวกัน */
+  .tqr-brand { font-style: italic; font-weight: 800; font-size: 15px; letter-spacing: -0.02em; margin-bottom: 4px; }
+  .tqr-brand-champ { color: #59606b; }
+  .tqr-brand-power, .tqr-brand-spk { color: #eab308; }
+
+  .tqr-title { font-size: 17px; font-weight: 800; color: #111; margin-bottom: 12px; }
+
+  /* กรอบมุมสไตล์ช่องเล็งสแกน QR — ทำให้ QR ดูเป็น "จุดที่ต้องสแกน" ชัดเจนขึ้น
+     แทนที่จะเป็นแค่รูปสี่เหลี่ยมลอย ๆ */
+  .tqr-qr-frame { position: relative; width: 152px; height: 152px; margin: 0 auto 14px; }
+  .tqr-qr-frame img { width: 100%; height: 100%; display: block; }
+  .tqr-corner { position: absolute; width: 20px; height: 20px; border: 3px solid #eab308; }
+  .tqr-corner-tl { top: -7px; left: -7px; border-right: none; border-bottom: none; border-radius: 5px 0 0 0; }
+  .tqr-corner-tr { top: -7px; right: -7px; border-left: none; border-bottom: none; border-radius: 0 5px 0 0; }
+  .tqr-corner-bl { bottom: -7px; left: -7px; border-right: none; border-top: none; border-radius: 0 0 0 5px; }
+  .tqr-corner-br { bottom: -7px; right: -7px; border-left: none; border-top: none; border-radius: 0 0 5px 0; }
+
+  .tqr-steps { text-align: left; width: 100%; font-size: 12px; color: #333; line-height: 1.5; }
+  .tqr-step { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; }
+  .tqr-step-no {
+    flex-shrink: 0; width: 18px; height: 18px; border-radius: 50%;
+    background: #111; color: #fff; font-size: 11px; font-weight: 800;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  .tqr-footer { margin-top: 10px; font-size: 9px; color: #9ca3af; word-break: break-all; }
 }
 
 /* ════════════════════════════════════════
