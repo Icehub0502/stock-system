@@ -83,6 +83,38 @@ describe('POST /api/jobs — auto-links a matching pending LINE quotation', () =
 
     await pool.execute('DELETE FROM jobs WHERE id = ?', [createRes.body.id]);
   });
+
+  test('explicitly pulling in a deposited (no_date) quotation from another day moves its quotation_date to today and clears the waiting status', async () => {
+    const [quoteResult] = await pool.execute(
+      `INSERT INTO quotations (quotation_no, quotation_date, customer_id, vehicle_id, total_amount, deposit_amount, deposit_date, status)
+       VALUES (?, '2020-01-01', ?, ?, 22000, 5000, '2020-01-01', 'no_date')`,
+      [`IV-TEST-${Date.now()}`, fixture.customerId, fixture.vehicleId]
+    );
+    const depositedQuotationId = quoteResult.insertId;
+
+    const createRes = await request(app)
+      .post('/api/jobs')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        vehicle_id: fixture.vehicleId,
+        customer_id: fixture.customerId,
+        job_date: todayStr(),
+        quotation_id: depositedQuotationId,
+        symptom: 'ทดสอบดึงใบมัดจำมาวันนี้',
+      });
+    expect(createRes.status).toBe(201);
+
+    const [[quotation]] = await pool.query(
+      'SELECT quotation_date, status, scheduled_date, deposit_amount FROM quotations WHERE id = ?',
+      [depositedQuotationId]
+    );
+    expect(new Date(quotation.quotation_date).toISOString().slice(0, 10)).toBe(todayStr());
+    expect(quotation.status).toBe('pending'); // เอาสถานะ "รอทำ" ออกแล้ว ลูกค้ามาถึงจริง
+    expect(quotation.scheduled_date).toBeNull();
+    expect(Number(quotation.deposit_amount)).toBe(5000); // ยังเก็บมัดจำเดิมไว้ ไม่หาย
+
+    await pool.execute('DELETE FROM jobs WHERE id = ?', [createRes.body.id]);
+  });
 });
 
 describe('PATCH /api/jobs/:id/quote-draft* — concurrent draft/signature writes do not clobber each other', () => {

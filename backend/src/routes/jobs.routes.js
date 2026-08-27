@@ -252,7 +252,7 @@ router.post('/', async (req, res) => {
     // เรียก PATCH /:id/quotation แยกอีกที เช็คว่ายังไม่เคยมีงานอื่นผูกใบนี้ไปแล้วก่อน
     // เสมอ กันกดซ้ำสองแท็บแล้วได้งานซ้อนกันสองใบจากใบเดียว
     if (quotation_id) {
-      const [[quote]] = await conn.query('SELECT id FROM quotations WHERE id = ? FOR UPDATE', [quotation_id]);
+      const [[quote]] = await conn.query('SELECT id, status, quotation_date FROM quotations WHERE id = ? FOR UPDATE', [quotation_id]);
       if (!quote) {
         await conn.rollback();
         return res.status(400).json({ error: 'ไม่พบใบเสนอราคาที่จะผูก' });
@@ -269,6 +269,17 @@ router.post('/', async (req, res) => {
         await conn.rollback();
         return res.status(400).json({ error: 'ใบเสนอราคานี้มีงานที่กำลังดำเนินการอยู่แล้ว' });
       }
+      // ลูกค้ามารับงานจริงวันนี้แล้ว — ย้าย quotation_date มาเป็นวันที่รับรถเข้าคิว
+      // เหมือนกับ matchedScheduled ใน lineWebhook.routes.js (เหตุผลเดียวกัน: ไม่งั้นใบ
+      // จะค้างวันที่เดิม ทำให้จุดอื่นที่ค้นด้วยเลขคิว+วันที่วันนี้ เช่นบอทกลุ่ม "รายการ"
+      // ที่ใช้ลงรายการอะไหล่ต่อ หาใบนี้ไม่เจอ กลายเป็นเปิดใบใหม่ซ้อน/รายการที่มัดจำไว้
+      // หายไปตามที่เจ้าของร้านแจ้ง) พร้อมเคลียร์สถานะ "รอทำ" (scheduled/no_date) ออก
+      // ถ้ามี เพราะลูกค้ามาถึงแล้วจริง ไม่ใช่แค่รอนัดอีกต่อไป
+      const clearWaitingStatus = quote.status === 'scheduled' || quote.status === 'no_date';
+      await conn.execute(
+        `UPDATE quotations SET quotation_date = ?${clearWaitingStatus ? ", status = 'pending', scheduled_date = NULL" : ''} WHERE id = ?`,
+        [jobDate, quotation_id]
+      );
     }
 
     const jobNo = await generateJobNo(conn, jobDate);
