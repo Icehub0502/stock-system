@@ -72,11 +72,20 @@ export default function JobBoardPage() {
   // สถานะอื่นทุกอัน เลยเปลี่ยนแค่ label งานเป็น "อนุมัติ" แต่ใบเสนอราคาไม่ขยับตาม
   // เลย (บั๊กที่เจ้าของร้านแจ้ง) — สถานะอื่นในเส้นทางหลัก (รับรถ/ตรวจเช็ค/เสนอราคา/
   // กำลังซ่อม/รอตั้งศูนย์/พร้อมส่ง/ส่งแล้ว) ไม่มีผลข้างเคียงแบบนี้ ใช้ endpoint เดิมได้
-  async function changeStatus(job, status) {
+  //
+  // สำคัญ: side effect นี้ต้องเกิดเฉพาะตอนกด "อนุมัติ →" (เดินหน้าเข้าสู่ approved
+  // ครั้งแรก, isForwardApprove=true) เท่านั้น — ปุ่ม "← อนุมัติ" (ย้อนกลับจากสถานะ
+  // ถัดไป เช่น กำลังซ่อม กลับมา approved) ก็ส่ง status='approved' เข้ามาเหมือนกัน แต่
+  // ใบเสนอราคาอนุมัติ+สร้างใบเสร็จไปแล้วตั้งแต่ตอนเดินหน้าผ่านมา การเดินถอยหลังไม่ควร
+  // ไปพยายามอนุมัติซ้ำอีก — เดิมโค้ดเช็คแค่ status==='approved' เฉยๆ ไม่แยกทิศทาง
+  // พอกดปุ่มถอยหลัง ยิง PATCH /quotations/:id/approve ซ้ำ ฝั่ง backend ปฏิเสธ
+  // ("ใบเสนอราคานี้อนุมัติและสร้างใบเสร็จไปแล้ว") ทำให้กดถอยหลังไม่ได้เลย (บั๊กที่
+  // เจ้าของร้านแจ้ง)
+  async function changeStatus(job, status, { isForwardApprove = false } = {}) {
     setBusyId(job.id);
     setError('');
     try {
-      if (status === 'approved') {
+      if (status === 'approved' && isForwardApprove) {
         if (job.quotation_id) {
           await client.patch(`/quotations/${job.quotation_id}/approve`);
           await client.patch(`/jobs/${job.id}/status`, { status: 'approved' });
@@ -214,7 +223,7 @@ export default function JobBoardPage() {
                         </button>
                       )}
                       {next && (
-                        <button type="button" className="btn-primary" disabled={busy} onClick={() => changeStatus(j, next)}>
+                        <button type="button" className="btn-primary" disabled={busy} onClick={() => changeStatus(j, next, { isForwardApprove: next === 'approved' })}>
                           {jobStatusDef(next).label} →
                         </button>
                       )}
