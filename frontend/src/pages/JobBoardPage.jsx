@@ -73,19 +73,22 @@ export default function JobBoardPage() {
   // เลย (บั๊กที่เจ้าของร้านแจ้ง) — สถานะอื่นในเส้นทางหลัก (รับรถ/ตรวจเช็ค/เสนอราคา/
   // กำลังซ่อม/รอตั้งศูนย์/พร้อมส่ง/ส่งแล้ว) ไม่มีผลข้างเคียงแบบนี้ ใช้ endpoint เดิมได้
   //
-  // สำคัญ: side effect นี้ต้องเกิดเฉพาะตอนกด "อนุมัติ →" (เดินหน้าเข้าสู่ approved
-  // ครั้งแรก, isForwardApprove=true) เท่านั้น — ปุ่ม "← อนุมัติ" (ย้อนกลับจากสถานะ
-  // ถัดไป เช่น กำลังซ่อม กลับมา approved) ก็ส่ง status='approved' เข้ามาเหมือนกัน แต่
-  // ใบเสนอราคาอนุมัติ+สร้างใบเสร็จไปแล้วตั้งแต่ตอนเดินหน้าผ่านมา การเดินถอยหลังไม่ควร
-  // ไปพยายามอนุมัติซ้ำอีก — เดิมโค้ดเช็คแค่ status==='approved' เฉยๆ ไม่แยกทิศทาง
-  // พอกดปุ่มถอยหลัง ยิง PATCH /quotations/:id/approve ซ้ำ ฝั่ง backend ปฏิเสธ
-  // ("ใบเสนอราคานี้อนุมัติและสร้างใบเสร็จไปแล้ว") ทำให้กดถอยหลังไม่ได้เลย (บั๊กที่
-  // เจ้าของร้านแจ้ง)
-  async function changeStatus(job, status, { isForwardApprove = false } = {}) {
+  // สำคัญ: side effect นี้ต้องเกิดเฉพาะตอนใบเสนอราคาที่ผูกไว้ "ยังไม่อนุมัติ" เท่านั้น
+  // — เช็คจาก job.quotation_status ตรง ๆ (ไม่ใช่เดาจากทิศทางปุ่มกด/ครั้งแรกหรือเปล่า)
+  // เพราะมี 2 เคสที่ใบเสนอราคาอนุมัติไปแล้วก่อนกดปุ่มนี้: (1) ปุ่ม "← อนุมัติ" ย้อนกลับ
+  // จากสถานะถัดไป เช่น กำลังซ่อม กลับมา approved — อนุมัติไปแล้วตั้งแต่ตอนเดินหน้าผ่าน
+  // มา (2) ใบเสนอราคาถูกอนุมัติแยกไปเลยจากหน้าใบเสนอราคาโดยตรง (ไม่ผ่านปุ่มนี้) ทำให้
+  // job.status ยังค้างที่ "เสนอราคา" (ไม่ทันขยับ) แต่ quotation_status เป็น approved
+  // ไปแล้ว พอพนักงานมากดปุ่ม "อนุมัติ →" ที่การ์ดตามหลัง (เข้าใจว่ายังไม่อนุมัติ) — ทั้ง
+  // 2 เคสนี้ไม่ควรไปพยายามอนุมัติซ้ำ แค่ให้สถานะงานตามให้ทันเฉย ๆ ก็พอ (เดิมโค้ดเช็ค
+  // แค่ทิศทางปุ่ม/status==='approved' เฉยๆ ไม่ได้เช็คสถานะใบเสนอราคาจริง พอเจอ 2 เคสนี้
+  // ยิง PATCH /quotations/:id/approve ซ้ำ ฝั่ง backend ปฏิเสธ ("ใบเสนอราคานี้อนุมัติ
+  // และสร้างใบเสร็จไปแล้ว") ทำให้ขยับสถานะงานไม่ได้เลย — บั๊กที่เจ้าของร้านแจ้ง)
+  async function changeStatus(job, status) {
     setBusyId(job.id);
     setError('');
     try {
-      if (status === 'approved' && isForwardApprove) {
+      if (status === 'approved' && job.quotation_status !== 'approved') {
         if (job.quotation_id) {
           await client.patch(`/quotations/${job.quotation_id}/approve`);
           await client.patch(`/jobs/${job.id}/status`, { status: 'approved' });
@@ -223,7 +226,7 @@ export default function JobBoardPage() {
                         </button>
                       )}
                       {next && (
-                        <button type="button" className="btn-primary" disabled={busy} onClick={() => changeStatus(j, next, { isForwardApprove: next === 'approved' })}>
+                        <button type="button" className="btn-primary" disabled={busy} onClick={() => changeStatus(j, next)}>
                           {jobStatusDef(next).label} →
                         </button>
                       )}
