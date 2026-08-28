@@ -1,6 +1,6 @@
 const express = require('express');
 const pool = require('../db/pool');
-const { authenticate, requireRole } = require('../middleware/auth');
+const { authenticate, requireRole, requireOwner } = require('../middleware/auth');
 
 const router = express.Router();
 router.use(authenticate);
@@ -29,6 +29,39 @@ router.post('/', async (req, res) => {
   } catch (err) {
     console.error('Error creating technician:', err);
     res.status(500).json({ error: 'เพิ่มชื่อช่างไม่สำเร็จ' });
+  }
+});
+
+// แก้ไข/ลบชื่อช่าง — เฉพาะเจ้าของร้าน (หน้าตั้งค่า) ต่างจาก GET/POST ด้านบนที่ office
+// ทั่วไปใช้ตอนมอบหมายงานได้อยู่แล้ว การแก้ไข/ลบเป็นงานจัดการรายชื่อ ไม่ใช่งานประจำวัน
+// จึงจำกัดเฉพาะเจ้าของร้าน — ปลอดภัยที่จะลบเพราะ jobs.technician เป็นแค่ VARCHAR
+// ก็อปปี้ชื่อไว้ตอนมอบหมาย (ไม่ใช่ foreign key) งานเก่าที่เคยมอบหมายไปแล้วไม่กระทบ
+router.put('/:id', requireOwner, async (req, res) => {
+  const name = String(req.body?.name || '').trim();
+  if (!name) return res.status(400).json({ error: 'กรุณากรอกชื่อช่าง' });
+  try {
+    const [[existing]] = await pool.query('SELECT id FROM technicians WHERE id = ?', [req.params.id]);
+    if (!existing) return res.status(404).json({ error: 'ไม่พบช่างนี้' });
+    await pool.execute('UPDATE technicians SET name = ? WHERE id = ?', [name, req.params.id]);
+    res.json({ success: true, data: { id: Number(req.params.id), name } });
+  } catch (err) {
+    if (err.code === 'ER_DUP_ENTRY') {
+      return res.status(409).json({ error: 'มีชื่อช่างนี้อยู่แล้ว' });
+    }
+    console.error('Error renaming technician:', err);
+    res.status(500).json({ error: 'แก้ไขชื่อช่างไม่สำเร็จ' });
+  }
+});
+
+router.delete('/:id', requireOwner, async (req, res) => {
+  try {
+    const [[existing]] = await pool.query('SELECT id FROM technicians WHERE id = ?', [req.params.id]);
+    if (!existing) return res.status(404).json({ error: 'ไม่พบช่างนี้' });
+    await pool.execute('DELETE FROM technicians WHERE id = ?', [req.params.id]);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Error deleting technician:', err);
+    res.status(500).json({ error: 'ลบช่างไม่สำเร็จ' });
   }
 });
 

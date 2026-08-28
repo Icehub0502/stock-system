@@ -36,6 +36,7 @@ const RepairNoticeListPage = lazy(() => import("./pages/RepairNoticeListPage"));
 const RepairNoticePage = lazy(() => import("./pages/RepairNoticePage"));
 const StockDeductionPage = lazy(() => import("./pages/StockDeductionPage"));
 const StockUsageReportPage = lazy(() => import("./pages/StockUsageReportPage"));
+const SettingsPage = lazy(() => import("./pages/SettingsPage"));
 // ระบบคิวรับรถ (subdomain queue.champ-powerspk.com แต่ route เดียวกันนี้ทำงาน
 // บนโดเมนหลักได้ด้วย เพราะเป็น build เดียวกัน) BoardPage ไม่ต้องล็อกอิน — จอ TV
 // ห้องรับรอง
@@ -184,6 +185,14 @@ function AppRoutes() {
             element={
               <ProtectedRoute roles={["office"]}>
                 <WarrantyManagementPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/settings"
+            element={
+              <ProtectedRoute roles={["office"]} ownerOnly>
+                <SettingsPage />
               </ProtectedRoute>
             }
           />

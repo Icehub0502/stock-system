@@ -30,4 +30,14 @@ function requireRole(...roles) {
   };
 }
 
-module.exports = { authenticate, requireRole, verifyToken };
+// เจ้าของร้าน (username 'ice') เท่านั้น — ใช้กับหน้า "ตั้งค่า" และ endpoint ที่จัดการ
+// บัญชีผู้ใช้/ความลับของระบบ ซึ่งอ่อนไหวกว่าสิทธิ์ office ทั่วไป ไม่ผูกกับ role เพราะ
+// ระบบยังไม่มี role แยกสำหรับเจ้าของร้านโดยเฉพาะ (มีแค่ office/technician)
+function requireOwner(req, res, next) {
+  if (!req.user || req.user.username !== 'ice') {
+    return res.status(403).json({ error: 'คุณไม่มีสิทธิ์ทำรายการนี้' });
+  }
+  next();
+}
+
+module.exports = { authenticate, requireRole, requireOwner, verifyToken };

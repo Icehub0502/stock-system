@@ -11,6 +11,17 @@ async function getTechnicianToken() {
   return jwt.sign({ id: user.id, username: user.username, role: user.role }, process.env.JWT_SECRET, { expiresIn: '1h' });
 }
 
+// requireOwner (middleware/auth.js) เช็คเฉพาะ username === 'ice' ตรง ๆ ไม่ผูกกับ role
+// เลย — เทสต์หน้าตั้งค่า/endpoint ที่จำกัดเฉพาะเจ้าของร้านต้องมี user ชื่อนี้จริงใน DB
+// ทดสอบ (ปกติมีแค่ admin/tech1 จาก seed) จึงสร้างขึ้นเองแบบ idempotent (INSERT IGNORE)
+async function getOwnerToken() {
+  await pool.execute(
+    "INSERT IGNORE INTO users (username, password_hash, full_name, role) VALUES ('ice', 'x', 'Test Owner', 'office')"
+  );
+  const [[user]] = await pool.query("SELECT id, username, role FROM users WHERE username = 'ice' LIMIT 1");
+  return jwt.sign({ id: user.id, username: user.username, role: user.role }, process.env.JWT_SECRET, { expiresIn: '1h' });
+}
+
 // Creates a throwaway customer + vehicle directly in the DB (fast, and
 // keeps fixture setup separate from the API behavior actually under test).
 async function createCustomerWithVehicle({ namePrefix = 'Test Customer' } = {}) {
@@ -47,4 +58,4 @@ async function cleanupCustomer(customerId) {
   await pool.execute('DELETE FROM customers WHERE id = ?', [customerId]);
 }
 
-module.exports = { getOfficeToken, getTechnicianToken, createCustomerWithVehicle, cleanupCustomer };
+module.exports = { getOfficeToken, getTechnicianToken, getOwnerToken, createCustomerWithVehicle, cleanupCustomer };

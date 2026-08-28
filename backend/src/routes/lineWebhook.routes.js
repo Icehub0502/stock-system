@@ -324,32 +324,46 @@ function formatThaiShortDate(date) {
 
 // เทมเพลตข้อความที่ตอบกลับตายตัว (รูปแบบตกลงกับเจ้าของร้านแล้ว) — เติมแค่เลขคิว
 // ถัดไปกับวันที่วันนี้ ที่เหลือเป็น label ว่างให้พนักงานกรอกทับแล้วส่งกลับมา
-function buildQueueTemplateText(nextQueueNo) {
+// แทนที่ {{key}} ด้วยค่าจริงจาก vars ทีละตัว — placeholder ที่ไม่รู้จัก (พิมพ์ผิด/พิมพ์
+// เอง) ปล่อยไว้เฉย ๆ ไม่ลบทิ้ง กันข้อความพังเงียบ ๆ ถ้าเจ้าของร้านแก้เทมเพลตเองผิด
+function renderTemplate(template, vars) {
+  return String(template).replace(/\{\{\s*(\w+)\s*\}\}/g, (match, key) => (
+    Object.prototype.hasOwnProperty.call(vars, key) ? String(vars[key]) : match
+  ));
+}
+
+// ค่าเริ่มต้นของเทมเพลตทั้งสองแบบ — ข้อความเดียวกับที่ใช้มาตลอด แค่เปลี่ยนจุดที่เคย
+// เป็นตัวแปรในโค้ดให้เป็น {{placeholder}} แทน ใช้เป็นค่า fallback ตอนยังไม่มีใคร
+// ตั้งค่าเอง (ดู app_settings key line_template_blank/line_template_filled ที่หน้า
+// ตั้งค่าใน settings.routes.js แก้ไขได้) และใช้เป็นปุ่ม "คืนค่าเริ่มต้น" ที่หน้านั้น
+const DEFAULT_BLANK_TEMPLATE = [
+  'คิว {{queue_no}}',
+  '{{date}}',
+  'ชื่อ:',
+  'เบอโทรศัพท์:',
+  'ยี่ห้อรถ:',
+  'รุ่นรถ:',
+  'ทะเบียนรถ:',
+  'สีรถ:',
+  'เลขไมค์:',
+  'อาการ:',
+  'รายการ:',
+  '',
+  '<--สิ้นสุดรายการ-->',
+  'ยอดรวม:',
+  'มัดจำ:',
+  'วันที่มัดจำ:',
+  'วันนัดหมาย:',
+  'หมายเหตุ:',
+  '',
+  '<--ลูกค้าชำระเงิน-->',
+  'ช่องทางการชำระ (โอน/บัตรเครดิต/เงินสด/QRCode):',
+  'ลูกค้าชำระเงิน (ยอดที่ได้รับจริง):',
+].join('\n');
+
+function buildQueueTemplateText(nextQueueNo, template = DEFAULT_BLANK_TEMPLATE) {
   const dateStr = formatThaiShortDate(new Date());
-  return [
-    `คิว ${nextQueueNo}`,
-    dateStr,
-    'ชื่อ:',
-    'เบอโทรศัพท์:',
-    'ยี่ห้อรถ:',
-    'รุ่นรถ:',
-    'ทะเบียนรถ:',
-    'สีรถ:',
-    'เลขไมค์:',
-    'อาการ:',
-    'รายการ:',
-    '',
-    '<--สิ้นสุดรายการ-->',
-    'ยอดรวม:',
-    'มัดจำ:',
-    'วันที่มัดจำ:',
-    'วันนัดหมาย:',
-    'หมายเหตุ:',
-    '',
-    '<--ลูกค้าชำระเงิน-->',
-    'ช่องทางการชำระ (โอน/บัตรเครดิต/เงินสด/QRCode):',
-    'ลูกค้าชำระเงิน (ยอดที่ได้รับจริง):',
-  ].join('\n');
+  return renderTemplate(template, { queue_no: nextQueueNo, date: dateStr });
 }
 
 // แปลงวันที่ที่ได้จาก DB (YYYY-MM-DD สตริง — pool ตั้ง dateStrings: true ไว้แล้ว)
@@ -372,38 +386,54 @@ function formatDbDateThai(dateStr) {
 // total_amount ที่บันทึกไว้จริงในใบเสนอราคา ไม่ใช่คำนวณจากรายการซ้ำ กันกรณีออฟฟิศ
 // ปรับยอดรวมเองไว้ในเว็บไม่ตรงกับผลรวมรายการเป๊ะ ๆ — วันนัดหมายมาจาก scheduled_date
 // เดียวกับที่หน้า "ลูกค้าที่นัดหมาย" ใช้ ไม่ใช่ฟิลด์แยกต่างหาก)
-function buildFilledTemplateText(data) {
-  const banner = `🔄 ข้อมูลอัปเดตแล้ว (คิว ${data.queue_no}) — คัดลอกไปใช้แทนของเดิมได้เลย`;
+const DEFAULT_FILLED_TEMPLATE = [
+  '🔄 ข้อมูลอัปเดตแล้ว (คิว {{queue_no}}) — คัดลอกไปใช้แทนของเดิมได้เลย',
+  '',
+  'คิว {{queue_no}}',
+  'ชื่อ:{{customer_name}}',
+  'เบอโทรศัพท์:{{phone}}',
+  'ยี่ห้อรถ:{{brand}}',
+  'รุ่นรถ:{{model}}',
+  'ทะเบียนรถ:{{license_plate}}',
+  'สีรถ:{{color}}',
+  'เลขไมค์:{{mileage}}',
+  'อาการ:{{symptom}}',
+  'รายการ:',
+  '{{items}}',
+  '<--สิ้นสุดรายการ-->',
+  'ยอดรวม:{{total_amount}}',
+  'มัดจำ:{{deposit_amount}}',
+  'วันที่มัดจำ:{{deposit_date}}',
+  'วันนัดหมาย:{{scheduled_date}}',
+  'หมายเหตุ:{{remark}}',
+  '',
+  '<--ลูกค้าชำระเงิน-->',
+  'ช่องทางการชำระ (โอน/บัตรเครดิต/เงินสด/QRCode):',
+  'ลูกค้าชำระเงิน (ยอดที่ได้รับจริง):',
+].join('\n');
+
+function buildFilledTemplateText(data, template = DEFAULT_FILLED_TEMPLATE) {
   const itemLines = (data.items || []).map((it) => {
     const amount = Number(it.quantity || 1) * Number(it.unit_price || 0);
     return `${it.product_name} ${amount}`;
   });
-  const totalAmount = Number(data.total_amount || 0);
-  const template = [
-    `คิว ${data.queue_no}`,
-    `ชื่อ:${data.customer_name || ''}`,
-    `เบอโทรศัพท์:${data.phone || ''}`,
-    `ยี่ห้อรถ:${data.brand || ''}`,
-    `รุ่นรถ:${data.model || ''}`,
-    `ทะเบียนรถ:${data.license_plate || ''}`,
-    `สีรถ:${data.color || ''}`,
-    `เลขไมค์:${data.mileage != null ? data.mileage : ''}`,
-    `อาการ:${data.symptom || ''}`,
-    'รายการ:',
-    ...itemLines,
-    '',
-    '<--สิ้นสุดรายการ-->',
-    `ยอดรวม:${totalAmount}`,
-    `มัดจำ:${data.deposit_amount != null ? data.deposit_amount : ''}`,
-    `วันที่มัดจำ:${formatDbDateThai(data.deposit_date)}`,
-    `วันนัดหมาย:${data.status === 'scheduled' ? formatDbDateThai(data.scheduled_date) : ''}`,
-    `หมายเหตุ:${data.remark || ''}`,
-    '',
-    '<--ลูกค้าชำระเงิน-->',
-    'ช่องทางการชำระ (โอน/บัตรเครดิต/เงินสด/QRCode):',
-    'ลูกค้าชำระเงิน (ยอดที่ได้รับจริง):',
-  ].join('\n');
-  return `${banner}\n\n${template}`;
+  return renderTemplate(template, {
+    queue_no: data.queue_no,
+    customer_name: data.customer_name || '',
+    phone: data.phone || '',
+    brand: data.brand || '',
+    model: data.model || '',
+    license_plate: data.license_plate || '',
+    color: data.color || '',
+    mileage: data.mileage != null ? data.mileage : '',
+    symptom: data.symptom || '',
+    items: itemLines.join('\n'),
+    total_amount: Number(data.total_amount || 0),
+    deposit_amount: data.deposit_amount != null ? data.deposit_amount : '',
+    deposit_date: formatDbDateThai(data.deposit_date),
+    scheduled_date: data.status === 'scheduled' ? formatDbDateThai(data.scheduled_date) : '',
+    remark: data.remark || '',
+  });
 }
 
 // ดึงข้อมูลใบเสนอราคา+ลูกค้า+รถ+รายการ มาให้ครบพอสร้างข้อความ push (mirror ของ
@@ -440,7 +470,10 @@ async function pushQuotationUpdate(quotationId) {
     if (!groupId) return; // ยังไม่เคยมีข้อความจากกลุ่มไลน์เข้ามาเลย ไม่รู้จะ push ไปกลุ่มไหน
     const data = await fetchQuotationForPush(quotationId);
     if (!data || !data.queue_no || data.closed_at) return; // ไม่ใช่บิลจากไลน์ที่ยังเปิดอยู่
-    await pushToLine(groupId, buildFilledTemplateText(data));
+    // เจ้าของร้านแก้ไขข้อความนี้เองได้จากหน้าตั้งค่า (settings.routes.js) — ใช้ค่าที่
+    // ตั้งไว้ถ้ามี ไม่งั้น fallback ไปใช้ค่าเริ่มต้น
+    const template = (await getSetting('line_template_filled')) || DEFAULT_FILLED_TEMPLATE;
+    await pushToLine(groupId, buildFilledTemplateText(data, template));
   } catch (err) {
     console.error('Error pushing quotation update to LINE:', err);
   }
@@ -1584,7 +1617,9 @@ router.post('/webhook', async (req, res) => {
       // retry มาลองใหม่ได้
       try {
         const nextQueueNo = await getNextQueueNoPreview();
-        await replyToLine(event.replyToken, buildQueueTemplateText(nextQueueNo));
+        // เจ้าของร้านแก้ไขเทมเพลตนี้เองได้จากหน้าตั้งค่า — ใช้ค่าที่ตั้งไว้ถ้ามี
+        const template = (await getSetting('line_template_blank')) || DEFAULT_BLANK_TEMPLATE;
+        await replyToLine(event.replyToken, buildQueueTemplateText(nextQueueNo, template));
         if (messageId) await markProcessed(messageId);
       } catch (err) {
         console.error('Error replying queue template:', err);
@@ -1681,3 +1716,6 @@ module.exports.pushWithToken = pushWithToken;
 module.exports.fetchQuotationForPush = fetchQuotationForPush; // ให้บอท 2 ดึงข้อมูลใบเสนอราคามาสร้างข้อความสรุปส่งต่อกลุ่มบอท 3 (Phase D)
 module.exports.updateQuotationItemsByQueue = updateQuotationItemsByQueue; // Phase D — บอท 2 บันทึกรายการอะไหล่ที่พนักงานพิมพ์มา
 module.exports.closeQuotationByQueue = closeQuotationByQueue; // Phase E — บอท 3 ปิดบิลด้วยตรรกะเดียวกับบอท 1
+module.exports.DEFAULT_BLANK_TEMPLATE = DEFAULT_BLANK_TEMPLATE; // ให้ settings.routes.js คืนเป็นค่า default ตอนยังไม่มีใครแก้ไข/ปุ่ม "คืนค่าเริ่มต้น"
+module.exports.DEFAULT_FILLED_TEMPLATE = DEFAULT_FILLED_TEMPLATE;
+module.exports.renderTemplate = renderTemplate; // ให้เทสต์ตรวจ placeholder substitution แยกจาก integration test ได้

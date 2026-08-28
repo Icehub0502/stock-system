@@ -1,10 +1,12 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const pool = require('../db/pool');
-const { authenticate, requireRole } = require('../middleware/auth');
+const { authenticate, requireOwner } = require('../middleware/auth');
 
 const router = express.Router();
-router.use(authenticate, requireRole('office'));
+// จัดการบัญชี/รหัสผ่าน/role ของทุกคนได้จากที่นี่ — อ่อนไหวกว่าสิทธิ์ office ทั่วไป
+// (เดิมเป็น requireRole('office') แต่ไม่เคยมีหน้าเว็บไหนเรียกใช้เลย จึงไม่กระทบของเดิม)
+router.use(authenticate, requireOwner);
 
 router.get('/', async (req, res) => {
   try {
@@ -72,6 +74,11 @@ router.delete('/:id', async (req, res) => {
   try {
     const [existingRows] = await pool.execute('SELECT * FROM users WHERE id = ?', [req.params.id]);
     if (!existingRows[0]) return res.status(404).json({ error: 'ไม่พบผู้ใช้' });
+    // กันลบบัญชีตัวเอง (ice) ทิ้งเผลอ — จะล็อกตัวเองออกจากหน้าตั้งค่าทันทีโดยไม่มีทาง
+    // กู้คืนผ่านเว็บอีก (ต้องเข้า DB ตรง ๆ)
+    if (Number(req.params.id) === req.user.id) {
+      return res.status(400).json({ error: 'ลบบัญชีของตัวเองไม่ได้' });
+    }
     await pool.execute('DELETE FROM users WHERE id = ?', [req.params.id]);
     res.json({ success: true });
   } catch (err) {

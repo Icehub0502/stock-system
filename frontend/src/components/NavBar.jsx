@@ -165,6 +165,12 @@ export default function NavBar() {
 
         <Link to="/repair-notices" className="navbar-standalone-link" onClick={close}>ใบแจ้งซ่อม</Link>
         <Link to="/scan" className="navbar-standalone-link" onClick={close}>สแกน QR</Link>
+        {/* เฉพาะเจ้าของร้าน (username 'ice') — ไม่ผูกกับ role เพราะระบบยังไม่มี role
+            แยกสำหรับเจ้าของร้านโดยเฉพาะ (มีแค่ office/technician) ดู requireOwner ฝั่ง
+            backend ที่บังคับสิทธิ์จริงอีกชั้นด้วย ปุ่มนี้แค่ซ่อนไม่ให้คนอื่นเห็นเฉย ๆ */}
+        {user.username === "ice" && (
+          <Link to="/settings" className="navbar-standalone-link" onClick={close}>⚙️ ตั้งค่า</Link>
+        )}
 
         <div className="navbar-user-row">
           <span className="navbar-user">
