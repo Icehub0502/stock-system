@@ -95,7 +95,10 @@ export default function AddJobModal({ onClose, onCreated, prefill = null }) {
     if (files.length === 0) return;
     setPhotosBusy(true);
     try {
-      const resized = await Promise.all(files.map((f) => resizeImageToDataUrl(f)));
+      // รูปรถตอนรับเข้า — ลูกค้าเปิดดูและเซฟรูปเองได้จากหน้าประวัติ (/track) ใช้ขนาด/
+      // คุณภาพสูงกว่าค่าเริ่มต้นของฟังก์ชัน (ซึ่งตั้งไว้สำหรับรูปการ์ดอะไหล่เล็ก ๆ)
+      // กันรูปแตกตอนลูกค้าเซฟไปดูจริง
+      const resized = await Promise.all(files.map((f) => resizeImageToDataUrl(f, 1280, 0.85)));
       setPhotos((prev) => [...prev, ...resized]);
     } catch {
       setError('เพิ่มรูปไม่สำเร็จ ลองใหม่อีกครั้ง');

@@ -1,10 +1,12 @@
 import React from 'react';
+import { useLocation } from 'react-router-dom';
 import { useRegisterSW } from 'virtual:pwa-register/react';
 
 // registerType is 'prompt' (see vite.config.js) — a new service worker sits
 // "waiting" until the user opts in here, instead of auto-activating under
 // someone mid-form.
 export default function UpdateBanner() {
+  const location = useLocation();
   const {
     offlineReady: [offlineReady, setOfflineReady],
     needRefresh: [needRefresh, setNeedRefresh],
@@ -23,6 +25,9 @@ export default function UpdateBanner() {
     setNeedRefresh(false);
   };
 
+  // หน้าประวัติรถลูกค้า (/track) เป็นหน้าสาธารณะให้ลูกค้าเปิดดูเฉย ๆ — ไม่ควรเห็น
+  // แบนเนอร์เกี่ยวกับแอป/เวอร์ชันใหม่ที่ไม่เกี่ยวกับตัวเอง (mirror InstallPrompt.jsx)
+  if (location.pathname.startsWith('/track')) return null;
   if (!offlineReady && !needRefresh) return null;
 
   return (

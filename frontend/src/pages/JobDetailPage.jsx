@@ -520,7 +520,9 @@ export default function JobDetailPage() {
     setIntakePhotosBusy(true);
     setIntakePhotosError('');
     try {
-      const resized = await Promise.all(files.map((f) => resizeImageToDataUrl(f)));
+      // ลูกค้าเปิดดูและเซฟรูปเองได้จากหน้าประวัติ (/track) — ใช้ขนาด/คุณภาพสูงกว่า
+      // ค่าเริ่มต้นของฟังก์ชัน (ตั้งไว้สำหรับรูปการ์ดอะไหล่เล็ก ๆ) กันรูปแตกตอนเซฟ
+      const resized = await Promise.all(files.map((f) => resizeImageToDataUrl(f, 1280, 0.85)));
       await client.post(`/jobs/${id}/photos`, { photos: resized });
       await load({ silent: true });
     } catch (err) {
@@ -567,7 +569,9 @@ export default function JobDetailPage() {
     setPartPhotosBusy(true);
     setPartPhotosError('');
     try {
-      const resized = await Promise.all(files.map((f) => resizeImageToDataUrl(f)));
+      // ลูกค้าเปิดดูและเซฟรูปเองได้จากหน้าประวัติ (/track) — ใช้ขนาด/คุณภาพสูงกว่า
+      // ค่าเริ่มต้นของฟังก์ชัน (ตั้งไว้สำหรับรูปการ์ดอะไหล่เล็ก ๆ) กันรูปแตกตอนเซฟ
+      const resized = await Promise.all(files.map((f) => resizeImageToDataUrl(f, 1280, 0.85)));
       await client.post(`/jobs/${id}/part-photos`, { photos: resized });
       await load({ silent: true });
     } catch (err) {

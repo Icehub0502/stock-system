@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 
 const DISMISS_KEY = 'pwa-install-dismissed';
 
@@ -18,9 +19,14 @@ function isIos() {
 // Screen" only exists as a manual Share-sheet action, so we just point
 // users at it instead.
 export default function InstallPrompt() {
+  const location = useLocation();
   const [deferredPrompt, setDeferredPrompt] = useState(null);
   const [showIosHint, setShowIosHint] = useState(false);
   const [dismissed, setDismissed] = useState(() => localStorage.getItem(DISMISS_KEY) === '1');
+  // หน้าประวัติรถลูกค้า (/track) เป็นหน้าสาธารณะให้ลูกค้าเปิดดูเฉย ๆ ไม่ใช่หน้าที่คนใน
+  // ร้านใช้งานประจำ — เจ้าของร้านสั่งไม่ให้ชวนลูกค้าโหลดแอปที่หน้านี้ ให้เห็นเป็นเว็บ
+  // ปกติธรรมดา
+  const isCustomerTrackPage = location.pathname.startsWith('/track');
 
   useEffect(() => {
     if (isStandalone() || dismissed) return undefined;
@@ -49,7 +55,7 @@ export default function InstallPrompt() {
     dismiss();
   };
 
-  if (dismissed || isStandalone()) return null;
+  if (dismissed || isStandalone() || isCustomerTrackPage) return null;
   if (!deferredPrompt && !showIosHint) return null;
 
   return (
