@@ -9,7 +9,6 @@ process.env.LINE_CHANNEL_SECRET = TEST_SECRET;
 const { createApp } = require('../src/app');
 const pool = require('../src/db/pool');
 const lineWebhook = require('../src/routes/lineWebhook.routes');
-const parseLineQueueMessage = require('../src/utils/parseLineQueueMessage');
 const { getOfficeToken, createCustomerWithVehicle, cleanupCustomer } = require('./helpers');
 
 const app = createApp();
@@ -78,74 +77,6 @@ describe('pushToLine — best-effort', () => {
   });
 });
 
-// ── buildFilledTemplateText: เทมเพลตที่กรอกข้อมูลจริงแล้ว ต้อง round-trip ผ่าน
-// parser กลับเป็นการแก้ไขปกติได้ (ตัดแบนเนอร์ทิ้ง เหลือแค่ส่วนเทมเพลตจริง) ──
-describe('buildFilledTemplateText', () => {
-  test('มีแบนเนอร์แจ้งอัปเดต และส่วนเทมเพลตพาร์สกลับผ่าน parseLineQueueMessage ได้ถูกต้อง', () => {
-    const data = {
-      queue_no: '7',
-      customer_name: 'คุณทดสอบ',
-      phone: '081-234-5678',
-      brand: 'Toyota',
-      model: 'Vios',
-      license_plate: '1กก1234',
-      color: 'ขาว',
-      mileage: 123456,
-      symptom: 'เช็คช่วงล่าง',
-      items: [{ product_name: 'แร็ค OEM', quantity: 1, unit_price: 5000 }],
-      remark: 'ลูกค้ารอรับรถ',
-      deposit_amount: 1000,
-      deposit_date: '2026-07-21',
-    };
-    const text = lineWebhook.buildFilledTemplateText(data);
-    expect(text).toContain('🔄 ข้อมูลอัปเดตแล้ว (คิว 7) — คัดลอกไปใช้แทนของเดิมได้เลย');
-
-    // ตัดแบนเนอร์+บรรทัดว่างคั่นทิ้ง เหลือแค่เทมเพลตจริงที่ขึ้นต้นด้วย "คิว 7"
-    const templatePart = text.split('\n\n').slice(1).join('\n\n');
-    expect(templatePart.startsWith('คิว 7')).toBe(true);
-
-    const parsed = parseLineQueueMessage(templatePart);
-    expect(parsed).not.toBeNull();
-    expect(parsed.queue_no).toBe('7');
-    expect(parsed.customer_name).toBe('คุณทดสอบ');
-    expect(parsed.license_plate).toBe('1กก1234');
-    expect(parsed.brand).toBe('Toyota');
-    expect(parsed.model).toBe('Vios');
-    expect(parsed.deposit_amount).toBe(1000);
-    expect(parsed.deposit_date).toBe('2026-07-21');
-    expect(parsed.items).toEqual([{ name: 'แร็ค OEM', price: 5000 }]);
-  });
-
-  test('ครบทุกส่วนเหมือนเทมเพลตจริง — ยอดรวม/วันนัดหมาย/ส่วนชำระเงิน ใส่มาให้เลย ไม่ใช่แค่ข้อมูลหัวบิล (พนักงานคัดลอกไปปิดบิลต่อได้ทันที)', () => {
-    const text = lineWebhook.buildFilledTemplateText({
-      queue_no: '2',
-      customer_name: 'คุณทดสอบ3',
-      total_amount: 26050,
-      deposit_amount: 2000,
-      status: 'scheduled',
-      scheduled_date: '2026-08-15',
-      items: [{ product_name: 'ลูกหมากปลาย', quantity: 1, unit_price: 26050 }],
-    });
-    expect(text).toContain('ยอดรวม:26050');
-    expect(text).toContain('มัดจำ:2000');
-    expect(text).toContain('วันนัดหมาย:15/08/69');
-    expect(text).toContain('<--ลูกค้าชำระเงิน-->');
-    expect(text).toContain('ช่องทางการชำระ (โอน/บัตรเครดิต/เงินสด/QRCode):');
-    expect(text).toContain('ลูกค้าชำระเงิน (ยอดที่ได้รับจริง):');
-  });
-
-  test('ไม่มีมัดจำ/ไม่มีรถ → label ยังอยู่ครบแต่เป็นค่าว่าง ไม่พังเทมเพลต', () => {
-    const text = lineWebhook.buildFilledTemplateText({
-      queue_no: '3',
-      customer_name: 'คุณทดสอบ2',
-      items: [],
-    });
-    expect(text).toContain('มัดจำ:');
-    expect(text).toContain('วันที่มัดจำ:');
-    expect(text).toContain('ยี่ห้อรถ:');
-  });
-});
-
 // ── auto-capture group id: ข้อความ/อีเวนต์แรกจากกลุ่มไลน์ → บันทึกลง app_settings
 // อัตโนมัติ ไม่ต้องตั้งค่าเอง (ดู captureGroupId ใน lineWebhook.routes.js) ──
 describe('LINE group id — auto-capture ลง app_settings', () => {
@@ -179,11 +110,13 @@ describe('LINE group id — auto-capture ลง app_settings', () => {
   });
 });
 
-// ── push trigger จากการแก้ไขข้อมูลผ่านหน้าเว็บ (ใบเสนอราคา/รถ/ลูกค้า) — ยิง push
-// เฉพาะใบที่ "มาจากไลน์และยังเปิดอยู่" (queue_no IS NOT NULL AND closed_at IS NULL)
-// เท่านั้น ตั้ง LINE_CHANNEL_ACCESS_TOKEN + mock fetch ไว้ในบล็อกนี้เพื่อจับได้ว่า
-// pushQuotationUpdate พยายามยิงจริง (ไม่ใช่แค่ไม่ error) ──
-describe('Push trigger เมื่อแก้ไขข้อมูลผ่านหน้าเว็บ', () => {
+// ── การ auto-push กลับเข้ากลุ่มไลน์ตอนแก้ไขข้อมูลผ่านหน้าเว็บ (ใบเสนอราคา/รถ/ลูกค้า)
+// ถูกถอดออกทั้งระบบตามคำสั่งเจ้าของร้าน (เคยกินโควต้า push ของ LINE โดยไม่จำเป็น —
+// พนักงานคัดลอกข้อความไปแจ้งกลุ่มเองด้วยมืออยู่แล้ว) เทสต์นี้เป็นเซฟตี้เน็ตกันมีใคร
+// เผลอเพิ่ม pushQuotationUpdate หรือโค้ดคล้ายกันกลับเข้ามาที่ 3 endpoint นี้อีกในอนาคต
+// โดยไม่รู้ตัว — ตั้ง LINE_CHANNEL_ACCESS_TOKEN + mock fetch ไว้เพื่อจับได้ว่ามีความ
+// พยายามยิง push จริง (ไม่ใช่แค่ไม่ error)
+describe('แก้ไขข้อมูลผ่านหน้าเว็บ ไม่ auto-push กลับเข้ากลุ่มไลน์อีกต่อไป', () => {
   let token;
   let fixture;
   let fetchSpy;
@@ -229,100 +162,43 @@ describe('Push trigger เมื่อแก้ไขข้อมูลผ่า
     return result.insertId;
   }
 
-  describe('PUT /api/quotations/:id', () => {
-    test('ใบเสนอราคาที่มาจากไลน์และยังเปิดอยู่ (มีเลขคิว ไม่ปิดบิล) → ยิง push', async () => {
-      const quotationId = await insertQuotation({ queueNo: '9' });
+  test('PUT /api/quotations/:id — ใบที่มาจากไลน์และยังเปิดอยู่ → ยังไม่ยิง push', async () => {
+    const quotationId = await insertQuotation({ queueNo: '9' });
 
-      const res = await request(app)
-        .put(`/api/quotations/${quotationId}`)
-        .set('Authorization', `Bearer ${token}`)
-        .send({
-          customer_id: fixture.customerId,
-          vehicle_id: fixture.vehicleId,
-          quotation_date: '2026-07-21',
-          queue_no: '9',
-          items: [],
-        });
-      expect(res.status).toBe(200);
-      expect(pushAttempts()).toHaveLength(1);
-    });
-
-    test('ใบเสนอราคาที่สร้างจากหน้าเว็บล้วน (ไม่มีเลขคิว) → ไม่ยิง push', async () => {
-      const quotationId = await insertQuotation({ queueNo: null });
-
-      const res = await request(app)
-        .put(`/api/quotations/${quotationId}`)
-        .set('Authorization', `Bearer ${token}`)
-        .send({
-          customer_id: fixture.customerId,
-          vehicle_id: fixture.vehicleId,
-          quotation_date: '2026-07-21',
-          items: [],
-        });
-      expect(res.status).toBe(200);
-      expect(pushAttempts()).toHaveLength(0);
-    });
-
-    test('ใบเสนอราคาที่ปิดบิลไปแล้ว (closed_at ไม่ว่าง) → ไม่ยิง push', async () => {
-      const quotationId = await insertQuotation({ queueNo: '10', closed: true });
-
-      const res = await request(app)
-        .put(`/api/quotations/${quotationId}`)
-        .set('Authorization', `Bearer ${token}`)
-        .send({
-          customer_id: fixture.customerId,
-          vehicle_id: fixture.vehicleId,
-          quotation_date: '2026-07-21',
-          queue_no: '10',
-          items: [],
-        });
-      expect(res.status).toBe(200);
-      expect(pushAttempts()).toHaveLength(0);
-    });
+    const res = await request(app)
+      .put(`/api/quotations/${quotationId}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        customer_id: fixture.customerId,
+        vehicle_id: fixture.vehicleId,
+        quotation_date: '2026-07-21',
+        queue_no: '9',
+        items: [],
+      });
+    expect(res.status).toBe(200);
+    expect(pushAttempts()).toHaveLength(0);
   });
 
-  describe('PUT /api/vehicles/:id', () => {
-    test('รถที่ผูกกับใบเสนอราคาที่มาจากไลน์และยังเปิดอยู่ → ยิง push', async () => {
-      await insertQuotation({ queueNo: '11' });
+  test('PUT /api/vehicles/:id — รถที่ผูกกับใบเสนอราคาที่มาจากไลน์และยังเปิดอยู่ → ยังไม่ยิง push', async () => {
+    await insertQuotation({ queueNo: '11' });
 
-      const res = await request(app)
-        .put(`/api/vehicles/${fixture.vehicleId}`)
-        .set('Authorization', `Bearer ${token}`)
-        .send({ brand: 'Honda', model: 'Civic', color: 'Red', license_plate: `TESTV-${Date.now()}`, mileage: 5000 });
-      expect(res.status).toBe(200);
-      expect(pushAttempts()).toHaveLength(1);
-    });
-
-    test('รถที่ไม่มีใบเสนอราคาที่เปิดอยู่จากไลน์เลย → ไม่ยิง push', async () => {
-      const res = await request(app)
-        .put(`/api/vehicles/${fixture.vehicleId}`)
-        .set('Authorization', `Bearer ${token}`)
-        .send({ brand: 'Honda', model: 'Civic', color: 'Red', license_plate: `TESTV-${Date.now()}`, mileage: 5000 });
-      expect(res.status).toBe(200);
-      expect(pushAttempts()).toHaveLength(0);
-    });
+    const res = await request(app)
+      .put(`/api/vehicles/${fixture.vehicleId}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ brand: 'Honda', model: 'Civic', color: 'Red', license_plate: `TESTV-${Date.now()}`, mileage: 5000 });
+    expect(res.status).toBe(200);
+    expect(pushAttempts()).toHaveLength(0);
   });
 
-  describe('PUT /api/customers/:id', () => {
-    test('ลูกค้าที่มีใบเสนอราคาที่มาจากไลน์และยังเปิดอยู่ → ยิง push', async () => {
-      await insertQuotation({ queueNo: '12' });
+  test('PUT /api/customers/:id — ลูกค้าที่มีใบเสนอราคาที่มาจากไลน์และยังเปิดอยู่ → ยังไม่ยิง push', async () => {
+    await insertQuotation({ queueNo: '12' });
 
-      const res = await request(app)
-        .put(`/api/customers/${fixture.customerId}`)
-        .set('Authorization', `Bearer ${token}`)
-        .send({ customer_name: 'คุณทดสอบแก้ไขแล้ว', phone: '0899999999' });
-      expect(res.status).toBe(200);
-      expect(pushAttempts()).toHaveLength(1);
-    });
-
-    test('ลูกค้าที่ไม่มีใบเสนอราคาที่เปิดอยู่จากไลน์เลย → ไม่ยิง push', async () => {
-      const res = await request(app)
-        .put(`/api/customers/${fixture.customerId}`)
-        .set('Authorization', `Bearer ${token}`)
-        .send({ customer_name: 'คุณทดสอบแก้ไขแล้ว2', phone: '0899999998' });
-      expect(res.status).toBe(200);
-      expect(pushAttempts()).toHaveLength(0);
-    });
+    const res = await request(app)
+      .put(`/api/customers/${fixture.customerId}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ customer_name: 'คุณทดสอบแก้ไขแล้ว', phone: '0899999999' });
+    expect(res.status).toBe(200);
+    expect(pushAttempts()).toHaveLength(0);
   });
 });
 

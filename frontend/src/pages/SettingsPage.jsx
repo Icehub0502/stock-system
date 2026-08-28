@@ -328,8 +328,11 @@ function TechniciansSection() {
   );
 }
 
-const PLACEHOLDER_LEGEND_BLANK = '{{queue_no}}, {{date}}';
-const PLACEHOLDER_LEGEND_FILLED = '{{queue_no}}, {{customer_name}}, {{phone}}, {{brand}}, {{model}}, {{license_plate}}, {{color}}, {{mileage}}, {{symptom}}, {{items}}, {{total_amount}}, {{deposit_amount}}, {{deposit_date}}, {{scheduled_date}}, {{remark}}';
+const BOT_LABELS = {
+  bot1: 'บอท 1 — รับรถ',
+  bot2: 'บอท 2 — รับรายการ',
+  bot3: 'บอท 3 — ปิดบิล',
+};
 
 function LineBotSection() {
   const [data, setData] = useState(null);
@@ -338,8 +341,9 @@ function LineBotSection() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [groupIds, setGroupIds] = useState({ line_group_id: '', line_group_id_bot2: '', line_group_id_bot3: '' });
-  const [templateBlank, setTemplateBlank] = useState('');
-  const [templateFilled, setTemplateFilled] = useState('');
+  // ค่าข้อความทุกอันของทั้ง 3 บอท เก็บเป็น map เดียว key -> ข้อความ (ไม่แยกตาม group)
+  // เพื่อให้แก้/บันทึกทีละอันง่าย ๆ — โครงสร้าง label/vars/default ยังอ้างจาก data.messages เดิม
+  const [values, setValues] = useState({});
 
   const fetchData = async () => {
     try {
@@ -347,8 +351,9 @@ function LineBotSection() {
       const res = await client.get('/settings/line');
       setData(res.data.data);
       setGroupIds(res.data.data.group_ids);
-      setTemplateBlank(res.data.data.templates.blank);
-      setTemplateFilled(res.data.data.templates.filled);
+      const nextValues = {};
+      Object.values(res.data.data.messages).flat().forEach((m) => { nextValues[m.key] = m.value; });
+      setValues(nextValues);
     } catch (err) {
       setError(err.response?.data?.error || 'โหลดการตั้งค่าบอทไลน์ไม่สำเร็จ');
     } finally {
@@ -363,10 +368,7 @@ function LineBotSection() {
     setError('');
     setSuccess('');
     try {
-      await client.put('/settings/line', {
-        group_ids: groupIds,
-        templates: { blank: templateBlank, filled: templateFilled },
-      });
+      await client.put('/settings/line', { group_ids: groupIds, messages: values });
       setSuccess('บันทึกแล้ว');
     } catch (err) {
       setError(err.response?.data?.error || 'บันทึกไม่สำเร็จ');
@@ -419,25 +421,34 @@ function LineBotSection() {
         <input type="text" value={groupIds.line_group_id_bot3} onChange={(e) => setGroupIds({ ...groupIds, line_group_id_bot3: e.target.value })} />
       </div>
 
-      <div className="form-group">
-        <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span>เทมเพลตว่าง (ตอนพนักงานพิมพ์ "คิว")</span>
-          <button type="button" onClick={() => setTemplateBlank(data.defaults.blank)}>คืนค่าเริ่มต้น</button>
-        </label>
-        <textarea rows={12} value={templateBlank} onChange={(e) => setTemplateBlank(e.target.value)} style={{ fontFamily: 'monospace', fontSize: 13 }} />
-        <p style={{ fontSize: 12, color: '#6b7280' }}>ใส่ได้: {PLACEHOLDER_LEGEND_BLANK}</p>
-      </div>
+      {/* ข้อความตอบกลับของแต่ละบอท — พับ/กางได้ทีละบอท กันหน้ายาวเกินไป (รวมกัน
+          หลายสิบข้อความ) แต่ละอันแก้แยกอิสระ มีปุ่ม "คืนค่าเริ่มต้น" ต่ออัน */}
+      {['bot1', 'bot2', 'bot3'].map((botKey) => (
+        <details key={botKey} style={{ marginTop: 16 }} open={botKey === 'bot1'}>
+          <summary style={{ cursor: 'pointer', fontWeight: 700, marginBottom: 8 }}>
+            {BOT_LABELS[botKey]} — ข้อความตอบกลับ ({data.messages[botKey].length} แบบ)
+          </summary>
+          {data.messages[botKey].map((m) => (
+            <div className="form-group" key={m.key}>
+              <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+                <span>{m.label}</span>
+                <button type="button" onClick={() => setValues((prev) => ({ ...prev, [m.key]: m.default }))}>
+                  คืนค่าเริ่มต้น
+                </button>
+              </label>
+              <textarea
+                rows={Math.min(10, Math.max(2, (values[m.key] || '').split('\n').length + 1))}
+                value={values[m.key] ?? ''}
+                onChange={(e) => setValues((prev) => ({ ...prev, [m.key]: e.target.value }))}
+                style={{ fontFamily: 'monospace', fontSize: 13 }}
+              />
+              {m.vars !== '(ไม่มี)' && <p style={{ fontSize: 12, color: '#6b7280' }}>ใส่ได้: {m.vars}</p>}
+            </div>
+          ))}
+        </details>
+      ))}
 
-      <div className="form-group">
-        <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span>เทมเพลตกรอกข้อมูลแล้ว (ส่งกลับไลน์หลังแก้ไขจากเว็บ)</span>
-          <button type="button" onClick={() => setTemplateFilled(data.defaults.filled)}>คืนค่าเริ่มต้น</button>
-        </label>
-        <textarea rows={14} value={templateFilled} onChange={(e) => setTemplateFilled(e.target.value)} style={{ fontFamily: 'monospace', fontSize: 13 }} />
-        <p style={{ fontSize: 12, color: '#6b7280' }}>ใส่ได้: {PLACEHOLDER_LEGEND_FILLED}</p>
-      </div>
-
-      <button type="button" className="btn btn-primary" disabled={saving} onClick={save}>
+      <button type="button" className="btn btn-primary" style={{ marginTop: 16 }} disabled={saving} onClick={save}>
         {saving ? 'กำลังบันทึก...' : 'บันทึกการตั้งค่า'}
       </button>
     </div>

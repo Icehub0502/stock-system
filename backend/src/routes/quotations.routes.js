@@ -2,10 +2,7 @@ const express = require('express');
 const pool = require('../db/pool');
 const { authenticate, requireRole } = require('../middleware/auth');
 const { formatPhone } = require('../utils/parseLineQueueMessage');
-// pushQuotationUpdate: ดัน "ข้อมูลอัปเดตแล้ว" กลับเข้ากลุ่มไลน์ของร้านหลังแก้ไขใบ
-// เสนอราคาที่มาจากไลน์ (มีเลขคิว+ยังไม่ปิดบิล) ผ่านหน้าเว็บ — กันพนักงานคัดลอก
-// ข้อความไลน์เก่าที่ยังผิดอยู่มาส่งซ้ำทับข้อมูลที่ออฟฟิศเพิ่งแก้ (ดู PUT /:id ด้านล่าง)
-const { pushQuotationUpdate, computeReceiptAmount } = require('./lineWebhook.routes');
+const { computeReceiptAmount } = require('./lineWebhook.routes');
 const { emitQuotationEvent, emitReceiptEvent } = require('../realtime');
 
 // ทำให้ตรงรูปแบบเดียวกับที่ customers.routes.js ใช้ กันเบอร์ที่พิมพ์ไม่มีขีดตรงนี้
@@ -445,10 +442,7 @@ router.put('/:id', async (req, res) => {
     conn = await pool.getConnection();
     await conn.beginTransaction();
 
-    // เพิ่ม queue_no ในผลลัพธ์ที่ดึงมา — ใช้เช็คหลัง commit ว่าใบนี้ "มาจากไลน์และ
-    // ยังเปิดอยู่" ไหม (มีเลขคิว + closed_at ยังว่าง) เพื่อตัดสินใจ push ข้อมูล
-    // อัปเดตกลับเข้ากลุ่มไลน์ (ดู pushQuotationUpdate ท้ายฟังก์ชันนี้)
-    const [existingRows] = await conn.execute('SELECT id, status, converted_receipt_id, deposit_amount, deposit_date, queue_no, closed_at FROM quotations WHERE id = ?', [id]);
+    const [existingRows] = await conn.execute('SELECT id, status, converted_receipt_id, deposit_amount, deposit_date FROM quotations WHERE id = ?', [id]);
     if (existingRows.length === 0) {
       await conn.rollback();
       return res.status(404).json({ error: 'ไม่พบใบเสนอราคา' });
@@ -589,19 +583,6 @@ router.put('/:id', async (req, res) => {
     emitQuotationEvent('quotation:updated', { quotationId: Number(id), status: existingQuotation.status, actorId: req.user.id });
     if (syncedReceipt) {
       emitReceiptEvent('receipt:updated', { receiptId: existingQuotation.converted_receipt_id, actorId: req.user.id });
-    }
-
-    // Push ข้อมูลอัปเดตกลับเข้ากลุ่มไลน์ของร้าน ถ้าใบนี้ "มาจากไลน์และยังเปิดอยู่"
-    // (มีเลขคิว + closed_at ยังว่าง — เช็คจากค่าที่อ่านไว้ก่อน UPDATE ด้านบน เพราะ
-    // ฟอร์มนี้ไม่มีช่องแก้ closed_at) กันพนักงานคัดลอกข้อความไลน์เก่าที่ยังผิดอยู่มา
-    // ส่งซ้ำทับข้อมูลที่ออฟฟิศเพิ่งแก้ — best-effort ทั้งหมด (ดู pushQuotationUpdate)
-    // ไม่ block/ไม่ทำให้ request นี้ล้มเหลวแม้ push จะพลาด
-    if (existingQuotation.queue_no && !existingQuotation.closed_at) {
-      try {
-        await pushQuotationUpdate(id);
-      } catch (err) {
-        console.error('Error pushing quotation update to LINE after edit:', err);
-      }
     }
 
     res.json({

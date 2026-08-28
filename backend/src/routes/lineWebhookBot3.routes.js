@@ -20,6 +20,8 @@ const {
   setSetting,
   closeQuotationByQueue,
   replyWithToken,
+  getMessageTemplate,
+  renderTemplate,
 } = require('./lineWebhook.routes');
 const parseLineQueueMessage = require('../utils/parseLineQueueMessage');
 
@@ -76,23 +78,17 @@ router.post('/webhook', async (req, res) => {
       const headerLine = `คิว ${parsed.queue_no} · ${parsed.customer_name || '-'}`;
 
       if (parsed.stated_total == null) {
-        await replyWithToken(
-          token,
-          event.replyToken,
-          `⚠️ ${headerLine}\nยังไม่ได้กรอก "ยอดรวม:" ครับ ยอดที่คำนวณจากรายการได้ ${computedTotal.toLocaleString()} บาท กรุณาตรวจสอบและกรอกยอดรวมก่อนแจ้งลูกค้า`
-        );
+        await replyWithToken(token, event.replyToken, renderTemplate(await getMessageTemplate('bot3_amount_missing'), {
+          header: headerLine, computed_total: computedTotal.toLocaleString(),
+        }));
       } else if (computedTotal === Number(parsed.stated_total)) {
-        await replyWithToken(
-          token,
-          event.replyToken,
-          `✅ ${headerLine}\nยอดตรงกันครับ รวม ${computedTotal.toLocaleString()} บาท`
-        );
+        await replyWithToken(token, event.replyToken, renderTemplate(await getMessageTemplate('bot3_amount_match'), {
+          header: headerLine, computed_total: computedTotal.toLocaleString(),
+        }));
       } else {
-        await replyWithToken(
-          token,
-          event.replyToken,
-          `❌ ${headerLine}\nยอดไม่ตรงกัน! รายการรวมได้ ${computedTotal.toLocaleString()} บาท แต่กรอก "ยอดรวม:" ไว้ ${Number(parsed.stated_total).toLocaleString()} บาท กรุณาตรวจสอบก่อนแจ้งลูกค้า`
-        );
+        await replyWithToken(token, event.replyToken, renderTemplate(await getMessageTemplate('bot3_amount_mismatch'), {
+          header: headerLine, computed_total: computedTotal.toLocaleString(), stated_total: Number(parsed.stated_total).toLocaleString(),
+        }));
       }
       continue;
     }
@@ -100,28 +96,27 @@ router.post('/webhook', async (req, res) => {
     try {
       const result = await closeQuotationByQueue(parsed);
       if (result.matchCount === 0) {
-        await replyWithToken(token, event.replyToken, `⚠️ ไม่พบบิลที่เปิดอยู่สำหรับคิว ${parsed.queue_no} กรุณาตรวจสอบเลขคิว`);
+        await replyWithToken(token, event.replyToken, renderTemplate(await getMessageTemplate('bot3_close_not_found'), { queue_no: parsed.queue_no }));
       } else if (result.matchCount > 1) {
         const list = result.candidates.map((c) => `- ${c.quotation_no} (${c.customer_name || 'ไม่ทราบชื่อ'})`).join('\n');
-        await replyWithToken(
-          token,
-          event.replyToken,
-          `⚠️ คิว ${parsed.queue_no} มีหลายบิลที่เปิดอยู่ ไม่แน่ใจว่าจะปิดใบไหน กรุณาปิดผ่านแอปแทน:\n${list}`
-        );
+        await replyWithToken(token, event.replyToken, renderTemplate(await getMessageTemplate('bot3_close_ambiguous'), { queue_no: parsed.queue_no, list }));
       } else if (result.warning === 'no_vehicle') {
-        await replyWithToken(token, event.replyToken, `⚠️ คิว ${parsed.queue_no} (${result.quotation_no}) ยังไม่มีข้อมูลรถ สร้างใบเสร็จไม่ได้ กรุณาเพิ่มข้อมูลรถก่อน`);
+        await replyWithToken(token, event.replyToken, renderTemplate(await getMessageTemplate('bot3_close_no_vehicle'), { queue_no: parsed.queue_no, quotation_no: result.quotation_no }));
       } else if (result.warning === 'no_items') {
-        await replyWithToken(token, event.replyToken, `⚠️ คิว ${parsed.queue_no} (${result.quotation_no}) ยังไม่มีรายการสินค้า สร้างใบเสร็จไม่ได้ กรุณาเพิ่มรายการก่อน`);
+        await replyWithToken(token, event.replyToken, renderTemplate(await getMessageTemplate('bot3_close_no_items'), { queue_no: parsed.queue_no, quotation_no: result.quotation_no }));
       } else {
-        await replyWithToken(
-          token,
-          event.replyToken,
-          `✅ ปิดบิล ${result.quotation_no} เรียบร้อยแล้วตรับ\nคิว ${parsed.queue_no} · ${result.customer_name || '-'}\n💰 รับชำระแล้ว (${parsed.payment_method || '-'} ${Number(result.amount).toLocaleString()} บาท) — ใบเสร็จ ${result.receiptNo}`
-        );
+        await replyWithToken(token, event.replyToken, renderTemplate(await getMessageTemplate('bot3_close_success'), {
+          quotation_no: result.quotation_no,
+          queue_no: parsed.queue_no,
+          customer_name: result.customer_name || '-',
+          payment_method: parsed.payment_method || '-',
+          amount: Number(result.amount).toLocaleString(),
+          receipt_no: result.receiptNo,
+        }));
       }
     } catch (err) {
       console.error('Error closing quotation by queue (bot3):', err);
-      await replyWithToken(token, event.replyToken, `❌ ปิดบิลไม่สำเร็จ (คิว ${parsed.queue_no || '-'}) กรุณาปิดเองในระบบ`);
+      await replyWithToken(token, event.replyToken, renderTemplate(await getMessageTemplate('bot3_close_failed'), { queue_no: parsed.queue_no || '-' }));
     }
   }
 

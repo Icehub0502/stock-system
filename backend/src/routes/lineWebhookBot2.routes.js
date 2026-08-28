@@ -14,6 +14,8 @@ const {
   setSetting,
   updateQuotationItemsByQueue,
   replyWithToken,
+  getMessageTemplate,
+  renderTemplate,
 } = require('./lineWebhook.routes');
 const { parseThaiShortDate } = require('../utils/parseLineQueueMessage');
 
@@ -76,36 +78,35 @@ router.post('/webhook', async (req, res) => {
       const result = await updateQuotationItemsByQueue(queueNo, itemLines, explicitDate);
 
       if (result.matchCount === 0) {
-        await replyWithToken(token, event.replyToken, `⚠️ ไม่พบใบเสนอราคาที่เปิดอยู่สำหรับคิว ${queueNo} กรุณาตรวจสอบเลขคิว`);
+        await replyWithToken(token, event.replyToken, renderTemplate(await getMessageTemplate('bot2_not_found'), { queue_no: queueNo }));
         continue;
       }
 
       const headerLine = `คิว ${queueNo} · ${result.customer_name || '-'}${result.license_plate ? ` · ${result.license_plate}` : ''}`;
 
       if (result.noItems) {
-        await replyWithToken(
-          token,
-          event.replyToken,
-          `🔄 รอรับรายการของ ${headerLine}\nเพิ่มรายการที่ช่อง "รายการ: " ได้เลยครับ`
-        );
+        await replyWithToken(token, event.replyToken, renderTemplate(await getMessageTemplate('bot2_no_items_yet'), { header: headerLine }));
         continue;
       }
 
       // เพิ่งลงรายการครั้งแรก (wasEmpty) กับแก้ไขรายการที่มีอยู่แล้วใช้คำตอบต่างกัน
       // ตามที่เจ้าของร้านสั่ง — ให้พนักงานรู้ชัดว่ากำลังเพิ่มใหม่หรือแก้ของเดิม
-      const verb = result.wasEmpty ? 'เพิ่มรายการเรียบร้อยครับ' : 'แก้ไขรายการเรียบร้อยแล้วครับ';
-      const replyText = [
-        `✅ ${verb}`,
-        headerLine,
-        `รายการ ${result.itemCount} ชิ้น รวม ${result.totalAmount.toLocaleString()} บาท`,
-        result.syncedReceipt ? '🧾 ใบเสร็จที่อนุมัติไว้แล้วถูกแก้ตามด้วย' : null,
-        '❗ ตรวจสอบใบเสนอราคา เพื่อความถูกต้องด้วยนะครับ ❗',
-        'ตรวจเช็คเรียบร้อยแล้ว คัดลอกและส่งลงกลุ่ม "สรุปบิล" ได้เลยครับ',
-      ].filter(Boolean).join('\n');
+      const [verb, syncedLine, savedTpl] = await Promise.all([
+        getMessageTemplate(result.wasEmpty ? 'bot2_saved_verb_new' : 'bot2_saved_verb_edit'),
+        result.syncedReceipt ? getMessageTemplate('bot2_saved_synced_receipt') : '',
+        getMessageTemplate('bot2_saved'),
+      ]);
+      const replyText = renderTemplate(savedTpl, {
+        verb,
+        header: headerLine,
+        item_count: result.itemCount,
+        total: result.totalAmount.toLocaleString(),
+        synced_receipt_line: syncedLine,
+      });
       await replyWithToken(token, event.replyToken, replyText);
     } catch (err) {
       console.error('Error updating quotation items from bot2 message:', err);
-      await replyWithToken(token, event.replyToken, `❌ บันทึกรายการไม่สำเร็จ (คิว ${queueNo}) กรุณาลงรายการผ่านแอปแทน`);
+      await replyWithToken(token, event.replyToken, renderTemplate(await getMessageTemplate('bot2_save_failed'), { queue_no: queueNo }));
     }
   }
 

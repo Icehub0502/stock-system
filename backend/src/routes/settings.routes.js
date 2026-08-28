@@ -1,35 +1,43 @@
 // หน้า "ตั้งค่า" เฉพาะเจ้าของร้าน (username 'ice' — ดู requireOwner ใน middleware/auth.js)
-// ตอนนี้มีแค่ส่วนตั้งค่าบอทไลน์: สถานะ token (อ่านจาก .env อย่างเดียว ไม่ให้แก้ผ่านเว็บ
-// เพราะเป็นความลับ ต้องแก้ที่ไฟล์ .env บนเซิร์ฟเวอร์เอง), group id ที่จับไว้ และเทมเพลต
-// ข้อความ 2 แบบ (ว่าง/กรอกแล้ว) ที่แก้ไขได้จริงผ่าน app_settings (ดู getSetting/
-// setSetting ที่ export มาจาก lineWebhook.routes.js — ไม่เขียนกลไก key-value ซ้ำ)
+// ส่วนบอทไลน์: สถานะ token (อ่านจาก .env อย่างเดียว ไม่ให้แก้ผ่านเว็บเพราะเป็นความลับ
+// ต้องแก้ที่ไฟล์ .env บนเซิร์ฟเวอร์เอง), group id ที่จับไว้, และข้อความที่บอททั้ง 3
+// ตัวตอบกลับ/ส่งเข้ากลุ่มทุกแบบ (ดูทะเบียนทั้งหมดใน utils/lineMessageDefaults.js) —
+// เก็บ/อ่านผ่าน app_settings key-value เดิม (getSetting/setSetting จาก
+// lineWebhook.routes.js — ไม่เขียนกลไกเก็บค่าซ้ำ)
 const express = require('express');
 const { authenticate, requireOwner } = require('../middleware/auth');
-const {
-  getSetting,
-  setSetting,
-  DEFAULT_BLANK_TEMPLATE,
-  DEFAULT_FILLED_TEMPLATE,
-} = require('./lineWebhook.routes');
+const { getSetting, setSetting } = require('./lineWebhook.routes');
+const { LINE_MESSAGE_DEFAULTS } = require('../utils/lineMessageDefaults');
 
 const router = express.Router();
 router.use(authenticate, requireOwner);
 
+const GROUP_ID_KEYS = ['line_group_id', 'line_group_id_bot2', 'line_group_id_bot3'];
+const MESSAGE_KEYS = Object.keys(LINE_MESSAGE_DEFAULTS);
+
 router.get('/line', async (req, res) => {
   try {
-    const [
-      line_group_id,
-      line_group_id_bot2,
-      line_group_id_bot3,
-      line_template_blank,
-      line_template_filled,
-    ] = await Promise.all([
-      getSetting('line_group_id'),
-      getSetting('line_group_id_bot2'),
-      getSetting('line_group_id_bot3'),
-      getSetting('line_template_blank'),
-      getSetting('line_template_filled'),
+    const [groupIdValues, messageValues] = await Promise.all([
+      Promise.all(GROUP_ID_KEYS.map((k) => getSetting(k))),
+      Promise.all(MESSAGE_KEYS.map((k) => getSetting(k))),
     ]);
+
+    const group_ids = {};
+    GROUP_ID_KEYS.forEach((k, i) => { group_ids[k] = groupIdValues[i] || ''; });
+
+    // จัดกลุ่มตาม bot1/bot2/bot3 ให้หน้าเว็บเรียงแสดงตามที่พนักงานคุ้นเคย
+    const messages = { bot1: [], bot2: [], bot3: [] };
+    MESSAGE_KEYS.forEach((key, i) => {
+      const def = LINE_MESSAGE_DEFAULTS[key];
+      messages[def.group].push({
+        key,
+        label: def.label,
+        vars: def.vars,
+        default: def.default,
+        value: messageValues[i] || def.default,
+      });
+    });
+
     res.json({
       success: true,
       data: {
@@ -38,19 +46,8 @@ router.get('/line', async (req, res) => {
           bot2: Boolean(process.env.LINE_BOT2_CHANNEL_SECRET && process.env.LINE_BOT2_CHANNEL_ACCESS_TOKEN),
           bot3: Boolean(process.env.LINE_BOT3_CHANNEL_SECRET && process.env.LINE_BOT3_CHANNEL_ACCESS_TOKEN),
         },
-        group_ids: {
-          line_group_id: line_group_id || '',
-          line_group_id_bot2: line_group_id_bot2 || '',
-          line_group_id_bot3: line_group_id_bot3 || '',
-        },
-        templates: {
-          blank: line_template_blank || DEFAULT_BLANK_TEMPLATE,
-          filled: line_template_filled || DEFAULT_FILLED_TEMPLATE,
-        },
-        defaults: {
-          blank: DEFAULT_BLANK_TEMPLATE,
-          filled: DEFAULT_FILLED_TEMPLATE,
-        },
+        group_ids,
+        messages,
       },
     });
   } catch (err) {
@@ -60,14 +57,19 @@ router.get('/line', async (req, res) => {
 });
 
 router.put('/line', async (req, res) => {
-  const { group_ids = {}, templates = {} } = req.body || {};
+  const { group_ids = {}, messages = {} } = req.body || {};
   try {
     const writes = [];
-    if (typeof group_ids.line_group_id === 'string') writes.push(setSetting('line_group_id', group_ids.line_group_id.trim()));
-    if (typeof group_ids.line_group_id_bot2 === 'string') writes.push(setSetting('line_group_id_bot2', group_ids.line_group_id_bot2.trim()));
-    if (typeof group_ids.line_group_id_bot3 === 'string') writes.push(setSetting('line_group_id_bot3', group_ids.line_group_id_bot3.trim()));
-    if (typeof templates.blank === 'string') writes.push(setSetting('line_template_blank', templates.blank));
-    if (typeof templates.filled === 'string') writes.push(setSetting('line_template_filled', templates.filled));
+    GROUP_ID_KEYS.forEach((k) => {
+      if (typeof group_ids[k] === 'string') writes.push(setSetting(k, group_ids[k].trim()));
+    });
+    // เขียนเฉพาะ key ที่รู้จักจริงในทะเบียน (กันเผลอส่ง key แปลกปลอมมาเขียนลง
+    // app_settings) และต้องเป็นสตริงเท่านั้น
+    Object.keys(messages).forEach((key) => {
+      if (LINE_MESSAGE_DEFAULTS[key] && typeof messages[key] === 'string') {
+        writes.push(setSetting(key, messages[key]));
+      }
+    });
     await Promise.all(writes);
     res.json({ success: true });
   } catch (err) {

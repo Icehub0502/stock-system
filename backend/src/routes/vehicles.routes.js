@@ -1,10 +1,6 @@
 const express = require('express');
 const pool = require('../db/pool');
 const { authenticate, requireRole } = require('../middleware/auth');
-// pushQuotationUpdate: ดันข้อมูลอัปเดตกลับเข้ากลุ่มไลน์ของร้าน — ใช้ตอนแก้ไขรถผ่าน
-// หน้า Vehicle Management (เจ้าของร้านยืนยันเองว่าการแก้ทะเบียน/ยี่ห้อ/รุ่นเกิดที่
-// หน้านี้ ไม่ใช่ผ่านฟอร์มใบเสนอราคา) ดู PUT /:id ด้านล่าง
-const { pushQuotationUpdate } = require('./lineWebhook.routes');
 const { buildVisitHistory } = require('../utils/visitHistory');
 const { CLOSED_STATUSES } = require('../utils/jobStatusFlow');
 
@@ -118,21 +114,6 @@ router.put('/:id', requireRole('office'), async (req, res) => {
     );
     if (result.affectedRows === 0) {
       return res.status(404).json({ error: 'ไม่พบรถ' });
-    }
-
-    // แก้ไขรถคันนี้แล้ว — หาใบเสนอราคาที่มาจากไลน์+ยังเปิดอยู่ทุกใบที่ผูกกับรถคันนี้
-    // (ปกติมีใบเดียว แต่ไม่บล็อกกรณีมีมากกว่า 1) แล้ว push ข้อมูลอัปเดตกลับเข้ากลุ่ม
-    // ไลน์ทีละใบ — best-effort ทั้งหมด ไม่กระทบผลลัพธ์การบันทึกรถที่สำเร็จไปแล้ว
-    try {
-      const [openQuotations] = await pool.execute(
-        'SELECT id FROM quotations WHERE vehicle_id = ? AND queue_no IS NOT NULL AND closed_at IS NULL',
-        [req.params.id]
-      );
-      for (const q of openQuotations) {
-        await pushQuotationUpdate(q.id);
-      }
-    } catch (err) {
-      console.error('Error pushing quotation update to LINE after vehicle edit:', err);
     }
 
     res.json({ success: true, message: 'อัปเดตรถสำเร็จ' });

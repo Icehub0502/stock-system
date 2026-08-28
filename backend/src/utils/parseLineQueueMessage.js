@@ -125,7 +125,7 @@ const PAYMENT_LABELS = {
   // ของใบเสนอราคา ตัวเดียวกับที่หน้า "ลูกค้าที่นัดหมาย" ใช้ (ดู createQuotationFromQueue)
   วันนัดหมาย: 'appointment_date',
   // เทมเพลตใหม่ใส่คำแนะนำในวงเล็บต่อท้าย label ให้พนักงานเห็นตัวเลือก/ความหมายชัด ๆ
-  // (ดู buildQueueTemplateText/buildFilledTemplateText ใน lineWebhook.routes.js) —
+  // (ดู buildQueueTemplateText ใน lineWebhook.routes.js) —
   // ต้องเขียนตัวที่มีวงเล็บไว้ก่อนตัวเปล่าเสมอ (⚠️ กติกาเดียวกับ OPTIONAL_LABELS
   // ด้านบน) ไม่งั้น "ช่องทางการชำระ" เปล่าจะแมตช์ก่อนแล้วเหลือ " (โอน/...):ค่า" ติด
   // มากับ value ที่พาร์สได้

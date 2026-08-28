@@ -17,6 +17,7 @@ const parseLineQueueMessage = require('../utils/parseLineQueueMessage');
 const { parseItemSectionLines } = require('../utils/parseLineQueueMessage');
 const { emitQuotationEvent, emitReceiptEvent, emitJobEvent } = require('../realtime');
 const { generateJobNo } = require('../utils/generateJobNo');
+const { LINE_MESSAGE_DEFAULTS } = require('../utils/lineMessageDefaults');
 
 const router = express.Router();
 
@@ -172,10 +173,8 @@ async function replyToLine(replyToken, text) {
 }
 
 // ส่งข้อความเข้ากลุ่มแบบ push (ไม่ต้องมี reply token — ยิงได้ทุกเมื่อ ต่างจาก
-// replyToLine ที่ใช้ได้แค่ในหน้าต่างตอบกลับ webhook เดียวกันเท่านั้น) ใช้ตอนออฟฟิศ
-// แก้ไขข้อมูลผ่านหน้าเว็บ (ใบเสนอราคา/รถ/ลูกค้า) แล้วต้องดันข้อมูลที่ถูกต้องกลับเข้า
-// กลุ่มให้พนักงานเห็น (ดู pushQuotationUpdate ด้านล่าง) — best-effort เหมือน
-// replyWithToken ทุกประการ: ส่งไม่สำเร็จก็แค่ log ไว้ ไม่ throw ไม่ rollback อะไร
+// replyToLine ที่ใช้ได้แค่ในหน้าต่างตอบกลับ webhook เดียวกันเท่านั้น) — best-effort
+// เหมือน replyWithToken ทุกประการ: ส่งไม่สำเร็จก็แค่ log ไว้ ไม่ throw ไม่ rollback อะไร
 async function pushWithToken(token, groupId, text) {
   if (!token || !groupId) return;
   try {
@@ -219,8 +218,7 @@ async function setSetting(key, value) {
   }
 }
 
-// อ่าน group id ของกลุ่มไลน์ร้าน — ให้ route อื่น (quotations/vehicles/customers)
-// import ไปเรียกใช้ตอนต้อง push ข้อมูลอัปเดตกลับเข้ากลุ่ม
+// อ่าน group id ของกลุ่มไลน์ร้าน (บอท 1) — ใช้ตรวจว่าเคยจับ group id ได้หรือยัง
 async function getLineGroupId() {
   return getSetting('line_group_id');
 }
@@ -322,8 +320,6 @@ function formatThaiShortDate(date) {
   return `${dd}/${mm}/${yy}`;
 }
 
-// เทมเพลตข้อความที่ตอบกลับตายตัว (รูปแบบตกลงกับเจ้าของร้านแล้ว) — เติมแค่เลขคิว
-// ถัดไปกับวันที่วันนี้ ที่เหลือเป็น label ว่างให้พนักงานกรอกทับแล้วส่งกลับมา
 // แทนที่ {{key}} ด้วยค่าจริงจาก vars ทีละตัว — placeholder ที่ไม่รู้จัก (พิมพ์ผิด/พิมพ์
 // เอง) ปล่อยไว้เฉย ๆ ไม่ลบทิ้ง กันข้อความพังเงียบ ๆ ถ้าเจ้าของร้านแก้เทมเพลตเองผิด
 function renderTemplate(template, vars) {
@@ -332,151 +328,20 @@ function renderTemplate(template, vars) {
   ));
 }
 
-// ค่าเริ่มต้นของเทมเพลตทั้งสองแบบ — ข้อความเดียวกับที่ใช้มาตลอด แค่เปลี่ยนจุดที่เคย
-// เป็นตัวแปรในโค้ดให้เป็น {{placeholder}} แทน ใช้เป็นค่า fallback ตอนยังไม่มีใคร
-// ตั้งค่าเอง (ดู app_settings key line_template_blank/line_template_filled ที่หน้า
-// ตั้งค่าใน settings.routes.js แก้ไขได้) และใช้เป็นปุ่ม "คืนค่าเริ่มต้น" ที่หน้านั้น
-const DEFAULT_BLANK_TEMPLATE = [
-  'คิว {{queue_no}}',
-  '{{date}}',
-  'ชื่อ:',
-  'เบอโทรศัพท์:',
-  'ยี่ห้อรถ:',
-  'รุ่นรถ:',
-  'ทะเบียนรถ:',
-  'สีรถ:',
-  'เลขไมค์:',
-  'อาการ:',
-  'รายการ:',
-  '',
-  '<--สิ้นสุดรายการ-->',
-  'ยอดรวม:',
-  'มัดจำ:',
-  'วันที่มัดจำ:',
-  'วันนัดหมาย:',
-  'หมายเหตุ:',
-  '',
-  '<--ลูกค้าชำระเงิน-->',
-  'ช่องทางการชำระ (โอน/บัตรเครดิต/เงินสด/QRCode):',
-  'ลูกค้าชำระเงิน (ยอดที่ได้รับจริง):',
-].join('\n');
+// ทุกข้อความที่บอทตอบกลับ (ทั้ง 3 ตัว) แก้ไขได้จากหน้าตั้งค่าแล้ว — เก็บอยู่ใน
+// app_settings ทีละ key (ดู utils/lineMessageDefaults.js สำหรับทะเบียน key/ข้อความ
+// เริ่มต้นทั้งหมด) ยังไม่มีใครตั้งค่าเอง (ปกติ) ก็ใช้ค่าเริ่มต้นจากทะเบียนนั้นแทน
+async function getMessageTemplate(key) {
+  const def = LINE_MESSAGE_DEFAULTS[key];
+  const stored = await getSetting(key);
+  return stored || (def ? def.default : '');
+}
+
+const DEFAULT_BLANK_TEMPLATE = LINE_MESSAGE_DEFAULTS.line_template_blank.default;
 
 function buildQueueTemplateText(nextQueueNo, template = DEFAULT_BLANK_TEMPLATE) {
   const dateStr = formatThaiShortDate(new Date());
   return renderTemplate(template, { queue_no: nextQueueNo, date: dateStr });
-}
-
-// แปลงวันที่ที่ได้จาก DB (YYYY-MM-DD สตริง — pool ตั้ง dateStrings: true ไว้แล้ว)
-// เป็นรูปแบบไทย dd/mm/yy (พ.ศ.) แบบเดียวกับที่ parseThaiShortDate ใน
-// parseLineQueueMessage.js อ่านกลับได้ — ไม่มีค่าคืนสตริงว่าง
-function formatDbDateThai(dateStr) {
-  if (!dateStr) return '';
-  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(dateStr));
-  if (!m) return '';
-  const buddhistYear = Number(m[1]) + 543;
-  return `${m[3]}/${m[2]}/${String(buddhistYear).slice(-2)}`;
-}
-
-// เทมเพลตแบบ "กรอกข้อมูลจริงแล้ว" (ต่างจาก buildQueueTemplateText ด้านบนที่เป็น
-// label ว่างให้กรอก) ใช้ตอน push ข้อมูลอัปเดตกลับเข้ากลุ่มหลังออฟฟิศแก้ไขใบเสนอราคา/
-// รถ/ลูกค้าผ่านหน้าเว็บ (ดู pushQuotationUpdate ด้านล่าง) — ขึ้นต้นด้วยแบนเนอร์แจ้ง
-// เตือนคั่นบรรทัดว่างแล้วตามด้วยเทมเพลตจริงที่ขึ้นต้นด้วย "คิว N" ครบทุกส่วนเหมือน
-// เทมเพลตปกติทุกประการ (รวมยอดรวม/วันนัดหมาย/ส่วนชำระเงิน) เพื่อให้พนักงานคัดลอกทั้ง
-// ก้อนไปใช้ต่อได้เลยไม่ว่าจะแก้ไขข้อมูลต่อหรือปิดบิลเลยก็ตาม (ยอดรวมคำนวณจาก
-// total_amount ที่บันทึกไว้จริงในใบเสนอราคา ไม่ใช่คำนวณจากรายการซ้ำ กันกรณีออฟฟิศ
-// ปรับยอดรวมเองไว้ในเว็บไม่ตรงกับผลรวมรายการเป๊ะ ๆ — วันนัดหมายมาจาก scheduled_date
-// เดียวกับที่หน้า "ลูกค้าที่นัดหมาย" ใช้ ไม่ใช่ฟิลด์แยกต่างหาก)
-const DEFAULT_FILLED_TEMPLATE = [
-  '🔄 ข้อมูลอัปเดตแล้ว (คิว {{queue_no}}) — คัดลอกไปใช้แทนของเดิมได้เลย',
-  '',
-  'คิว {{queue_no}}',
-  'ชื่อ:{{customer_name}}',
-  'เบอโทรศัพท์:{{phone}}',
-  'ยี่ห้อรถ:{{brand}}',
-  'รุ่นรถ:{{model}}',
-  'ทะเบียนรถ:{{license_plate}}',
-  'สีรถ:{{color}}',
-  'เลขไมค์:{{mileage}}',
-  'อาการ:{{symptom}}',
-  'รายการ:',
-  '{{items}}',
-  '<--สิ้นสุดรายการ-->',
-  'ยอดรวม:{{total_amount}}',
-  'มัดจำ:{{deposit_amount}}',
-  'วันที่มัดจำ:{{deposit_date}}',
-  'วันนัดหมาย:{{scheduled_date}}',
-  'หมายเหตุ:{{remark}}',
-  '',
-  '<--ลูกค้าชำระเงิน-->',
-  'ช่องทางการชำระ (โอน/บัตรเครดิต/เงินสด/QRCode):',
-  'ลูกค้าชำระเงิน (ยอดที่ได้รับจริง):',
-].join('\n');
-
-function buildFilledTemplateText(data, template = DEFAULT_FILLED_TEMPLATE) {
-  const itemLines = (data.items || []).map((it) => {
-    const amount = Number(it.quantity || 1) * Number(it.unit_price || 0);
-    return `${it.product_name} ${amount}`;
-  });
-  return renderTemplate(template, {
-    queue_no: data.queue_no,
-    customer_name: data.customer_name || '',
-    phone: data.phone || '',
-    brand: data.brand || '',
-    model: data.model || '',
-    license_plate: data.license_plate || '',
-    color: data.color || '',
-    mileage: data.mileage != null ? data.mileage : '',
-    symptom: data.symptom || '',
-    items: itemLines.join('\n'),
-    total_amount: Number(data.total_amount || 0),
-    deposit_amount: data.deposit_amount != null ? data.deposit_amount : '',
-    deposit_date: formatDbDateThai(data.deposit_date),
-    scheduled_date: data.status === 'scheduled' ? formatDbDateThai(data.scheduled_date) : '',
-    remark: data.remark || '',
-  });
-}
-
-// ดึงข้อมูลใบเสนอราคา+ลูกค้า+รถ+รายการ มาให้ครบพอสร้างข้อความ push (mirror ของ
-// GET /quotations/:id ใน quotations.routes.js เท่าที่ต้องใช้ในเทมเพลต) คืน null
-// ถ้าไม่พบใบเสนอราคานี้แล้ว (เช่นถูกลบไปแล้วระหว่างทาง)
-async function fetchQuotationForPush(quotationId) {
-  const [[q]] = await pool.query(
-    `SELECT q.id, q.queue_no, q.quotation_date, q.closed_at, q.symptom, q.remark, q.deposit_amount, q.deposit_date, q.total_amount,
-            q.status, q.scheduled_date,
-            c.customer_name, c.phone,
-            v.brand, v.model, v.color, v.license_plate, v.mileage
-     FROM quotations q
-     LEFT JOIN customers c ON q.customer_id = c.id
-     LEFT JOIN vehicles v ON q.vehicle_id = v.id
-     WHERE q.id = ?`,
-    [quotationId]
-  );
-  if (!q) return null;
-  const [items] = await pool.query(
-    'SELECT product_name, quantity, unit_price FROM quotation_items WHERE quotation_id = ? ORDER BY id ASC',
-    [quotationId]
-  );
-  return { ...q, items };
-}
-
-// จุดรวมเดียวที่ quotations.routes.js/vehicles.routes.js/customers.routes.js เรียก
-// หลังแก้ไขข้อมูลผ่านหน้าเว็บสำเร็จ — ตรวจเองว่าใบนี้ "มาจากไลน์และยังเปิดอยู่" จริง
-// ไหม (queue_no IS NOT NULL AND closed_at IS NULL) ก่อนค่อย push กันผู้เรียกต้องเช็ค
-// ซ้ำเอง best-effort ทุกชั้น (เหมือน pushToLine) — error จุดไหนก็แค่ log ไม่ throw
-// ไม่กระทบ response ของ route ที่เรียกมา
-async function pushQuotationUpdate(quotationId) {
-  try {
-    const groupId = await getLineGroupId();
-    if (!groupId) return; // ยังไม่เคยมีข้อความจากกลุ่มไลน์เข้ามาเลย ไม่รู้จะ push ไปกลุ่มไหน
-    const data = await fetchQuotationForPush(quotationId);
-    if (!data || !data.queue_no || data.closed_at) return; // ไม่ใช่บิลจากไลน์ที่ยังเปิดอยู่
-    // เจ้าของร้านแก้ไขข้อความนี้เองได้จากหน้าตั้งค่า (settings.routes.js) — ใช้ค่าที่
-    // ตั้งไว้ถ้ามี ไม่งั้น fallback ไปใช้ค่าเริ่มต้น
-    const template = (await getSetting('line_template_filled')) || DEFAULT_FILLED_TEMPLATE;
-    await pushToLine(groupId, buildFilledTemplateText(data, template));
-  } catch (err) {
-    console.error('Error pushing quotation update to LINE:', err);
-  }
 }
 
 // ── กติกาปิดบิลอัตโนมัติเมื่อพนักงานพิมพ์ "วลีแจ้งจ่ายเงินแล้ว" มา (parsed.paid_confirmed
@@ -1501,62 +1366,76 @@ async function updateQuotationItemsByQueue(queueNo, itemLines, explicitDate) {
 // แยกเป็นฟังก์ชันล้วน (pure) ทดสอบได้โดยไม่ต้องยิง LINE API จริง — โดยเฉพาะ
 // ส่วนเตือนยอดไม่ตรง (mismatchLine) ที่ไม่มีทางสังเกตได้จากเทสต์ end-to-end เลย
 // เพราะ replyToLine คุยกับ LINE API ตรง ๆ ไม่มี side effect อื่นให้ตรวจสอบ
-function buildSuccessReplyText(parsed, info) {
+// ข้อความหลัก + ท่อนเสริม 10 แบบ (โผล่ตามเงื่อนไข) แต่ละท่อนแก้ไขเองได้จากหน้าตั้งค่า
+// แยกกัน (ดู lineMessageDefaults.js คีย์ bot1_success_*) — ตรรกะ "ท่อนไหนโผล่เมื่อไหร่"
+// ยังอยู่ในโค้ด แก้ไม่ได้จากหน้าเว็บ เปลี่ยนได้แค่ถ้อยคำ
+async function buildSuccessReplyText(parsed, info) {
   const {
     quotation_no, totalAmount, hasNote, isUpdate, syncedReceipt, reassignedFrom, reassignedTo,
     paymentClosed, paymentReceiptNo, paymentAmount, paymentWarning, depositMismatch, depositAmount, appointmentDate,
   } = info;
+
+  const [
+    baseTpl, noteTpl, mismatchTpl, reassignTpl, syncedTpl,
+    paymentTpl, paymentNoItemsTpl, paymentNoVehicleTpl, depositMismatchTpl, remainingTpl, appointmentTpl,
+  ] = await Promise.all([
+    'bot1_success_base', 'bot1_success_note', 'bot1_success_mismatch', 'bot1_success_reassigned', 'bot1_success_synced_receipt',
+    'bot1_success_payment_closed', 'bot1_success_payment_no_items', 'bot1_success_payment_no_vehicle', 'bot1_success_deposit_mismatch', 'bot1_success_remaining', 'bot1_success_appointment',
+  ].map(getMessageTemplate));
+
   // บอท 1 เป็นแค่ขั้นตอนรับคิว/ข้อมูลลูกค้าเท่านั้น (ไม่ส่งต่อข้ามกลุ่มอัตโนมัติแล้ว —
   // เจ้าของร้านสั่งตัดออก) รายการอะไหล่ไปลงที่กลุ่มบอท 2 ต่อ พนักงานคัดลอกข้อความนี้
   // ไปเองด้วยมือ จึงบอกแค่ให้คัดลอกไปกลุ่มไหนต่อ ไม่ต้องรายงานจำนวน/ยอดรวมตรงนี้แล้ว
-  const itemLine = 'คัดลอกลงกลุ่ม "รายการ" ได้เลยครับ';
-  const noteLine = hasNote ? '\n📝 มีข้อความเพิ่มเติมที่ไม่ได้แยกเป็นรายการ ดูในหมายเหตุของใบเสนอราคา' : '';
+  const verb = isUpdate ? 'แก้ไขใบเสนอราคา' : 'สร้างใบเสนอราคา';
+  const displayQueueNo = reassignedTo || parsed.queue_no || '-';
+  const base = renderTemplate(baseTpl, {
+    verb, quotation_no, queue_no: displayQueueNo, customer_name: parsed.customer_name,
+    plate_suffix: parsed.license_plate ? ` · ${parsed.license_plate}` : '',
+  });
+
+  const noteLine = hasNote ? noteTpl : '';
   // ร้านบางทีก็แจ้งยอดรวมมาเองในข้อความ ("รวม 23000") — เทียบกับที่คำนวณจริง
   // แล้วเตือนถ้าไม่ตรง กันบิลผิดหลุดไปถึงลูกค้าโดยไม่มีใครสังเกต
   const mismatchLine = parsed.stated_total != null && parsed.stated_total !== totalAmount
-    ? `\n⚠️ ยอดที่แจ้งในไลน์ (${parsed.stated_total.toLocaleString()} บาท) ไม่ตรงกับผลรวมรายการ (${totalAmount.toLocaleString()} บาท) กรุณาตรวจสอบ`
+    ? renderTemplate(mismatchTpl, { stated_total: parsed.stated_total.toLocaleString(), total_amount: totalAmount.toLocaleString() })
     : '';
   // เลขคิวที่พิมพ์มาชนกับของลูกค้าคนอื่นวันนี้ → ถูกเปลี่ยนอัตโนมัติ ต้องแจ้งให้รู้
   // ชัด ๆ ไม่งั้นหน้างานเรียกคิวผิดคน
-  const reassignLine = reassignedFrom
-    ? `\n⚠️ คิวที่ ${reassignedFrom} มีแล้ววันนี้ เปลี่ยนเป็นคิว ${reassignedTo} ให้อัตโนมัติ`
-    : '';
+  const reassignLine = reassignedFrom ? renderTemplate(reassignTpl, { from: reassignedFrom, to: reassignedTo }) : '';
   // แก้ไขใบที่อนุมัติไปแล้ว → ใบเสร็จที่สร้างไว้ก่อนหน้าก็ถูกแก้ตามด้วย ต้องเตือน
   // ให้พิมพ์ใหม่ ไม่งั้นใบที่พิมพ์ไปแล้วจะไม่ตรงกับข้อมูลในระบบ
-  const syncedLine = syncedReceipt ? '\n🧾 ใบเสร็จที่อนุมัติไว้แล้วถูกแก้ตามด้วย กรุณาพิมพ์ใหม่' : '';
+  const syncedLine = syncedReceipt ? syncedTpl : '';
   // วลีแจ้งจ่ายเงินแล้วถูกพิมพ์มาแล้วปิดบิลสำเร็จ → แจ้งชัด ๆ ว่าปิดแล้ว พร้อมเลข
   // ใบเสร็จที่สร้าง/แก้ให้ (กันหน้างานพิมพ์คิวเดิมซ้ำแล้วงงว่าทำไมแก้ไม่ได้อีก)
   const paymentLine = paymentClosed
-    ? `\n💰 รับชำระแล้ว (${parsed.payment_method || '-'} ${Number(paymentAmount).toLocaleString()} บาท) — ปิดบิล ใบเสร็จ ${paymentReceiptNo}`
+    ? renderTemplate(paymentTpl, { payment_method: parsed.payment_method || '-', amount: Number(paymentAmount).toLocaleString(), receipt_no: paymentReceiptNo })
     : '';
   // แจ้งเงินมาแล้วแต่ปิดบิลไม่ได้ (ไม่มีรายการ/ไม่มีข้อมูลรถ) — ต้องเตือนชัด ๆ ไม่งั้น
   // หน้างานเข้าใจผิดว่าบิลปิดแล้วทั้งที่จริงยังไม่มีใบเสร็จ
   const paymentWarningLine = paymentWarning === 'no_items'
-    ? '\n⚠️ แจ้งชำระเงินมาแล้วแต่ยังไม่มีรายการสินค้า สร้างใบเสร็จไม่ได้ กรุณาเพิ่มรายการก่อน'
+    ? paymentNoItemsTpl
     : paymentWarning === 'no_vehicle'
-      ? '\n⚠️ แจ้งชำระเงินมาแล้วแต่ยังไม่มีข้อมูลรถ สร้างใบเสร็จไม่ได้ กรุณาเพิ่มข้อมูลรถก่อน'
+      ? paymentNoVehicleTpl
       : '';
   // ยอดมัดจำ (deposit_amount) มากกว่ายอดรวมที่แจ้งมา — เตือนเฉย ๆ ไม่บล็อกการสร้างบิล
   // (ดู checkDepositMismatch)
   const depositMismatchLine = depositMismatch
-    ? `\n⚠️ ยอดมัดจำ (${depositMismatch.depositAmount.toLocaleString()} บาท) มากกว่ายอดรวมที่แจ้ง (${depositMismatch.expected.toLocaleString()} บาท) กรุณาตรวจสอบ`
+    ? renderTemplate(depositMismatchTpl, { deposit_amount: depositMismatch.depositAmount.toLocaleString(), expected: depositMismatch.expected.toLocaleString() })
     : '';
   // มีมัดจำแล้วยังไม่ปิดบิล — บอทคำนวณ "เหลือชำระ" เองจาก total_amount - deposit_amount
   // แทนที่จะให้พนักงานพิมพ์ "ยอดที่ต้องชำระ" เอง (เดิมเป็นฟิลด์ข้อความล้วน ไม่เคยถูก
   // ตรวจสอบ/บันทึกจริง) ไม่แสดงถ้าปิดบิลไปแล้ว (paymentLine บอกยอดที่ปิดไปแทน) หรือ
   // ไม่มีมัดจำเลย (ไม่มีอะไรให้ "เหลือ")
   const remainingLine = !paymentClosed && depositAmount != null
-    ? `\n💵 เหลือชำระ ${(totalAmount - depositAmount).toLocaleString()} บาท`
+    ? renderTemplate(remainingTpl, { remaining: (totalAmount - depositAmount).toLocaleString() })
     : '';
   // วันนัดหมาย (parsed.appointment_date) ถูก sync เข้า scheduled_date ของใบเสนอราคา
   // แล้วอัตโนมัติ (ดู createQuotationFromQueue) — แจ้งยืนยันให้พนักงานเห็นชัด ๆ ว่า
   // ขึ้นหน้า "ลูกค้าที่นัดหมาย" แล้ว
   const appointmentLine = appointmentDate
-    ? `\n📅 บันทึกวันนัดหมาย ${new Date(appointmentDate).toLocaleDateString('th-TH')} แล้ว`
+    ? renderTemplate(appointmentTpl, { date: new Date(appointmentDate).toLocaleDateString('th-TH') })
     : '';
-  const verb = isUpdate ? 'แก้ไขใบเสนอราคา' : 'สร้างใบเสนอราคา';
-  const displayQueueNo = reassignedTo || parsed.queue_no || '-';
-  return `✅ ${verb} ${quotation_no} แล้ว\nคิว ${displayQueueNo} · ${parsed.customer_name}${parsed.license_plate ? ` · ${parsed.license_plate}` : ''}\n${itemLine}${noteLine}${mismatchLine}${reassignLine}${syncedLine}${paymentLine}${paymentWarningLine}${depositMismatchLine}${remainingLine}${appointmentLine}`;
+  return `${base}${noteLine}${mismatchLine}${reassignLine}${syncedLine}${paymentLine}${paymentWarningLine}${depositMismatchLine}${remainingLine}${appointmentLine}`;
 }
 
 router.post('/webhook', async (req, res) => {
@@ -1575,8 +1454,7 @@ router.post('/webhook', async (req, res) => {
 
   for (const event of events) {
     // จับ group id ของกลุ่มไลน์ร้านไว้อัตโนมัติจากข้อความ/อีเวนต์แรกที่มาจากกลุ่มนั้น
-    // (ดู captureGroupId ด้านบน) — ไม่ต้องตั้งค่าเอง ใช้ตอน push ข้อมูลอัปเดตกลับเข้า
-    // กลุ่มจากหน้าเว็บ (ดู pushQuotationUpdate) best-effort ไม่ให้กระทบการประมวลผล
+    // (ดู captureGroupId ด้านบน) — ไม่ต้องตั้งค่าเอง best-effort ไม่ให้กระทบการประมวลผล
     // อีเวนต์อื่นถ้าเขียน DB พลาด
     if (event.source?.groupId) {
       try {
@@ -1639,26 +1517,27 @@ router.post('/webhook', async (req, res) => {
       try {
         const result = await closeQuotationByQueue(parsed);
         if (result.matchCount === 0) {
-          await replyToLine(event.replyToken, `⚠️ ไม่พบบิลที่เปิดอยู่สำหรับคิว ${parsed.queue_no} กรุณาตรวจสอบเลขคิว`);
+          await replyToLine(event.replyToken, renderTemplate(await getMessageTemplate('bot1_close_not_found'), { queue_no: parsed.queue_no }));
         } else if (result.matchCount > 1) {
           const list = result.candidates.map((c) => `- ${c.quotation_no} (${c.customer_name || 'ไม่ทราบชื่อ'})`).join('\n');
-          await replyToLine(
-            event.replyToken,
-            `⚠️ คิว ${parsed.queue_no} มีหลายบิลที่เปิดอยู่ ไม่แน่ใจว่าจะปิดใบไหน กรุณาปิดผ่านแอปแทน:\n${list}`
-          );
+          await replyToLine(event.replyToken, renderTemplate(await getMessageTemplate('bot1_close_ambiguous'), { queue_no: parsed.queue_no, list }));
         } else if (result.warning === 'no_vehicle') {
-          await replyToLine(event.replyToken, `⚠️ คิว ${parsed.queue_no} (${result.quotation_no}) ยังไม่มีข้อมูลรถ สร้างใบเสร็จไม่ได้ กรุณาเพิ่มข้อมูลรถก่อน`);
+          await replyToLine(event.replyToken, renderTemplate(await getMessageTemplate('bot1_close_no_vehicle'), { queue_no: parsed.queue_no, quotation_no: result.quotation_no }));
         } else if (result.warning === 'no_items') {
-          await replyToLine(event.replyToken, `⚠️ คิว ${parsed.queue_no} (${result.quotation_no}) ยังไม่มีรายการสินค้า สร้างใบเสร็จไม่ได้ กรุณาเพิ่มรายการก่อน`);
+          await replyToLine(event.replyToken, renderTemplate(await getMessageTemplate('bot1_close_no_items'), { queue_no: parsed.queue_no, quotation_no: result.quotation_no }));
         } else {
-          await replyToLine(
-            event.replyToken,
-            `✅ ปิดบิล ${result.quotation_no} แล้ว\nคิว ${parsed.queue_no} · ${result.customer_name || '-'}\n💰 รับชำระแล้ว (${parsed.payment_method || '-'} ${Number(result.amount).toLocaleString()} บาท) — ใบเสร็จ ${result.receiptNo}`
-          );
+          await replyToLine(event.replyToken, renderTemplate(await getMessageTemplate('bot1_close_success'), {
+            quotation_no: result.quotation_no,
+            queue_no: parsed.queue_no,
+            customer_name: result.customer_name || '-',
+            payment_method: parsed.payment_method || '-',
+            amount: Number(result.amount).toLocaleString(),
+            receipt_no: result.receiptNo,
+          }));
         }
       } catch (err) {
         console.error('Error closing quotation by queue (close_only):', err);
-        await replyToLine(event.replyToken, `❌ ปิดบิลไม่สำเร็จ (คิว ${parsed.queue_no || '-'}) กรุณาปิดเองในระบบ`);
+        await replyToLine(event.replyToken, renderTemplate(await getMessageTemplate('bot1_close_failed'), { queue_no: parsed.queue_no || '-' }));
       }
       continue;
     }
@@ -1669,10 +1548,10 @@ router.post('/webhook', async (req, res) => {
       // เลขคิวนี้ตรงกับบิลที่ปิดไปแล้วของลูกค้าคนนี้ — ไม่สร้าง/แก้ไขอะไร แค่เตือน
       // ให้พิมพ์ "คิว" ขอเลขใหม่ถ้าเป็นงานใหม่จริง ๆ (ดู createQuotationFromQueue)
       if (info.closedBillMatch) {
-        await replyToLine(
-          event.replyToken,
-          `⚠️ บิลนี้ปิดแล้ว (คิว ${info.queue_no} ของ ${parsed.customer_name}) หากเป็นงานใหม่กรุณาขอเลขคิวใหม่ด้วยการพิมพ์ "คิว"`
-        );
+        await replyToLine(event.replyToken, renderTemplate(await getMessageTemplate('bot1_closed_bill_match'), {
+          queue_no: info.queue_no,
+          customer_name: parsed.customer_name,
+        }));
         continue;
       }
 
@@ -1683,13 +1562,10 @@ router.post('/webhook', async (req, res) => {
       if (!info.isUpdate) {
         await trackMessageQuotation(messageId, info);
       }
-      await replyToLine(event.replyToken, buildSuccessReplyText(parsed, info));
+      await replyToLine(event.replyToken, await buildSuccessReplyText(parsed, info));
     } catch (err) {
       console.error('Error creating quotation from LINE message:', err);
-      await replyToLine(
-        event.replyToken,
-        `❌ สร้างใบเสนอราคาไม่สำเร็จ (คิว ${parsed.queue_no || '-'}) กรุณาสร้างเองในระบบ`
-      );
+      await replyToLine(event.replyToken, renderTemplate(await getMessageTemplate('bot1_create_failed'), { queue_no: parsed.queue_no || '-' }));
     }
   }
 
@@ -1702,9 +1578,7 @@ module.exports.buildQueueTemplateText = buildQueueTemplateText; // ให้เ�
 module.exports.checkDepositMismatch = checkDepositMismatch; // ให้เทสต์ตรวจกติกาเตือนยอดมัดจำไม่ตรงแยกจาก integration test ได้
 module.exports.computeReceiptAmount = computeReceiptAmount; // ให้เทสต์ตรวจกติกายอดใบเสร็จ (มัดจำ vs จ่ายเต็ม) แยกจาก integration test ได้
 module.exports.pushToLine = pushToLine; // ให้เทสต์ยืนยันพฤติกรรม best-effort (ไม่มี token/groupId ก็ไม่ throw) และให้ route อื่น ๆ เรียกตรง ๆ ได้ถ้าจำเป็น
-module.exports.getLineGroupId = getLineGroupId; // ให้ quotations/vehicles/customers routes.js อ่าน group id ที่จับไว้ได้
-module.exports.buildFilledTemplateText = buildFilledTemplateText; // ให้เทสต์ตรวจรูปแบบข้อความ push ได้โดยไม่ต้องยิง LINE API จริง
-module.exports.pushQuotationUpdate = pushQuotationUpdate; // จุดรวมเดียวที่ quotations/vehicles/customers routes.js เรียกหลังแก้ไขข้อมูลสำเร็จ
+module.exports.getLineGroupId = getLineGroupId;
 // ให้ lineWebhookBot2.routes.js/lineWebhookBot3.routes.js (คนละ Channel Secret/Token
 // กับบอท 1) ใช้ตรวจลายเซ็น/อ่าน-เขียน app_settings/ยิง reply-push ผ่าน token ของตัวเอง
 // โดยไม่ต้องคัดลอกโค้ดชุดนี้ซ้ำ — ดูแผนงาน 3 บอท (Phase B-E)
@@ -1713,9 +1587,8 @@ module.exports.getSetting = getSetting;
 module.exports.setSetting = setSetting;
 module.exports.replyWithToken = replyWithToken;
 module.exports.pushWithToken = pushWithToken;
-module.exports.fetchQuotationForPush = fetchQuotationForPush; // ให้บอท 2 ดึงข้อมูลใบเสนอราคามาสร้างข้อความสรุปส่งต่อกลุ่มบอท 3 (Phase D)
 module.exports.updateQuotationItemsByQueue = updateQuotationItemsByQueue; // Phase D — บอท 2 บันทึกรายการอะไหล่ที่พนักงานพิมพ์มา
 module.exports.closeQuotationByQueue = closeQuotationByQueue; // Phase E — บอท 3 ปิดบิลด้วยตรรกะเดียวกับบอท 1
 module.exports.DEFAULT_BLANK_TEMPLATE = DEFAULT_BLANK_TEMPLATE; // ให้ settings.routes.js คืนเป็นค่า default ตอนยังไม่มีใครแก้ไข/ปุ่ม "คืนค่าเริ่มต้น"
-module.exports.DEFAULT_FILLED_TEMPLATE = DEFAULT_FILLED_TEMPLATE;
-module.exports.renderTemplate = renderTemplate; // ให้เทสต์ตรวจ placeholder substitution แยกจาก integration test ได้
+module.exports.renderTemplate = renderTemplate; // ให้บอท 2/3 + เทสต์ ประกอบ placeholder เองได้เหมือนกัน
+module.exports.getMessageTemplate = getMessageTemplate; // ให้บอท 2/3 อ่านข้อความที่เจ้าของร้านแก้ไว้ (หรือค่าเริ่มต้น) ของตัวเองได้

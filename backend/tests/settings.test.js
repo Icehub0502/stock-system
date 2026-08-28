@@ -8,7 +8,7 @@ const app = createApp();
 
 describe('GET/PUT /api/settings/line — เฉพาะเจ้าของร้าน (username ice)', () => {
   afterEach(async () => {
-    await pool.execute("DELETE FROM app_settings WHERE `key` IN ('line_group_id_bot2', 'line_group_id_bot3', 'line_template_blank', 'line_template_filled')");
+    await pool.execute("DELETE FROM app_settings WHERE `key` IN ('line_group_id_bot2', 'line_group_id_bot3', 'line_template_blank', 'bot1_close_success')");
   });
 
   test('office ทั่วไป (ไม่ใช่ ice) → 403 ทั้ง GET และ PUT', async () => {
@@ -19,7 +19,7 @@ describe('GET/PUT /api/settings/line — เฉพาะเจ้าของร
     const putRes = await request(app)
       .put('/api/settings/line')
       .set('Authorization', `Bearer ${token}`)
-      .send({ templates: { blank: 'x' } });
+      .send({ messages: { line_template_blank: 'x' } });
     expect(putRes.status).toBe(403);
   });
 
@@ -28,17 +28,21 @@ describe('GET/PUT /api/settings/line — เฉพาะเจ้าของร
     expect(res.status).toBe(401);
   });
 
-  test('ice → เห็นค่าเริ่มต้นตอนยังไม่เคยตั้งค่าอะไรเลย', async () => {
+  test('ice → เห็นค่าเริ่มต้นตอนยังไม่เคยตั้งค่าอะไรเลย ครบทั้ง 3 บอท', async () => {
     const token = await getOwnerToken();
     const res = await request(app).get('/api/settings/line').set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(200);
-    expect(res.body.data.templates.blank).toBe(lineWebhookRouter.DEFAULT_BLANK_TEMPLATE);
-    expect(res.body.data.templates.filled).toBe(lineWebhookRouter.DEFAULT_FILLED_TEMPLATE);
     expect(res.body.data.group_ids.line_group_id_bot2).toBe('');
     expect(typeof res.body.data.bots.bot1).toBe('boolean');
+
+    const blankMsg = res.body.data.messages.bot1.find((m) => m.key === 'line_template_blank');
+    expect(blankMsg.value).toBe(blankMsg.default);
+    expect(res.body.data.messages.bot1.length).toBeGreaterThan(0);
+    expect(res.body.data.messages.bot2.length).toBeGreaterThan(0);
+    expect(res.body.data.messages.bot3.length).toBeGreaterThan(0);
   });
 
-  test('ice → PUT แล้ว GET กลับมาต้องเห็นค่าที่บันทึกไว้ (round-trip)', async () => {
+  test('ice → PUT แล้ว GET กลับมาต้องเห็นค่าที่บันทึกไว้ (round-trip) แก้ทีละ key ไม่กระทบ key อื่น', async () => {
     const token = await getOwnerToken();
     const customBlank = 'คิว {{queue_no}} ทดสอบแก้เทมเพลต';
     const putRes = await request(app)
@@ -46,15 +50,28 @@ describe('GET/PUT /api/settings/line — เฉพาะเจ้าของร
       .set('Authorization', `Bearer ${token}`)
       .send({
         group_ids: { line_group_id_bot2: 'Gtest-bot2' },
-        templates: { blank: customBlank },
+        messages: { line_template_blank: customBlank },
       });
     expect(putRes.status).toBe(200);
 
     const getRes = await request(app).get('/api/settings/line').set('Authorization', `Bearer ${token}`);
     expect(getRes.body.data.group_ids.line_group_id_bot2).toBe('Gtest-bot2');
-    expect(getRes.body.data.templates.blank).toBe(customBlank);
-    // ไม่ได้แก้ filled — ยังต้องเป็นค่าเริ่มต้นอยู่
-    expect(getRes.body.data.templates.filled).toBe(lineWebhookRouter.DEFAULT_FILLED_TEMPLATE);
+    const blankMsg = getRes.body.data.messages.bot1.find((m) => m.key === 'line_template_blank');
+    expect(blankMsg.value).toBe(customBlank);
+    // ไม่ได้แก้ bot1_close_success — ยังต้องเป็นค่าเริ่มต้นอยู่
+    const closeMsg = getRes.body.data.messages.bot1.find((m) => m.key === 'bot1_close_success');
+    expect(closeMsg.value).toBe(closeMsg.default);
+  });
+
+  test('ยิง key ที่ไม่รู้จักมาใน messages → ถูกเมิน ไม่พังไม่เขียนอะไรลง DB', async () => {
+    const token = await getOwnerToken();
+    const res = await request(app)
+      .put('/api/settings/line')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ messages: { not_a_real_key: 'ไม่ควรถูกบันทึก' } });
+    expect(res.status).toBe(200);
+    const stored = await lineWebhookRouter.getSetting('not_a_real_key');
+    expect(stored).toBeNull();
   });
 
   test('เทมเพลตที่ตั้งไว้เอง มีผลจริงกับข้อความที่บอทจะส่ง (ไม่ใช่แค่เก็บไว้เฉย ๆ)', async () => {

@@ -552,7 +552,7 @@ describe('POST /api/line/webhook', () => {
     expect(q2.requested_queue_no).toBe(sharedQueue); // เก็บเลขที่พิมพ์มาจริงไว้ด้วย
 
     // ข้อความตอบต้องมีคำเตือนเรื่องเปลี่ยนคิวอัตโนมัติ
-    const replyText = lineWebhookRouter.buildSuccessReplyText(
+    const replyText = await lineWebhookRouter.buildSuccessReplyText(
       { queue_no: sharedQueue, customer_name: 'คุณทดสอบเจ็ด', license_plate: null, stated_total: null },
       {
         quotation_no: secondRes.body.created[0],
@@ -716,67 +716,67 @@ describe('POST /api/line/webhook', () => {
     expect(quotations).toHaveLength(2); // สองใบแยกกัน
   });
 
-  test('ยอดที่ร้านแจ้งมาเอง ("รวม") ตรงกับผลรวมจริง → ข้อความตอบไม่มีคำเตือน', () => {
+  test('ยอดที่ร้านแจ้งมาเอง ("รวม") ตรงกับผลรวมจริง → ข้อความตอบไม่มีคำเตือน', async () => {
     const parsed = { queue_no: '1', customer_name: 'คุณเอ', license_plate: null, stated_total: 5000 };
     const info = { quotation_no: 'IV000001', itemCount: 1, totalAmount: 5000, hasNote: false, isUpdate: false };
-    expect(lineWebhookRouter.buildSuccessReplyText(parsed, info)).not.toMatch(/ไม่ตรงกับผลรวม/);
+    expect(await lineWebhookRouter.buildSuccessReplyText(parsed, info)).not.toMatch(/ไม่ตรงกับผลรวม/);
   });
 
-  test('ยอดที่ร้านแจ้งมาเอง ("รวม") ไม่ตรงกับผลรวมจริง → ข้อความตอบมีคำเตือน', () => {
+  test('ยอดที่ร้านแจ้งมาเอง ("รวม") ไม่ตรงกับผลรวมจริง → ข้อความตอบมีคำเตือน', async () => {
     const parsed = { queue_no: '1', customer_name: 'คุณเอ', license_plate: null, stated_total: 34000 };
     const info = { quotation_no: 'IV000001', itemCount: 2, totalAmount: 33500, hasNote: false, isUpdate: false };
-    const text = lineWebhookRouter.buildSuccessReplyText(parsed, info);
+    const text = await lineWebhookRouter.buildSuccessReplyText(parsed, info);
     expect(text).toMatch(/ไม่ตรงกับผลรวม/);
     expect(text).toContain('34,000');
     expect(text).toContain('33,500');
   });
 
-  test('ไม่ได้แจ้งยอดรวมมาเลย → ข้อความตอบไม่มีคำเตือน (ใช้ผลรวมที่ระบบคำนวณ)', () => {
+  test('ไม่ได้แจ้งยอดรวมมาเลย → ข้อความตอบไม่มีคำเตือน (ใช้ผลรวมที่ระบบคำนวณ)', async () => {
     const parsed = { queue_no: '1', customer_name: 'คุณเอ', license_plate: null, stated_total: null };
     const info = { quotation_no: 'IV000001', itemCount: 2, totalAmount: 33500, hasNote: false, isUpdate: false };
-    expect(lineWebhookRouter.buildSuccessReplyText(parsed, info)).not.toMatch(/ไม่ตรงกับผลรวม/);
+    expect(await lineWebhookRouter.buildSuccessReplyText(parsed, info)).not.toMatch(/ไม่ตรงกับผลรวม/);
   });
 
-  test('ข้อความที่แก้ไขใบเดิม (isUpdate) → ข้อความตอบใช้คำว่า "แก้ไข" ไม่ใช่ "สร้าง"', () => {
+  test('ข้อความที่แก้ไขใบเดิม (isUpdate) → ข้อความตอบใช้คำว่า "แก้ไข" ไม่ใช่ "สร้าง"', async () => {
     const parsed = { queue_no: '1', customer_name: 'คุณเอ', license_plate: null, stated_total: null };
     const info = { quotation_no: 'IV000001', itemCount: 1, totalAmount: 2000, hasNote: false, isUpdate: true };
-    const text = lineWebhookRouter.buildSuccessReplyText(parsed, info);
+    const text = await lineWebhookRouter.buildSuccessReplyText(parsed, info);
     expect(text).toContain('แก้ไขใบเสนอราคา');
     expect(text).not.toContain('สร้างใบเสนอราคา');
   });
 
-  test('ปิดบิลสำเร็จ (paymentClosed) → ข้อความตอบมีบรรทัด "รับชำระแล้ว...ปิดบิล" พร้อมเลขใบเสร็จ', () => {
+  test('ปิดบิลสำเร็จ (paymentClosed) → ข้อความตอบมีบรรทัด "รับชำระแล้ว...ปิดบิล" พร้อมเลขใบเสร็จ', async () => {
     const parsed = { queue_no: '1', customer_name: 'คุณเอ', license_plate: null, stated_total: null, payment_method: 'เงินสด' };
     const info = {
       quotation_no: 'IV000001', itemCount: 1, totalAmount: 2000, hasNote: false, isUpdate: false,
       paymentClosed: true, paymentReceiptNo: 'RC260718001', paymentAmount: 2000,
     };
-    const text = lineWebhookRouter.buildSuccessReplyText(parsed, info);
+    const text = await lineWebhookRouter.buildSuccessReplyText(parsed, info);
     expect(text).toMatch(/รับชำระแล้ว/);
     expect(text).toMatch(/ปิดบิล/);
     expect(text).toContain('RC260718001');
     expect(text).toContain('เงินสด');
   });
 
-  test('แจ้งชำระเงินมาแต่ไม่มีรายการสินค้า (paymentWarning: no_items) → ข้อความตอบเตือน ไม่บอกว่าปิดบิลแล้ว', () => {
+  test('แจ้งชำระเงินมาแต่ไม่มีรายการสินค้า (paymentWarning: no_items) → ข้อความตอบเตือน ไม่บอกว่าปิดบิลแล้ว', async () => {
     const parsed = { queue_no: '1', customer_name: 'คุณเอ', license_plate: null, stated_total: null };
     const info = {
       quotation_no: 'IV000001', itemCount: 0, totalAmount: 0, hasNote: false, isUpdate: false,
       paymentClosed: false, paymentWarning: 'no_items',
     };
-    const text = lineWebhookRouter.buildSuccessReplyText(parsed, info);
+    const text = await lineWebhookRouter.buildSuccessReplyText(parsed, info);
     expect(text).toMatch(/ยังไม่มีรายการสินค้า/);
     expect(text).not.toMatch(/ปิดบิล/);
   });
 
-  test('ยอดมัดจำมากกว่ายอดรวมที่แจ้งมา (depositMismatch) → ข้อความตอบมีคำเตือนเฉย ๆ ไม่บล็อกการปิดบิล', () => {
+  test('ยอดมัดจำมากกว่ายอดรวมที่แจ้งมา (depositMismatch) → ข้อความตอบมีคำเตือนเฉย ๆ ไม่บล็อกการปิดบิล', async () => {
     const parsed = { queue_no: '1', customer_name: 'คุณเอ', license_plate: null, stated_total: null };
     const info = {
       quotation_no: 'IV000001', itemCount: 1, totalAmount: 10000, hasNote: false, isUpdate: false,
       paymentClosed: true, paymentReceiptNo: 'RC260718002', paymentAmount: 10000,
       depositMismatch: { depositAmount: 12000, actual: 12000, expected: 10000 },
     };
-    const text = lineWebhookRouter.buildSuccessReplyText(parsed, info);
+    const text = await lineWebhookRouter.buildSuccessReplyText(parsed, info);
     expect(text).toMatch(/มากกว่ายอดรวมที่แจ้ง/);
     expect(text).toContain('12,000');
     expect(text).toContain('10,000');
