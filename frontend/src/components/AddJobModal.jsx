@@ -97,8 +97,12 @@ export default function AddJobModal({ onClose, onCreated, prefill = null }) {
     try {
       // รูปรถตอนรับเข้า — ลูกค้าเปิดดูและเซฟรูปเองได้จากหน้าประวัติ (/track) ใช้ขนาด/
       // คุณภาพสูงกว่าค่าเริ่มต้นของฟังก์ชัน (ซึ่งตั้งไว้สำหรับรูปการ์ดอะไหล่เล็ก ๆ)
-      // กันรูปแตกตอนลูกค้าเซฟไปดูจริง
-      const resized = await Promise.all(files.map((f) => resizeImageToDataUrl(f, 1280, 0.85)));
+      // กันรูปแตกตอนลูกค้าเซฟไปดูจริง — เก็บรูปย่อเล็กจริง ๆ คู่กันไปด้วย (thumb) ให้
+      // GET /jobs ใช้โชว์บนการ์ดรายการงานวันนี้แทนรูปเต็ม 1280px (เดิมโหลดหนักทั้งวัน)
+      const resized = await Promise.all(files.map(async (f) => ({
+        full: await resizeImageToDataUrl(f, 1280, 0.85),
+        thumb: await resizeImageToDataUrl(f, 200, 0.5),
+      })));
       setPhotos((prev) => [...prev, ...resized]);
     } catch {
       setError('เพิ่มรูปไม่สำเร็จ ลองใหม่อีกครั้ง');
@@ -255,10 +259,10 @@ export default function AddJobModal({ onClose, onCreated, prefill = null }) {
 
           <label>รูปรถ</label>
           <div className="job-photo-picker">
-            {photos.map((src, idx) => (
+            {photos.map((photo, idx) => (
               <div className="job-photo-thumb" key={idx}>
                 <span className="job-photo-num">{idx + 1}</span>
-                <img src={src} alt="" />
+                <img src={photo.full} alt="" />
                 <div className="job-photo-thumb-actions">
                   <button type="button" onClick={() => movePhoto(idx, -1)} disabled={idx === 0}>◀</button>
                   <button type="button" onClick={() => removePhoto(idx)}>✕</button>

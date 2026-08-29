@@ -11,6 +11,72 @@ function todayStr() {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
+describe('POST /api/jobs — รูปตอนสร้างงาน รองรับทั้ง {full, thumb} และ string เดิม', () => {
+  let token;
+  let fixture;
+
+  beforeAll(async () => {
+    token = await getOfficeToken();
+  });
+
+  beforeEach(async () => {
+    fixture = await createCustomerWithVehicle({ namePrefix: 'Create Job Photo Test Customer' });
+  });
+
+  afterEach(async () => {
+    await cleanupCustomer(fixture.customerId);
+  });
+
+  test('ส่งรูปแบบ {full, thumb} ตอนสร้างงาน → เก็บทั้งสองค่าแยกคอลัมน์', async () => {
+    const fullPng = 'data:image/png;base64,iVBORw0KGgo=CREATEFULL';
+    const thumbPng = 'data:image/png;base64,iVBORw0KGgo=CREATETHUMB';
+
+    const createRes = await request(app)
+      .post('/api/jobs')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        vehicle_id: fixture.vehicleId,
+        customer_id: fixture.customerId,
+        job_date: todayStr(),
+        photos: [{ full: fullPng, thumb: thumbPng }],
+      });
+    expect(createRes.status).toBe(201);
+
+    const [[photo]] = await pool.query(
+      'SELECT photo_data, photo_thumb_data FROM job_photos WHERE job_id = ?',
+      [createRes.body.id]
+    );
+    expect(photo.photo_data).toBe(fullPng);
+    expect(photo.photo_thumb_data).toBe(thumbPng);
+
+    await pool.execute('DELETE FROM jobs WHERE id = ?', [createRes.body.id]);
+  });
+
+  test('ส่งรูปแบบ string ธรรมดา (โค้ดเวอร์ชันเก่า) → ยังบันทึกรูปเต็มได้ปกติ ไม่มี thumb', async () => {
+    const fullPng = 'data:image/png;base64,iVBORw0KGgo=CREATELEGACY';
+
+    const createRes = await request(app)
+      .post('/api/jobs')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        vehicle_id: fixture.vehicleId,
+        customer_id: fixture.customerId,
+        job_date: todayStr(),
+        photos: [fullPng],
+      });
+    expect(createRes.status).toBe(201);
+
+    const [[photo]] = await pool.query(
+      'SELECT photo_data, photo_thumb_data FROM job_photos WHERE job_id = ?',
+      [createRes.body.id]
+    );
+    expect(photo.photo_data).toBe(fullPng);
+    expect(photo.photo_thumb_data).toBeNull();
+
+    await pool.execute('DELETE FROM jobs WHERE id = ?', [createRes.body.id]);
+  });
+});
+
 describe('POST /api/jobs — auto-links a matching pending LINE quotation', () => {
   let token;
   let fixture;
@@ -432,6 +498,39 @@ describe('POST/DELETE/PATCH /api/jobs/:id/photos — เพิ่ม/ลบ/จ�
     );
     expect(rows[0].id).toBe(secondId);
     expect(rows[1].id).toBe(firstId);
+  });
+
+  test('ส่งรูปแบบ {full, thumb} → GET /jobs (รายการวันนี้) ใช้ thumb ไม่ใช่รูปเต็ม กันหน้ารายการโหลดหนัก', async () => {
+    const fullPng = 'data:image/png;base64,iVBORw0KGgo=FULLFULLFULL';
+    const thumbPng = 'data:image/png;base64,iVBORw0KGgo=TINY';
+
+    await request(app)
+      .post(`/api/jobs/${jobId}/photos`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ photos: [{ full: fullPng, thumb: thumbPng }] });
+
+    const listRes = await request(app)
+      .get(`/api/jobs?date=${todayStr()}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send();
+    const listedJob = listRes.body.data.find((j) => j.id === jobId);
+    expect(listedJob.photo_thumb).toBe(thumbPng);
+  });
+
+  test('ส่งรูปแบบ string ธรรมดา (ไม่มี thumb) → GET /jobs ใช้รูปเต็มแทน (fallback ย้อนหลังให้รูปเก่ายังโชว์ได้)', async () => {
+    const fullPng = 'data:image/png;base64,iVBORw0KGgo=LEGACYSTRING';
+
+    await request(app)
+      .post(`/api/jobs/${jobId}/photos`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ photos: [fullPng] });
+
+    const listRes = await request(app)
+      .get(`/api/jobs?date=${todayStr()}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send();
+    const listedJob = listRes.body.data.find((j) => j.id === jobId);
+    expect(listedJob.photo_thumb).toBe(fullPng);
   });
 });
 

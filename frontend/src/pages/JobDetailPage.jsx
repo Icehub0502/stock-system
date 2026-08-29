@@ -521,8 +521,13 @@ export default function JobDetailPage() {
     setIntakePhotosError('');
     try {
       // ลูกค้าเปิดดูและเซฟรูปเองได้จากหน้าประวัติ (/track) — ใช้ขนาด/คุณภาพสูงกว่า
-      // ค่าเริ่มต้นของฟังก์ชัน (ตั้งไว้สำหรับรูปการ์ดอะไหล่เล็ก ๆ) กันรูปแตกตอนเซฟ
-      const resized = await Promise.all(files.map((f) => resizeImageToDataUrl(f, 1280, 0.85)));
+      // ค่าเริ่มต้นของฟังก์ชัน (ตั้งไว้สำหรับรูปการ์ดอะไหล่เล็ก ๆ) กันรูปแตกตอนเซฟ —
+      // เก็บรูปย่อเล็กจริง ๆ คู่กันไปด้วย (thumb) ให้ GET /jobs ใช้โชว์บนการ์ดรายการ
+      // งานวันนี้แทนรูปเต็ม (เดิมโหลดหนักทั้งวัน)
+      const resized = await Promise.all(files.map(async (f) => ({
+        full: await resizeImageToDataUrl(f, 1280, 0.85),
+        thumb: await resizeImageToDataUrl(f, 200, 0.5),
+      })));
       await client.post(`/jobs/${id}/photos`, { photos: resized });
       await load({ silent: true });
     } catch (err) {

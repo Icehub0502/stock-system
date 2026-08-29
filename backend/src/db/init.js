@@ -781,6 +781,17 @@ async function initDatabase() {
     ADD COLUMN photo_type ENUM('intake','part') NOT NULL DEFAULT 'intake'
   `).catch(ignoreIfAlreadyApplied);
 
+  // photo_thumb_data: รูปย่อจริง ๆ (ไม่ใช่รูปเต็มขนาด 1280px ที่ใช้พิมพ์/ดูรายละเอียด)
+  // สำหรับ subquery "photo_thumb" ใน GET /jobs ที่ดึงมาโชว์บนการ์ดรายการงานวันนี้
+  // ทุกงานในวันนั้น — พบว่าเดิมใช้ photo_data (รูปเต็ม ~650-800KB ต่อรูป) เป็น thumb
+  // ตรง ๆ ทำให้โหลดหน้าคิววันนี้หนักหลาย MB ทุกครั้ง (เจ้าของร้านแจ้งเว็บช้า) รูปเก่าที่
+  // ยังไม่มี thumb จะ fallback ไปใช้ photo_data เหมือนเดิมใน query (ดู jobs.routes.js)
+  // ไม่ต้อง backfill ย้อนหลัง เพราะงานปิดหมุนเวียนทุกวันอยู่แล้ว
+  await conn.query(`
+    ALTER TABLE job_photos
+    ADD COLUMN photo_thumb_data LONGTEXT DEFAULT NULL
+  `).catch(ignoreIfAlreadyApplied);
+
   // quote_draft: ร่างรายการ/ราคา/ลายเซ็นก่อนตัดสินใจ (อนุมัติ/นัดวันมาทำ/ไม่ทำ) —
   // ยังไม่ใช่ใบเสนอราคาจริง เก็บเป็น JSON บนงานเอง กันไม่ให้ทุกครั้งที่พนักงานติ๊ก
   // เลือกอะไหล่ในหน้ารายละเอียดงานสร้างแถวจริงใน quotations ทันที (เจ้าของร้านขอ —

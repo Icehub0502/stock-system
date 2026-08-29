@@ -65,7 +65,7 @@ router.get('/', async (req, res) => {
              v.license_plate, v.brand, v.model, v.color,
              q.quotation_no, q.status AS quotation_status, q.total_amount,
              q.deposit_amount, q.deposit_date,
-             (SELECT p.photo_data FROM job_photos p WHERE p.job_id = j.id AND p.photo_type = 'intake' ORDER BY p.sort_order LIMIT 1) AS photo_thumb
+             (SELECT COALESCE(p.photo_thumb_data, p.photo_data) FROM job_photos p WHERE p.job_id = j.id AND p.photo_type = 'intake' ORDER BY p.sort_order LIMIT 1) AS photo_thumb
       FROM jobs j
       LEFT JOIN customers c ON c.id = j.customer_id
       LEFT JOIN vehicles v ON v.id = j.vehicle_id
@@ -120,7 +120,7 @@ router.get('/:id', async (req, res) => {
              v.license_plate, v.brand, v.model, v.color,
              q.quotation_no, q.status AS quotation_status, q.total_amount,
              q.deposit_amount, q.deposit_date,
-             q.customer_signature, q.staff_signature
+             (q.customer_signature IS NOT NULL) AS customer_signature
       FROM jobs j
       LEFT JOIN customers c ON c.id = j.customer_id
       LEFT JOIN vehicles v ON v.id = j.vehicle_id
@@ -327,11 +327,13 @@ router.post('/', async (req, res) => {
     // หน้าเว็บย่อรูปก่อนส่งมาแล้ว (utils/resizeImage.js) จึงไม่ต้อง validate ขนาดซ้ำ
     if (Array.isArray(photos) && photos.length > 0) {
       for (let i = 0; i < photos.length; i += 1) {
-        const dataUrl = photos[i];
+        const photo = photos[i];
+        const dataUrl = typeof photo === 'string' ? photo : photo?.full;
+        const thumbDataUrl = typeof photo === 'string' ? null : photo?.thumb;
         if (typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image/')) continue;
         await conn.execute(
-          'INSERT INTO job_photos (job_id, photo_data, sort_order) VALUES (?,?,?)',
-          [result.insertId, dataUrl, i]
+          'INSERT INTO job_photos (job_id, photo_data, photo_thumb_data, sort_order) VALUES (?,?,?,?)',
+          [result.insertId, dataUrl, typeof thumbDataUrl === 'string' ? thumbDataUrl : null, i]
         );
       }
     }
@@ -556,11 +558,13 @@ router.post('/:id/photos', async (req, res) => {
     let nextOrder = (maxRow?.maxOrder ?? -1) + 1;
 
     const insertedIds = [];
-    for (const dataUrl of photos) {
+    for (const photo of photos) {
+      const dataUrl = typeof photo === 'string' ? photo : photo?.full;
+      const thumbDataUrl = typeof photo === 'string' ? null : photo?.thumb;
       if (typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image/')) continue;
       const [result] = await conn.execute(
-        "INSERT INTO job_photos (job_id, photo_data, sort_order, photo_type) VALUES (?,?,?,'intake')",
-        [job.id, dataUrl, nextOrder]
+        "INSERT INTO job_photos (job_id, photo_data, photo_thumb_data, sort_order, photo_type) VALUES (?,?,?,?,'intake')",
+        [job.id, dataUrl, typeof thumbDataUrl === 'string' ? thumbDataUrl : null, nextOrder]
       );
       insertedIds.push(result.insertId);
       nextOrder += 1;
