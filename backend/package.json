@@ -10,6 +10,7 @@
     "import-vehicle-models": "node scripts/import_vehicle_models.js",
     "import-quote-parts-all-models": "node scripts/import_quote_parts_for_all_models.js",
     "backfill-part-categories": "node scripts/backfill_part_categories.js",
+    "backfill-photo-thumbs": "node scripts/backfill_photo_thumbs.js",
     "test": "jest --runInBand"
   },
   "dependencies": {
@@ -23,6 +24,7 @@
     "jsonwebtoken": "^9.0.2",
     "mysql2": "^3.22.5",
     "qrcode": "^1.5.3",
+    "sharp": "^0.33.5",
     "socket.io": "^4.8.3"
   },
   "devDependencies": {
