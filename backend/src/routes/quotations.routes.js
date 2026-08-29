@@ -316,8 +316,23 @@ router.get('/', async (req, res) => {
     // (5000) ไว้กันเติบโตแบบไม่จำกัดแทน ในสเกลร้านนี้ (คิวไม่กี่สิบ/วัน) ยังไม่มีทาง
     // แตะเพดานนี้ในทางปฏิบัติ ถ้าจำนวนใบเสนอราคาโตเกินนี้จริง ต้องทำ pagination
     // จริงจัง (search/limit/offset) ฝั่ง frontend ควบคู่กันแทน ไม่ใช่ตัด LIMIT ต่ำ ๆ ที่นี่
+    // q.* เดิมดึง customer_signature/staff_signature (LONGTEXT รูป base64 ลายเซ็น)
+    // มาด้วยทุกแถว ทั้งที่หน้ารายการ (QuotationListPage.jsx) ใช้แค่เช็คว่า "เซ็นแล้ว
+    // หรือยัง" (truthy check) ไม่เคยโชว์รูปจริงในหน้านี้เลย (ต้องเปิดใบเดียวถึงจะโชว์
+    // รูปจริง) — โหลดมาทั้งก้อนทุกครั้งที่เปิดหน้านี้ทำให้ response ใหญ่เป็น MB+ ตอนมี
+    // ใบเสนอราคาเยอะขึ้น (เจอจริง ~1.1MB ต่อครั้ง) ทำเว็บช้าโดยไม่จำเป็น เปลี่ยนเป็น
+    // ส่งแค่ boolean (มี/ไม่มี) แทน ยังใช้กับ `q.customer_signature ? ... : ...` ที่
+    // frontend เดิมได้ตรงๆ ไม่ต้องแก้ฝั่งนั้น (mysql2 คืน 0/1 เป็น falsy/truthy พอดี)
+    // ไม่ส่ง staff_signature เลยเพราะหน้านี้ไม่ได้ใช้แม้แต่ boolean — เลี่ยง SELECT *
+    // ตามกติกาโปรเจกต์ (backend/CLAUDE.md) ไปในตัว
     const [rows] = await pool.execute(
-      `SELECT q.*, c.customer_name, c.customer_code, c.phone,
+      `SELECT q.id, q.quotation_no, q.quotation_date, q.customer_id, q.car_brand, q.car_model,
+              q.car_color, q.license_plate, q.product_summary, q.total_amount, q.created_at,
+              q.updated_at, q.vehicle_id, q.mileage, q.remark, q.status, q.scheduled_date,
+              q.converted_receipt_id, q.queue_no, q.symptom, q.printed_at, q.requested_queue_no,
+              q.closed_at, q.deposit_amount, q.deposit_date, q.staff_name, q.decline_reason,
+              q.decline_note, (q.customer_signature IS NOT NULL) AS customer_signature,
+              c.customer_name, c.customer_code, c.phone,
               v.brand, v.model, v.color, v.license_plate,
               rn.id AS repair_notice_id, rn.checklist AS repair_notice_checklist,
               rn.checked_by AS repair_notice_checked_by, rn.repaired_by AS repair_notice_repaired_by,
