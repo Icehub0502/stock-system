@@ -3,7 +3,7 @@ const pool = require('../db/pool');
 const { authenticate, requireRole } = require('../middleware/auth');
 const { formatPhone } = require('../utils/parseLineQueueMessage');
 const { computeReceiptAmount } = require('./lineWebhook.routes');
-const { emitQuotationEvent, emitReceiptEvent } = require('../realtime');
+const { emitQuotationEvent, emitReceiptEvent, emitJobEvent } = require('../realtime');
 
 // ทำให้ตรงรูปแบบเดียวกับที่ customers.routes.js ใช้ กันเบอร์ที่พิมพ์ไม่มีขีดตรงนี้
 // ไปหลุดจากการค้นหาของบอทไลน์ (lineWebhook.routes.js เทียบแบบ phone = ? ตรง ๆ)
@@ -662,6 +662,29 @@ router.patch('/:id/approve', async (req, res) => {
       [receiptId, id]
     );
 
+    // ถ้าใบนี้ผูกกับงานในหน้าคิว (jobs.quotation_id) ที่ยังค้างสถานะเก่าอยู่ —
+    // ต้องดันสถานะงานให้ตามด้วย ไม่งั้นจะไม่ขึ้นหน้ารายการงานวันนี้อีกเลย (บั๊กจริงที่
+    // เจอ: ลูกค้ามัดจำแล้วรถ "เอาลง" (carout — หลุดจากจอบอร์ดตามดีไซน์เดิม เผื่อกลับมา
+    // ทำวันหลัง) แต่ลูกค้ากลับมาทำงานต่อวันเดียวกันเลย พนักงานกดอนุมัติผ่านหน้า
+    // ใบเสนอราคา/นัดหมายแทนปุ่มอนุมัติที่หน้างาน (ซึ่งจะ sync สถานะงานให้เองอยู่แล้ว)
+    // งานเลยค้างเป็น carout ทั้งที่จริงอนุมัติ+ออกใบเสร็จไปแล้ว) เลื่อนสถานะเป็น
+    // 'approved' เฉพาะงานที่ยังไม่ไปไกลกว่านี้เท่านั้น (received/inspecting/quoted/
+    // carout) กันดึงงานที่ซ่อมไปไกลแล้วถอยหลังกลับมาโดยไม่ตั้งใจ
+    const [[linkedJob]] = await conn.query(
+      "SELECT id, job_date, status FROM jobs WHERE quotation_id = ? LIMIT 1",
+      [id]
+    );
+    if (linkedJob && ['received', 'inspecting', 'quoted', 'carout'].includes(linkedJob.status)) {
+      await conn.execute(
+        "UPDATE jobs SET status = 'approved', bay = NULL, closed_at = NULL WHERE id = ?",
+        [linkedJob.id]
+      );
+      await conn.execute(
+        'INSERT INTO job_status_history (job_id, status, changed_by) VALUES (?,?,?)',
+        [linkedJob.id, 'approved', req.user.id]
+      );
+    }
+
     // ใบเสนอราคาปกติที่สร้างจากหน้าเว็บมีใบแจ้งซ่อมคู่กันมาตั้งแต่ตอนสร้างแล้ว
     // (ดู POST / ด้านบน) แต่ใบที่บอทไลน์สร้างตั้งใจไม่สร้างใบแจ้งซ่อมให้ทันที —
     // รอถึงตอนอนุมัติแบบนี้ค่อยสร้าง (หน้างานได้ตรวจสอบร่างจากไลน์ก่อนแล้ว)
@@ -682,6 +705,9 @@ router.patch('/:id/approve', async (req, res) => {
 
     emitQuotationEvent('quotation:updated', { quotationId: Number(id), status: 'approved', actorId: req.user.id });
     emitReceiptEvent('receipt:created', { receiptId, actorId: req.user.id });
+    if (linkedJob && ['received', 'inspecting', 'quoted', 'carout'].includes(linkedJob.status)) {
+      emitJobEvent('job:status-changed', { jobId: linkedJob.id, jobDate: linkedJob.job_date, status: 'approved', actorId: req.user.id });
+    }
 
     res.json({
       success: true,

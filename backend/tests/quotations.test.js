@@ -206,6 +206,75 @@ describe('PATCH /api/quotations/:id/approve — auto-creates a matching receipt'
     );
     expect(receipts.length).toBe(1);
   });
+
+  test('อนุมัติใบเสนอราคาที่ผูกกับงานซึ่งค้างสถานะ carout (เอารถลงไปหลังมัดจำ) → ต้องดันสถานะงานเป็น approved ให้ตามด้วย ไม่งั้นงานจะไม่ขึ้นหน้ารายการงานวันนี้อีกเลยทั้งที่อนุมัติ+ออกใบเสร็จไปแล้วจริง (บั๊กที่เจ้าของร้านแจ้ง — รถ Sonic มัดจำแล้วกลับมาทำต่อวันเดียวกัน)', async () => {
+    const createRes = await request(app)
+      .post('/api/quotations')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        customer_id: fixture.customerId,
+        vehicle_id: fixture.vehicleId,
+        quotation_date: '2026-07-10',
+        items: [{ product_name: 'โช้คหลัง', quantity: 2, unit_price: 2500 }],
+      });
+    const quotationId = createRes.body.quotation_id;
+
+    // จำลองงานที่เคยถูกส่งไป carout ตอนมัดจำ (ดู POST /jobs/:id/quotation/deposit)
+    // — ลูกค้ากลับมาทำต่อวันเดียวกัน พนักงานเลยไปกดอนุมัติที่หน้าใบเสนอราคาแทนปุ่ม
+    // อนุมัติที่หน้างาน (ซึ่งจะ sync สถานะงานให้เองอยู่แล้ว)
+    const [jobResult] = await pool.execute(
+      `INSERT INTO jobs (job_no, job_date, customer_id, vehicle_id, quotation_id, status, closed_at)
+       VALUES (?, CURDATE(), ?, ?, ?, 'carout', NOW())`,
+      [`TESTJOB-${Date.now()}`, fixture.customerId, fixture.vehicleId, quotationId]
+    );
+    const jobId = jobResult.insertId;
+
+    const approveRes = await request(app)
+      .patch(`/api/quotations/${quotationId}/approve`)
+      .set('Authorization', `Bearer ${token}`)
+      .send();
+    expect(approveRes.status).toBe(200);
+
+    const [[jobAfter]] = await pool.query('SELECT status, closed_at, bay FROM jobs WHERE id = ?', [jobId]);
+    expect(jobAfter.status).toBe('approved'); // ไม่ค้างเป็น carout อีกต่อไป — กลับมาขึ้นจอบอร์ดได้
+    expect(jobAfter.closed_at).toBeNull();
+    expect(jobAfter.bay).toBeNull();
+
+    const [history] = await pool.query(
+      "SELECT status FROM job_status_history WHERE job_id = ? AND status = 'approved'",
+      [jobId]
+    );
+    expect(history.length).toBe(1);
+  });
+
+  test('อนุมัติใบเสนอราคาที่งานซ่อมไปไกลกว่า approved แล้ว (เช่น repairing) → ไม่ดึงสถานะงานถอยหลังกลับมา', async () => {
+    const createRes = await request(app)
+      .post('/api/quotations')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        customer_id: fixture.customerId,
+        vehicle_id: fixture.vehicleId,
+        quotation_date: '2026-07-10',
+        items: [{ product_name: 'ยางหุ้มเพลา', quantity: 1, unit_price: 400 }],
+      });
+    const quotationId = createRes.body.quotation_id;
+
+    const [jobResult] = await pool.execute(
+      `INSERT INTO jobs (job_no, job_date, customer_id, vehicle_id, quotation_id, status)
+       VALUES (?, CURDATE(), ?, ?, ?, 'repairing')`,
+      [`TESTJOB-${Date.now()}`, fixture.customerId, fixture.vehicleId, quotationId]
+    );
+    const jobId = jobResult.insertId;
+
+    const approveRes = await request(app)
+      .patch(`/api/quotations/${quotationId}/approve`)
+      .set('Authorization', `Bearer ${token}`)
+      .send();
+    expect(approveRes.status).toBe(200);
+
+    const [[jobAfter]] = await pool.query('SELECT status FROM jobs WHERE id = ?', [jobId]);
+    expect(jobAfter.status).toBe('repairing'); // ยังคงเดิม ไม่ถูกดึงกลับมาเป็น approved
+  });
 });
 
 describe('PATCH /api/quotations/:id/close — รับชำระเงิน/ปิดบิลจากหน้าเว็บโดยตรง', () => {
