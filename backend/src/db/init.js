@@ -721,6 +721,16 @@ async function initDatabase() {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
 
+  // ใบแจ้งซ่อมแบบใหม่ (RepairWorksheetPrintModal.jsx) ไม่มีแถวของตัวเองใน DB เลย —
+  // พิมพ์ตรงจากรายการในใบเสนอราคาทันที ไม่บันทึกอะไร (ดูคอมเมนต์ในไฟล์นั้น) เพราะงั้น
+  // สถานะ "พิมพ์แล้วหรือยัง" ที่จะโชว์ในหน้ารายการงานวันนี้ (JobBoardPage.jsx) ต้องเก็บ
+  // ไว้ที่ jobs ตรงๆ แทน (มิเรอร์ pattern เดียวกับ receipts.printed_at/
+  // quotations.printed_at — ดูคอมเมนต์จุดนั้น)
+  await conn.query(`
+    ALTER TABLE jobs
+    ADD COLUMN repair_notice_printed_at TIMESTAMP NULL DEFAULT NULL
+  `).catch(ignoreIfAlreadyApplied);
+
   // รายชื่อช่าง — ใช้เติม dropdown "มอบหมายให้ช่าง" ที่การ์ดงาน (JobBoardPage.jsx)
   // แทนที่ dropdown ช่องยกเดิม (เจ้าของร้านสั่งตัดออก ไม่ได้ใช้ประโยชน์) เพิ่มชื่อใหม่
   // ได้เองจากหน้าเว็บเมื่อรับช่างเข้าใหม่ — ไม่ผูกกับ users (บัญชีล็อกอิน) เพราะช่าง

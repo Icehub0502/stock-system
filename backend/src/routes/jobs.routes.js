@@ -60,7 +60,7 @@ router.get('/', async (req, res) => {
     const [rows] = await pool.execute(`
       SELECT j.id, j.job_no, j.queue_no, j.job_date, j.status, j.bay, j.technician,
              j.est_minutes, j.mileage_in, j.symptom, j.note, j.received_at, j.closed_at,
-             j.customer_id, j.vehicle_id, j.quotation_id,
+             j.customer_id, j.vehicle_id, j.quotation_id, j.repair_notice_printed_at,
              c.customer_name, c.phone,
              v.license_plate, v.brand, v.model, v.color,
              q.quotation_no, q.status AS quotation_status, q.total_amount,
@@ -403,6 +403,25 @@ router.patch('/:id', async (req, res) => {
     res.status(500).json({ error: 'แก้ไขงานไม่สำเร็จ' });
   } finally {
     if (conn) conn.release();
+  }
+});
+
+// ── บันทึกว่าพิมพ์ใบแจ้งซ่อม (worksheet) แล้ว ──
+// มิเรอร์ PATCH /quotations/:id/mark-printed — ใบแจ้งซ่อมแบบใหม่ไม่มีแถวของตัวเองใน
+// DB (ดูคอมเมนต์ที่ jobs.repair_notice_printed_at ใน db/init.js) จึงบันทึกไว้ที่
+// job ตรงๆ แทน ให้หน้ารายการงานวันนี้โชว์เป็นป้ายได้
+router.patch('/:id/mark-worksheet-printed', async (req, res) => {
+  try {
+    const [result] = await pool.execute(
+      'UPDATE jobs SET repair_notice_printed_at = NOW() WHERE id = ?',
+      [req.params.id]
+    );
+    if (result.affectedRows === 0) return res.status(404).json({ error: 'ไม่พบงานนี้' });
+    const [[row]] = await pool.execute('SELECT repair_notice_printed_at FROM jobs WHERE id = ?', [req.params.id]);
+    res.json({ success: true, repair_notice_printed_at: row.repair_notice_printed_at });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'บันทึกสถานะพิมพ์ไม่สำเร็จ' });
   }
 });
 

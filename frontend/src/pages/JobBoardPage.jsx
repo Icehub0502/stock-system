@@ -196,6 +196,17 @@ export default function JobBoardPage() {
                   {j.deposit_amount > 0 && (
                     <span className="job-card-deposit-badge">💰 มัดจำ ฿{Number(j.deposit_amount).toLocaleString('th-TH')}</span>
                   )}
+                  {j.quotation_id && (
+                    j.repair_notice_printed_at ? (
+                      <span className="job-card-worksheet-badge job-card-worksheet-printed" title={`พิมพ์แล้วเมื่อ ${new Date(j.repair_notice_printed_at).toLocaleString('th-TH')}`}>
+                        🖨️ พิมพ์ใบแจ้งซ่อมแล้ว
+                      </span>
+                    ) : (
+                      <span className="job-card-worksheet-badge job-card-worksheet-unprinted">
+                        ยังไม่พิมพ์ใบแจ้งซ่อม
+                      </span>
+                    )
+                  )}
                 </div>
 
                 <div className="job-card-vehicle">

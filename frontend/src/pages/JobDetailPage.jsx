@@ -1186,7 +1186,8 @@ export default function JobDetailPage() {
             vehicle: { brand: job.brand, model: job.model, color: job.color, license_plate: job.license_plate, mileage: job.mileage_in },
             items: activePartsList.map((p) => ({ product_name: p.part_name, quantity: p.quantity })),
           }}
-          onClose={() => setShowWorksheetModal(false)}
+          markPrintedUrl={`/jobs/${id}/mark-worksheet-printed`}
+          onClose={() => { setShowWorksheetModal(false); load({ silent: true }); }}
         />
       )}
 

@@ -5018,6 +5018,21 @@ body:has(.modal-backdrop) .page-fade-in {
   padding: 2px 8px;
   font-weight: 600;
 }
+.job-card-worksheet-badge {
+  font-size: 0.72rem;
+  white-space: nowrap;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-weight: 600;
+}
+.job-card-worksheet-printed {
+  background: #dcfce7;
+  color: #166534;
+}
+.job-card-worksheet-unprinted {
+  background: #f3f4f6;
+  color: #6b7280;
+}
 
 /* ── หลอดสถานะ + ควบคุมสถานะ/ช่องยก — ย้ายมาไว้หน้าการ์ดแทนที่จะอยู่ในหน้า
    รายละเอียด กดเปลี่ยนได้จากตรงนี้เลย (stopPropagation กันไม่ให้กดแล้วเด้งเข้า
