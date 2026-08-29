@@ -227,6 +227,19 @@ export default function QuotationListPage() {
     }
   };
 
+  const handleUndoDecline = async (q) => {
+    if (!window.confirm(`ดึง ${q.quotation_no} กลับเข้าคิวใช่ไหม?`)) return;
+    setActioningId(q.id);
+    try {
+      await client.patch(`/quotations/${q.id}/undo-decline`);
+      fetchQuotations();
+    } catch (err) {
+      alert(err.response?.data?.error || "ดึงกลับไม่สำเร็จ");
+    } finally {
+      setActioningId(null);
+    }
+  };
+
   const handleCloseConfirm = async ({ payment_method, paid_amount }) => {
     if (!closingQuotation) return;
     setActioningId(closingQuotation.id);
@@ -404,7 +417,16 @@ export default function QuotationListPage() {
                         >
                           {q.printed_at ? 'พิมพ์แล้ว' : 'พิมพ์'}
                         </button>
-                        {q.status !== 'approved' && (
+                        {q.status === 'declined' && (
+                          <button
+                            className="btn-icon-small"
+                            onClick={() => handleUndoDecline(q)}
+                            disabled={actioningId === q.id}
+                          >
+                            ดึงกลับเข้าคิว
+                          </button>
+                        )}
+                        {q.status !== 'approved' && q.status !== 'declined' && (
                           <>
                             <button
                               className="btn-icon-small"
@@ -420,15 +442,13 @@ export default function QuotationListPage() {
                             >
                               วันที่
                             </button>
-                            {q.status !== 'declined' && (
-                              <button
-                                className="btn-icon-small btn-danger"
-                                onClick={() => setDecliningQuotation(q)}
-                                disabled={actioningId === q.id}
-                              >
-                                ลูกค้าไม่ได้ทำ
-                              </button>
-                            )}
+                            <button
+                              className="btn-icon-small btn-danger"
+                              onClick={() => setDecliningQuotation(q)}
+                              disabled={actioningId === q.id}
+                            >
+                              ลูกค้าไม่ได้ทำ
+                            </button>
                           </>
                         )}
                         {q.status === 'approved' && !q.closed_at && (

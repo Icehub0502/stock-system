@@ -925,6 +925,72 @@ router.patch('/:id/decline', async (req, res) => {
   }
 });
 
+// พลาดกดปุ่ม "ลูกค้าไม่ได้ทำ" ผิด — ดึงกลับเข้าคิว/รายการหลักตามเดิม กลับสถานะเป็น
+// 'pending' และล้างเหตุผลที่บันทึกไว้ ถ้าใบนี้มีงานที่ผูกอยู่ซึ่งถูกเซ็ตเป็น
+// 'rejected' คู่กันไป (มาจาก /jobs/:id/quotation/decline ตอน decline จาก quote_draft
+// บนหน้าคิว) ให้ดึงงานนั้นกลับขึ้นบอร์ดคิวด้วย โดยย้อนไปสถานะล่าสุดก่อนหน้า
+// 'rejected' ใน job_status_history (เช่น 'quoted') แทนที่จะเดาเอาเองว่าควรเป็น
+// สถานะไหน — ถ้าไม่เจอประวัติก่อนหน้าเลยค่อย fallback เป็น 'quoted'
+router.patch('/:id/undo-decline', async (req, res) => {
+  const { id } = req.params;
+  let conn;
+  try {
+    conn = await pool.getConnection();
+    await conn.beginTransaction();
+
+    const [[quotation]] = await conn.query('SELECT id, status FROM quotations WHERE id = ? FOR UPDATE', [id]);
+    if (!quotation) {
+      await conn.rollback();
+      return res.status(404).json({ error: 'ไม่พบใบเสนอราคา' });
+    }
+    if (quotation.status !== 'declined') {
+      await conn.rollback();
+      return res.status(400).json({ error: 'ใบนี้ไม่ได้อยู่ในสถานะลูกค้าไม่ได้ทำ' });
+    }
+
+    await conn.execute(
+      "UPDATE quotations SET status = 'pending', decline_reason = NULL, decline_note = NULL WHERE id = ?",
+      [id]
+    );
+
+    const [[linkedJob]] = await conn.query(
+      "SELECT id, job_date, status FROM jobs WHERE quotation_id = ? AND status = 'rejected' LIMIT 1",
+      [id]
+    );
+
+    if (linkedJob) {
+      const [[prevHistory]] = await conn.query(
+        "SELECT status FROM job_status_history WHERE job_id = ? AND status != 'rejected' ORDER BY id DESC LIMIT 1",
+        [linkedJob.id]
+      );
+      const restoredStatus = prevHistory?.status || 'quoted';
+      await conn.execute(
+        'UPDATE jobs SET status = ?, closed_at = NULL WHERE id = ?',
+        [restoredStatus, linkedJob.id]
+      );
+      await conn.execute(
+        'INSERT INTO job_status_history (job_id, status, changed_by) VALUES (?,?,?)',
+        [linkedJob.id, restoredStatus, req.user.id]
+      );
+    }
+
+    await conn.commit();
+
+    emitQuotationEvent('quotation:updated', { quotationId: Number(id), status: 'pending', actorId: req.user.id });
+    if (linkedJob) {
+      emitJobEvent('job:status-changed', { jobId: linkedJob.id, jobDate: linkedJob.job_date, status: null, actorId: req.user.id });
+    }
+
+    res.json({ success: true, message: 'ดึงกลับเข้าคิวสำเร็จ' });
+  } catch (err) {
+    if (conn) await conn.rollback();
+    console.error('Error undoing decline:', err);
+    res.status(500).json({ error: 'ดึงกลับไม่สำเร็จ' });
+  } finally {
+    if (conn) conn.release();
+  }
+});
+
 // PATCH - Save the customer's signature (captured on a tablet/phone at the counter)
 router.patch('/:id/signature', async (req, res) => {
   const { id } = req.params;

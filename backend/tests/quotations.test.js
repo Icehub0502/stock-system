@@ -277,6 +277,114 @@ describe('PATCH /api/quotations/:id/approve — auto-creates a matching receipt'
   });
 });
 
+describe('PATCH /api/quotations/:id/undo-decline — พลาดกด "ลูกค้าไม่ได้ทำ" ดึงกลับเข้าคิว', () => {
+  let token;
+  let fixture;
+
+  beforeAll(async () => {
+    token = await getOfficeToken();
+  });
+
+  beforeEach(async () => {
+    fixture = await createCustomerWithVehicle({ namePrefix: 'Undo Decline Test Customer' });
+  });
+
+  afterEach(async () => {
+    await cleanupCustomer(fixture.customerId);
+  });
+
+  test('ดึงใบที่ declined กลับเป็น pending และล้างเหตุผลที่บันทึกไว้', async () => {
+    const createRes = await request(app)
+      .post('/api/quotations')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        customer_id: fixture.customerId,
+        vehicle_id: fixture.vehicleId,
+        quotation_date: '2026-07-10',
+        items: [{ product_name: 'ผ้าเบรก', quantity: 1, unit_price: 800 }],
+      });
+    const quotationId = createRes.body.quotation_id;
+
+    const declineRes = await request(app)
+      .patch(`/api/quotations/${quotationId}/decline`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ reason: 'price_high' });
+    expect(declineRes.status).toBe(200);
+
+    const undoRes = await request(app)
+      .patch(`/api/quotations/${quotationId}/undo-decline`)
+      .set('Authorization', `Bearer ${token}`)
+      .send();
+    expect(undoRes.status).toBe(200);
+
+    const [[after]] = await pool.query(
+      'SELECT status, decline_reason, decline_note FROM quotations WHERE id = ?',
+      [quotationId]
+    );
+    expect(after.status).toBe('pending');
+    expect(after.decline_reason).toBeNull();
+    expect(after.decline_note).toBeNull();
+  });
+
+  test('ใบที่ไม่ได้อยู่ในสถานะ declined → ดึงกลับไม่ได้ (400)', async () => {
+    const createRes = await request(app)
+      .post('/api/quotations')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        customer_id: fixture.customerId,
+        vehicle_id: fixture.vehicleId,
+        quotation_date: '2026-07-10',
+        items: [{ product_name: 'ผ้าเบรก', quantity: 1, unit_price: 800 }],
+      });
+    const quotationId = createRes.body.quotation_id;
+
+    const undoRes = await request(app)
+      .patch(`/api/quotations/${quotationId}/undo-decline`)
+      .set('Authorization', `Bearer ${token}`)
+      .send();
+    expect(undoRes.status).toBe(400);
+  });
+
+  test('มีงานที่ผูกอยู่ซึ่งถูกตั้งเป็น rejected คู่กัน (decline จากหน้าคิว) → ดึงงานกลับเป็นสถานะก่อนหน้า rejected ให้ขึ้นบอร์ดคิวอีกครั้ง', async () => {
+    const createRes = await request(app)
+      .post('/api/quotations')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        customer_id: fixture.customerId,
+        vehicle_id: fixture.vehicleId,
+        quotation_date: '2026-07-10',
+        items: [{ product_name: 'ยางหน้า', quantity: 2, unit_price: 1200 }],
+      });
+    const quotationId = createRes.body.quotation_id;
+
+    await request(app)
+      .patch(`/api/quotations/${quotationId}/decline`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ reason: 'quote_only' });
+
+    const [jobResult] = await pool.execute(
+      `INSERT INTO jobs (job_no, job_date, customer_id, vehicle_id, quotation_id, status)
+       VALUES (?, CURDATE(), ?, ?, ?, 'rejected')`,
+      [`TESTJOB-${Date.now()}`, fixture.customerId, fixture.vehicleId, quotationId]
+    );
+    const jobId = jobResult.insertId;
+    await pool.execute(
+      "INSERT INTO job_status_history (job_id, status) VALUES (?, 'quoted'), (?, 'rejected')",
+      [jobId, jobId]
+    );
+
+    const undoRes = await request(app)
+      .patch(`/api/quotations/${quotationId}/undo-decline`)
+      .set('Authorization', `Bearer ${token}`)
+      .send();
+    expect(undoRes.status).toBe(200);
+
+    const [[jobAfter]] = await pool.query('SELECT status, closed_at FROM jobs WHERE id = ?', [jobId]);
+    expect(jobAfter.status).toBe('quoted');
+    expect(jobAfter.closed_at).toBeNull();
+  });
+});
+
 describe('PATCH /api/quotations/:id/close — รับชำระเงิน/ปิดบิลจากหน้าเว็บโดยตรง', () => {
   let token;
   let fixture;
