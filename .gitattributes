@@ -1,0 +1,4 @@
+# Shell scripts must always check out with LF — a CRLF shebang line or
+# CRLF-terminated variable assignments break bash on both this Windows dev
+# machine (Git Bash) and the Linux production server.
+*.sh text eol=lf
