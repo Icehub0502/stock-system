@@ -6,16 +6,29 @@
 // lineWebhook.routes.js — ไม่เขียนกลไกเก็บค่าซ้ำ)
 const express = require('express');
 const { authenticate, requireOwner } = require('../middleware/auth');
-const { getSetting, setSetting } = require('./lineWebhook.routes');
+const { getSetting, setSetting, getMessageTemplate } = require('./lineWebhook.routes');
 const { LINE_MESSAGE_DEFAULTS } = require('../utils/lineMessageDefaults');
 
 const router = express.Router();
-router.use(authenticate, requireOwner);
+router.use(authenticate);
 
 const GROUP_ID_KEYS = ['line_group_id', 'line_group_id_bot2', 'line_group_id_bot3'];
 const MESSAGE_KEYS = Object.keys(LINE_MESSAGE_DEFAULTS);
 
-router.get('/line', async (req, res) => {
+// พนักงานทั่วไป (ไม่ใช่แค่เจ้าของร้าน) ต้องอ่านค่านี้ได้ — ปุ่ม "คัดลอกลงกลุ่ม" ที่หน้า
+// ใบเสนอราคาต้องใช้ label/ลำดับฟิลด์เดียวกับเทมเพลตที่เจ้าของร้านตั้งไว้จริง ไม่ใช่
+// ก็อปปี้แยกไว้เอง (ที่ผ่านมาสองจุดนี้เพี้ยนกันจนบอทอ่านไม่รู้จักบรรทัดที่เปลี่ยนไป)
+router.get('/line-template-blank', async (req, res) => {
+  try {
+    const template = await getMessageTemplate('line_template_blank');
+    res.json({ template });
+  } catch (err) {
+    console.error('Error loading blank LINE template:', err);
+    res.status(500).json({ error: 'โหลดเทมเพลตไม่สำเร็จ' });
+  }
+});
+
+router.get('/line', requireOwner, async (req, res) => {
   try {
     const [groupIdValues, messageValues] = await Promise.all([
       Promise.all(GROUP_ID_KEYS.map((k) => getSetting(k))),
@@ -56,7 +69,7 @@ router.get('/line', async (req, res) => {
   }
 });
 
-router.put('/line', async (req, res) => {
+router.put('/line', requireOwner, async (req, res) => {
   const { group_ids = {}, messages = {} } = req.body || {};
   try {
     const writes = [];

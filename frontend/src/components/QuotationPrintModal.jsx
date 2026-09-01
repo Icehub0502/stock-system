@@ -29,7 +29,18 @@ export default function QuotationPrintModal({
   const [copied, setCopied] = useState(false);
 
   const handleCopyLineText = async () => {
-    const ok = await copyTextToClipboard(buildLineQuoteText(detail));
+    // ดึงเทมเพลตจริงตอนกดคัดลอกทุกครั้ง (ไม่แคช) — เจ้าของร้านอาจเพิ่งแก้เทมเพลต
+    // จากหน้าตั้งค่า อยากให้ปุ่มนี้ตามทันเสมอ ไม่ใช้ค่าเก่าค้าง
+    let template;
+    try {
+      const res = await client.get('/settings/line-template-blank');
+      template = res.data.template;
+    } catch (err) {
+      console.error('Error loading LINE template for copy button:', err);
+      alert('โหลดเทมเพลตไม่สำเร็จ กรุณาลองใหม่อีกครั้ง');
+      return;
+    }
+    const ok = await copyTextToClipboard(buildLineQuoteText(detail, template));
     if (!ok) {
       alert('คัดลอกข้อความไม่สำเร็จ กรุณาลองใหม่อีกครั้ง');
       return;

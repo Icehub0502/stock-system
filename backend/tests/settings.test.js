@@ -84,6 +84,34 @@ describe('GET/PUT /api/settings/line — เฉพาะเจ้าของร
   });
 });
 
+describe('GET /api/settings/line-template-blank — พนักงานทั่วไปก็อ่านได้ (ปุ่ม "คัดลอกลงกลุ่ม" ต้องใช้)', () => {
+  afterEach(async () => {
+    await pool.execute("DELETE FROM app_settings WHERE `key` = 'line_template_blank'");
+  });
+
+  test('office ทั่วไป (ไม่ใช่ ice) → 200 เห็นค่าเริ่มต้นได้', async () => {
+    const token = await getOfficeToken();
+    const res = await request(app).get('/api/settings/line-template-blank').set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(200);
+    expect(res.body.template).toContain('{{queue_no}}');
+  });
+
+  test('ไม่มี token เลย → 401', async () => {
+    const res = await request(app).get('/api/settings/line-template-blank');
+    expect(res.status).toBe(401);
+  });
+
+  test('เจ้าของร้านแก้เทมเพลตแล้ว → endpoint นี้ต้องคืนค่าที่แก้ ไม่ใช่ค่าเริ่มต้น', async () => {
+    const token = await getOfficeToken();
+    await pool.execute(
+      "INSERT INTO app_settings (`key`, value) VALUES ('line_template_blank', 'คิว {{queue_no}} — เทมเพลตกำหนดเอง') ON DUPLICATE KEY UPDATE value = VALUES(value)"
+    );
+    const res = await request(app).get('/api/settings/line-template-blank').set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(200);
+    expect(res.body.template).toBe('คิว {{queue_no}} — เทมเพลตกำหนดเอง');
+  });
+});
+
 describe('PUT/DELETE /api/technicians/:id — เฉพาะเจ้าของร้าน', () => {
   let technicianId;
 

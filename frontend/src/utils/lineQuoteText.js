@@ -51,9 +51,34 @@ function formatThaiDateShort(dateInput) {
   return `${dd}/${mm}/${yy}`;
 }
 
-// สร้างข้อความสำเร็จรูปสำหรับคัดลอกไปวางในไลน์ — ตามฟอร์แมตที่ร้านใช้จริง
-// (ชื่อ label สะกดตามที่ร้านใช้เป๊ะๆ เช่น "เบอโทรศัพท์"/"เลขไมค์" ไม่ใช่การพิมพ์ผิด)
-export function buildLineQuoteText(quotation) {
+// label (ก่อน ":") -> ค่าจากใบเสนอราคาที่จะพิมพ์ต่อท้าย — ตั้งใจ "ไม่" ใส่ label
+// ของ "ช่องทางการชำระ" / "ลูกค้าชำระเงิน" ไว้ในนี้ เพราะสองบรรทัดนั้นให้พนักงานกรอกเอง
+// ตอนวางในกลุ่มไลน์จริง ไม่ใช่ค่าที่ระบบรู้ล่วงหน้า
+function buildFieldMap(quotation, totalAmount, depositAmount) {
+  return {
+    'ชื่อ': quotation.customer_name || '',
+    'เบอโทรศัพท์': quotation.phone || '',
+    'ยี่ห้อรถ': quotation.brand || quotation.car_brand || '',
+    'รุ่นรถ': quotation.model || quotation.car_model || '',
+    'ทะเบียนรถ': quotation.license_plate || '',
+    'สีรถ': quotation.color || quotation.car_color || '',
+    'เลขไมค์': quotation.mileage || quotation.vehicle_mileage || '',
+    'อาการ': quotation.symptom || '',
+    'ยอดรวม': totalAmount ? formatPlainAmount(totalAmount) : '',
+    'มัดจำ': depositAmount ? formatPlainAmount(depositAmount) : '',
+    'วันที่มัดจำ': formatThaiDateShort(quotation.deposit_date),
+    'วันนัดหมาย': formatThaiDateShort(quotation.scheduled_date),
+    'หมายเหตุ': quotation.remark || '',
+  };
+}
+
+// สร้างข้อความสำเร็จรูปสำหรับคัดลอกไปวางในไลน์ — เดินตามเทมเพลตจริงที่เจ้าของร้าน
+// ตั้งไว้ (line_template_blank ผ่าน GET /api/settings/line-template-blank) ทีละ
+// บรรทัด แทนที่จะเขียนก็อปปี้ label/ลำดับฟิลด์แยกไว้เองแบบเดิม (ที่ผ่านมาสองจุดนี้
+// เพี้ยนกันจนบอทอ่านไม่รู้จักบรรทัดที่เทมเพลตเปลี่ยนไปแล้วแต่ปุ่มนี้ไม่รู้) —
+// `template` เป็น string ดิบจากเทมเพลตนั้น (บรรทัดแบบ "คิว {{queue_no}}" / "{{date}}"
+// / "ชื่อ:" / "รายการ:" / เครื่องหมายคั่น เช่น "<--สิ้นสุดรายการ-->")
+export function buildLineQuoteText(quotation, template) {
   const items = quotation.items || [];
   const itemLines = items.map((it) => {
     const name = it.product_name || it.product_name_snapshot || '';
@@ -74,35 +99,31 @@ export function buildLineQuoteText(quotation) {
     ? Number(quotation.deposit_amount)
     : null;
 
-  const lines = [
-    `คิว ${quotation.queue_no || ''}`,
-    formatThaiDateShort(quotation.quotation_date),
-    `ชื่อ:${quotation.customer_name || ''}`,
-    `เบอโทรศัพท์:${quotation.phone || ''}`,
-    `ยี่ห้อรถ:${quotation.brand || quotation.car_brand || ''}`,
-    `รุ่นรถ:${quotation.model || quotation.car_model || ''}`,
-    `ทะเบียนรถ:${quotation.license_plate || ''}`,
-    `สีรถ:${quotation.color || quotation.car_color || ''}`,
-    `เลขไมค์:${quotation.mileage || quotation.vehicle_mileage || ''}`,
-    `อาการ:${quotation.symptom || ''}`,
-    'รายการ:',
-    ...itemLines,
-    '',
-    '<--สิ้นสุดรายการ-->',
-    `ยอดรวม:${totalAmount ? formatPlainAmount(totalAmount) : ''}`,
-    `มัดจำ:${depositAmount ? formatPlainAmount(depositAmount) : ''}`,
-    `วันที่มัดจำ:${formatThaiDateShort(quotation.deposit_date)}`,
-    // "ยอดที่ต้องชำระ" ถูกแทนที่ด้วย "วันนัดหมาย" ในเทมเพลตปัจจุบันของบอทแล้ว (ยอดค้าง
-    // ชำระบอทคำนวณเองจาก total_amount - deposit_amount ไม่ต้องพิมพ์ — ดู
-    // backend/src/utils/parseLineQueueMessage.js PAYMENT_LABELS) เดิมข้อความคัดลอกจาก
-    // ที่นี่ยังพิมพ์ label เก่าอยู่ ทำให้บอทอ่านไม่รู้จักบรรทัดนี้เลย (ข้ามเงียบ ๆ ทิ้ง)
-    `วันนัดหมาย:${formatThaiDateShort(quotation.scheduled_date)}`,
-    `หมายเหตุ:${quotation.remark || ''}`,
-    '',
-    '<--ลูกค้าชำระเงิน-->',
-    'ช่องทางการชำระ (โอน/บัตรเครดิต/เงินสด/QRCode):',
-    'ลูกค้าชำระเงิน (ยอดที่ได้รับจริง):',
-  ];
+  const fieldMap = buildFieldMap(quotation, totalAmount, depositAmount);
+
+  const lines = [];
+  template.split('\n').forEach((rawLine) => {
+    if (rawLine.includes('{{queue_no}}')) {
+      lines.push(rawLine.replace('{{queue_no}}', quotation.queue_no || ''));
+      return;
+    }
+    if (rawLine.trim() === '{{date}}') {
+      lines.push(formatThaiDateShort(quotation.quotation_date));
+      return;
+    }
+    if (rawLine === 'รายการ:') {
+      lines.push(rawLine, ...itemLines);
+      return;
+    }
+    const labelMatch = rawLine.match(/^([^:{}]+):$/);
+    if (labelMatch && Object.prototype.hasOwnProperty.call(fieldMap, labelMatch[1])) {
+      lines.push(`${rawLine}${fieldMap[labelMatch[1]]}`);
+      return;
+    }
+    // บรรทัดอื่น ๆ (บรรทัดว่าง, "<--สิ้นสุดรายการ-->", "ช่องทางการชำระ...:" ที่ให้
+    // พนักงานกรอกเอง, หรือ label แปลกที่เจ้าของร้านเพิ่มเองแต่ระบบยังไม่รู้ค่า) ปล่อยผ่านตามเทมเพลตเป๊ะ ๆ
+    lines.push(rawLine);
+  });
 
   return lines.join('\n');
 }
