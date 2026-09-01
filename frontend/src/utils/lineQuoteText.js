@@ -73,7 +73,6 @@ export function buildLineQuoteText(quotation) {
   const depositAmount = quotation.deposit_amount != null && quotation.deposit_amount !== ''
     ? Number(quotation.deposit_amount)
     : null;
-  const remaining = depositAmount != null ? totalAmount - depositAmount : null;
 
   const lines = [
     `คิว ${quotation.queue_no || ''}`,
@@ -89,12 +88,15 @@ export function buildLineQuoteText(quotation) {
     'รายการ:',
     ...itemLines,
     '',
-    '',
     '<--สิ้นสุดรายการ-->',
     `ยอดรวม:${totalAmount ? formatPlainAmount(totalAmount) : ''}`,
     `มัดจำ:${depositAmount ? formatPlainAmount(depositAmount) : ''}`,
     `วันที่มัดจำ:${formatThaiDateShort(quotation.deposit_date)}`,
-    `ยอดที่ต้องชำระ:${remaining != null ? formatPlainAmount(remaining) : ''}`,
+    // "ยอดที่ต้องชำระ" ถูกแทนที่ด้วย "วันนัดหมาย" ในเทมเพลตปัจจุบันของบอทแล้ว (ยอดค้าง
+    // ชำระบอทคำนวณเองจาก total_amount - deposit_amount ไม่ต้องพิมพ์ — ดู
+    // backend/src/utils/parseLineQueueMessage.js PAYMENT_LABELS) เดิมข้อความคัดลอกจาก
+    // ที่นี่ยังพิมพ์ label เก่าอยู่ ทำให้บอทอ่านไม่รู้จักบรรทัดนี้เลย (ข้ามเงียบ ๆ ทิ้ง)
+    `วันนัดหมาย:${formatThaiDateShort(quotation.scheduled_date)}`,
     `หมายเหตุ:${quotation.remark || ''}`,
     '',
     '<--ลูกค้าชำระเงิน-->',
