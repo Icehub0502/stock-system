@@ -20,9 +20,14 @@ export default function UpdateBanner() {
     },
   });
 
+  // ปิดได้แค่ตอนเป็นข้อความ "พร้อมใช้งานออฟไลน์" เฉย ๆ (แค่แจ้งให้ทราบ ไม่ต้องทำอะไร)
+  // ส่วน needRefresh ห้ามปิดทิ้งได้ — เดิมกดปิดแล้ว setNeedRefresh(false) ทำให้แบนเนอร์
+  // หายไปแต่ service worker เวอร์ชันใหม่ยัง "รอ" อยู่เหมือนเดิม (ไม่ re-fire event ให้
+  // เตือนซ้ำ) พนักงานที่กดปิดไปเฉย ๆ (เผลอ/รีบ) เลยติดค้างเวอร์ชันเก่าไปทั้งกะโดยไม่รู้ตัว
+  // จนกว่าจะปิดแท็บ/รีเฟรชเองเอง (สาเหตุของความสับสน "แก้แล้วทำไมยังไม่เปลี่ยน" ที่เจอซ้ำ ๆ)
   const close = () => {
+    if (needRefresh) return;
     setOfflineReady(false);
-    setNeedRefresh(false);
   };
 
   // หน้าประวัติรถลูกค้า (/track) เป็นหน้าสาธารณะให้ลูกค้าเปิดดูเฉย ๆ — ไม่ควรเห็น
@@ -43,9 +48,11 @@ export default function UpdateBanner() {
             รีเฟรชตอนนี้
           </button>
         )}
-        <button type="button" className="pwa-banner-close" onClick={close} aria-label="ปิด">
-          ✕
-        </button>
+        {!needRefresh && (
+          <button type="button" className="pwa-banner-close" onClick={close} aria-label="ปิด">
+            ✕
+          </button>
+        )}
       </div>
     </div>
   );
