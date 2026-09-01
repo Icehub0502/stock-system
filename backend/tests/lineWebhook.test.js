@@ -1472,6 +1472,51 @@ describe('POST /api/line/webhook', () => {
       expect(Number(receipt.deposit_amount)).toBe(3000);
     });
 
+    test('มีงานผูกอยู่ที่ค้างสถานะ carout (มัดจำแล้วเอารถลง) → ปิดบิลผ่านไลน์ต้องดันสถานะงานเป็น approved ให้ตามด้วย (บั๊กเดียวกับที่เจอตอนอนุมัติผ่านหน้าเว็บ)', async () => {
+      const uniq = Date.now().toString().slice(-7);
+      const phone = `079${uniq}`;
+      const queueNo = `92${uniq}`;
+
+      const first = await postWebhook(eventsBody([messageEvent(
+        templateText({
+          queueNo,
+          name: 'คุณมัดจำแล้วปิดบิลไลน์',
+          phone,
+          plate: `8กจ${uniq.slice(0, 4)}`,
+          items: [{ name: 'ค่าแรง', price: 5000 }],
+          payment: { statedTotal: 5000, deposit: 2000 },
+        }),
+        `msg-closejob1-${uniq}`
+      )]));
+      expect(first.body.created).toHaveLength(1);
+      const [[q1]] = await pool.query(
+        'SELECT id, customer_id, vehicle_id, status FROM quotations WHERE quotation_no = ?',
+        [first.body.created[0]]
+      );
+      createdCustomerIds.push(q1.customer_id);
+      expect(q1.status).toBe('no_date');
+
+      // createQuotationFromQueue สร้างงานผูกไว้ให้อัตโนมัติอยู่แล้วตั้งแต่ตอนสร้างใบเสนอราคา
+      // (ดู INSERT INTO jobs ในฟังก์ชันนั้น) — จำลองงานนี้เคยถูกส่งไป carout ตอนมัดจำ
+      // (ดู POST /jobs/:id/quotation/deposit) แล้วลูกค้ากลับมาทำต่อวันเดียวกัน แต่
+      // พนักงานปิดบิลผ่านไลน์แทนปุ่มอนุมัติที่หน้างาน
+      const [[jobRow]] = await pool.query('SELECT id FROM jobs WHERE quotation_id = ?', [q1.id]);
+      const jobId = jobRow.id;
+      await pool.execute("UPDATE jobs SET status = 'carout', closed_at = NOW() WHERE id = ?", [jobId]);
+
+      const closeText = `คิว ${queueNo}\nช่องทางการชำระ: เงินสด\nลูกค้าชำระเงิน: 3000\nชำระเงินเรียบร้อย`;
+      const second = await postWebhook(eventsBody([messageEvent(closeText, `msg-closejob2-${uniq}`)]));
+      expect(second.status).toBe(200);
+
+      const [[q1After]] = await pool.query('SELECT status FROM quotations WHERE id = ?', [q1.id]);
+      expect(q1After.status).toBe('approved');
+
+      const [[jobAfter]] = await pool.query('SELECT status, closed_at, bay FROM jobs WHERE id = ?', [jobId]);
+      expect(jobAfter.status).toBe('approved'); // ไม่ค้างเป็น carout อีกต่อไป — กลับขึ้นจอบอร์ดได้
+      expect(jobAfter.closed_at).toBeNull();
+      expect(jobAfter.bay).toBeNull();
+    });
+
     test('เจอมากกว่า 1 ใบ (เลขคิวชนกันข้ามลูกค้าคนละคน) → ไม่เดา ตอบให้ไปปิดในแอปแทน ไม่แก้ไขข้อมูลใด ๆ', async () => {
       const uniq = Date.now().toString().slice(-7);
       const queueNo = `95${uniq}`;
@@ -1674,6 +1719,59 @@ describe('POST /api/line/webhook', () => {
       createdCustomerIds.push(quotation.customer_id);
       expect(quotation.status).toBe('no_date');
       expect(Number(quotation.deposit_amount)).toBe(500);
+    });
+
+    test('มัดจำไว้ก่อน (no_date) มีงานผูกอยู่ที่ค้างสถานะ carout แล้วลูกค้ากลับมาทำ+ปิดบิลในข้อความเดียวกัน → ต้องดันสถานะงานเป็น approved ให้ตามด้วย', async () => {
+      const uniq = Date.now().toString().slice(-7);
+      const phone = `086${uniq}`;
+      const queueNo = `72${uniq}`;
+
+      const first = await postWebhook(eventsBody([messageEvent(
+        templateText({
+          queueNo,
+          name: 'คุณมัดจำก่อนปิดบิลทีเดียว',
+          phone,
+          plate: `4กจ${uniq.slice(0, 4)}`,
+          items: [{ name: 'ค่าแรง', price: 2000 }],
+          payment: { deposit: 500 },
+        }),
+        `msg-depositjob1-${uniq}`
+      )]));
+      expect(first.body.created).toHaveLength(1);
+      const [[q1]] = await pool.query(
+        'SELECT id, customer_id, vehicle_id, status FROM quotations WHERE quotation_no = ?',
+        [first.body.created[0]]
+      );
+      createdCustomerIds.push(q1.customer_id);
+      expect(q1.status).toBe('no_date');
+
+      // createQuotationFromQueue สร้างงานผูกไว้ให้อัตโนมัติอยู่แล้วตั้งแต่ตอนสร้างใบเสนอราคา
+      // — จำลองงานนี้เคยถูกส่งไป carout ตอนมัดจำ (ดู POST /jobs/:id/quotation/deposit)
+      const [[jobRow]] = await pool.query('SELECT id FROM jobs WHERE quotation_id = ?', [q1.id]);
+      const jobId = jobRow.id;
+      await pool.execute("UPDATE jobs SET status = 'carout', closed_at = NOW() WHERE id = ?", [jobId]);
+
+      // ข้อความเดียวจบ (เต็มเทมเพลตอีกรอบ + วลีปิดบิลท้ายข้อความ) — จับคู่ใบ no_date
+      // เดิมของลูกค้าคนนี้ได้ (ไม่ใช่เปิดใบใหม่) แล้วอนุมัติ+ปิดบิลในทีเดียว
+      const second = await postWebhook(eventsBody([messageEvent(
+        templateText({
+          queueNo: `73${uniq}`,
+          name: 'คุณมัดจำก่อนปิดบิลทีเดียว',
+          phone,
+          items: [{ name: 'ค่าแรง', price: 2000 }],
+          payment: { deposit: 500, method: 'เงินสด', paidAmount: 1500, confirm: true },
+        }),
+        `msg-depositjob2-${uniq}`
+      )]));
+      expect(second.status).toBe(200);
+
+      const [[q1After]] = await pool.query('SELECT id, status FROM quotations WHERE id = ?', [q1.id]);
+      expect(q1After.status).toBe('approved');
+
+      const [[jobAfter]] = await pool.query('SELECT status, closed_at, bay FROM jobs WHERE id = ?', [jobId]);
+      expect(jobAfter.status).toBe('approved'); // ไม่ค้างเป็น carout อีกต่อไป — กลับขึ้นจอบอร์ดได้
+      expect(jobAfter.closed_at).toBeNull();
+      expect(jobAfter.bay).toBeNull();
     });
 
     test('resend ข้อความเดิมต่อ (เพิ่มรายการ) → ยังจับคู่ใบเดิมได้ ไม่เปิดใบใหม่ซ้อน (ใบเดิมเป็น no_date แล้ว)', async () => {

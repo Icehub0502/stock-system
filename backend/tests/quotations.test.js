@@ -277,6 +277,89 @@ describe('PATCH /api/quotations/:id/approve — auto-creates a matching receipt'
   });
 });
 
+describe('PATCH /api/quotations/:id/decline — ลูกค้าไม่ได้ทำ ต้อง sync สถานะงานที่ผูกอยู่ด้วย', () => {
+  let token;
+  let fixture;
+
+  beforeAll(async () => {
+    token = await getOfficeToken();
+  });
+
+  beforeEach(async () => {
+    fixture = await createCustomerWithVehicle({ namePrefix: 'Decline Sync Test Customer' });
+  });
+
+  afterEach(async () => {
+    await cleanupCustomer(fixture.customerId);
+  });
+
+  test('มีงานผูกอยู่ที่ยังไม่ได้ตัดสินใจ (เช่น carout จากมัดจำเดิม) → กด "ลูกค้าไม่ได้ทำ" ต้องดันสถานะงานเป็น rejected ให้ตามด้วย ไม่งั้นงานจะค้างสถานะเดิมทั้งที่ลูกค้ายกเลิกไปแล้วจริง', async () => {
+    const createRes = await request(app)
+      .post('/api/quotations')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        customer_id: fixture.customerId,
+        vehicle_id: fixture.vehicleId,
+        quotation_date: '2026-07-10',
+        items: [{ product_name: 'ยางหน้า', quantity: 2, unit_price: 1200 }],
+      });
+    const quotationId = createRes.body.quotation_id;
+
+    const [jobResult] = await pool.execute(
+      `INSERT INTO jobs (job_no, job_date, customer_id, vehicle_id, quotation_id, status, closed_at)
+       VALUES (?, CURDATE(), ?, ?, ?, 'carout', NOW())`,
+      [`TESTJOB-${Date.now()}`, fixture.customerId, fixture.vehicleId, quotationId]
+    );
+    const jobId = jobResult.insertId;
+
+    const declineRes = await request(app)
+      .patch(`/api/quotations/${quotationId}/decline`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ reason: 'price_high' });
+    expect(declineRes.status).toBe(200);
+
+    const [[jobAfter]] = await pool.query('SELECT status, closed_at, bay FROM jobs WHERE id = ?', [jobId]);
+    expect(jobAfter.status).toBe('rejected');
+    expect(jobAfter.closed_at).toBeNull();
+    expect(jobAfter.bay).toBeNull();
+
+    const [history] = await pool.query(
+      "SELECT status FROM job_status_history WHERE job_id = ? AND status = 'rejected'",
+      [jobId]
+    );
+    expect(history.length).toBe(1);
+  });
+
+  test('งานผูกอยู่ไปไกลกว่าจุดตัดสินใจแล้ว (เช่น repairing) → ไม่ดึงสถานะงานถอยหลังกลับมาเป็น rejected', async () => {
+    const createRes = await request(app)
+      .post('/api/quotations')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        customer_id: fixture.customerId,
+        vehicle_id: fixture.vehicleId,
+        quotation_date: '2026-07-10',
+        items: [{ product_name: 'ยางหลัง', quantity: 2, unit_price: 1200 }],
+      });
+    const quotationId = createRes.body.quotation_id;
+
+    const [jobResult] = await pool.execute(
+      `INSERT INTO jobs (job_no, job_date, customer_id, vehicle_id, quotation_id, status)
+       VALUES (?, CURDATE(), ?, ?, ?, 'repairing')`,
+      [`TESTJOB-${Date.now()}`, fixture.customerId, fixture.vehicleId, quotationId]
+    );
+    const jobId = jobResult.insertId;
+
+    const declineRes = await request(app)
+      .patch(`/api/quotations/${quotationId}/decline`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ reason: 'price_high' });
+    expect(declineRes.status).toBe(200);
+
+    const [[jobAfter]] = await pool.query('SELECT status FROM jobs WHERE id = ?', [jobId]);
+    expect(jobAfter.status).toBe('repairing'); // ยังคงเดิม ไม่ถูกดึงกลับมาเป็น rejected
+  });
+});
+
 describe('PATCH /api/quotations/:id/undo-decline — พลาดกด "ลูกค้าไม่ได้ทำ" ดึงกลับเข้าคิว', () => {
   let token;
   let fixture;

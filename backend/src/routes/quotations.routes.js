@@ -4,6 +4,7 @@ const { authenticate, requireRole } = require('../middleware/auth');
 const { formatPhone } = require('../utils/parseLineQueueMessage');
 const { computeReceiptAmount } = require('./lineWebhook.routes');
 const { emitQuotationEvent, emitReceiptEvent, emitJobEvent } = require('../realtime');
+const { syncJobOnQuotationStatusChange } = require('../utils/jobQuotationSync');
 
 // ทำให้ตรงรูปแบบเดียวกับที่ customers.routes.js ใช้ กันเบอร์ที่พิมพ์ไม่มีขีดตรงนี้
 // ไปหลุดจากการค้นหาของบอทไลน์ (lineWebhook.routes.js เทียบแบบ phone = ? ตรง ๆ)
@@ -682,23 +683,9 @@ router.patch('/:id/approve', async (req, res) => {
     // เจอ: ลูกค้ามัดจำแล้วรถ "เอาลง" (carout — หลุดจากจอบอร์ดตามดีไซน์เดิม เผื่อกลับมา
     // ทำวันหลัง) แต่ลูกค้ากลับมาทำงานต่อวันเดียวกันเลย พนักงานกดอนุมัติผ่านหน้า
     // ใบเสนอราคา/นัดหมายแทนปุ่มอนุมัติที่หน้างาน (ซึ่งจะ sync สถานะงานให้เองอยู่แล้ว)
-    // งานเลยค้างเป็น carout ทั้งที่จริงอนุมัติ+ออกใบเสร็จไปแล้ว) เลื่อนสถานะเป็น
-    // 'approved' เฉพาะงานที่ยังไม่ไปไกลกว่านี้เท่านั้น (received/inspecting/quoted/
-    // carout) กันดึงงานที่ซ่อมไปไกลแล้วถอยหลังกลับมาโดยไม่ตั้งใจ
-    const [[linkedJob]] = await conn.query(
-      "SELECT id, job_date, status FROM jobs WHERE quotation_id = ? LIMIT 1",
-      [id]
-    );
-    if (linkedJob && ['received', 'inspecting', 'quoted', 'carout'].includes(linkedJob.status)) {
-      await conn.execute(
-        "UPDATE jobs SET status = 'approved', bay = NULL, closed_at = NULL WHERE id = ?",
-        [linkedJob.id]
-      );
-      await conn.execute(
-        'INSERT INTO job_status_history (job_id, status, changed_by) VALUES (?,?,?)',
-        [linkedJob.id, 'approved', req.user.id]
-      );
-    }
+    // งานเลยค้างเป็น carout ทั้งที่จริงอนุมัติ+ออกใบเสร็จไปแล้ว) — ดูรายละเอียดเงื่อนไข
+    // ที่ syncJobOnQuotationStatusChange ด้านล่างไฟล์
+    const linkedJob = await syncJobOnQuotationStatusChange(conn, id, 'approved', req.user.id);
 
     // ใบเสนอราคาปกติที่สร้างจากหน้าเว็บมีใบแจ้งซ่อมคู่กันมาตั้งแต่ตอนสร้างแล้ว
     // (ดู POST / ด้านบน) แต่ใบที่บอทไลน์สร้างตั้งใจไม่สร้างใบแจ้งซ่อมให้ทันที —
@@ -720,8 +707,8 @@ router.patch('/:id/approve', async (req, res) => {
 
     emitQuotationEvent('quotation:updated', { quotationId: Number(id), status: 'approved', actorId: req.user.id });
     emitReceiptEvent('receipt:created', { receiptId, actorId: req.user.id });
-    if (linkedJob && ['received', 'inspecting', 'quoted', 'carout'].includes(linkedJob.status)) {
-      emitJobEvent('job:status-changed', { jobId: linkedJob.id, jobDate: linkedJob.job_date, status: 'approved', actorId: req.user.id });
+    if (linkedJob) {
+      emitJobEvent('job:status-changed', { jobId: linkedJob.jobId, jobDate: linkedJob.jobDate, status: linkedJob.status, actorId: req.user.id });
     }
 
     res.json({
@@ -909,19 +896,38 @@ router.patch('/:id/decline', async (req, res) => {
     return res.status(400).json({ error: 'กรุณาระบุรายละเอียดเหตุผล' });
   }
 
+  let conn;
   try {
-    const [result] = await pool.execute(
+    conn = await pool.getConnection();
+    await conn.beginTransaction();
+
+    const [result] = await conn.execute(
       "UPDATE quotations SET status = 'declined', scheduled_date = NULL, decline_reason = ?, decline_note = ? WHERE id = ?",
       [reason, reason === 'other' ? note.trim() : null, id]
     );
     if (result.affectedRows === 0) {
+      await conn.rollback();
       return res.status(404).json({ error: 'ไม่พบใบเสนอราคา' });
     }
+
+    // ถ้าใบนี้ผูกกับงานในหน้าคิวที่ยังไม่ถูกตัดสินใจไปทางไหน — ดันเป็น "ไม่อนุมัติ" ให้
+    // ตามด้วย ไม่งั้นงานจะค้างสถานะเดิมบนบอร์ดทั้งที่ลูกค้ายกเลิกไปแล้วจริง (บั๊กเดียวกับ
+    // ที่เจอตอนอนุมัติ — ดู syncJobOnQuotationStatusChange)
+    const linkedJob = await syncJobOnQuotationStatusChange(conn, id, 'rejected', req.user.id);
+
+    await conn.commit();
+
     emitQuotationEvent('quotation:updated', { quotationId: Number(id), status: 'declined', actorId: req.user.id });
+    if (linkedJob) {
+      emitJobEvent('job:status-changed', { jobId: linkedJob.jobId, jobDate: linkedJob.jobDate, status: linkedJob.status, actorId: req.user.id });
+    }
     res.json({ success: true, message: 'บันทึกสถานะลูกค้าไม่ได้ทำสำเร็จ' });
   } catch (err) {
+    if (conn) await conn.rollback();
     console.error('Error marking quotation as declined:', err);
     res.status(500).json({ error: 'บันทึกไม่สำเร็จ' });
+  } finally {
+    if (conn) conn.release();
   }
 });
 

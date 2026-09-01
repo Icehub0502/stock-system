@@ -17,6 +17,7 @@ const parseLineQueueMessage = require('../utils/parseLineQueueMessage');
 const { parseItemSectionLines } = require('../utils/parseLineQueueMessage');
 const { emitQuotationEvent, emitReceiptEvent, emitJobEvent } = require('../realtime');
 const { generateJobNo } = require('../utils/generateJobNo');
+const { syncJobOnQuotationStatusChange } = require('../utils/jobQuotationSync');
 const { LINE_MESSAGE_DEFAULTS } = require('../utils/lineMessageDefaults');
 
 const router = express.Router();
@@ -888,6 +889,7 @@ async function createQuotationFromQueue(parsed) {
     // (ไม่เคยมีใบเสร็จมาก่อน) ถึงจะเป็น receipt:created จริง ๆ
     let closedReceiptId = null;
     let closedReceiptIsNew = false;
+    let syncedJob = null;
 
     // ค่ามัดจำที่จะถูกบันทึกจริง (COALESCE เดียวกับจุด UPDATE quotations ด้านบน) —
     // ข้อความอาจไม่ได้พิมพ์ "มัดจำ:" ซ้ำ ต้องย้อนไปใช้ค่าที่เคยบันทึกไว้ในใบเดิม คำนวณ
@@ -950,6 +952,9 @@ async function createQuotationFromQueue(parsed) {
             "UPDATE quotations SET status = 'approved', converted_receipt_id = ?, closed_at = NOW() WHERE id = ?",
             [receiptId, quotationId]
           );
+          // ถ้าใบนี้ผูกกับงานในหน้าคิวที่ยังไม่ถูกตัดสินใจไปทางไหน — ดันสถานะงานตามด้วย
+          // (บั๊กเดียวกับที่เจอตอนอนุมัติผ่านหน้าเว็บ — ดู syncJobOnQuotationStatusChange)
+          syncedJob = await syncJobOnQuotationStatusChange(conn, quotationId, 'approved', null);
           // ใบเสนอราคาปกติที่สร้างจากหน้าเว็บมีใบแจ้งซ่อมคู่กันมาตั้งแต่ตอนสร้างแล้ว
           // แต่ใบที่บอทไลน์สร้างไม่มี (รอถึงตอนอนุมัติ) — อนุมัติเองตรงนี้ก็ต้องสร้าง
           // ใบแจ้งซ่อมให้ครบเหมือนอนุมัติผ่านเว็บทุกประการ
@@ -976,6 +981,9 @@ async function createQuotationFromQueue(parsed) {
     await conn.commit();
 
     emitQuotationEvent(isUpdate ? 'quotation:updated' : 'quotation:created', { quotationId, status: null, actorId: null });
+    if (syncedJob) {
+      emitJobEvent('job:status-changed', { jobId: syncedJob.jobId, jobDate: syncedJob.jobDate, status: syncedJob.status, actorId: null });
+    }
     if (paymentClosed) {
       emitReceiptEvent(closedReceiptIsNew ? 'receipt:created' : 'receipt:updated', { receiptId: closedReceiptId, actorId: null });
     } else if (syncedReceipt) {
@@ -1068,6 +1076,7 @@ async function deleteQuotationForMessage(info) {
 // ข้อมูลติดตาม ไม่ลดยอดใบเสร็จ)
 async function closeQuotationByQueue(parsed) {
   let conn;
+  let syncedJob = null;
   try {
     conn = await pool.getConnection();
     await conn.beginTransaction();
@@ -1179,6 +1188,9 @@ async function closeQuotationByQueue(parsed) {
         "UPDATE quotations SET status = 'approved', converted_receipt_id = ? WHERE id = ?",
         [receiptId, quotation.id]
       );
+      // ถ้าใบนี้ผูกกับงานในหน้าคิวที่ยังไม่ถูกตัดสินใจไปทางไหน — ดันสถานะงานตามด้วย
+      // (บั๊กเดียวกับที่เจอตอนอนุมัติผ่านหน้าเว็บ — ดู syncJobOnQuotationStatusChange)
+      syncedJob = await syncJobOnQuotationStatusChange(conn, quotation.id, 'approved', null);
       // ใบแจ้งซ่อมคู่กัน เหมือนอนุมัติผ่านเว็บ/ผ่าน createQuotationFromQueue ทุกประการ
       const [existingNotice] = await conn.execute(
         'SELECT id FROM repair_notices WHERE quotation_id = ? LIMIT 1',
@@ -1199,6 +1211,9 @@ async function closeQuotationByQueue(parsed) {
 
     emitQuotationEvent('quotation:updated', { quotationId: quotation.id, status: 'approved', actorId: null });
     emitReceiptEvent('receipt:updated', { receiptId, actorId: null });
+    if (syncedJob) {
+      emitJobEvent('job:status-changed', { jobId: syncedJob.jobId, jobDate: syncedJob.jobDate, status: syncedJob.status, actorId: null });
+    }
 
     return {
       matchCount: 1,
