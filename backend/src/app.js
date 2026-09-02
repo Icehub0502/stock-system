@@ -45,6 +45,7 @@ const techniciansRoutes = require('./routes/technicians.routes');
 const boardRoutes = require('./routes/board.routes');
 const trackRoutes = require('./routes/track.routes');
 const settingsRoutes = require('./routes/settings.routes');
+const claimsRoutes = require('./routes/claims.routes');
 
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 const FRONTEND_DIST = path.join(__dirname, '..', '..', 'frontend', 'dist');
@@ -150,6 +151,7 @@ function createApp() {
   app.use('/api/board', boardRoutes);
   app.use('/api/track', trackRoutes);
   app.use('/api/settings', settingsRoutes);
+  app.use('/api/claims', claimsRoutes);
 
   app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
   app.get('/api/landing-images', (req, res) => {

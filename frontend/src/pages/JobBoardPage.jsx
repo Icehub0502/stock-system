@@ -5,6 +5,7 @@ import client from '../api/client';
 import { jobStatusDef, nextMainStatus, prevMainStatus } from '../utils/jobStatus';
 import { todayStr } from '../utils/format';
 import AddJobModal from '../components/AddJobModal';
+import ClaimFormModal from '../components/ClaimFormModal';
 import CarIcon from '../components/CarIcon';
 import StatusTrack from '../components/StatusTrack';
 import useRealtimeEvent from '../hooks/useRealtimeEvent';
@@ -23,6 +24,7 @@ export default function JobBoardPage() {
   const [error, setError] = useState('');
   const [busyId, setBusyId] = useState(null);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showClaimModal, setShowClaimModal] = useState(false);
   const [technicians, setTechnicians] = useState([]);
   const [qrData, setQrData] = useState(null);
   const [qrLoading, setQrLoading] = useState(false);
@@ -169,6 +171,9 @@ export default function JobBoardPage() {
           <button type="button" className="btn btn-primary" onClick={() => setShowAddModal(true)}>
             + เพิ่มคิว
           </button>
+          <button type="button" onClick={() => setShowClaimModal(true)}>
+            🛠️ เคลม
+          </button>
           <button type="button" onClick={handleShowQr} disabled={qrLoading}>
             {qrLoading ? 'กำลังสร้าง QR...' : '📱 QR ติดตามสถานะ'}
           </button>
@@ -263,6 +268,14 @@ export default function JobBoardPage() {
         <AddJobModal
           onClose={() => setShowAddModal(false)}
           onCreated={() => { setShowAddModal(false); load(); }}
+        />
+      )}
+
+      {showClaimModal && (
+        <ClaimFormModal
+          claim={null}
+          onClose={() => setShowClaimModal(false)}
+          onSaved={() => setShowClaimModal(false)}
         />
       )}
 

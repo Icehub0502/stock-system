@@ -463,6 +463,44 @@ async function initDatabase() {
     ADD UNIQUE KEY uk_repair_notices_code (code)
   `).catch(ignoreIfAlreadyApplied);
 
+  // เคลม (claim) — บันทึกอิสระ ไม่ผูกกับใบเสร็จ/ใบเสนอราคาเดิม (เจ้าของร้านยืนยันแล้ว
+  // ว่าไม่ต้องอ้างอิงบิลเก่า แค่เก็บว่าลูกค้า/รถคันไหนมาเคลม อาการอะไร เปลี่ยนอะไหล่
+  // อะไรไปบ้าง) — customer_id/vehicle_id เป็น RESTRICT ไม่ใช่ CASCADE/SET NULL เหมือน
+  // repair_notices เพราะถ้าลบลูกค้า/รถทิ้งไม่ควรทำให้ประวัติเคลมหายไปเงียบ ๆ ไม่มี
+  // status/workflow ตามที่เจ้าของร้านสั่ง — เก็บไว้เป็นประวัติเฉย ๆ
+  await conn.query(`
+    CREATE TABLE IF NOT EXISTS claims (
+      id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+      claim_no VARCHAR(30) NOT NULL UNIQUE,
+      customer_id BIGINT UNSIGNED NOT NULL,
+      vehicle_id BIGINT UNSIGNED NOT NULL,
+      claim_date DATE NOT NULL,
+      symptom TEXT,
+      remark TEXT,
+      created_by INT DEFAULT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      CONSTRAINT fk_claim_customer FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE RESTRICT,
+      CONSTRAINT fk_claim_vehicle FOREIGN KEY (vehicle_id) REFERENCES vehicles(id) ON DELETE RESTRICT,
+      CONSTRAINT fk_claim_user FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  // อะไหล่ที่เปลี่ยนระหว่างเคลม — ไม่ผูก FK ไปที่ service_items เพราะบางครั้งพนักงาน
+  // พิมพ์ชื่ออะไหล่เองสด ๆ ไม่มีในแคตตาล็อก (เหมือน quotation_items/receipt_items
+  // ที่เก็บ product_name ตรง ๆ ไม่ใช่แค่ product_id) unit_price อนุญาตให้เป็น 0 ได้
+  // เพราะของเคลมบางชิ้นเปลี่ยนให้ฟรีตามประกัน
+  await conn.query(`
+    CREATE TABLE IF NOT EXISTS claim_items (
+      id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+      claim_id BIGINT UNSIGNED NOT NULL,
+      product_name VARCHAR(255) NOT NULL,
+      quantity INT NOT NULL DEFAULT 1,
+      unit_price DECIMAL(12, 2) NOT NULL DEFAULT 0,
+      CONSTRAINT fk_claim_item_claim FOREIGN KEY (claim_id) REFERENCES claims(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
   // ดัชนีเสริมประสิทธิภาพ query ที่ใช้บ่อย — ไม่ใช่ constraint ใหม่ ไม่กระทบข้อมูลเดิม
   // customers.phone: ใช้กับ WHERE phone = ? ใน LINE webhook (ดู lineWebhook.routes.js)
   await conn.query(`

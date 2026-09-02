@@ -24,6 +24,7 @@ const NAV_CATEGORIES = [
       { to: "/customers", label: "ลูกค้า" },
       { to: "/vehicles", label: "รถลูกค้า" },
       { to: "/warranties", label: "การรับประกัน" },
+      { to: "/claims", label: "เคลม" },
       { to: "/customers/found-via", label: "ช่องทางที่ลูกค้าเจอเรา" },
     ],
   },
