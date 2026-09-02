@@ -87,8 +87,10 @@ export function buildLineQuoteText(quotation, template) {
     const amount = qty * price;
     const label = qty > 1 ? `${name} x${qty}` : name;
     // แถวย่อยของ "ชุดโปร" ตั้งใจไม่ใส่ราคา (ราคารวมอยู่ที่บรรทัดชื่อชุดแล้ว) —
-    // ไม่ต้องพิมพ์เลข 0 ต่อท้ายให้รกตา ปล่อยเป็นชื่อรายการเปล่า ๆ
-    return amount > 0 ? `${label} ${formatPlainAmount(amount)}` : label;
+    // ไม่ต้องพิมพ์เลข 0 ต่อท้ายให้รกตา ปล่อยเป็นชื่อรายการเปล่า ๆ แต่รายการส่วนลด
+    // (เช่น "ส่วนลด" ราคา -1000) ต้องยังพิมพ์ตัวเลขติดลบต่อท้ายด้วย ไม่งั้นส่วนลด
+    // หายไปเงียบ ๆ ตอนคัดลอก (amount > 0 เดิมเข้าใจผิดว่าราคาติดลบ = แถวย่อยไม่มีราคา)
+    return amount !== 0 ? `${label} ${formatPlainAmount(amount)}` : label;
   });
 
   const totalAmount = Number(
