@@ -4,6 +4,8 @@ import { useNavigate } from 'react-router-dom';
 import client from '../api/client';
 import { jobStatusDef, nextMainStatus, prevMainStatus } from '../utils/jobStatus';
 import { todayStr } from '../utils/format';
+import { buildLineQuoteText } from '../utils/lineQuoteText';
+import { copyTextAndImageToClipboard } from '../utils/copyWithImage';
 import AddJobModal from '../components/AddJobModal';
 import ClaimFormModal from '../components/ClaimFormModal';
 import CarIcon from '../components/CarIcon';
@@ -25,6 +27,8 @@ export default function JobBoardPage() {
   const [busyId, setBusyId] = useState(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showClaimModal, setShowClaimModal] = useState(false);
+  const [copyingQueueId, setCopyingQueueId] = useState(null);
+  const [copiedQueueId, setCopiedQueueId] = useState(null);
   const [technicians, setTechnicians] = useState([]);
   const [qrData, setQrData] = useState(null);
   const [qrLoading, setQrLoading] = useState(false);
@@ -143,6 +147,51 @@ export default function JobBoardPage() {
     }
   }
 
+  // คัดลอกข้อมูลคิว (ลูกค้า/รถ/อาการ) ไปวางในกลุ่มไลน์ได้เลย ไม่ต้องพิมพ์เอง — ใช้
+  // เทมเพลตจริงเดียวกับที่บอทใช้ (เหมือนปุ่ม "คัดลอกลงกลุ่ม" ในใบเสนอราคา) โดยส่ง
+  // "ใบเสนอราคาจำลอง" ที่มีแค่ข้อมูลหัวบิล (ไม่มีรายการ/ยอดเงิน เพราะยังไม่ถึงขั้น
+  // เสนอราคา) เข้า buildLineQuoteText ตัวเดิม — ฟังก์ชันนั้นเว้นบรรทัดว่างให้เองอยู่แล้ว
+  // เมื่อไม่มีข้อมูล จึงได้ผลลัพธ์เป็นเทมเพลตเปล่าที่กรอกแค่หัวบิลพอดี พยายามคัดลอก
+  // รูปรถตอนรับเข้าไปด้วย (best-effort — ดู copyWithImage.js) ถ้าคัดลอกรูปไม่ได้ก็ยัง
+  // ได้ข้อความอย่างน้อย ไม่มี error กวนใจ
+  async function handleCopyQueue(job) {
+    setCopyingQueueId(job.id);
+    try {
+      const [detailRes, templateRes] = await Promise.all([
+        client.get(`/jobs/${job.id}`),
+        client.get('/settings/line-template-blank'),
+      ]);
+      const detail = detailRes.data.data;
+      const intakePhoto = (detail.photos || []).find((p) => p.photo_type === 'intake');
+      const pseudoQuotation = {
+        queue_no: detail.queue_no,
+        quotation_date: todayStr(),
+        customer_name: detail.customer_name,
+        phone: detail.phone,
+        brand: detail.brand,
+        model: detail.model,
+        license_plate: detail.license_plate,
+        color: detail.color,
+        mileage: detail.mileage_in,
+        symptom: detail.symptom,
+        items: [],
+      };
+      const text = buildLineQuoteText(pseudoQuotation, templateRes.data.template);
+      const result = await copyTextAndImageToClipboard(text, intakePhoto?.photo_data);
+      if (!result.ok) {
+        alert('คัดลอกข้อความไม่สำเร็จ กรุณาลองใหม่อีกครั้ง');
+        return;
+      }
+      setCopiedQueueId(job.id);
+      setTimeout(() => setCopiedQueueId(null), 2500);
+    } catch (err) {
+      console.error('Error copying queue text:', err);
+      alert('คัดลอกข้อความไม่สำเร็จ กรุณาลองใหม่อีกครั้ง');
+    } finally {
+      setCopyingQueueId(null);
+    }
+  }
+
   // QR ติดตามสถานะรถ — คงที่ ไม่ผูกกับงานไหนเลย (ลิงก์แค่หน้า /track เฉย ๆ ลูกค้า
   // พิมพ์ทะเบียน+เบอร์โทร 4 ตัวท้ายเอง) พิมพ์ครั้งเดียวแปะห้องรับรองถาวรได้เลย — ย้าย
   // มาจากหน้ารายละเอียดงานเดิม (เจ้าของร้านสั่ง — ของเดิมสร้างใหม่ทุกครั้งไม่จำเป็น)
@@ -257,6 +306,14 @@ export default function JobBoardPage() {
                     {technicians.map((t) => <option key={t.id} value={t.name}>ช่าง: {t.name}</option>)}
                     <option value={NEW_TECHNICIAN_OPTION}>+ เพิ่มชื่อช่างใหม่...</option>
                   </select>
+                  <button
+                    type="button"
+                    className="job-card-copy-queue-btn"
+                    disabled={copyingQueueId === j.id}
+                    onClick={() => handleCopyQueue(j)}
+                  >
+                    {copiedQueueId === j.id ? '✅ คัดลอกแล้ว' : copyingQueueId === j.id ? 'กำลังคัดลอก...' : '📋 คัดลอกคิว'}
+                  </button>
                 </div>
               </div>
             );

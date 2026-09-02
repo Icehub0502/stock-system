@@ -1,9 +1,16 @@
-import React, { useState } from 'react';
-import { DECLINE_REASONS } from '../utils/declineReasons';
+import React, { useEffect, useState } from 'react';
+import client from '../api/client';
 
 export default function DeclineReasonModal({ quotation, onConfirm, onCancel, loading }) {
+  const [reasons, setReasons] = useState([]);
   const [reason, setReason] = useState('');
   const [note, setNote] = useState('');
+
+  useEffect(() => {
+    client.get('/settings/decline-reasons')
+      .then((res) => setReasons(res.data.data || []))
+      .catch(() => {});
+  }, []);
 
   const needsNote = reason === 'other';
   const canSubmit = reason && (!needsNote || note.trim());
@@ -21,9 +28,10 @@ export default function DeclineReasonModal({ quotation, onConfirm, onCancel, loa
             <label>เหตุผล</label>
             <select value={reason} onChange={(e) => setReason(e.target.value)}>
               <option value="">-- เลือกเหตุผล --</option>
-              {DECLINE_REASONS.map((r) => (
-                <option key={r.value} value={r.value}>{r.label}</option>
+              {reasons.map((r) => (
+                <option key={r.id} value={r.id}>{r.label}</option>
               ))}
+              <option value="other">อื่นๆ ระบุ</option>
             </select>
           </div>
           {needsNote && (

@@ -5,6 +5,7 @@
 // เก็บ/อ่านผ่าน app_settings key-value เดิม (getSetting/setSetting จาก
 // lineWebhook.routes.js — ไม่เขียนกลไกเก็บค่าซ้ำ)
 const express = require('express');
+const pool = require('../db/pool');
 const { authenticate, requireOwner } = require('../middleware/auth');
 const { getSetting, setSetting, getMessageTemplate } = require('./lineWebhook.routes');
 const { LINE_MESSAGE_DEFAULTS } = require('../utils/lineMessageDefaults');
@@ -88,6 +89,62 @@ router.put('/line', requireOwner, async (req, res) => {
   } catch (err) {
     console.error('Error saving LINE settings:', err);
     res.status(500).json({ error: 'บันทึกการตั้งค่าไม่สำเร็จ' });
+  }
+});
+
+// เหตุผลที่ลูกค้าไม่ได้ทำ — พนักงานทั่วไปอ่านได้ (DeclineReasonModal.jsx ใช้ตอนกด
+// "ลูกค้าไม่ได้ทำ") แต่แก้ไข/เพิ่ม/ลบได้เฉพาะเจ้าของร้านจากหน้าตั้งค่านี้เท่านั้น
+router.get('/decline-reasons', async (req, res) => {
+  try {
+    const [rows] = await pool.execute('SELECT id, label, sort_order FROM decline_reasons ORDER BY sort_order, id');
+    res.json({ success: true, data: rows });
+  } catch (err) {
+    console.error('Error loading decline reasons:', err);
+    res.status(500).json({ error: 'โหลดเหตุผลไม่สำเร็จ' });
+  }
+});
+
+router.post('/decline-reasons', requireOwner, async (req, res) => {
+  const { label } = req.body || {};
+  if (!label || !label.trim()) {
+    return res.status(400).json({ error: 'กรุณากรอกเหตุผล' });
+  }
+  try {
+    const [[{ maxOrder }]] = await pool.query('SELECT COALESCE(MAX(sort_order), 0) AS maxOrder FROM decline_reasons');
+    const [result] = await pool.execute(
+      'INSERT INTO decline_reasons (label, sort_order) VALUES (?, ?)',
+      [label.trim(), maxOrder + 1]
+    );
+    res.status(201).json({ success: true, data: { id: result.insertId } });
+  } catch (err) {
+    console.error('Error creating decline reason:', err);
+    res.status(500).json({ error: 'เพิ่มเหตุผลไม่สำเร็จ (อาจมีชื่อนี้อยู่แล้ว)' });
+  }
+});
+
+router.put('/decline-reasons/:id', requireOwner, async (req, res) => {
+  const { label } = req.body || {};
+  if (!label || !label.trim()) {
+    return res.status(400).json({ error: 'กรุณากรอกเหตุผล' });
+  }
+  try {
+    const [result] = await pool.execute('UPDATE decline_reasons SET label = ? WHERE id = ?', [label.trim(), req.params.id]);
+    if (result.affectedRows === 0) return res.status(404).json({ error: 'ไม่พบเหตุผลนี้' });
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Error updating decline reason:', err);
+    res.status(500).json({ error: 'แก้ไขเหตุผลไม่สำเร็จ (อาจมีชื่อนี้อยู่แล้ว)' });
+  }
+});
+
+router.delete('/decline-reasons/:id', requireOwner, async (req, res) => {
+  try {
+    const [result] = await pool.execute('DELETE FROM decline_reasons WHERE id = ?', [req.params.id]);
+    if (result.affectedRows === 0) return res.status(404).json({ error: 'ไม่พบเหตุผลนี้' });
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Error deleting decline reason:', err);
+    res.status(500).json({ error: 'ลบเหตุผลไม่สำเร็จ' });
   }
 });
 

@@ -84,6 +84,56 @@ describe('GET/PUT /api/settings/line — เฉพาะเจ้าของร
   });
 });
 
+describe('/api/settings/decline-reasons — พนักงานทั่วไปอ่านได้ แก้ไข/เพิ่ม/ลบเฉพาะเจ้าของร้าน', () => {
+  afterEach(async () => {
+    await pool.execute("DELETE FROM decline_reasons WHERE label LIKE 'ทดสอบ%'");
+  });
+
+  test('office ทั่วไป → อ่านได้ (200) แต่เพิ่ม/แก้ไข/ลบไม่ได้ (403)', async () => {
+    const officeToken = await getOfficeToken();
+    const getRes = await request(app).get('/api/settings/decline-reasons').set('Authorization', `Bearer ${officeToken}`);
+    expect(getRes.status).toBe(200);
+    expect(Array.isArray(getRes.body.data)).toBe(true);
+    expect(getRes.body.data.length).toBeGreaterThan(0);
+
+    const postRes = await request(app)
+      .post('/api/settings/decline-reasons')
+      .set('Authorization', `Bearer ${officeToken}`)
+      .send({ label: 'ทดสอบเหตุผล' });
+    expect(postRes.status).toBe(403);
+  });
+
+  test('ไม่มี token เลย → 401', async () => {
+    const res = await request(app).get('/api/settings/decline-reasons');
+    expect(res.status).toBe(401);
+  });
+
+  test('ice → เพิ่ม/แก้ไข/ลบได้ครบ (round-trip)', async () => {
+    const ownerToken = await getOwnerToken();
+    const addRes = await request(app)
+      .post('/api/settings/decline-reasons')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ label: 'ทดสอบเหตุผลใหม่' });
+    expect(addRes.status).toBe(201);
+    const id = addRes.body.data.id;
+
+    const listRes = await request(app).get('/api/settings/decline-reasons').set('Authorization', `Bearer ${ownerToken}`);
+    expect(listRes.body.data.find((r) => r.id === id).label).toBe('ทดสอบเหตุผลใหม่');
+
+    const putRes = await request(app)
+      .put(`/api/settings/decline-reasons/${id}`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ label: 'ทดสอบเหตุผลแก้ไขแล้ว' });
+    expect(putRes.status).toBe(200);
+
+    const delRes = await request(app).delete(`/api/settings/decline-reasons/${id}`).set('Authorization', `Bearer ${ownerToken}`);
+    expect(delRes.status).toBe(200);
+
+    const finalListRes = await request(app).get('/api/settings/decline-reasons').set('Authorization', `Bearer ${ownerToken}`);
+    expect(finalListRes.body.data.find((r) => r.id === id)).toBeUndefined();
+  });
+});
+
 describe('GET /api/settings/line-template-blank — พนักงานทั่วไปก็อ่านได้ (ปุ่ม "คัดลอกลงกลุ่ม" ต้องใช้)', () => {
   afterEach(async () => {
     await pool.execute("DELETE FROM app_settings WHERE `key` = 'line_template_blank'");

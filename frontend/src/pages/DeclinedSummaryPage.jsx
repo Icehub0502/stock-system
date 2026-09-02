@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import client from "../api/client";
-import { DECLINE_REASONS, declineReasonLabel } from "../utils/declineReasons";
+import { declineReasonLabel } from "../utils/declineReasons";
 import { todayStr } from "../utils/format";
 import useRealtimeEvent from "../hooks/useRealtimeEvent";
 
@@ -45,6 +45,7 @@ function computePeriod(periodType, dayValue, monthValue, yearValue) {
 // ใหม่แค่เพื่อหน้านี้หน้าเดียว
 export default function DeclinedSummaryPage() {
   const [quotations, setQuotations] = useState([]);
+  const [reasons, setReasons] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [periodType, setPeriodType] = useState('day'); // 'day' | 'month' | 'year'
@@ -66,6 +67,7 @@ export default function DeclinedSummaryPage() {
 
   useEffect(() => {
     fetchQuotations();
+    client.get('/settings/decline-reasons').then((res) => setReasons(res.data.data || [])).catch(() => {});
   }, [fetchQuotations]);
 
   // Realtime: only listens for updated/deleted — a brand-new quotation can
@@ -93,16 +95,23 @@ export default function DeclinedSummaryPage() {
     [quotations, from, to]
   );
 
-  // นับตามลำดับที่กำหนดไว้ใน DECLINE_REASONS เสมอ (ไม่ใช่เรียงตามจำนวนที่เจอ) ให้
-  // กราฟ/ตารางเรียงลำดับเดิมทุกครั้งไม่ว่าช่วงวันที่จะมีข้อมูลอะไรบ้าง
+  // เหตุผลจาก DB (แก้ไขได้จากหน้าตั้งค่าแล้ว) + "อื่นๆ" ต่อท้ายเสมอ (ค่าคงที่ ไม่ใช่
+  // แถวใน DB) — นับตามลำดับนี้เสมอ (ไม่ใช่เรียงตามจำนวนที่เจอ) ให้กราฟ/ตารางเรียง
+  // ลำดับเดิมทุกครั้งไม่ว่าช่วงวันที่จะมีข้อมูลอะไรบ้าง เหตุผลที่ถูกลบไปแล้ว/ค่าเก่า
+  // ที่ไม่ตรงกับใครเลยจะตกไปกอง "อื่นๆ" เหมือนเดิม
+  const reasonOptions = useMemo(
+    () => [...reasons.map((r) => ({ value: String(r.id), label: r.label })), { value: 'other', label: 'อื่นๆ ระบุ' }],
+    [reasons]
+  );
+
   const reasonCounts = useMemo(() => {
-    const counts = Object.fromEntries(DECLINE_REASONS.map((r) => [r.value, 0]));
+    const counts = Object.fromEntries(reasonOptions.map((r) => [r.value, 0]));
     for (const q of declined) {
-      const key = counts.hasOwnProperty(q.decline_reason) ? q.decline_reason : 'other';
+      const key = counts.hasOwnProperty(String(q.decline_reason)) ? String(q.decline_reason) : 'other';
       counts[key] += 1;
     }
-    return DECLINE_REASONS.map((r) => ({ ...r, count: counts[r.value] }));
-  }, [declined]);
+    return reasonOptions.map((r) => ({ ...r, count: counts[r.value] }));
+  }, [declined, reasonOptions]);
 
   const maxCount = Math.max(...reasonCounts.map((r) => r.count), 1);
 
@@ -218,7 +227,7 @@ export default function DeclinedSummaryPage() {
                         {q.brand || q.car_brand} {q.model || q.car_model} / {q.license_plate}
                       </td>
                       <td data-label="เหตุผล">
-                        {declineReasonLabel(q.decline_reason)}
+                        {declineReasonLabel(q.decline_reason, reasons)}
                         {q.decline_reason === 'other' && q.decline_note ? ` — ${q.decline_note}` : ''}
                       </td>
                     </tr>

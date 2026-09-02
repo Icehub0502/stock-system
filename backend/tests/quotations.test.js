@@ -315,7 +315,7 @@ describe('PATCH /api/quotations/:id/decline — ลูกค้าไม่ไ�
     const declineRes = await request(app)
       .patch(`/api/quotations/${quotationId}/decline`)
       .set('Authorization', `Bearer ${token}`)
-      .send({ reason: 'price_high' });
+      .send({ reason: 'other', note: 'ราคาสูงไป' });
     expect(declineRes.status).toBe(200);
 
     const [[jobAfter]] = await pool.query('SELECT status, closed_at, bay FROM jobs WHERE id = ?', [jobId]);
@@ -352,7 +352,7 @@ describe('PATCH /api/quotations/:id/decline — ลูกค้าไม่ไ�
     const declineRes = await request(app)
       .patch(`/api/quotations/${quotationId}/decline`)
       .set('Authorization', `Bearer ${token}`)
-      .send({ reason: 'price_high' });
+      .send({ reason: 'other', note: 'ราคาสูงไป' });
     expect(declineRes.status).toBe(200);
 
     const [[jobAfter]] = await pool.query('SELECT status FROM jobs WHERE id = ?', [jobId]);
@@ -391,7 +391,7 @@ describe('PATCH /api/quotations/:id/undo-decline — พลาดกด "ลู�
     const declineRes = await request(app)
       .patch(`/api/quotations/${quotationId}/decline`)
       .set('Authorization', `Bearer ${token}`)
-      .send({ reason: 'price_high' });
+      .send({ reason: 'other', note: 'ราคาสูงไป' });
     expect(declineRes.status).toBe(200);
 
     const undoRes = await request(app)
@@ -443,7 +443,7 @@ describe('PATCH /api/quotations/:id/undo-decline — พลาดกด "ลู�
     await request(app)
       .patch(`/api/quotations/${quotationId}/decline`)
       .set('Authorization', `Bearer ${token}`)
-      .send({ reason: 'quote_only' });
+      .send({ reason: 'other', note: 'ขอใบเสนอราคา' });
 
     const [jobResult] = await pool.execute(
       `INSERT INTO jobs (job_no, job_date, customer_id, vehicle_id, quotation_id, status)

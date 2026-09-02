@@ -5071,6 +5071,7 @@ body:has(.modal-backdrop) .page-fade-in {
 .job-card-status-actions { display: flex; gap: 6px; flex-wrap: wrap; }
 .job-card-status-actions button { font-size: 0.78rem; padding: 4px 8px; }
 .job-card-status-block select { font-size: 0.82rem; padding: 4px 8px; }
+.job-card-copy-queue-btn { font-size: 0.82rem; padding: 4px 8px; width: 100%; margin-top: 6px; }
 
 .job-card-vehicle {
   display: flex;

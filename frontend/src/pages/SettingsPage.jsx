@@ -5,8 +5,8 @@ import { useAuth } from '../context/AuthContext';
 
 // หน้า "ตั้งค่า" เฉพาะเจ้าของร้าน (username 'ice' — บังคับจริงฝั่ง backend ผ่าน
 // requireOwner, หน้านี้แค่เป็นทางเข้า ป้องกันซ้ำอีกชั้นที่ ProtectedRoute ownerOnly)
-// รวม 4 ส่วนที่กระจัดกระจาย/ไม่เคยมีมาก่อน: บัญชีผู้ใช้, ช่าง, บอทไลน์, ลิงก์ด่วนไปหน้า
-// ตั้งค่าอื่นที่มีอยู่แล้ว
+// รวมส่วนที่กระจัดกระจาย/ไม่เคยมีมาก่อน: บัญชีผู้ใช้, ช่าง, เหตุผลที่ลูกค้าไม่ได้ทำ,
+// บอทไลน์, ลิงก์ด่วนไปหน้าตั้งค่าอื่นที่มีอยู่แล้ว
 export default function SettingsPage() {
   return (
     <div className="quotation-page">
@@ -18,6 +18,7 @@ export default function SettingsPage() {
       </div>
       <UsersSection />
       <TechniciansSection />
+      <DeclineReasonsSection />
       <LineBotSection />
       <QuickLinksSection />
     </div>
@@ -315,6 +316,136 @@ function TechniciansSection() {
                       <>
                         <button type="button" onClick={() => startEdit(t)}>แก้ไข</button>
                         <button type="button" className="btn-danger" onClick={() => remove(t)}>ลบ</button>
+                      </>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// เหตุผลที่ลูกค้าไม่ได้ทำ — เดิมเป็นลิสต์ตายตัวในโค้ด ต้องแก้พร้อมกัน 2-3 ที่
+// (frontend/src/utils/declineReasons.js + DECLINE_REASON_VALUES ใน
+// quotations.routes.js) ย้ายมาเป็นตารางที่แก้จากตรงนี้ที่เดียว — โครงเดียวกับ
+// TechniciansSection ด้านบนเป๊ะ ๆ (ลิสต์เล็ก ๆ ที่เจ้าของร้านดูแลเอง)
+function DeclineReasonsSection() {
+  const [reasons, setReasons] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [newLabel, setNewLabel] = useState('');
+  const [editingId, setEditingId] = useState(null);
+  const [editingLabel, setEditingLabel] = useState('');
+
+  const fetchReasons = async () => {
+    try {
+      setLoading(true);
+      const res = await client.get('/settings/decline-reasons');
+      setReasons(res.data.data || []);
+    } catch (err) {
+      setError(err.response?.data?.error || 'โหลดรายการเหตุผลไม่สำเร็จ');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { fetchReasons(); }, []);
+
+  const add = async (e) => {
+    e.preventDefault();
+    if (!newLabel.trim()) return;
+    setError('');
+    try {
+      await client.post('/settings/decline-reasons', { label: newLabel.trim() });
+      setNewLabel('');
+      fetchReasons();
+    } catch (err) {
+      setError(err.response?.data?.error || 'เพิ่มเหตุผลไม่สำเร็จ');
+    }
+  };
+
+  const startEdit = (r) => {
+    setEditingId(r.id);
+    setEditingLabel(r.label);
+  };
+
+  const saveEdit = async (id) => {
+    if (!editingLabel.trim()) return;
+    setError('');
+    try {
+      await client.put(`/settings/decline-reasons/${id}`, { label: editingLabel.trim() });
+      setEditingId(null);
+      fetchReasons();
+    } catch (err) {
+      setError(err.response?.data?.error || 'แก้ไขเหตุผลไม่สำเร็จ');
+    }
+  };
+
+  const remove = async (r) => {
+    if (!window.confirm(`ลบเหตุผล "${r.label}" หรือไม่?`)) return;
+    try {
+      await client.delete(`/settings/decline-reasons/${r.id}`);
+      fetchReasons();
+    } catch (err) {
+      alert(err.response?.data?.error || 'ลบไม่สำเร็จ');
+    }
+  };
+
+  return (
+    <div className="dash-panel">
+      <div className="dash-panel-title">เหตุผลที่ลูกค้าไม่ได้ทำ</div>
+      <p style={{ fontSize: 13, color: '#6b7280', marginBottom: 8 }}>
+        แสดงในตัวเลือกตอนกดปุ่ม "ลูกค้าไม่ได้ทำ" — "อื่นๆ ระบุ" มีให้เลือกเสมออยู่แล้ว ไม่ต้องเพิ่ม
+      </p>
+      {error && <div className="error-message">{error}</div>}
+      <form onSubmit={add} className="modal-actions" style={{ marginBottom: 12 }}>
+        <input
+          type="text"
+          placeholder="เหตุผลใหม่"
+          value={newLabel}
+          onChange={(e) => setNewLabel(e.target.value)}
+        />
+        <button type="submit" className="btn btn-primary">+ เพิ่มเหตุผล</button>
+      </form>
+      {loading ? (
+        <div className="loading">กำลังโหลด...</div>
+      ) : reasons.length === 0 ? (
+        <div className="dash-empty">ยังไม่มีเหตุผล</div>
+      ) : (
+        <div className="quotation-table-wrap">
+          <table className="quotation-table">
+            <thead>
+              <tr><th>เหตุผล</th><th>จัดการ</th></tr>
+            </thead>
+            <tbody>
+              {reasons.map((r) => (
+                <tr key={r.id}>
+                  <td data-label="เหตุผล">
+                    {editingId === r.id ? (
+                      <input
+                        type="text"
+                        value={editingLabel}
+                        onChange={(e) => setEditingLabel(e.target.value)}
+                        autoFocus
+                      />
+                    ) : (
+                      r.label
+                    )}
+                  </td>
+                  <td className="actions" data-label="จัดการ">
+                    {editingId === r.id ? (
+                      <>
+                        <button type="button" onClick={() => saveEdit(r.id)}>บันทึก</button>
+                        <button type="button" className="btn-secondary" onClick={() => setEditingId(null)}>ยกเลิก</button>
+                      </>
+                    ) : (
+                      <>
+                        <button type="button" onClick={() => startEdit(r)}>แก้ไข</button>
+                        <button type="button" className="btn-danger" onClick={() => remove(r)}>ลบ</button>
                       </>
                     )}
                   </td>

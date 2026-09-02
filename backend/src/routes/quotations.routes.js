@@ -874,22 +874,20 @@ router.patch('/:id/no-date', async (req, res) => {
   }
 });
 
-// ชุดเหตุผลคงที่ที่เลือกได้ตอนกด "ลูกค้าไม่ได้ทำ" (mirror กับ DECLINE_REASONS ใน
-// frontend/src/utils/declineReasons.js — ต้องแก้ทั้งคู่พร้อมกันถ้าจะเพิ่ม/ลดตัวเลือก)
-// จำกัดเป็นค่าคงที่แทนข้อความอิสระ เพื่อให้หน้าสรุปสถิติ (DeclinedSummaryPage.jsx)
-// จัดกลุ่มได้ถูกต้องแม่นยำ ไม่กระจัดกระจายเป็นข้อความคนละแบบความหมายเดียวกัน
-const DECLINE_REASON_VALUES = ['price_high', 'budget', 'quote_only', 'other_day', 'other'];
-
 // ลูกค้าขอใบเสนอราคาแล้วไม่ได้ทำจริง — สำนักงานกดปุ่ม "ลูกค้าไม่ได้ทำ" บนหน้า
 // รายการใบเสนอราคา แยกใบนี้ออกจากรายการหลัก/หน้านัดหมาย ไปอยู่ในหน้า "ลูกค้าที่
 // ไม่ได้ทำ" แทน (mirror รูปแบบเดียวกับ /no-date ด้านบน) ต้องระบุเหตุผลด้วยเสมอ (ดู
 // DeclineReasonModal.jsx) — reason='other' ต้องมี note มาด้วย ไม่งั้นข้อมูลสรุปจะมีแต่
-// "อื่นๆ" ที่ไม่รู้ว่าคืออะไรจริง ๆ
+// "อื่นๆ" ที่ไม่รู้ว่าคืออะไรจริง ๆ — เหตุผลที่เลือกได้มาจากตาราง decline_reasons ที่
+// เจ้าของร้านแก้ไขได้จากหน้าตั้งค่าแล้ว (ดู settings.routes.js) ไม่ใช่ค่าคงที่ในโค้ด
+// อีกต่อไป reason ที่ส่งมาจะเป็น id ของแถวนั้น (string) หรือ 'other' เท่านั้น
 router.patch('/:id/decline', async (req, res) => {
   const { id } = req.params;
   const { reason, note } = req.body || {};
 
-  if (!DECLINE_REASON_VALUES.includes(reason)) {
+  const [validReasonRows] = await pool.query('SELECT id FROM decline_reasons');
+  const validReasonIds = validReasonRows.map((r) => String(r.id));
+  if (reason !== 'other' && !validReasonIds.includes(String(reason))) {
     return res.status(400).json({ error: 'กรุณาเลือกเหตุผลที่ลูกค้าไม่ได้ทำ' });
   }
   if (reason === 'other' && !note?.trim()) {

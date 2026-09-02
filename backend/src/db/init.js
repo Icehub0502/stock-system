@@ -784,6 +784,40 @@ async function initDatabase() {
     await conn.query('INSERT IGNORE INTO technicians (name) VALUES (?)', [name]);
   }
 
+  // เหตุผลที่ลูกค้าไม่ได้ทำ — ย้ายจากลิสต์ตายตัวในโค้ด (เคยซ้ำกันอยู่ 2 ที่ ทั้ง
+  // frontend/src/utils/declineReasons.js และ DECLINE_REASON_VALUES ใน
+  // quotations.routes.js) มาเป็นตารางที่เจ้าของร้านแก้ไขได้จากหน้าตั้งค่าแทน — เหมือน
+  // technicians เป๊ะ ๆ (ลิสต์เล็ก ๆ ที่เจ้าของร้านดูแลเอง ไม่ผูก FK กับ quotations
+  // เพราะ decline_reason แค่เก็บ id เป็น string ไว้เทียบ ลบเหตุผลทิ้งไปแล้วแถวเก่าจะ
+  // ตกไปกอง "อื่นๆ" ในหน้าสรุปเฉย ๆ ไม่พังอะไร)
+  await conn.query(`
+    CREATE TABLE IF NOT EXISTS decline_reasons (
+      id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+      label VARCHAR(100) NOT NULL UNIQUE,
+      sort_order INT NOT NULL DEFAULT 0,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+  const DEFAULT_DECLINE_REASONS = [
+    ['ราคาสูงไป', 1, 'price_high'],
+    ['งบไม่พอ', 2, 'budget'],
+    ['ขอใบเสนอราคา', 3, 'quote_only'],
+    ['นำรถมาทำวันอื่น', 4, 'other_day'],
+  ];
+  for (const [label, sortOrder] of DEFAULT_DECLINE_REASONS) {
+    await conn.query('INSERT IGNORE INTO decline_reasons (label, sort_order) VALUES (?, ?)', [label, sortOrder]);
+  }
+  // ย้ายข้อมูลเก่า: quotations.decline_reason เดิมเก็บ slug คงที่ ('price_high' ฯลฯ)
+  // ตอนนี้เปลี่ยนไปเก็บ id ของ decline_reasons แทน (ยกเว้น 'other' ที่ยังเป็นค่าคงที่
+  // เหมือนเดิมเพราะต้องมี decline_note คู่กันเสมอ) — รันซ้ำได้ทุกครั้งที่บูตอย่างปลอดภัย
+  // เพราะหลังย้ายรอบแรกแล้วจะไม่มีแถวไหนตรงกับ slug เก่าอีก (WHERE ไม่เจอแถว = no-op)
+  for (const [label, , oldSlug] of DEFAULT_DECLINE_REASONS) {
+    await conn.query(
+      'UPDATE quotations SET decline_reason = (SELECT id FROM decline_reasons WHERE label = ?) WHERE decline_reason = ?',
+      [label, oldSlug]
+    );
+  }
+
   // ประวัติการเปลี่ยนสถานะ — เก็บทุกครั้งที่เปลี่ยน ใครเปลี่ยน เมื่อไหร่ ใช้ดูย้อนหลัง
   // ว่ารถคันนี้ค้างอยู่ขั้นไหนนานเกินไป และคำนวณเวลาที่ใช้ซ่อมจริงต่อคัน
   await conn.query(`
