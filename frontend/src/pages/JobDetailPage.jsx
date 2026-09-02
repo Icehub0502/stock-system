@@ -352,6 +352,23 @@ export default function JobDetailPage() {
   const selectedPartsCount = activePartsList.reduce((sum, p) => sum + p.quantity, 0);
   const selectedPartsTotal = activePartsList.reduce((sum, p) => sum + p.quantity * (Number(p.unitPrice) || 0), 0);
 
+  // ใบแจ้งซ่อม (RepairWorksheetPrintModal) เป็น checklist ให้ช่างติ๊กงานที่ต้อง
+  // ทำจริง — รายการหมวด "ส่วนลด"/"ค่าใช้จ่าย" เป็นรายการทางบัญชี ไม่ใช่งานที่ช่าง
+  // ต้องเช็ค เจ้าของร้านขอให้ตัดออกจากใบนี้โดยเฉพาะ (ยังคงอยู่ในใบเสนอราคา/ยอดเงิน
+  // ตามปกติ) — รายการที่ติ๊กจากแคตตาล็อกโดยตรงมี category ติดมาอยู่แล้ว แต่รายการที่
+  // seed มาจากใบเสนอราคาที่บันทึกไว้แล้ว (คีย์ existing-/draft-) ไม่มี category ติด
+  // มาด้วย (quotation_items ไม่ได้เก็บ category ไว้) จึงต้องย้อนไปหาจากชื่อในแคตตาล็อก
+  const EXCLUDED_WORKSHEET_CATEGORIES = ['ส่วนลด', 'ค่าใช้จ่าย'];
+  const catalogCategoryByName = useMemo(() => {
+    const map = {};
+    catalogParts.forEach((p) => { map[p.part_name] = p.category; });
+    return map;
+  }, [catalogParts]);
+  const worksheetPartsList = activePartsList.filter((p) => {
+    const category = p.category || catalogCategoryByName[p.part_name];
+    return !EXCLUDED_WORKSHEET_CATEGORIES.includes(category);
+  });
+
   // เพิ่มรายการสินค้า/บริการใหม่ที่ยังไม่มีในระบบ (POST /service-items) — ไม่มี
   // ช่องราคา เพราะ service_items ไม่เก็บราคาไว้เลย พนักงานพิมพ์ราคาเองตอนติ๊ก
   // เลือกเข้ารายการ (เหมือนรายการอื่นทุกชิ้นในแผงนี้)
@@ -1184,7 +1201,7 @@ export default function JobDetailPage() {
             customer_name: job.customer_name,
             phone: job.phone,
             vehicle: { brand: job.brand, model: job.model, color: job.color, license_plate: job.license_plate, mileage: job.mileage_in },
-            items: activePartsList.map((p) => ({ product_name: p.part_name, quantity: p.quantity })),
+            items: worksheetPartsList.map((p) => ({ product_name: p.part_name, quantity: p.quantity })),
           }}
           markPrintedUrl={`/jobs/${id}/mark-worksheet-printed`}
           onClose={() => { setShowWorksheetModal(false); load({ silent: true }); }}
