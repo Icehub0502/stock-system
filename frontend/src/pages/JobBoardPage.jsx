@@ -4,8 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import client from '../api/client';
 import { jobStatusDef, nextMainStatus, prevMainStatus } from '../utils/jobStatus';
 import { todayStr } from '../utils/format';
-import { buildLineQuoteText } from '../utils/lineQuoteText';
-import { copyTextAndImageToClipboard } from '../utils/copyWithImage';
+import { buildLineQuoteText, copyTextToClipboard } from '../utils/lineQuoteText';
 import AddJobModal from '../components/AddJobModal';
 import ClaimFormModal from '../components/ClaimFormModal';
 import CarIcon from '../components/CarIcon';
@@ -151,9 +150,9 @@ export default function JobBoardPage() {
   // เทมเพลตจริงเดียวกับที่บอทใช้ (เหมือนปุ่ม "คัดลอกลงกลุ่ม" ในใบเสนอราคา) โดยส่ง
   // "ใบเสนอราคาจำลอง" ที่มีแค่ข้อมูลหัวบิล (ไม่มีรายการ/ยอดเงิน เพราะยังไม่ถึงขั้น
   // เสนอราคา) เข้า buildLineQuoteText ตัวเดิม — ฟังก์ชันนั้นเว้นบรรทัดว่างให้เองอยู่แล้ว
-  // เมื่อไม่มีข้อมูล จึงได้ผลลัพธ์เป็นเทมเพลตเปล่าที่กรอกแค่หัวบิลพอดี พยายามคัดลอก
-  // รูปรถตอนรับเข้าไปด้วย (best-effort — ดู copyWithImage.js) ถ้าคัดลอกรูปไม่ได้ก็ยัง
-  // ได้ข้อความอย่างน้อย ไม่มี error กวนใจ
+  // เมื่อไม่มีข้อมูล จึงได้ผลลัพธ์เป็นเทมเพลตเปล่าที่กรอกแค่หัวบิลพอดี คัดลอกเฉพาะ
+  // ข้อความอย่างเดียว (เจ้าของร้านสั่งเอารูปออก) จึงใช้ copyTextToClipboard ตัวเดียว
+  // กับปุ่มคัดลอกอื่น ๆ ซึ่งมีทางสำรองสำหรับ HTTP บนวงแลนของร้านด้วย
   async function handleCopyQueue(job) {
     setCopyingQueueId(job.id);
     try {
@@ -162,7 +161,6 @@ export default function JobBoardPage() {
         client.get('/settings/line-template-blank'),
       ]);
       const detail = detailRes.data.data;
-      const intakePhoto = (detail.photos || []).find((p) => p.photo_type === 'intake');
       const pseudoQuotation = {
         queue_no: detail.queue_no,
         quotation_date: todayStr(),
@@ -177,8 +175,8 @@ export default function JobBoardPage() {
         items: [],
       };
       const text = buildLineQuoteText(pseudoQuotation, templateRes.data.template);
-      const result = await copyTextAndImageToClipboard(text, intakePhoto?.photo_data);
-      if (!result.ok) {
+      const ok = await copyTextToClipboard(text);
+      if (!ok) {
         alert('คัดลอกข้อความไม่สำเร็จ กรุณาลองใหม่อีกครั้ง');
         return;
       }
