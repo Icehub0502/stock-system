@@ -1136,14 +1136,18 @@ router.post('/:id/quotation/deposit', async (req, res) => {
   }
 });
 
-// เหตุผลที่ลูกค้าไม่ได้ทำ — mirror DECLINE_REASON_VALUES ใน quotations.routes.js
-// (ต้องแก้พร้อมกันทั้งคู่ถ้าจะเพิ่ม/ลดตัวเลือก — ดูคอมเมนต์ต้นทางที่นั่น)
-const DECLINE_REASON_VALUES = ['price_high', 'budget', 'quote_only', 'other_day', 'other'];
-
 // ── ไม่ทำ: โปรโมท quote_draft เป็นใบเสนอราคาจริง สถานะ declined ──
+// เหตุผลตรวจกับตาราง decline_reasons (ตั้งค่าได้จากหน้าตั้งค่า) เหมือน
+// PATCH /quotations/:id/decline ใน quotations.routes.js ทุกประการ — เดิมไฟล์นี้เช็ค
+// กับ array ภาษาอังกฤษตายตัวคนละชุดกัน (ตกค้างจากก่อนย้ายเหตุผลไปตั้งค่าได้แบบ dynamic)
+// ทำให้ปุ่ม "ไม่ทำ"/"ลูกค้าไม่ทำ" ที่ทุกหน้าใช้ DeclineReasonModal ร่วมกัน (ส่ง id ตัวเลข
+// จากตาราง) พังทันทีถ้างานยังเป็นแค่ร่าง (ยังไม่โปรโมทเป็นใบเสนอราคาจริง) — บั๊กจริงที่
+// เจอตอนเพิ่มปุ่มนี้ที่หน้าบอร์ด
 router.post('/:id/quotation/decline', async (req, res) => {
   const { reason, note } = req.body || {};
-  if (!DECLINE_REASON_VALUES.includes(reason)) {
+  const [validReasonRows] = await pool.query('SELECT id FROM decline_reasons');
+  const validReasonIds = validReasonRows.map((r) => String(r.id));
+  if (reason !== 'other' && !validReasonIds.includes(String(reason))) {
     return res.status(400).json({ error: 'กรุณาเลือกเหตุผลที่ลูกค้าไม่ได้ทำ' });
   }
   if (reason === 'other' && !note?.trim()) {

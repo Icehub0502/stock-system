@@ -7,6 +7,7 @@ import { todayStr } from '../utils/format';
 import { buildLineQuoteText, copyTextToClipboard } from '../utils/lineQuoteText';
 import AddJobModal from '../components/AddJobModal';
 import ClaimFormModal from '../components/ClaimFormModal';
+import DeclineReasonModal from '../components/DeclineReasonModal';
 import CarIcon from '../components/CarIcon';
 import StatusTrack from '../components/StatusTrack';
 import useRealtimeEvent from '../hooks/useRealtimeEvent';
@@ -26,6 +27,8 @@ export default function JobBoardPage() {
   const [busyId, setBusyId] = useState(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showClaimModal, setShowClaimModal] = useState(false);
+  const [declineJob, setDeclineJob] = useState(null);
+  const [declineBusy, setDeclineBusy] = useState(false);
   const [copyingQueueId, setCopyingQueueId] = useState(null);
   const [copiedQueueId, setCopiedQueueId] = useState(null);
   const [technicians, setTechnicians] = useState([]);
@@ -108,6 +111,32 @@ export default function JobBoardPage() {
       setError(err.response?.data?.error || 'เปลี่ยนสถานะไม่สำเร็จ');
     } finally {
       setBusyId(null);
+    }
+  }
+
+  // "ลูกค้าไม่ทำ" ที่การ์ด — มิเรอร์ handleDeclineConfirm ของ JobDetailPage.jsx: ใบ
+  // เสนอราคาที่โปรโมทแล้วใช้ PATCH /quotations/:id/decline (ฝั่ง backend sync สถานะ
+  // งานเป็น 'rejected' ให้เองอยู่แล้วผ่าน syncJobOnQuotationStatusChange ไม่ต้องยิง
+  // PATCH /jobs/:id/status ซ้ำอีกที) ส่วนที่ยังเป็นแค่ร่าง (quote_draft ยังไม่โปรโมท)
+  // ใช้ POST /jobs/:id/quotation/decline ซึ่งอัปเดตทั้งใบเสนอราคา+สถานะงานในทีเดียว
+  // งานที่ถูกปฏิเสธจะหายจากบอร์ดทันทีหลังโหลดใหม่ (status 'rejected' อยู่ใน
+  // HIDDEN_STATUSES ด้านบนแล้ว — ตามไปดูต่อได้ที่หน้าสรุปลูกค้าที่ไม่ได้ทำ)
+  async function handleDeclineConfirm({ reason, note }) {
+    if (!declineJob) return;
+    setDeclineBusy(true);
+    setError('');
+    try {
+      if (declineJob.quotation_id) {
+        await client.patch(`/quotations/${declineJob.quotation_id}/decline`, { reason, note });
+      } else {
+        await client.post(`/jobs/${declineJob.id}/quotation/decline`, { reason, note });
+      }
+      setDeclineJob(null);
+      await load();
+    } catch (err) {
+      setError(err.response?.data?.error || 'บันทึกไม่สำเร็จ');
+    } finally {
+      setDeclineBusy(false);
     }
   }
 
@@ -293,6 +322,11 @@ export default function JobBoardPage() {
                           {jobStatusDef(next).label} →
                         </button>
                       )}
+                      {j.status === 'quoted' && (
+                        <button type="button" className="btn-danger" disabled={busy} onClick={() => setDeclineJob(j)}>
+                          ลูกค้าไม่ทำ
+                        </button>
+                      )}
                     </div>
                   </div>
                   <select
@@ -331,6 +365,15 @@ export default function JobBoardPage() {
           claim={null}
           onClose={() => setShowClaimModal(false)}
           onSaved={() => setShowClaimModal(false)}
+        />
+      )}
+
+      {declineJob && (
+        <DeclineReasonModal
+          quotation={{ quotation_no: declineJob.quotation_no || declineJob.job_no, customer_name: declineJob.customer_name }}
+          loading={declineBusy}
+          onConfirm={handleDeclineConfirm}
+          onCancel={() => setDeclineJob(null)}
         />
       )}
 
