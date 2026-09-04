@@ -918,10 +918,15 @@ router.patch('/:id/quote-draft/staff-signature', async (req, res) => {
 // ด้านล่าง: approve/schedule/decline) — mirror ตรรกะ POST /quotations เดิมเท่าที่
 // จำเป็น (ไม่รองรับ newCustomer/newVehicle เพราะงานมีลูกค้า/รถอยู่แล้วเสมอตอนถึง
 // จุดนี้) ต้องเรียกภายใน transaction ของผู้เรียกเท่านั้น (รับ conn เข้ามา ไม่เปิดเอง)
-async function promoteDraftToQuotation(conn, job, { status, scheduledDate, declineReason, declineNote, depositAmount, depositDate } = {}) {
+// allowEmptyItems: เฉพาะเส้นทาง "ไม่ทำ" เท่านั้นที่ส่ง true เข้ามา — เซลจำนวนไม่น้อย
+// คุยราคากับลูกค้าปากเปล่า (โทร/หน้าร้าน) ไม่ได้พิมพ์รายการเข้าระบบเลย พอลูกค้าปฏิเสธ
+// ไปแล้วก็ไม่มีทางย้อนกลับไปรู้ว่าจะพิมพ์รายการอะไรลงไป (รถกลับไปแล้ว) แต่ยังต้อง
+// บันทึกไว้ว่า "ลูกค้าไม่ทำ" เพื่อนับสถิติ/เหตุผลได้ถูกต้อง — อนุมัติ/นัดวันมาทำยังคง
+// บังคับต้องมีรายการเหมือนเดิม เพราะสร้างใบเสร็จ/ใบเสนอราคาจริงที่ต้องมีรายการอยู่แล้ว
+async function promoteDraftToQuotation(conn, job, { status, scheduledDate, declineReason, declineNote, depositAmount, depositDate, allowEmptyItems = false } = {}) {
   const draft = parseDraft(job.quote_draft);
   const validItems = buildValidItems(draft.items || []);
-  if (validItems.length === 0) {
+  if (validItems.length === 0 && !allowEmptyItems) {
     const err = new Error('ยังไม่มีรายการสินค้า/บริการที่บันทึกไว้ กรุณากด "บันทึกข้อมูล" ก่อน');
     err.statusCode = 400;
     throw err;
@@ -1169,6 +1174,7 @@ router.post('/:id/quotation/decline', async (req, res) => {
         status: 'declined',
         declineReason: reason,
         declineNote: reason === 'other' ? note.trim() : null,
+        allowEmptyItems: true,
       });
     } catch (err) {
       await conn.rollback();
