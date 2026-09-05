@@ -23,6 +23,7 @@ const ReceiptListPage = lazy(() => import("./pages/ReceiptListPage"));
 const QuotationListPage = lazy(() => import("./pages/QuotationListPage"));
 const AppointmentsPage = lazy(() => import("./pages/AppointmentsPage"));
 const DeclinedSummaryPage = lazy(() => import("./pages/DeclinedSummaryPage"));
+const PendingDeliveryPage = lazy(() => import("./pages/PendingDeliveryPage"));
 const CustomerChannelPage = lazy(() => import("./pages/CustomerChannelPage"));
 const CustomerManagementPage = lazy(() => import("./pages/CustomerManagementPage"));
 const VehicleManagementPage = lazy(() => import("./pages/VehicleManagementPage"));
@@ -310,6 +311,14 @@ function AppRoutes() {
             element={
               <ProtectedRoute roles={["office"]}>
                 <JobBoardPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/jobs/pending-delivery"
+            element={
+              <ProtectedRoute roles={["office"]}>
+                <PendingDeliveryPage />
               </ProtectedRoute>
             }
           />

@@ -769,6 +769,15 @@ async function initDatabase() {
     ADD COLUMN repair_notice_printed_at TIMESTAMP NULL DEFAULT NULL
   `).catch(ignoreIfAlreadyApplied);
 
+  // กำหนดรับรถโดยประมาณ — พนักงานตั้งเองได้จากหน้า "รถที่ยังไม่ได้ส่งรถ" (ดู
+  // GET /jobs/pending-delivery) ไม่ผูกกับ quotations.scheduled_date (อันนั้นคือวันนัด
+  // ที่ลูกค้าจะ "เอารถมา" ก่อนเริ่มงาน) เพราะฟิลด์นี้คือวันที่คาดว่าจะ "ส่งรถคืน" หลัง
+  // รับรถเข้ามาแล้ว คนละความหมาย คนละช่วงเวลากันเลย
+  await conn.query(`
+    ALTER TABLE jobs
+    ADD COLUMN expected_pickup_date DATE NULL DEFAULT NULL
+  `).catch(ignoreIfAlreadyApplied);
+
   // รายชื่อช่าง — ใช้เติม dropdown "มอบหมายให้ช่าง" ที่การ์ดงาน (JobBoardPage.jsx)
   // แทนที่ dropdown ช่องยกเดิม (เจ้าของร้านสั่งตัดออก ไม่ได้ใช้ประโยชน์) เพิ่มชื่อใหม่
   // ได้เองจากหน้าเว็บเมื่อรับช่างเข้าใหม่ — ไม่ผูกกับ users (บัญชีล็อกอิน) เพราะช่าง

@@ -34,6 +34,7 @@ const NAV_CATEGORIES = [
     items: [
       { to: "/jobs", label: "รายการงานวันนี้ (+ เพิ่มคิว)" },
       { to: "/board", label: "จอบอร์ดห้องรับรอง" },
+      { to: "/jobs/pending-delivery", label: "รถที่ยังไม่ได้ส่งรถ" },
     ],
   },
   {

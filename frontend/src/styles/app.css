@@ -2268,6 +2268,13 @@ button:disabled { background: #f3f4f6; color: #9ca3af; cursor: not-allowed; }
   white-space: nowrap;
 }
 
+.pending-delivery-date-overdue {
+  border-color: #dc2626 !important;
+  background: #fef2f2;
+  color: #991b1b;
+  font-weight: 600;
+}
+
 .status-badge {
   display: inline-block;
   padding: 4px 10px;

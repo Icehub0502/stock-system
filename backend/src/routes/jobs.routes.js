@@ -80,6 +80,35 @@ router.get('/', async (req, res) => {
   }
 });
 
+// ── รถที่ยังไม่ได้ส่งรถ — ข้ามวัน ไม่ใช่แค่วันนี้ (ต่างจาก GET / ด้านบน) เพราะรถที่
+// ค้างซ่อมอยู่หลายวันต้องยังโผล่ในหน้านี้แม้จะรับเข้ามาวันก่อนหน้าแล้วก็ตาม — กรอง
+// สถานะเดียวกับ HIDDEN_STATUSES ฝั่ง JobBoardPage.jsx บวก 'delivered' เอง (ที่นั่นยัง
+// โชว์ 'delivered' ของวันนี้ไว้ในบอร์ด แต่หน้านี้คือ "ยังไม่ได้ส่งรถ" ตรงๆ ส่งแล้วต้อง
+// หายไปเลยไม่ว่าจะส่งวันไหนก็ตาม)
+const PENDING_DELIVERY_EXCLUDED_STATUSES = ['delivered', 'carout', 'scheduled', 'rejected'];
+router.get('/pending-delivery', async (req, res) => {
+  try {
+    const [rows] = await pool.execute(`
+      SELECT j.id, j.job_no, j.queue_no, j.job_date, j.status, j.received_at, j.note,
+             j.expected_pickup_date, j.customer_id, j.vehicle_id, j.quotation_id,
+             c.customer_name, c.phone,
+             v.license_plate, v.brand, v.model, v.color,
+             q.quotation_no, q.status AS quotation_status, q.total_amount, q.product_summary,
+             q.deposit_amount, q.deposit_date
+      FROM jobs j
+      LEFT JOIN customers c ON c.id = j.customer_id
+      LEFT JOIN vehicles v ON v.id = j.vehicle_id
+      LEFT JOIN quotations q ON q.id = j.quotation_id
+      WHERE j.status NOT IN (${PENDING_DELIVERY_EXCLUDED_STATUSES.map(() => '?').join(',')})
+      ORDER BY j.received_at ASC
+    `, PENDING_DELIVERY_EXCLUDED_STATUSES);
+    res.json({ success: true, data: rows });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'โหลดรายการรถที่ยังไม่ได้ส่งไม่สำเร็จ' });
+  }
+});
+
 // ── เลขคิวถัดไป (ให้หน้ารับรถเติมให้อัตโนมัติ) ──
 router.get('/next-queue-no', async (req, res) => {
   const jobDate = DATE_ONLY_RE.test(req.query.date || '') ? req.query.date : todayStr();
@@ -352,9 +381,12 @@ router.post('/', async (req, res) => {
 
 // ── แก้ไขงาน (ช่าง / ช่องยก / เวลา / อาการ) ──
 router.patch('/:id', async (req, res) => {
-  const { technician, bay, est_minutes, symptom, note, queue_no, mileage_in } = req.body || {};
+  const { technician, bay, est_minutes, symptom, note, queue_no, mileage_in, expected_pickup_date } = req.body || {};
   if (bay !== undefined && bay !== null && bay !== '' && !isValidBay(bay)) {
     return res.status(400).json({ error: 'ช่องยกไม่ถูกต้อง' });
+  }
+  if (expected_pickup_date !== undefined && expected_pickup_date !== null && expected_pickup_date !== '' && !DATE_ONLY_RE.test(expected_pickup_date)) {
+    return res.status(400).json({ error: 'วันที่กำหนดรับรถไม่ถูกต้อง' });
   }
 
   let conn;
@@ -380,7 +412,7 @@ router.patch('/:id', async (req, res) => {
 
     await conn.execute(
       `UPDATE jobs SET technician = ?, bay = ?, est_minutes = ?, symptom = ?,
-                       note = ?, queue_no = ?, mileage_in = ?
+                       note = ?, queue_no = ?, mileage_in = ?, expected_pickup_date = ?
        WHERE id = ?`,
       [
         technician === undefined ? job.technician : (technician || null),
@@ -390,6 +422,7 @@ router.patch('/:id', async (req, res) => {
         note === undefined ? job.note : (note || null),
         queue_no === undefined ? job.queue_no : (String(queue_no).trim() || null),
         mileage_in === undefined ? job.mileage_in : (mileage_in || null),
+        expected_pickup_date === undefined ? job.expected_pickup_date : (expected_pickup_date || null),
         job.id,
       ]
     );
