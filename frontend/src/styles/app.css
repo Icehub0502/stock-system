@@ -2275,6 +2275,12 @@ button:disabled { background: #f3f4f6; color: #9ca3af; cursor: not-allowed; }
   font-weight: 600;
 }
 
+.pending-delivery-capture-title {
+  padding: 12px 16px 0;
+  font-weight: 700;
+  color: #111827;
+}
+
 .status-badge {
   display: inline-block;
   padding: 4px 10px;

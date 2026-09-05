@@ -1,8 +1,8 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import client from '../api/client';
 import { jobStatusDef } from '../utils/jobStatus';
-import { formatMoney } from '../utils/format';
+import { formatMoney, todayStr } from '../utils/format';
 import useRealtimeEvent from '../hooks/useRealtimeEvent';
 
 function formatDateTh(dateStr) {
@@ -34,6 +34,8 @@ export default function PendingDeliveryPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [savingId, setSavingId] = useState(null);
+  const [exportingImage, setExportingImage] = useState(false);
+  const captureRef = useRef(null);
 
   const load = useCallback(async ({ silent } = {}) => {
     try {
@@ -70,10 +72,55 @@ export default function PendingDeliveryPage() {
     }
   };
 
+  // มิเรอร์ handleExportImage ของ DailySummaryDetailModal.jsx (หน้าสรุปยอดขายรายวัน)
+  // ทุกประการ — html2canvas วาด <input>/<select> เพี้ยน ต้องสลับเป็น <span> ข้อความ
+  // ล้วนในสำเนาที่ครอปก่อนเสมอ ของจริงบนหน้าจอไม่โดนแตะ
+  const handleExportImage = async () => {
+    if (!captureRef.current) return;
+    setExportingImage(true);
+    try {
+      const { default: html2canvas } = await import('html2canvas');
+      const canvas = await html2canvas(captureRef.current, {
+        backgroundColor: '#ffffff',
+        scale: 2,
+        windowWidth: 1400,
+        onclone: (clonedDoc) => {
+          clonedDoc.querySelectorAll('.pending-delivery-capture-area input[type="date"]').forEach((inp) => {
+            const span = clonedDoc.createElement('span');
+            span.textContent = inp.value ? formatDateTh(inp.value) : '-';
+            const overdue = inp.classList.contains('pending-delivery-date-overdue');
+            span.style.cssText = `display:block;padding:2px 0;font-size:0.9rem;${overdue ? 'color:#991b1b;font-weight:700;' : 'color:#1f2937;'}`;
+            inp.replaceWith(span);
+          });
+          clonedDoc.querySelectorAll('.pending-delivery-capture-area input[type="text"]').forEach((inp) => {
+            const span = clonedDoc.createElement('span');
+            span.textContent = inp.value ? inp.value : '-';
+            span.style.cssText = 'display:block;padding:2px 0;color:#1f2937;font-size:0.9rem;';
+            inp.replaceWith(span);
+          });
+        },
+      });
+      const link = document.createElement('a');
+      link.download = `รถค้างส่ง-${todayStr()}.png`;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    } catch (err) {
+      console.error('Error exporting image:', err);
+      alert('บันทึกรูปภาพไม่สำเร็จ');
+    } finally {
+      setExportingImage(false);
+    }
+  };
+
   return (
     <div className="quotation-page">
       <div className="quotation-header">
         <h1>รถที่ยังไม่ได้ส่งรถ</h1>
+        {jobs.length > 0 && (
+          <button className="btn btn-secondary" onClick={handleExportImage} disabled={exportingImage}>
+            🖼️ {exportingImage ? 'กำลังบันทึก...' : 'บันทึกเป็นรูปภาพ'}
+          </button>
+        )}
       </div>
       <p className="sec-intro" style={{ color: '#6b7280', marginTop: -8, marginBottom: 16 }}>
         รวมรถทุกคันที่ยังอยู่ในขั้นตอนซ่อม ไม่ว่าจะรับเข้ามาวันไหน จนกว่าจะกดสถานะ "ส่งแล้ว" ที่หน้ารายการงาน
@@ -86,7 +133,8 @@ export default function PendingDeliveryPage() {
       ) : jobs.length === 0 ? (
         <div className="empty-message">ไม่มีรถค้างส่งตอนนี้</div>
       ) : (
-        <div className="quotation-table-wrap">
+        <div className="quotation-table-wrap pending-delivery-capture-area" ref={captureRef}>
+          <div className="pending-delivery-capture-title">สรุปรถที่ยังไม่ได้ส่งรถ — {formatDateTh(todayStr())}</div>
           <table className="quotation-table">
             <thead>
               <tr>
