@@ -80,12 +80,13 @@ router.get('/', async (req, res) => {
   }
 });
 
-// ── รถที่ยังไม่ได้ส่งรถ — ข้ามวัน ไม่ใช่แค่วันนี้ (ต่างจาก GET / ด้านบน) เพราะรถที่
-// ค้างซ่อมอยู่หลายวันต้องยังโผล่ในหน้านี้แม้จะรับเข้ามาวันก่อนหน้าแล้วก็ตาม — กรอง
-// สถานะเดียวกับ HIDDEN_STATUSES ฝั่ง JobBoardPage.jsx บวก 'delivered' เอง (ที่นั่นยัง
-// โชว์ 'delivered' ของวันนี้ไว้ในบอร์ด แต่หน้านี้คือ "ยังไม่ได้ส่งรถ" ตรงๆ ส่งแล้วต้อง
-// หายไปเลยไม่ว่าจะส่งวันไหนก็ตาม)
-const PENDING_DELIVERY_EXCLUDED_STATUSES = ['delivered', 'carout', 'scheduled', 'rejected'];
+// ── รถที่ยังไม่ได้ส่งรถ — เจ้าของร้านสั่งแก้ให้อ้างอิงเฉพาะ "บิลที่อนุมัติแล้ว" เท่านั้น
+// (จะได้เป็นรถที่จบขั้นตัดสินใจ/ตีราคาแล้วจริง ๆ ไม่ปนกับรถที่เพิ่งรับเข้ามา/กำลังตรวจเช็ค/
+// รอเสนอราคาที่ยังไม่รู้ผลเลย) นับตั้งแต่ 'approved' ไปจนถึงก่อน 'delivered' บน
+// MAIN_PATH เดียวกับที่ใช้เดินสถานะทั่วทั้งระบบ กันพิมพ์ผิด/ลืมอัปเดตถ้าเรียงลำดับ
+// สถานะเปลี่ยนในอนาคต — ข้ามวัน ไม่ใช่แค่วันนี้ (ต่างจาก GET / ด้านบน) เพราะรถที่ค้าง
+// ซ่อมอยู่หลายวันต้องยังโผล่ในหน้านี้แม้จะรับเข้ามาวันก่อนหน้าแล้วก็ตาม
+const PENDING_DELIVERY_STATUSES = MAIN_PATH.slice(MAIN_PATH.indexOf('approved'), MAIN_PATH.indexOf('delivered'));
 router.get('/pending-delivery', async (req, res) => {
   try {
     const [rows] = await pool.execute(`
@@ -99,9 +100,9 @@ router.get('/pending-delivery', async (req, res) => {
       LEFT JOIN customers c ON c.id = j.customer_id
       LEFT JOIN vehicles v ON v.id = j.vehicle_id
       LEFT JOIN quotations q ON q.id = j.quotation_id
-      WHERE j.status NOT IN (${PENDING_DELIVERY_EXCLUDED_STATUSES.map(() => '?').join(',')})
-      ORDER BY j.received_at ASC
-    `, PENDING_DELIVERY_EXCLUDED_STATUSES);
+      WHERE j.status IN (${PENDING_DELIVERY_STATUSES.map(() => '?').join(',')})
+      ORDER BY j.job_date ASC, j.received_at ASC
+    `, PENDING_DELIVERY_STATUSES);
     res.json({ success: true, data: rows });
   } catch (err) {
     console.error(err);
