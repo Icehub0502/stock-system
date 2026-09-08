@@ -2275,6 +2275,16 @@ button:disabled { background: #f3f4f6; color: #9ca3af; cursor: not-allowed; }
   font-weight: 600;
 }
 
+/* บอกจำนวนคันที่เกินกำหนดรับรถไว้ที่หัวแฟ้มวัน (หน้า PendingDeliveryPage.jsx) — เพราะ
+   พับรายละเอียดแต่ละคันไว้ใน modal แล้ว มองจากแฟ้มด้านนอกจะไม่เห็นว่าคันไหนเกินกำหนด
+   ถ้าไม่มีตัวเลขเตือนตรงนี้ */
+.pending-delivery-overdue-badge {
+  margin-left: 8px;
+  color: #dc2626;
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
 .pending-delivery-capture-title {
   padding: 12px 16px 0;
   font-weight: 700;
@@ -5274,6 +5284,12 @@ body:has(.modal-backdrop) .page-fade-in {
    เทียบราคาระหว่างตัวเลือกตอนเสนอลูกค้า (เช่นโช้ค 2 แบบ ราคาต่างกัน) */
 .jdp-selected-row--disabled { opacity: 0.5; }
 .jdp-selected-row--disabled .jdp-selected-name { text-decoration: line-through; }
+.jdp-stock-warning-badge {
+  font-weight: 600;
+  font-size: 0.78rem;
+  color: #b45309;
+  white-space: nowrap;
+}
 .jdp-selected-toggle {
   width: 28px;
   height: 28px;
