@@ -282,6 +282,14 @@ async function generateReceiptNo(conn) {
   return `RC${dateStr}${String(nextNumber).padStart(3, '0')}`;
 }
 
+// Mirrors quotations.routes.js's generateCarSequenceNo() — เหตุผลเดียวกับ
+// generateReceiptNo ด้านบน
+async function generateCarSequenceNo(conn) {
+  const [rows] = await conn.execute('SELECT MAX(car_sequence_no) AS maxNo FROM receipts FOR UPDATE');
+  const nextNumber = (rows[0]?.maxNo || 0) + 1;
+  return nextNumber < 1396 ? 1396 : nextNumber;
+}
+
 // Mirrors quotations.routes.js's generateRepairNoticeCode() — ใบเสนอราคาที่บอท
 // อนุมัติเองต้องได้ใบแจ้งซ่อมคู่กันเหมือนอนุมัติผ่านหน้าเว็บทุกประการ
 async function generateRepairNoticeCode(conn) {
@@ -935,10 +943,11 @@ async function createQuotationFromQueue(parsed) {
           // เลย (mirror ของ PATCH /quotations/:id/approve ใน quotations.routes.js —
           // ดูเหตุผลที่ mirror แทนเรียกข้ามไฟล์ในหมายเหตุหัวไฟล์ generateReceiptNo ด้านบน)
           const receipt_no = await generateReceiptNo(conn);
+          const car_sequence_no = await generateCarSequenceNo(conn);
           const [receiptResult] = await conn.execute(
-            `INSERT INTO receipts (receipt_no, receipt_date, customer_id, vehicle_id, mileage, remark, payment_method, total_amount, customer_signature, deposit_amount, deposit_date)
-             VALUES (?, CURDATE(), ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [receipt_no, customerId, vehicleId, parsed.mileage ?? 0, parsed.remark || null, parsed.payment_method || null, paymentAmount, null, parsed.deposit_amount ?? null, parsed.deposit_date || null]
+            `INSERT INTO receipts (receipt_no, receipt_date, customer_id, vehicle_id, mileage, remark, payment_method, total_amount, customer_signature, deposit_amount, deposit_date, car_sequence_no)
+             VALUES (?, CURDATE(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [receipt_no, customerId, vehicleId, parsed.mileage ?? 0, parsed.remark || null, parsed.payment_method || null, paymentAmount, null, parsed.deposit_amount ?? null, parsed.deposit_date || null, car_sequence_no]
           );
           const receiptId = receiptResult.insertId;
           for (const item of resolvedItems) {
@@ -1171,10 +1180,11 @@ async function closeQuotationByQueue(parsed) {
       // ยัง pending → อนุมัติ+สร้างใบเสร็จเองในทรานแซกชันนี้เลย (mirror ของ
       // createQuotationFromQueue's paid_confirmed pending branch)
       receipt_no = await generateReceiptNo(conn);
+      const car_sequence_no = await generateCarSequenceNo(conn);
       const [receiptResult] = await conn.execute(
-        `INSERT INTO receipts (receipt_no, receipt_date, customer_id, vehicle_id, mileage, remark, payment_method, total_amount, customer_signature, deposit_amount, deposit_date)
-         VALUES (?, CURDATE(), ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [receipt_no, quotation.customer_id, quotation.vehicle_id, 0, null, parsed.payment_method || null, receiptAmount, null, quotation.deposit_amount, quotation.deposit_date]
+        `INSERT INTO receipts (receipt_no, receipt_date, customer_id, vehicle_id, mileage, remark, payment_method, total_amount, customer_signature, deposit_amount, deposit_date, car_sequence_no)
+         VALUES (?, CURDATE(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [receipt_no, quotation.customer_id, quotation.vehicle_id, 0, null, parsed.payment_method || null, receiptAmount, null, quotation.deposit_amount, quotation.deposit_date, car_sequence_no]
       );
       receiptId = receiptResult.insertId;
       for (const item of items) {

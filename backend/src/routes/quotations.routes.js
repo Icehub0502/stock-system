@@ -91,6 +91,17 @@ async function generateReceiptNo(conn) {
   return `RC${dateStr}${String(nextNumber).padStart(3, '0')}`;
 }
 
+// เลขคันสะสมทั้งชีวิตร้าน — นับรวมทุกบิลไม่ว่าจะสร้างจากช่องทางไหน (อนุมัติใบเสนอ
+// ราคา, บอทไลน์, สร้างบิลมือ) ดูที่มาของเลขเริ่มต้น 1396 ใน db/init.js's backfill
+// migration — ล็อกทั้งตาราง receipts ไว้จนกว่า transaction จะ commit (ไม่ได้กรองด้วย
+// WHERE เหมือน generateReceiptNo เพราะเลขนี้นับรวมข้ามวัน) แต่ร้านนี้มีบิลไม่มาก จึงยัง
+// ไม่กระทบ performance
+async function generateCarSequenceNo(conn) {
+  const [rows] = await conn.execute('SELECT MAX(car_sequence_no) AS maxNo FROM receipts FOR UPDATE');
+  const nextNumber = (rows[0]?.maxNo || 0) + 1;
+  return nextNumber < 1396 ? 1396 : nextNumber;
+}
+
 async function generateCustomerCode(conn) {
   // FOR UPDATE เหตุผลเดียวกับ generateReceiptNo/generateQuotationNo ด้านบน
   const [rows] = await conn.execute(
@@ -652,14 +663,15 @@ router.patch('/:id/approve', async (req, res) => {
     }
 
     const receipt_no = await generateReceiptNo(conn);
+    const car_sequence_no = await generateCarSequenceNo(conn);
     const total_amount = items.reduce((sum, item) => sum + Number(item.quantity) * Number(item.unit_price), 0);
 
     // deposit_amount/deposit_date: snapshot จากใบเสนอราคาลงใบเสร็จเหมือน remark/
     // mileage ด้านบน (ตั้งมาจากบอทไลน์ก่อนกดอนุมัติได้ — ดู createQuotationFromQueue)
     const [receiptResult] = await conn.execute(
-      `INSERT INTO receipts (receipt_no, receipt_date, customer_id, vehicle_id, mileage, remark, total_amount, customer_signature, deposit_amount, deposit_date)
-       VALUES (?, CURDATE(), ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [receipt_no, quotation.customer_id, quotation.vehicle_id, quotation.mileage || 0, quotation.remark || null, total_amount, quotation.customer_signature || null, quotation.deposit_amount, quotation.deposit_date]
+      `INSERT INTO receipts (receipt_no, receipt_date, customer_id, vehicle_id, mileage, remark, total_amount, customer_signature, deposit_amount, deposit_date, car_sequence_no)
+       VALUES (?, CURDATE(), ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [receipt_no, quotation.customer_id, quotation.vehicle_id, quotation.mileage || 0, quotation.remark || null, total_amount, quotation.customer_signature || null, quotation.deposit_amount, quotation.deposit_date, car_sequence_no]
     );
     const receiptId = receiptResult.insertId;
 
@@ -1091,6 +1103,7 @@ router.delete('/:id', async (req, res) => {
 module.exports = router;
 module.exports.generateQuotationNo = generateQuotationNo; // ให้ jobs.routes.js ใช้เลขที่ชุดเดียวกันตอนโปรโมท quote_draft เป็นใบเสนอราคาจริง
 module.exports.generateReceiptNo = generateReceiptNo; // ให้ jobs.routes.js สร้างใบเสร็จตอนอนุมัติ ด้วยตรรกะออกเลขเดียวกับ /:id/approve
+module.exports.generateCarSequenceNo = generateCarSequenceNo; // เหตุผลเดียวกับ generateReceiptNo ด้านบน
 module.exports.generateRepairNoticeCode = generateRepairNoticeCode; // ให้ jobs.routes.js สร้างใบแจ้งซ่อมคู่กันเหมือน POST /quotations เดิม
 module.exports.buildValidItems = buildValidItems; // ให้ jobs.routes.js กรองรายการจาก quote_draft ด้วยกติกาเดียวกัน
 module.exports.findInvalidItems = findInvalidItems; // ให้ jobs.routes.js ตรวจสอบ quote_draft.items ก่อนโปรโมท

@@ -54,6 +54,14 @@ async function generateReceiptNo(conn = pool) {
   return `RC${dateStr}${String(nextNumber).padStart(3, '0')}`;
 }
 
+// เลขคันสะสมทั้งชีวิตร้าน — มิเรอร์กับ quotations.routes.js's generateCarSequenceNo()
+// (ดูคอมเมนต์ที่นั่นสำหรับที่มาของเลขเริ่มต้น 1396 และ backfill migration ใน db/init.js)
+async function generateCarSequenceNo(conn = pool) {
+  const [rows] = await conn.execute('SELECT MAX(car_sequence_no) AS maxNo FROM receipts FOR UPDATE');
+  const nextNumber = (rows[0]?.maxNo || 0) + 1;
+  return nextNumber < 1396 ? 1396 : nextNumber;
+}
+
 // เหตุผลเดียวกับ generateReceiptNo ด้านบน
 async function generateCustomerCode(conn = pool) {
   const [rows] = await conn.execute(
@@ -181,7 +189,7 @@ router.get('/by-date', async (req, res) => {
     // receipt_date เป็นคอลัมน์ DATE อยู่แล้ว (ไม่ใช่ DATETIME) เทียบตรง ๆ ได้เลย ไม่ต้อง
     // ครอบด้วย DATE() — การครอบฟังก์ชันบนคอลัมน์ทำให้ index บน receipt_date ใช้ไม่ได้
     const [rows] = await pool.execute(
-      `SELECT r.id, r.receipt_no, r.receipt_date, r.total_amount, r.payment_method, r.technician_name, r.remark,
+      `SELECT r.id, r.receipt_no, r.receipt_date, r.total_amount, r.payment_method, r.technician_name, r.remark, r.car_sequence_no,
               c.customer_name, c.customer_code,
               v.brand, v.model, v.license_plate,
               (SELECT GROUP_CONCAT(ri.product_name_snapshot SEPARATOR ', ')
@@ -503,12 +511,13 @@ router.post('/', async (req, res) => {
     }
 
     const receipt_no = await generateReceiptNo(conn);
+    const car_sequence_no = await generateCarSequenceNo(conn);
     const total_amount = normalizedItems.reduce((sum, item) => sum + item.qty * item.price, 0);
 
     const [receiptResult] = await conn.execute(
-      `INSERT INTO receipts (receipt_no, receipt_date, customer_id, vehicle_id, mileage, remark, payment_method, technician_name, total_amount)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [receipt_no, receipt_date, selectedCustomerId, selectedVehicleId, Number(mileage) || 0, remark || null, payment_method || null, technician_name || null, total_amount]
+      `INSERT INTO receipts (receipt_no, receipt_date, customer_id, vehicle_id, mileage, remark, payment_method, technician_name, total_amount, car_sequence_no)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [receipt_no, receipt_date, selectedCustomerId, selectedVehicleId, Number(mileage) || 0, remark || null, payment_method || null, technician_name || null, total_amount, car_sequence_no]
     );
 
     const receiptId = receiptResult.insertId;

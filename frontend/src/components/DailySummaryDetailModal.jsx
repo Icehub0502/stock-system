@@ -350,6 +350,7 @@ export default function DailySummaryDetailModal({ date, onClose, onReceiptsMoved
                     </th>
                     <th className="col-no">ลำดับ</th>
                     <th>เลขที่บิล</th>
+                    <th title="เลขคันสะสมทั้งชีวิตร้าน">คันที่</th>
                     <th>รหัสลูกค้า</th>
                     <th>ชื่อลูกค้า</th>
                     <th>ยี่ห้อ/รุ่นรถ</th>
@@ -374,6 +375,7 @@ export default function DailySummaryDetailModal({ date, onClose, onReceiptsMoved
                       </td>
                       <td className="col-no" data-label="ลำดับ">{idx + 1}</td>
                       <td data-label="เลขที่บิล"><strong>{r.receipt_no}</strong></td>
+                      <td data-label="คันที่">{r.car_sequence_no ?? '-'}</td>
                       <td data-label="รหัสลูกค้า">{r.customer_code || '-'}</td>
                       <td data-label="ชื่อลูกค้า">{r.customer_name}</td>
                       <td data-label="ยี่ห้อ/รุ่นรถ">{[r.brand, r.model].filter(Boolean).join(' ') || '-'}</td>

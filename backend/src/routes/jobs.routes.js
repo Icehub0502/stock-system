@@ -14,7 +14,7 @@ const { emitJobEvent, emitQuotationEvent, emitReceiptEvent } = require('../realt
 // เอกสาร/กติกากรองรายการแยกกันเป็น 2 ชุดที่อาจเพี้ยนไม่ตรงกันในอนาคต (ดู
 // promoteDraftToQuotation ด้านล่าง ที่ใช้ตอน "โปรโมท" quote_draft เป็นใบเสนอราคาจริง)
 const {
-  generateQuotationNo, generateReceiptNo, generateRepairNoticeCode,
+  generateQuotationNo, generateReceiptNo, generateRepairNoticeCode, generateCarSequenceNo,
   buildValidItems, findInvalidItems,
 } = require('./quotations.routes');
 
@@ -1048,10 +1048,11 @@ router.post('/:id/quotation/approve', async (req, res) => {
     const draft = parseDraft(job.quote_draft);
 
     const receipt_no = await generateReceiptNo(conn);
+    const car_sequence_no = await generateCarSequenceNo(conn);
     const [receiptResult] = await conn.execute(
-      `INSERT INTO receipts (receipt_no, receipt_date, customer_id, vehicle_id, mileage, remark, total_amount, customer_signature, deposit_amount, deposit_date)
-       VALUES (?, CURDATE(), ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [receipt_no, job.customer_id, job.vehicle_id, job.mileage_in || 0, draft.remark || null, total_amount, draft.customer_signature || null, draft.deposit_amount ?? null, draft.deposit_date || null]
+      `INSERT INTO receipts (receipt_no, receipt_date, customer_id, vehicle_id, mileage, remark, total_amount, customer_signature, deposit_amount, deposit_date, car_sequence_no)
+       VALUES (?, CURDATE(), ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [receipt_no, job.customer_id, job.vehicle_id, job.mileage_in || 0, draft.remark || null, total_amount, draft.customer_signature || null, draft.deposit_amount ?? null, draft.deposit_date || null, car_sequence_no]
     );
     const receiptId = receiptResult.insertId;
 

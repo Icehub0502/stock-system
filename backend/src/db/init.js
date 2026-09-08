@@ -896,6 +896,45 @@ async function initDatabase() {
     ADD COLUMN quote_draft JSON DEFAULT NULL
   `).catch(ignoreIfAlreadyApplied);
 
+  // เลขคันสะสมทั้งชีวิตร้าน (car_sequence_no) — ร้านเปิดมาก่อนระบบนี้จะมีอยู่ เคยทำรถ
+  // ไปแล้วเป็นพันคันโดยไม่มีข้อมูลอยู่ในระบบเลย เจ้าของร้านกำหนดว่าบิลแรกที่อนุมัติ
+  // "วันนี้" (วันที่ไมเกรชันนี้รันจริงครั้งแรก) ต้องได้เลข 1396 พอดี ส่วนบิลเก่าทั้งหมด
+  // ที่มีอยู่แล้วในระบบ (ก่อนวันนี้) ให้นับถอยหลังจาก 1395 ลงไปเรื่อย ๆ ตามลำดับวันที่ใน
+  // บิล (เก่าสุดได้เลขน้อยสุด) — WHERE car_sequence_no IS NULL กันรันซ้ำทุกครั้งที่บูต
+  // ไม่กระทบบิลที่เคยได้เลขไปแล้ว ไปข้างหน้าเลขนี้ได้จาก generateCarSequenceNo() ตอน
+  // สร้างบิลใหม่โดยตรง (ดู quotations.routes.js/receipts.routes.js/lineWebhook.routes.js)
+  // ไม่ต้องพึ่งไมเกรชันนี้อีก — เคสนี้ครอบคลุมแค่บิลที่ค้างไม่มีเลขตอนบูตครั้งแรกเท่านั้น
+  await conn.query(`
+    ALTER TABLE receipts
+    ADD COLUMN car_sequence_no INT UNIQUE NULL DEFAULT NULL
+  `).catch(ignoreIfAlreadyApplied);
+
+  const CAR_SEQUENCE_START = 1396;
+  const [historicalReceipts] = await conn.query(
+    `SELECT id FROM receipts WHERE car_sequence_no IS NULL AND receipt_date < CURDATE()
+     ORDER BY receipt_date ASC, created_at ASC, id ASC`
+  );
+  const [todayOrLaterReceipts] = await conn.query(
+    `SELECT id FROM receipts WHERE car_sequence_no IS NULL AND receipt_date >= CURDATE()
+     ORDER BY receipt_date ASC, created_at ASC, id ASC`
+  );
+  if (historicalReceipts.length > 0 || todayOrLaterReceipts.length > 0) {
+    let nextNo = CAR_SEQUENCE_START - historicalReceipts.length;
+    for (const row of historicalReceipts) {
+      await conn.query('UPDATE receipts SET car_sequence_no = ? WHERE id = ?', [nextNo, row.id]);
+      nextNo += 1;
+    }
+
+    const [[{ maxNo }]] = await conn.query(
+      'SELECT COALESCE(MAX(car_sequence_no), ?) AS maxNo FROM receipts', [CAR_SEQUENCE_START - 1]
+    );
+    nextNo = Math.max(CAR_SEQUENCE_START, maxNo + 1);
+    for (const row of todayOrLaterReceipts) {
+      await conn.query('UPDATE receipts SET car_sequence_no = ? WHERE id = ?', [nextNo, row.id]);
+      nextNo += 1;
+    }
+  }
+
   const [userRows] = await conn.query(
     'SELECT COUNT(*) AS c FROM users'
   );
