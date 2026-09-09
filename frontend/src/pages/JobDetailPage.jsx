@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import client from '../api/client';
 import { jobStatusDef, MAIN_PATH } from '../utils/jobStatus';
@@ -57,6 +57,21 @@ export default function JobDetailPage() {
   const [catalogError, setCatalogError] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [selectedParts, setSelectedParts] = useState({});
+  // ลำดับที่แท้จริงของรายการที่เลือก — เก็บแยกจาก selectedParts เพราะคีย์บางตัวเป็น
+  // ตัวเลขล้วน (part.id จากแคตตาล็อก) ซึ่งตาม JS spec คีย์ตัวเลขจะถูกเรียงจากน้อยไป
+  // มากเองเสมอ ไม่ใช่ตามลำดับที่ใส่ (Object.keys/values ใช้อ้างลำดับไม่ได้) จึงต้องมี
+  // array นี้เป็นแหล่งความจริงของลำดับแสดงผล/บันทึก แทน — ทุกจุดที่เพิ่ม/ลบคีย์ใน
+  // selectedParts ต้อง sync ตรงนี้ด้วยเสมอ (ดู togglePart/changePartQty/
+  // removeSelected/handleAddPart และ effect สำหรับ seed ด้านล่าง)
+  const [orderedKeys, setOrderedKeys] = useState([]);
+  // ลากสลับตำแหน่งรายการด้วยการกดค้างแล้วลาก (Pointer Events รองรับทั้งเมาส์/นิ้ว
+  // ในตัวเดียว ไม่ต้องพึ่ง HTML5 drag-and-drop ที่ใช้บนจอสัมผัสไม่ได้) draggingKey
+  // คุมสไตล์ระหว่างลาก ส่วน dragInfo เป็น ref (ไม่ trigger re-render ตอน pointermove
+  // ถี่ๆ) เก็บคีย์ที่กำลังลากอยู่ + ตำแหน่งเริ่มต้น + ตัวธงว่าขยับเกิน threshold แล้ว
+  // หรือยัง (กันมือสั่น/แตะเบาๆ กลายเป็นลากโดยไม่ตั้งใจ ยังกดปุ่ม +/-/ลบในแถวได้ปกติ)
+  const [draggingKey, setDraggingKey] = useState(null);
+  const dragInfo = useRef({ key: null, startY: 0, moved: false });
+  const rowNodeRefs = useRef({});
   const [quotationMeta, setQuotationMeta] = useState(null);
   const [itemsLoading, setItemsLoading] = useState(false);
   const [showAddPart, setShowAddPart] = useState(false);
@@ -167,6 +182,7 @@ export default function JobDetailPage() {
         };
       });
       setSelectedParts(seeded);
+      setOrderedKeys(Object.keys(seeded));
       return;
     }
     setItemsLoading(true);
@@ -184,6 +200,7 @@ export default function JobDetailPage() {
           };
         });
         setSelectedParts(seeded);
+        setOrderedKeys(Object.keys(seeded));
       })
       .catch((err) => setCatalogError(err.response?.data?.error || 'โหลดรายการในใบเสนอราคาไม่สำเร็จ'))
       .finally(() => setItemsLoading(false));
@@ -256,12 +273,14 @@ export default function JobDetailPage() {
           });
           return next;
         });
+        setOrderedKeys((prev) => prev.filter((k) => selectedParts[k]?.setId !== part.id));
         return;
       }
       try {
         const res = await client.get(`/service-items/${part.id}/components`);
         const components = res.data.data || [];
         const rows = components.length > 0 ? components : [{ component_name: part.part_name, default_qty: 1 }];
+        const newKeys = rows.map((comp, idx) => `set-${part.id}-comp-${idx}`);
         setSelectedParts((prev) => {
           const next = { ...prev };
           rows.forEach((comp, idx) => {
@@ -275,14 +294,16 @@ export default function JobDetailPage() {
           });
           return next;
         });
+        setOrderedKeys((prev) => [...prev, ...newKeys]);
       } catch (err) {
         setCatalogError(err.response?.data?.error || 'โหลดรายการย่อยของชุดไม่สำเร็จ');
       }
       return;
     }
 
+    const key = String(part.id);
+    const isRemoving = Boolean(selectedParts[key]);
     setSelectedParts((prev) => {
-      const key = part.id;
       if (prev[key]) {
         const next = { ...prev };
         delete next[key];
@@ -293,20 +314,26 @@ export default function JobDetailPage() {
         [key]: { ...part, quantity: 1, unitPrice: '', enabled: true },
       };
     });
+    setOrderedKeys((prev) => (isRemoving ? prev.filter((k) => k !== key) : [...prev, key]));
   }
 
   function changePartQty(key, delta) {
-    setSelectedParts((prev) => {
-      const current = prev[key];
-      if (!current) return prev;
-      const nextQty = current.quantity + delta;
-      if (nextQty <= 0) {
+    // อ่าน current จาก selectedParts ตรงๆ (ไม่ใช่จากใน updater ของ setSelectedParts)
+    // เพราะ updater function ไม่ได้รันซิงโครนัสเสมอไป เช็ค "ลบไปแล้วหรือยัง" ในนั้น
+    // ไม่แม่นพอจะใช้ตัดสินใจอัปเดต orderedKeys ต่อได้ทันที
+    const current = selectedParts[key];
+    if (!current) return;
+    const nextQty = current.quantity + delta;
+    if (nextQty <= 0) {
+      setSelectedParts((prev) => {
         const next = { ...prev };
         delete next[key];
         return next;
-      }
-      return { ...prev, [key]: { ...current, quantity: nextQty } };
-    });
+      });
+      setOrderedKeys((prev) => prev.filter((k) => k !== key));
+    } else {
+      setSelectedParts((prev) => ({ ...prev, [key]: { ...prev[key], quantity: nextQty } }));
+    }
   }
 
   function updatePartPrice(key, value) {
@@ -319,6 +346,7 @@ export default function JobDetailPage() {
       delete next[key];
       return next;
     });
+    setOrderedKeys((prev) => prev.filter((k) => k !== key));
   }
 
   // ปิดการมองเห็น/นับราคา — ไม่ได้ลบรายการทิ้ง แค่กันไม่ให้นับรวมยอด ใช้ตอนเสนอลูกค้า
@@ -327,6 +355,58 @@ export default function JobDetailPage() {
   // "บันทึกรายการ" ก็จะไม่ถูกบันทึกไปด้วย (ดู saveQuotationItems ที่กรองเฉพาะ enabled)
   function toggleEnabled(key) {
     setSelectedParts((prev) => (prev[key] ? { ...prev, [key]: { ...prev[key], enabled: prev[key].enabled === false } } : prev));
+  }
+
+  // ลากสลับลำดับรายการที่เลือก — กดค้างแล้วลากที่ตัวแถวได้เลย (ไม่ต้องมีปุ่ม/ที่จับ
+  // แยก) ใช้ Pointer Events เพราะรองรับทั้งเมาส์และนิ้วในโค้ดชุดเดียว ต่างจาก HTML5
+  // drag-and-drop ที่ใช้บนจอสัมผัสไม่ได้เลย ยกเว้นปุ่ม/ช่องกรอกในแถว (+/-/ราคา/ลบ/
+  // ปิดการมองเห็น) ไม่ให้เริ่มลาก กันชนกับการกดปุ่มพวกนั้นตามปกติ
+  function handleRowPointerDown(e, key) {
+    if (e.button != null && e.button !== 0) return; // ซ้ายเท่านั้น (เมาส์)
+    if (e.target.closest('button, input')) return;
+    dragInfo.current = { key, startY: e.clientY, moved: false };
+  }
+
+  function handleRowPointerMove(e, key) {
+    if (dragInfo.current.key !== key) return;
+    const dy = e.clientY - dragInfo.current.startY;
+    if (!dragInfo.current.moved) {
+      if (Math.abs(dy) < 6) return; // threshold กันแตะเบาๆ กลายเป็นลากโดยไม่ตั้งใจ
+      dragInfo.current.moved = true;
+      setDraggingKey(key);
+      e.currentTarget.setPointerCapture(e.pointerId);
+    }
+    // หาแถวที่ตัวชี้อยู่เหนือ ณ ตอนนี้ จากตำแหน่งจริงของแต่ละแถวบนจอ (จุดกึ่งกลาง) —
+    // แม่นกว่าคำนวณจาก dy ตรงๆ เพราะแต่ละแถวสูงไม่เท่ากัน (มี badge เตือนสต๊อกบางแถว)
+    let overKey = null;
+    for (const k of orderedKeys) {
+      const node = rowNodeRefs.current[k];
+      if (!node) continue;
+      const rect = node.getBoundingClientRect();
+      if (e.clientY < rect.top + rect.height / 2) { overKey = k; break; }
+    }
+    if (overKey === null) overKey = orderedKeys[orderedKeys.length - 1];
+    if (overKey && overKey !== key) {
+      setOrderedKeys((prev) => {
+        const from = prev.indexOf(key);
+        const to = prev.indexOf(overKey);
+        if (from === -1 || to === -1 || from === to) return prev;
+        const next = [...prev];
+        next.splice(from, 1);
+        // ตำแหน่งเป้าหมาย to คำนวณจาก prev (ก่อนลบ) — พอลบ from ออกไปแล้วถ้า
+        // to อยู่หลัง from ตำแหน่งจริงในอาเรย์ที่เหลือจะขยับมาข้างหน้า 1 ที่
+        const adjustedTo = to > from ? to - 1 : to;
+        next.splice(adjustedTo, 0, key);
+        return next;
+      });
+    }
+  }
+
+  function handleRowPointerUp(e, key) {
+    if (dragInfo.current.key === key) {
+      dragInfo.current = { key: null, startY: 0, moved: false };
+      setDraggingKey(null);
+    }
   }
 
   const catalogCategories = useMemo(() => {
@@ -345,7 +425,9 @@ export default function JobDetailPage() {
     ? catalogParts.filter((p) => p.category === categoryFilter)
     : catalogParts;
 
-  const selectedPartsList = Object.values(selectedParts);
+  // ยึด orderedKeys เป็นแหล่งความจริงของลำดับ (ดูคอมเมนต์ตอนประกาศ state) แทน
+  // Object.values(selectedParts) ที่ไม่รับประกันลำดับเมื่อมีคีย์ตัวเลขปนอยู่
+  const selectedPartsList = orderedKeys.map((k) => selectedParts[k]).filter(Boolean);
   // เฉพาะรายการที่ "เปิด" อยู่เท่านั้นที่นับเป็นจำนวน/ยอดรวม/สิ่งที่จะบันทึกจริง —
   // รายการที่ปิดไว้ (toggleEnabled) ยังโชว์ในลิสต์เผื่อเทียบราคาต่อ แต่ไม่นับรวม
   const activePartsList = selectedPartsList.filter((p) => p.enabled !== false);
@@ -399,6 +481,7 @@ export default function JobDetailPage() {
         ...prev,
         [created.id]: { ...created, quantity: 1, unitPrice: '' },
       }));
+      setOrderedKeys((prev) => [...prev, String(created.id)]);
       setNewPart({ part_name: '', category: '' });
       setShowAddPart(false);
     } catch (err) {
@@ -819,10 +902,21 @@ export default function JobDetailPage() {
           {selectedPartsList.length > 0 && (
             <div className="jdp-selected-list">
               <div className="jdp-selected-list-title">รายการที่เลือก ({selectedPartsCount} ชิ้น)</div>
-              {Object.entries(selectedParts).map(([key, item]) => {
+              {orderedKeys.map((key) => {
+                const item = selectedParts[key];
+                if (!item) return null;
                 const isEnabled = item.enabled !== false;
+                const isDragging = draggingKey === key;
                 return (
-                  <div className={`jdp-selected-row${isEnabled ? '' : ' jdp-selected-row--disabled'}`} key={key}>
+                  <div
+                    className={`jdp-selected-row${isEnabled ? '' : ' jdp-selected-row--disabled'}${isDragging ? ' jdp-selected-row--dragging' : ''}`}
+                    key={key}
+                    ref={(node) => { rowNodeRefs.current[key] = node; }}
+                    onPointerDown={(e) => handleRowPointerDown(e, key)}
+                    onPointerMove={(e) => handleRowPointerMove(e, key)}
+                    onPointerUp={(e) => handleRowPointerUp(e, key)}
+                    onPointerCancel={(e) => handleRowPointerUp(e, key)}
+                  >
                     <span className="jdp-selected-name">{item.part_name}</span>
                     {/* กลุ่มควบคุมทั้งสี่ (ปิดการมองเห็น/จำนวน/ราคา/ลบ) รวมเป็นก้อนเดียว
                         ไม่แยกกันห่อบรรทัดใหม่ทีละปุ่ม — กันปัญหาเดิมที่จอแคบแล้วปุ่มหลุด

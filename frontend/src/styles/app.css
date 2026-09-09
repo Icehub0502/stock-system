@@ -5271,8 +5271,20 @@ body:has(.modal-backdrop) .page-fade-in {
   gap: 10px;
   padding: 10px 2px;
   border-top: 1px solid #e5e7eb;
+  cursor: grab;
+  /* กดค้าง+ลากที่ตัวแถวได้ทั้งแถว (ไม่มีที่จับแยก) — ปิดท่าทางสัมผัสของเบราว์เซอร์
+     เอง (เลื่อนหน้าจอ/ซูม) บนแถวนี้ ไม่งั้นจอสัมผัสจะแย่งท่าทางกับการลากของเราเอง
+     เลื่อนหน้าจอยังทำได้ปกติถ้าแตะนอกพื้นที่แถว */
+  touch-action: none;
+  user-select: none;
 }
 .jdp-selected-row:first-of-type { border-top: none; }
+.jdp-selected-row--dragging {
+  cursor: grabbing;
+  opacity: 0.6;
+  background: #eef2ff;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+}
 .jdp-selected-name {
   flex: 1 1 140px;
   min-width: 0;
@@ -5318,6 +5330,11 @@ body:has(.modal-backdrop) .page-fade-in {
   gap: 10px;
   flex-shrink: 0;
   flex-wrap: nowrap;
+  /* ยกเลิก touch-action:none/user-select:none ของแถวแม่ (ไว้ให้ลากทั้งแถว) เฉพาะ
+     ก้อนปุ่ม/ช่องกรอกนี้ — ปุ่ม +/-/ลบ และช่องกรอกราคายังต้องแตะ/พิมพ์ได้ตามปกติ */
+  touch-action: auto;
+  user-select: auto;
+  cursor: auto;
 }
 .jdp-selected-qty {
   display: flex;
