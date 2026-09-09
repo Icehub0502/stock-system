@@ -65,12 +65,20 @@ export default function JobDetailPage() {
   // removeSelected/handleAddPart และ effect สำหรับ seed ด้านล่าง)
   const [orderedKeys, setOrderedKeys] = useState([]);
   // ลากสลับตำแหน่งรายการด้วยการกดค้างแล้วลาก (Pointer Events รองรับทั้งเมาส์/นิ้ว
-  // ในตัวเดียว ไม่ต้องพึ่ง HTML5 drag-and-drop ที่ใช้บนจอสัมผัสไม่ได้) draggingKey
-  // คุมสไตล์ระหว่างลาก ส่วน dragInfo เป็น ref (ไม่ trigger re-render ตอน pointermove
-  // ถี่ๆ) เก็บคีย์ที่กำลังลากอยู่ + ตำแหน่งเริ่มต้น + ตัวธงว่าขยับเกิน threshold แล้ว
-  // หรือยัง (กันมือสั่น/แตะเบาๆ กลายเป็นลากโดยไม่ตั้งใจ ยังกดปุ่ม +/-/ลบในแถวได้ปกติ)
+  // ในตัวเดียว ไม่ต้องพึ่ง HTML5 drag-and-drop ที่ใช้บนจอสัมผัสไม่ได้) — ระหว่างลาก
+  // จะ "ลอย" แถวที่จับอยู่ด้วย CSS transform ตามนิ้ว/เมาส์ (ไม่แตะ orderedKeys เลย
+  // จนกว่าจะปล่อย) แถวอื่นอยู่นิ่งตามเดิม แล้วสลับ array จริงทีเดียวตอนปล่อยนิ้ว —
+  // เลือกทำแบบนี้แทนการสลับตำแหน่งจริงทุกครั้งที่ผ่านแถวถัดไป เพราะแบบเดิมพอสลับ
+  // แล้ว DOM ของแถวที่ลากขยับตำแหน่งจริงกลางอากาศ ทำให้ลากต่อได้แค่ทีละบรรทัดแล้ว
+  // ค้าง — วิธีนี้ลากยาวข้ามหลายบรรทัดในจังหวะเดียวได้ตามที่ต้องการ
+  // draggingKey/dragOffsetY/dragTargetIndex เป็น state (ต้อง re-render ให้เห็นภาพ
+  // ลอย+เส้นบอกตำแหน่งจะวาง) ส่วน dragInfo เป็น ref เก็บค่าที่ไม่ต้อง re-render ทุก
+  // ครั้ง (ตำแหน่งเริ่มลาก + สแนปช็อตตำแหน่งแถวอื่น ๆ ตอนเริ่มลาก + ตัวธง moved กัน
+  // แตะเบา ๆ กลายเป็นลากโดยไม่ตั้งใจ)
   const [draggingKey, setDraggingKey] = useState(null);
-  const dragInfo = useRef({ key: null, startY: 0, moved: false });
+  const [dragOffsetY, setDragOffsetY] = useState(0);
+  const [dragTargetIndex, setDragTargetIndex] = useState(null);
+  const dragInfo = useRef({ key: null, startY: 0, moved: false, staticRects: [] });
   const rowNodeRefs = useRef({});
   const [quotationMeta, setQuotationMeta] = useState(null);
   const [itemsLoading, setItemsLoading] = useState(false);
@@ -364,7 +372,7 @@ export default function JobDetailPage() {
   function handleRowPointerDown(e, key) {
     if (e.button != null && e.button !== 0) return; // ซ้ายเท่านั้น (เมาส์)
     if (e.target.closest('button, input')) return;
-    dragInfo.current = { key, startY: e.clientY, moved: false };
+    dragInfo.current = { key, startY: e.clientY, moved: false, staticRects: [] };
   }
 
   function handleRowPointerMove(e, key) {
@@ -373,40 +381,46 @@ export default function JobDetailPage() {
     if (!dragInfo.current.moved) {
       if (Math.abs(dy) < 6) return; // threshold กันแตะเบาๆ กลายเป็นลากโดยไม่ตั้งใจ
       dragInfo.current.moved = true;
+      // สแนปช็อตตำแหน่งของทุกแถว ณ ตอนเริ่มลากไว้ครั้งเดียว — ตลอดการลากแถวอื่นๆ
+      // ไม่ขยับ DOM จริงเลย (แค่แถวที่จับอยู่ลอยด้วย transform) จึงใช้ค่าที่จำไว้
+      // ตอนเริ่มคำนวณตำแหน่งเป้าหมายได้ตลอด ไม่ต้องวัด DOM ซ้ำทุกครั้งที่ขยับ
+      dragInfo.current.staticRects = orderedKeys
+        .filter((k) => k !== key)
+        .map((k) => {
+          const node = rowNodeRefs.current[k];
+          const rect = node?.getBoundingClientRect();
+          return rect ? { key: k, center: rect.top + rect.height / 2 } : null;
+        })
+        .filter(Boolean);
       setDraggingKey(key);
       e.currentTarget.setPointerCapture(e.pointerId);
     }
-    // หาแถวที่ตัวชี้อยู่เหนือ ณ ตอนนี้ จากตำแหน่งจริงของแต่ละแถวบนจอ (จุดกึ่งกลาง) —
-    // แม่นกว่าคำนวณจาก dy ตรงๆ เพราะแต่ละแถวสูงไม่เท่ากัน (มี badge เตือนสต๊อกบางแถว)
-    let overKey = null;
-    for (const k of orderedKeys) {
-      const node = rowNodeRefs.current[k];
-      if (!node) continue;
-      const rect = node.getBoundingClientRect();
-      if (e.clientY < rect.top + rect.height / 2) { overKey = k; break; }
+    setDragOffsetY(dy);
+    // นับว่ามีแถวอื่นกี่แถวที่จุดกึ่งกลาง (ตำแหน่งเดิมตอนเริ่มลาก) อยู่เหนือตัวชี้ ณ
+    // ตอนนี้ — จำนวนนั้นคือตำแหน่งที่จะแทรกแถวนี้ลงไปพอดี (นับจากบนสุด)
+    const pointerY = e.clientY;
+    let index = 0;
+    for (const r of dragInfo.current.staticRects) {
+      if (pointerY > r.center) index += 1;
     }
-    if (overKey === null) overKey = orderedKeys[orderedKeys.length - 1];
-    if (overKey && overKey !== key) {
-      setOrderedKeys((prev) => {
-        const from = prev.indexOf(key);
-        const to = prev.indexOf(overKey);
-        if (from === -1 || to === -1 || from === to) return prev;
-        const next = [...prev];
-        next.splice(from, 1);
-        // ตำแหน่งเป้าหมาย to คำนวณจาก prev (ก่อนลบ) — พอลบ from ออกไปแล้วถ้า
-        // to อยู่หลัง from ตำแหน่งจริงในอาเรย์ที่เหลือจะขยับมาข้างหน้า 1 ที่
-        const adjustedTo = to > from ? to - 1 : to;
-        next.splice(adjustedTo, 0, key);
-        return next;
-      });
-    }
+    setDragTargetIndex(index);
   }
 
   function handleRowPointerUp(e, key) {
-    if (dragInfo.current.key === key) {
-      dragInfo.current = { key: null, startY: 0, moved: false };
-      setDraggingKey(null);
+    if (dragInfo.current.key === key && dragInfo.current.moved && dragTargetIndex !== null) {
+      setOrderedKeys((prev) => {
+        const from = prev.indexOf(key);
+        if (from === -1) return prev;
+        const next = [...prev];
+        next.splice(from, 1);
+        next.splice(dragTargetIndex, 0, key);
+        return next;
+      });
     }
+    dragInfo.current = { key: null, startY: 0, moved: false, staticRects: [] };
+    setDraggingKey(null);
+    setDragOffsetY(0);
+    setDragTargetIndex(null);
   }
 
   const catalogCategories = useMemo(() => {
@@ -902,21 +916,33 @@ export default function JobDetailPage() {
           {selectedPartsList.length > 0 && (
             <div className="jdp-selected-list">
               <div className="jdp-selected-list-title">รายการที่เลือก ({selectedPartsCount} ชิ้น)</div>
-              {orderedKeys.map((key) => {
-                const item = selectedParts[key];
-                if (!item) return null;
-                const isEnabled = item.enabled !== false;
-                const isDragging = draggingKey === key;
-                return (
-                  <div
-                    className={`jdp-selected-row${isEnabled ? '' : ' jdp-selected-row--disabled'}${isDragging ? ' jdp-selected-row--dragging' : ''}`}
-                    key={key}
-                    ref={(node) => { rowNodeRefs.current[key] = node; }}
-                    onPointerDown={(e) => handleRowPointerDown(e, key)}
-                    onPointerMove={(e) => handleRowPointerMove(e, key)}
-                    onPointerUp={(e) => handleRowPointerUp(e, key)}
-                    onPointerCancel={(e) => handleRowPointerUp(e, key)}
-                  >
+              {(() => {
+                // เส้นบอกตำแหน่งที่จะวาง — dragTargetIndex นับใน "แถวอื่นๆ ไม่รวมตัวที่
+                // กำลังลาก" (ดูคอมเมนต์ handleRowPointerMove) แปลงกลับเป็น "วางก่อนคีย์
+                // ไหน" ตรงนี้ (null = วางท้ายสุด) เพื่อรู้ว่าจะแทรกเส้นก่อนแถวไหนตอนวาด
+                const otherKeys = draggingKey ? orderedKeys.filter((k) => k !== draggingKey) : [];
+                const insertBeforeKey = draggingKey && dragTargetIndex !== null
+                  ? (otherKeys[dragTargetIndex] ?? null)
+                  : undefined; // undefined = ไม่ได้ลากอยู่ ไม่ต้องวาดเส้นเลย
+                return orderedKeys.map((key) => {
+                  const item = selectedParts[key];
+                  if (!item) return null;
+                  const isEnabled = item.enabled !== false;
+                  const isDragging = draggingKey === key;
+                  const showIndicatorBefore = insertBeforeKey !== undefined && insertBeforeKey === key;
+                  const showIndicatorAfter = insertBeforeKey === null && key === otherKeys[otherKeys.length - 1];
+                  return (
+                    <React.Fragment key={key}>
+                      {showIndicatorBefore && <div className="jdp-drag-indicator" />}
+                      <div
+                        className={`jdp-selected-row${isEnabled ? '' : ' jdp-selected-row--disabled'}${isDragging ? ' jdp-selected-row--dragging' : ''}`}
+                        ref={(node) => { rowNodeRefs.current[key] = node; }}
+                        style={isDragging ? { transform: `translateY(${dragOffsetY}px)` } : undefined}
+                        onPointerDown={(e) => handleRowPointerDown(e, key)}
+                        onPointerMove={(e) => handleRowPointerMove(e, key)}
+                        onPointerUp={(e) => handleRowPointerUp(e, key)}
+                        onPointerCancel={(e) => handleRowPointerUp(e, key)}
+                      >
                     <span className="jdp-selected-name">{item.part_name}</span>
                     {/* กลุ่มควบคุมทั้งสี่ (ปิดการมองเห็น/จำนวน/ราคา/ลบ) รวมเป็นก้อนเดียว
                         ไม่แยกกันห่อบรรทัดใหม่ทีละปุ่ม — กันปัญหาเดิมที่จอแคบแล้วปุ่มหลุด
@@ -951,9 +977,12 @@ export default function JobDetailPage() {
                         ✕
                       </button>
                     </div>
-                  </div>
-                );
-              })}
+                      </div>
+                      {showIndicatorAfter && <div className="jdp-drag-indicator" />}
+                    </React.Fragment>
+                  );
+                });
+              })()}
               <div className="jdp-selected-total">รวม {selectedPartsTotal.toLocaleString('th-TH')} บาท</div>
             </div>
           )}

@@ -5281,9 +5281,20 @@ body:has(.modal-backdrop) .page-fade-in {
 .jdp-selected-row:first-of-type { border-top: none; }
 .jdp-selected-row--dragging {
   cursor: grabbing;
-  opacity: 0.6;
+  opacity: 0.9;
   background: #eef2ff;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18);
+  /* ลอยอยู่เหนือแถวอื่น ๆ ระหว่างลาก (translateY ทำผ่าน inline style ใน JSX ตาม
+     ตำแหน่งนิ้ว/เมาส์สด ๆ — ไม่กระทบ layout เดิม แถวอื่นไม่ขยับตาม) */
+  position: relative;
+  z-index: 5;
+}
+/* เส้นบอกตำแหน่งที่จะวางตอนลาก (คำนวณจาก dragTargetIndex ใน JobDetailPage.jsx) */
+.jdp-drag-indicator {
+  height: 3px;
+  margin: 2px 0;
+  border-radius: 2px;
+  background: #4f46e5;
 }
 .jdp-selected-name {
   flex: 1 1 140px;
