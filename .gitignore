@@ -22,3 +22,13 @@ backend/backups/
 backend/data/*.db
 backend/data/*.db-shm
 backend/data/*.db-wal
+
+# Local scratch/test image folders and a recruitment poster — not app assets,
+# kept on disk but never tracked
+frontend/src/image/test1/
+frontend/src/image/test2/
+frontend/src/image/รับสมัครงาน.png
+
+# รูปที่ผู้ใช้อัปโหลดจริงตอนรันไทม์ (job_photos, quote_part_prices.image_data) —
+# เก็บเป็นไฟล์บนดิสก์เซิร์ฟเวอร์เท่านั้น ไม่ใช่ asset ของโค้ด ไม่ควรอยู่ใน git เลย
+backend/uploads/

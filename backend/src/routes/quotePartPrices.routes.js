@@ -1,6 +1,7 @@
 const express = require('express');
 const pool = require('../db/pool');
 const { authenticate, requireRole } = require('../middleware/auth');
+const { saveDataUrlToFile, deleteUploadedFile } = require('../utils/photoStorage');
 
 const router = express.Router();
 router.use(authenticate);
@@ -90,10 +91,11 @@ router.post('/', async (req, res) => {
     return res.status(400).json({ error: 'กรุณากรอกยี่ห้อ รุ่นรถ และชื่ออะไหล่ให้ครบถ้วน' });
   }
   try {
+    const imageUrl = saveDataUrlToFile(image_data, 'quote-parts');
     const [result] = await pool.execute(
       `INSERT INTO quote_part_prices (brand, model, part_name, description, price, image_data, category)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [brand.trim(), model.trim(), part_name.trim(), description?.trim() || null, Number(price) || 0, image_data || null, category?.trim() || null]
+      [brand.trim(), model.trim(), part_name.trim(), description?.trim() || null, Number(price) || 0, imageUrl || null, category?.trim() || null]
     );
     res.status(201).json({ success: true, data: { id: result.insertId } });
   } catch (err) {
@@ -109,6 +111,8 @@ router.put('/:id', async (req, res) => {
     return res.status(400).json({ error: 'กรุณากรอกยี่ห้อ รุ่นรถ และชื่ออะไหล่ให้ครบถ้วน' });
   }
   try {
+    const [[existing]] = await pool.query('SELECT image_data FROM quote_part_prices WHERE id = ?', [req.params.id]);
+    const imageUrl = saveDataUrlToFile(image_data, 'quote-parts');
     // แก้ไข/บันทึกผ่านหน้านี้ = ออฟฟิศตั้งใจยืนยันราคาแล้ว (ไม่ว่าจะเป็นแถวที่พิมพ์
     // เองแต่แรก หรือแถวที่ import_quote_parts_for_all_models.js สร้างราคา 0 ให้ไว้
     // ก่อน) เคลียร์ needs_price ทิ้งเสมอ กันค้างสถานะ "ยังไม่ตั้งราคา" ทั้งที่แก้แล้ว
@@ -122,13 +126,17 @@ router.put('/:id', async (req, res) => {
         part_name.trim(),
         description?.trim() || null,
         Number(price) || 0,
-        image_data || null,
+        imageUrl || null,
         is_active === undefined ? 1 : (is_active ? 1 : 0),
         req.params.id,
       ]
     );
     if (result.affectedRows === 0) {
       return res.status(404).json({ error: 'ไม่พบรายการ' });
+    }
+    // เปลี่ยนรูปใหม่ (ไม่ใช่แค่ path เดิม/ลบรูปทิ้ง) — ลบไฟล์รูปเก่าทิ้ง กันไฟล์ค้าง
+    if (existing?.image_data && existing.image_data !== imageUrl) {
+      deleteUploadedFile(existing.image_data);
     }
     res.json({ success: true, message: 'แก้ไขรายการสำเร็จ' });
   } catch (err) {
@@ -140,10 +148,12 @@ router.put('/:id', async (req, res) => {
 // DELETE /:id
 router.delete('/:id', async (req, res) => {
   try {
+    const [[existing]] = await pool.query('SELECT image_data FROM quote_part_prices WHERE id = ?', [req.params.id]);
     const [result] = await pool.execute('DELETE FROM quote_part_prices WHERE id = ?', [req.params.id]);
     if (result.affectedRows === 0) {
       return res.status(404).json({ error: 'ไม่พบรายการ' });
     }
+    deleteUploadedFile(existing?.image_data);
     res.json({ success: true, message: 'ลบรายการสำเร็จ' });
   } catch (err) {
     console.error('Error deleting quote part price:', err);

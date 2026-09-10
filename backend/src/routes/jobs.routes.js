@@ -10,6 +10,7 @@ const {
 const { ALIGN_BAY, isValidBay } = require('../utils/workBays');
 const { generateJobNo } = require('../utils/generateJobNo');
 const { emitJobEvent, emitQuotationEvent, emitReceiptEvent } = require('../realtime');
+const { saveDataUrlToFile, deleteUploadedFile } = require('../utils/photoStorage');
 // ใช้ตรรกะออกเลขที่/กรองรายการชุดเดียวกับ quotations.routes.js — กันไม่ให้เลขที่
 // เอกสาร/กติกากรองรายการแยกกันเป็น 2 ชุดที่อาจเพี้ยนไม่ตรงกันในอนาคต (ดู
 // promoteDraftToQuotation ด้านล่าง ที่ใช้ตอน "โปรโมท" quote_draft เป็นใบเสนอราคาจริง)
@@ -361,9 +362,11 @@ router.post('/', async (req, res) => {
         const dataUrl = typeof photo === 'string' ? photo : photo?.full;
         const thumbDataUrl = typeof photo === 'string' ? null : photo?.thumb;
         if (typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image/')) continue;
+        const photoUrl = saveDataUrlToFile(dataUrl, 'job-photos');
+        const thumbUrl = typeof thumbDataUrl === 'string' ? saveDataUrlToFile(thumbDataUrl, 'job-photos') : null;
         await conn.execute(
           'INSERT INTO job_photos (job_id, photo_data, photo_thumb_data, sort_order) VALUES (?,?,?,?)',
-          [result.insertId, dataUrl, typeof thumbDataUrl === 'string' ? thumbDataUrl : null, i]
+          [result.insertId, photoUrl, thumbUrl, i]
         );
       }
     }
@@ -571,10 +574,22 @@ router.delete('/:id', async (req, res) => {
       return res.status(409).json({ error: 'งานนี้มีใบเสนอราคาที่อนุมัติและมีใบเสร็จผูกอยู่แล้ว กรุณาจัดการที่ใบเสร็จก่อน' });
     }
 
+    // ดึง path ไฟล์รูปของงานนี้ไว้ก่อนลบ — job_photos ลบตามอัตโนมัติด้วย ON DELETE
+    // CASCADE (แค่แถวใน DB) แต่ไฟล์จริงบนดิสก์ไม่มีใครลบให้ ต้องเก็บ path ไว้ลบเอง
+    // หลัง commit สำเร็จ
+    const [photoRows] = await conn.query(
+      'SELECT photo_data, photo_thumb_data FROM job_photos WHERE job_id = ?',
+      [req.params.id]
+    );
+
     const [result] = await conn.execute('DELETE FROM jobs WHERE id = ?', [req.params.id]);
     if (!result.affectedRows) { await conn.rollback(); return res.status(404).json({ error: 'ไม่พบงานนี้' }); }
 
     await conn.commit();
+    for (const row of photoRows) {
+      deleteUploadedFile(row.photo_data);
+      deleteUploadedFile(row.photo_thumb_data);
+    }
     emitJobEvent('job:deleted', { jobId: Number(req.params.id), jobDate: job.job_date, actorId: req.user.id });
     res.json({ success: true, message: 'ลบงานสำเร็จ' });
   } catch (err) {
@@ -615,9 +630,11 @@ router.post('/:id/photos', async (req, res) => {
       const dataUrl = typeof photo === 'string' ? photo : photo?.full;
       const thumbDataUrl = typeof photo === 'string' ? null : photo?.thumb;
       if (typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image/')) continue;
+      const photoUrl = saveDataUrlToFile(dataUrl, 'job-photos');
+      const thumbUrl = typeof thumbDataUrl === 'string' ? saveDataUrlToFile(thumbDataUrl, 'job-photos') : null;
       const [result] = await conn.execute(
         "INSERT INTO job_photos (job_id, photo_data, photo_thumb_data, sort_order, photo_type) VALUES (?,?,?,?,'intake')",
-        [job.id, dataUrl, typeof thumbDataUrl === 'string' ? thumbDataUrl : null, nextOrder]
+        [job.id, photoUrl, thumbUrl, nextOrder]
       );
       insertedIds.push(result.insertId);
       nextOrder += 1;
@@ -644,6 +661,10 @@ router.delete('/:id/photos/:photoId', async (req, res) => {
     const [[job]] = await conn.query('SELECT id, job_date, status FROM jobs WHERE id = ? FOR UPDATE', [req.params.id]);
     if (!job) { await conn.rollback(); return res.status(404).json({ error: 'ไม่พบงานนี้' }); }
 
+    const [[photoRow]] = await conn.query(
+      "SELECT photo_data, photo_thumb_data FROM job_photos WHERE id = ? AND job_id = ? AND photo_type = 'intake'",
+      [req.params.photoId, job.id]
+    );
     const [result] = await conn.execute(
       "DELETE FROM job_photos WHERE id = ? AND job_id = ? AND photo_type = 'intake'",
       [req.params.photoId, job.id]
@@ -651,6 +672,9 @@ router.delete('/:id/photos/:photoId', async (req, res) => {
     if (!result.affectedRows) { await conn.rollback(); return res.status(404).json({ error: 'ไม่พบรูปนี้' }); }
 
     await conn.commit();
+    // ลบไฟล์จริงบนดิสก์หลัง commit สำเร็จ — best-effort เท่านั้น (ดู deleteUploadedFile)
+    deleteUploadedFile(photoRow?.photo_data);
+    deleteUploadedFile(photoRow?.photo_thumb_data);
     emitJobEvent('job:updated', { jobId: job.id, jobDate: job.job_date, status: job.status, actorId: req.user.id });
     res.json({ success: true });
   } catch (err) {
@@ -745,9 +769,10 @@ router.post('/:id/part-photos', async (req, res) => {
     const insertedIds = [];
     for (const dataUrl of photos) {
       if (typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image/')) continue;
+      const photoUrl = saveDataUrlToFile(dataUrl, 'job-photos');
       const [result] = await conn.execute(
         "INSERT INTO job_photos (job_id, photo_data, sort_order, photo_type) VALUES (?,?,?,'part')",
-        [job.id, dataUrl, nextOrder]
+        [job.id, photoUrl, nextOrder]
       );
       insertedIds.push(result.insertId);
       nextOrder += 1;
@@ -775,6 +800,10 @@ router.delete('/:id/part-photos/:photoId', async (req, res) => {
     if (!job) { await conn.rollback(); return res.status(404).json({ error: 'ไม่พบงานนี้' }); }
     if (!assertPartPhotosAllowed(job, res)) { await conn.rollback(); return; }
 
+    const [[photoRow]] = await conn.query(
+      "SELECT photo_data FROM job_photos WHERE id = ? AND job_id = ? AND photo_type = 'part'",
+      [req.params.photoId, job.id]
+    );
     const [result] = await conn.execute(
       "DELETE FROM job_photos WHERE id = ? AND job_id = ? AND photo_type = 'part'",
       [req.params.photoId, job.id]
@@ -782,6 +811,7 @@ router.delete('/:id/part-photos/:photoId', async (req, res) => {
     if (!result.affectedRows) { await conn.rollback(); return res.status(404).json({ error: 'ไม่พบรูปนี้' }); }
 
     await conn.commit();
+    deleteUploadedFile(photoRow?.photo_data);
     emitJobEvent('job:updated', { jobId: job.id, jobDate: job.job_date, status: job.status, actorId: req.user.id });
     res.json({ success: true });
   } catch (err) {

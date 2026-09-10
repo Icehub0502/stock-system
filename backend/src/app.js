@@ -47,6 +47,8 @@ const trackRoutes = require('./routes/track.routes');
 const settingsRoutes = require('./routes/settings.routes');
 const claimsRoutes = require('./routes/claims.routes');
 
+const { UPLOADS_DIR } = require('./utils/photoStorage');
+
 const PUBLIC_DIR = path.join(__dirname, '..', 'public');
 const FRONTEND_DIST = path.join(__dirname, '..', '..', 'frontend', 'dist');
 
@@ -173,6 +175,11 @@ function createApp() {
   });
   app.use(express.static(PUBLIC_DIR));
   app.use('/landing-assets', express.static(PUBLIC_DIR));
+  // รูปรถ/อะไหล่ที่ผู้ใช้อัปโหลดจริง (job_photos, quote_part_prices.image_data ที่
+  // ออฟฟิศอัปโหลดเอง) เก็บเป็นไฟล์ตรงนี้ตอนรันไทม์ (ดู utils/photoStorage.js) คนละ
+  // ที่กับ frontend/public/part-images (รูปที่ import ตอน build เท่านั้น)
+  fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+  app.use('/uploads', express.static(UPLOADS_DIR, { maxAge: '30d' }));
 
   // เสิร์ฟไฟล์ frontend ที่ build แล้ว (รัน `npm run build` ใน /frontend ก่อน)
   // ไฟล์ใน /assets มีชื่อ hash ต่อท้ายจาก Vite (เปลี่ยนทุกครั้งที่ build ใหม่) จึง
