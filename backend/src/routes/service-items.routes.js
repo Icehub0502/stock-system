@@ -18,7 +18,14 @@ router.get('/', requireRole('office'), async (req, res) => {
       const term = `%${search}%`;
       params.push(term, term);
     }
-    query += ' ORDER BY si.category ASC, si.product_name ASC LIMIT 200';
+    query += ' ORDER BY si.category ASC, si.product_name ASC';
+    // จำกัดแค่ตอนค้นหากว้าง ๆ (กันโหลดหนักถ้า search คำสั้นแล้วแมตช์เยอะมาก) — ตอน
+    // โหลดทั้งแคตตาล็อกแบบไม่ค้นหา (หน้าสร้างใบเสนอราคาต้องเห็นครบทุกหมวด) ห้าม
+    // ครอบ LIMIT เด็ดขาด เพราะเคยทำให้รายการท้าย ๆ ตามลำดับตัวอักษร (เช่น "โช๊คหน้า")
+    // หายไปจากตัวเลือกเงียบ ๆ พอแคตตาล็อกโตเกิน 200 แถว
+    if (search) {
+      query += ' LIMIT 200';
+    }
     const [rows] = await pool.execute(query, params);
     res.json({ success: true, data: rows });
   } catch (err) {
