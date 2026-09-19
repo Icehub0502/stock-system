@@ -800,6 +800,51 @@ router.patch('/:id/close', async (req, res) => {
   }
 });
 
+// PATCH - ยกเลิกสถานะ "ปิดบิล" — เผื่อกดปิดบิลผิด เช่น ลูกค้าแค่มัดจำไว้ยังจ่ายไม่
+// ครบ แต่กดปิดบิล (ชำระแล้ว) พลาดไป ไม่แตะยอดในใบเสร็จ (receipts.total_amount) เลย
+// เพราะยอดที่ตั้งไว้ตอนปิดบิลอาจถูกต้องอยู่แล้ว มีแค่สถานะ "จ่ายครบหรือยัง" ที่ผิด —
+// ถ้ายอดในใบเสร็จผิดด้วย ออฟฟิศแก้เองแยกต่างหากที่หน้าใบเสร็จได้
+router.patch('/:id/reopen', async (req, res) => {
+  const { id } = req.params;
+  let conn;
+  try {
+    conn = await pool.getConnection();
+    await conn.beginTransaction();
+
+    const [[quotation]] = await conn.query(
+      'SELECT id, status, closed_at, converted_receipt_id FROM quotations WHERE id = ? FOR UPDATE',
+      [id]
+    );
+    if (!quotation) {
+      await conn.rollback();
+      return res.status(404).json({ error: 'ไม่พบใบเสนอราคา' });
+    }
+    if (!quotation.closed_at) {
+      await conn.rollback();
+      return res.status(400).json({ error: 'ใบเสนอราคานี้ยังไม่ได้ปิดบิล' });
+    }
+
+    await conn.execute('UPDATE quotations SET closed_at = NULL WHERE id = ?', [id]);
+
+    await conn.commit();
+
+    emitQuotationEvent('quotation:updated', { quotationId: Number(id), status: quotation.status, actorId: req.user.id });
+    if (quotation.converted_receipt_id) {
+      emitReceiptEvent('receipt:updated', { receiptId: quotation.converted_receipt_id, actorId: req.user.id });
+    }
+
+    res.json({ success: true, message: 'ยกเลิกสถานะชำระแล้วสำเร็จ' });
+  } catch (err) {
+    if (conn) {
+      try { await conn.rollback(); } catch (rollbackErr) { console.error('Rollback error:', rollbackErr); }
+    }
+    console.error('Error reopening quotation:', err);
+    res.status(500).json({ error: 'ยกเลิกสถานะชำระแล้วไม่สำเร็จ' });
+  } finally {
+    if (conn) conn.release();
+  }
+});
+
 // PATCH - Mark a quotation as "customer will come back later" with a date
 // deposit_amount/deposit_date เป็น optional — เดิม endpoint นี้ตั้งได้แค่วันนัด
 // อย่างเดียว พนักงานต้องไปกดแก้ไขใบเสนอราคาแยกอีกทีเพื่อใส่มัดจำ (ถ้าลืมทำ มัดจำ

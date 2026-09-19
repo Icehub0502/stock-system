@@ -240,6 +240,19 @@ export default function QuotationListPage() {
     }
   };
 
+  const handleReopen = async (q) => {
+    if (!window.confirm(`ยกเลิกสถานะ "ชำระแล้ว" ของ ${q.quotation_no} ใช่ไหม? (เผื่อกดปิดบิลผิด เช่น ลูกค้าแค่มัดจำไว้)`)) return;
+    setActioningId(q.id);
+    try {
+      await client.patch(`/quotations/${q.id}/reopen`);
+      fetchQuotations();
+    } catch (err) {
+      alert(err.response?.data?.error || "ยกเลิกสถานะไม่สำเร็จ");
+    } finally {
+      setActioningId(null);
+    }
+  };
+
   const handleCloseConfirm = async ({ payment_method, paid_amount }) => {
     if (!closingQuotation) return;
     setActioningId(closingQuotation.id);
@@ -458,6 +471,15 @@ export default function QuotationListPage() {
                             disabled={actioningId === q.id}
                           >
                             รับชำระ/ปิดบิล
+                          </button>
+                        )}
+                        {q.status === 'approved' && q.closed_at && (
+                          <button
+                            className="btn-icon-small btn-danger"
+                            onClick={() => handleReopen(q)}
+                            disabled={actioningId === q.id}
+                          >
+                            ยกเลิกชำระแล้ว
                           </button>
                         )}
                       </td>
