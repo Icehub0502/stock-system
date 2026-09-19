@@ -10,14 +10,19 @@ export default function ReceiptListPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
+  const [dateFilter, setDateFilter] = useState("");
   const [showFormModal, setShowFormModal] = useState(false);
   const [editingReceiptId, setEditingReceiptId] = useState(null);
   const [selectedReceiptForPrint, setSelectedReceiptForPrint] = useState(null);
 
-  const fetchReceipts = async ({ silent } = {}) => {
+  // ค้นหา/กรองวันที่ทำที่ backend ตรงๆ (ดู GET /receipts) แทนกรองแค่ 200 แถวล่าสุด
+  // ที่โหลดมาไว้ในเครื่อง — ไม่งั้นพิมพ์หาชื่ออะไหล่/บิลเก่าที่หลุดจาก 200 แถวแรกจะไม่
+  // เจอเงียบๆ โดยไม่มี error บอกเลย (ค้นหาชื่ออะไหล่ต้อง join receipt_items ที่ backend
+  // ด้วย ทำฝั่งนี้ไม่ได้เพราะ list ตรงนี้ไม่มีรายการอะไหล่ติดมา)
+  const fetchReceipts = async ({ silent, q, date } = {}) => {
     try {
       if (!silent) setLoading(true);
-      const response = await client.get('/receipts');
+      const response = await client.get('/receipts', { params: { q: q || undefined, date: date || undefined } });
       setReceipts(response.data.data || []);
     } catch (err) {
       setError(err.response?.data?.error || 'โหลดบิลไม่สำเร็จ');
@@ -26,9 +31,15 @@ export default function ReceiptListPage() {
     }
   };
 
+  // ดีเลย์ยิง API ตอนพิมพ์ค้นหา (400ms) กันยิงถี่ทุกตัวอักษร — เปลี่ยนวันที่ยิงทันที
+  // เพราะเป็นการกดเลือกครั้งเดียว ไม่ได้พิมพ์ต่อเนื่องแบบช่องค้นหา
   useEffect(() => {
-    fetchReceipts();
-  }, []);
+    const timer = setTimeout(() => {
+      fetchReceipts({ q: search, date: dateFilter });
+    }, 400);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search, dateFilter]);
 
   // Realtime: quotation-side actions (approve/close) also emit receipt:*
   // events server-side, so this page only needs the receipt channel. Guarded
@@ -43,33 +54,27 @@ export default function ReceiptListPage() {
         pendingRefreshRef.current = true;
         return;
       }
-      fetchReceipts({ silent: true });
+      fetchReceipts({ silent: true, q: search, date: dateFilter });
     }
   );
 
   useEffect(() => {
     if (!showFormModal && pendingRefreshRef.current) {
       pendingRefreshRef.current = false;
-      fetchReceipts({ silent: true });
+      fetchReceipts({ silent: true, q: search, date: dateFilter });
     }
   }, [showFormModal]);
 
-  const filtered = useMemo(() => {
-    const q = search.toLowerCase();
-    return receipts.filter((r) =>
-      r.receipt_no.toLowerCase().includes(q) ||
-      r.customer_code?.toLowerCase().includes(q) ||
-      r.customer_name?.toLowerCase().includes(q) ||
-      `${r.brand || ''} ${r.model || ''} ${r.license_plate || ''}`.toLowerCase().includes(q)
-    );
-  }, [receipts, search]);
-
+  // ค้นหา/กรองวันที่ทำที่ backend แล้ว (ดู fetchReceipts ด้านบน) receipts ที่ได้มา
+  // จึงเป็นผลลัพธ์ที่กรองแล้วเสมอ ไม่ต้องกรองซ้ำฝั่งนี้อีก — ถ้ากรองซ้ำด้วยเงื่อนไข
+  // เดิม (ที่ไม่รู้จักการค้นหาชื่ออะไหล่) จะเผลอตัดบิลที่แมตช์จากชื่ออะไหล่อย่างเดียว
+  // ทิ้งไปเงียบๆ
   // จัดเป็นแฟ้ม ปี → เดือน → วัน (ใหม่สุดอยู่บนสุด) เหมือนหน้าสรุปยอด — การย้ายบิล
   // ไปวันอื่น (จากหน้าสรุปยอด "ย้ายไปวันถัดไป"/"ย้ายไปวันก่อนหน้า") ยังคงย้ายที่
   // แสดงผลตรงนี้ตามจริง เพราะจัดกลุ่มจาก receipt_date ที่ backend ส่งมาเสมอ
   const archive = useMemo(
-    () => buildArchiveGroups(filtered, (r) => r.receipt_date),
-    [filtered]
+    () => buildArchiveGroups(receipts, (r) => r.receipt_date),
+    [receipts]
   );
 
   const [expandedYears, setExpandedYears] = useState(null);
@@ -130,10 +135,22 @@ export default function ReceiptListPage() {
           <input
             type="text"
             className="search-input"
-            placeholder="ค้นหาเลขที่บิล, ลูกค้า, หรือทะเบียนรถ..."
+            placeholder="ค้นหาเลขที่บิล, ลูกค้า, ทะเบียนรถ, หรือชื่ออะไหล่..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
+          <input
+            type="date"
+            className="search-input"
+            title="กรองเฉพาะบิลของวันที่เลือก"
+            value={dateFilter}
+            onChange={(e) => setDateFilter(e.target.value)}
+          />
+          {dateFilter && (
+            <button type="button" className="btn btn-secondary" onClick={() => setDateFilter("")}>
+              ล้างวันที่
+            </button>
+          )}
           <button className="btn btn-primary btn-fab-mobile" onClick={() => setShowFormModal(true)}>
             + สร้างบิลใหม่
           </button>
@@ -144,7 +161,7 @@ export default function ReceiptListPage() {
 
       {loading ? (
         <div className="loading">กำลังโหลด...</div>
-      ) : filtered.length === 0 ? (
+      ) : receipts.length === 0 ? (
         <div className="empty-message">ไม่พบบิล</div>
       ) : (
         <div className="quotation-table-wrap">

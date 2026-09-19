@@ -135,8 +135,40 @@ router.get('/service-items', async (req, res) => {
   }
 });
 
+// q: ค้นหาเลขที่บิล/ลูกค้า/รถ ตามเดิม บวกชื่ออะไหล่ในบิล (join receipt_items) —
+// date: กรองเฉพาะบิลของวันนั้น (receipt_date ตรงเป๊ะ) ทั้งสองพารามิเตอร์เป็น
+// query string เดิมจากหน้าเว็บ (ดู ReceiptListPage.jsx) ไม่ใส่มาก็ได้ตามปกติ
+// LIMIT 200 เดิมใช้เฉพาะตอนไม่มีตัวกรองเลย (มุมมองเริ่มต้น) — พอมีการค้นหาจริง
+// ไม่ควรมีเพดานเลย เพราะบิลเก่าที่เกิน 200 แถวล่าสุดต้องหาเจอด้วยเหมือนกัน (บั๊กเดิม
+// ที่ทำให้ค้นหาไม่เจอบิลเก่าเงียบๆ โดยไม่มี error อะไรเลย)
 router.get('/', async (req, res) => {
   try {
+    const { q, date } = req.query;
+    const where = [];
+    const params = [];
+
+    if (date) {
+      where.push('r.receipt_date = ?');
+      params.push(date);
+    }
+    if (q && q.trim()) {
+      const like = `%${q.trim()}%`;
+      where.push(`(
+        r.receipt_no LIKE ? OR
+        c.customer_name LIKE ? OR
+        c.customer_code LIKE ? OR
+        v.brand LIKE ? OR
+        v.model LIKE ? OR
+        v.license_plate LIKE ? OR
+        EXISTS (
+          SELECT 1 FROM receipt_items ri
+          WHERE ri.receipt_id = r.id AND ri.product_name_snapshot LIKE ?
+        )
+      )`);
+      params.push(like, like, like, like, like, like, like);
+    }
+
+    const hasFilter = where.length > 0;
     const [rows] = await pool.execute(
       // ใบเสร็จที่เกิดจากปุ่ม "อนุมัติ" บนใบเสนอราคาจะถูกสร้างทันทีเพื่อพิมพ์เอกสาร
       // ให้ลูกค้า แต่ไม่ได้แปลว่าจ่ายเงินแล้ว — ต้องเช็ค quotations.closed_at (ตั้งค่า
@@ -151,8 +183,10 @@ router.get('/', async (req, res) => {
        JOIN customers c ON r.customer_id = c.id
        LEFT JOIN vehicles v ON r.vehicle_id = v.id
        LEFT JOIN quotations q ON q.converted_receipt_id = r.id
+       ${where.length > 0 ? `WHERE ${where.join(' AND ')}` : ''}
        ORDER BY r.receipt_date DESC, r.created_at DESC
-       LIMIT 200`
+       ${hasFilter ? '' : 'LIMIT 200'}`,
+      params
     );
     res.json({ success: true, data: rows });
   } catch (err) {
