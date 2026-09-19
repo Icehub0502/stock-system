@@ -473,7 +473,7 @@ export default function QuotationListPage() {
                             รับชำระ/ปิดบิล
                           </button>
                         )}
-                        {q.status === 'approved' && q.closed_at && (
+                        {q.closed_at && (
                           <button
                             className="btn-icon-small btn-danger"
                             onClick={() => handleReopen(q)}
