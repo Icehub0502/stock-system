@@ -106,7 +106,7 @@ export default function JobBoardPage() {
       } else {
         await client.patch(`/jobs/${job.id}/status`, { status });
       }
-      await load();
+      await load({ silent: true });
     } catch (err) {
       setError(err.response?.data?.error || 'เปลี่ยนสถานะไม่สำเร็จ');
     } finally {
@@ -132,7 +132,7 @@ export default function JobBoardPage() {
         await client.post(`/jobs/${declineJob.id}/quotation/decline`, { reason, note });
       }
       setDeclineJob(null);
-      await load();
+      await load({ silent: true });
     } catch (err) {
       setError(err.response?.data?.error || 'บันทึกไม่สำเร็จ');
     } finally {
@@ -155,7 +155,7 @@ export default function JobBoardPage() {
           return [...prev, res.data.data].sort((a, b) => a.name.localeCompare(b.name, 'th'));
         });
         await client.patch(`/jobs/${job.id}`, { technician: res.data.data.name });
-        await load();
+        await load({ silent: true });
       } catch (err) {
         setError(err.response?.data?.error || 'เพิ่มชื่อช่างไม่สำเร็จ');
       } finally {
@@ -167,7 +167,7 @@ export default function JobBoardPage() {
     setError('');
     try {
       await client.patch(`/jobs/${job.id}`, { technician: value || null });
-      await load();
+      await load({ silent: true });
     } catch (err) {
       setError(err.response?.data?.error || 'มอบหมายช่างไม่สำเร็จ');
     } finally {
@@ -356,7 +356,7 @@ export default function JobBoardPage() {
       {showAddModal && (
         <AddJobModal
           onClose={() => setShowAddModal(false)}
-          onCreated={() => { setShowAddModal(false); load(); }}
+          onCreated={() => { setShowAddModal(false); load({ silent: true }); }}
         />
       )}
 
