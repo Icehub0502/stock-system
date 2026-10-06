@@ -56,6 +56,7 @@ export default function JobDetailPage() {
   const [catalogLoading, setCatalogLoading] = useState(false);
   const [catalogError, setCatalogError] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
+  const [partSearch, setPartSearch] = useState('');
   const [selectedParts, setSelectedParts] = useState({});
   // ลำดับที่แท้จริงของรายการที่เลือก — เก็บแยกจาก selectedParts เพราะคีย์บางตัวเป็น
   // ตัวเลขล้วน (part.id จากแคตตาล็อก) ซึ่งตาม JS spec คีย์ตัวเลขจะถูกเรียงจากน้อยไป
@@ -435,9 +436,19 @@ export default function JobDetailPage() {
     return list;
   }, [catalogParts]);
 
-  const filteredCatalogParts = categoryFilter
-    ? catalogParts.filter((p) => p.category === categoryFilter)
-    : catalogParts;
+  // พิมพ์ค้นหาได้ (แคตตาล็อกอะไหล่ยาวขึ้นเรื่อย ๆ เลื่อนหาด้วยตาไม่ไหวแล้ว) — แยกคำด้วย
+  // ช่องว่างแล้วต้องมีครบทุกคำ (เช่น "โช๊ค showa") ตรงกับชื่อหรือหมวดหมู่ก็ได้ ตอนมีคำ
+  // ค้นหาจะค้นข้ามทุกหมวดเลย ไม่ติดชิปหมวดที่เลือกค้างไว้ ไม่งั้นพิมพ์แล้วไม่เจอเพราะ
+  // ชิปกรองอยู่ ทั้งที่ของอยู่อีกหมวด
+  const searchTokens = partSearch.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  const filteredCatalogParts = searchTokens.length > 0
+    ? catalogParts.filter((p) => {
+        const haystack = `${p.part_name || ''} ${p.category || ''}`.toLowerCase();
+        return searchTokens.every((t) => haystack.includes(t));
+      })
+    : categoryFilter
+      ? catalogParts.filter((p) => p.category === categoryFilter)
+      : catalogParts;
 
   // ยึด orderedKeys เป็นแหล่งความจริงของลำดับ (ดูคอมเมนต์ตอนประกาศ state) แทน
   // Object.values(selectedParts) ที่ไม่รับประกันลำดับเมื่อมีคีย์ตัวเลขปนอยู่
@@ -991,6 +1002,17 @@ export default function JobDetailPage() {
             <div className="loading">กำลังโหลดรายการสินค้า/บริการ...</div>
           ) : (
             <>
+              <div className="jdp-part-search">
+                <input
+                  type="search"
+                  placeholder="พิมพ์ค้นหาอะไหล่/รายการ เช่น โช๊ค, ลูกหมาก, น้ำมัน..."
+                  value={partSearch}
+                  onChange={(e) => setPartSearch(e.target.value)}
+                />
+                {partSearch && (
+                  <button type="button" onClick={() => setPartSearch('')} aria-label="ล้างคำค้นหา">✕</button>
+                )}
+              </div>
               {catalogCategories.length > 0 && (
                 <div className="jdp-category-bar">
                   <button
@@ -1014,7 +1036,11 @@ export default function JobDetailPage() {
               )}
 
               {filteredCatalogParts.length === 0 ? (
-                <p className="empty-message">ยังไม่มีรายการสินค้า/บริการในระบบ — เพิ่มใหม่ได้ด้านล่าง</p>
+                <p className="empty-message">
+                  {searchTokens.length > 0
+                    ? `ไม่พบรายการที่ตรงกับ "${partSearch.trim()}" — ลองคำอื่น หรือเพิ่มใหม่ได้ด้านล่าง`
+                    : 'ยังไม่มีรายการสินค้า/บริการในระบบ — เพิ่มใหม่ได้ด้านล่าง'}
+                </p>
               ) : (
                 <div className="jdp-item-grid">
                   {filteredCatalogParts.map((part) => {

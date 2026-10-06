@@ -5178,6 +5178,38 @@ body:has(.modal-backdrop) .page-fade-in {
   color: #92400e;
 }
 
+/* ช่องพิมพ์ค้นหารายการอะไหล่ในหน้ารายละเอียดงาน (อยู่เหนือแถบหมวดหมู่) */
+.jdp-part-search {
+  position: relative;
+  margin-bottom: 12px;
+}
+.jdp-part-search input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 10px 40px 10px 14px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  background: #fff;
+}
+.jdp-part-search input:focus {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+.jdp-part-search button {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  border: none;
+  background: transparent;
+  color: #6b7280;
+  font-size: 1rem;
+  cursor: pointer;
+  padding: 4px 8px;
+}
+
 /* แถบตัวกรองหมวดหมู่ — ปล่อยให้ wrap ลงบรรทัดใหม่แทนสกอลล์แนวนอนอย่างเดียว (ของ
    เดิมสกอลล์แล้วชิดขอบขวาตัดพอดี ดูอึดอัด) ขอบมนพอประมาณ (8px) แทนแบบเม็ดยา
    (999px) ให้เข้ากับปุ่ม/การ์ดอื่นในหน้านี้ที่ไม่มีอันไหนเป็นเม็ดยาเลย */
