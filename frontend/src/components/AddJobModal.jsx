@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import client from '../api/client';
 import { todayStr } from '../utils/format';
 import { formatDateTh } from '../utils/dateGroups';
-import { resizeImageToDataUrl } from '../utils/resizeImage';
+import { resizePhotos, describePhotoFailures, IMAGE_ACCEPT } from '../utils/resizeImage';
 
 // ยี่ห้อ/รุ่นรถ: พิมพ์แล้วมีตัวเลือกจากฐานข้อมูลเด้งขึ้นมาให้กด (เช่นพิมพ์ "To" แล้ว
 // เห็น "Toyota") แต่ยังพิมพ์ค่าที่ไม่มีในระบบได้อยู่ (รถรุ่นใหม่) — ใช้ <datalist>
@@ -99,11 +99,9 @@ export default function AddJobModal({ onClose, onCreated, prefill = null }) {
       // คุณภาพสูงกว่าค่าเริ่มต้นของฟังก์ชัน (ซึ่งตั้งไว้สำหรับรูปการ์ดอะไหล่เล็ก ๆ)
       // กันรูปแตกตอนลูกค้าเซฟไปดูจริง — เก็บรูปย่อเล็กจริง ๆ คู่กันไปด้วย (thumb) ให้
       // GET /jobs ใช้โชว์บนการ์ดรายการงานวันนี้แทนรูปเต็ม 1280px (เดิมโหลดหนักทั้งวัน)
-      const resized = await Promise.all(files.map(async (f) => ({
-        full: await resizeImageToDataUrl(f, 1280, 0.85),
-        thumb: await resizeImageToDataUrl(f, 200, 0.5),
-      })));
-      setPhotos((prev) => [...prev, ...resized]);
+      const { photos: resized, failed } = await resizePhotos(files);
+      if (resized.length > 0) setPhotos((prev) => [...prev, ...resized]);
+      if (failed.length > 0) setError(describePhotoFailures(failed));
     } catch {
       setError('เพิ่มรูปไม่สำเร็จ ลองใหม่อีกครั้ง');
     } finally {
@@ -274,11 +272,11 @@ export default function AddJobModal({ onClose, onCreated, prefill = null }) {
           <div className="job-photo-add-row">
             <label className="btn job-photo-add-btn">
               📷 ถ่ายรูป
-              <input type="file" accept="image/*" capture="environment" multiple hidden onChange={handleFilesSelected} />
+              <input type="file" accept={IMAGE_ACCEPT} capture="environment" multiple hidden onChange={handleFilesSelected} />
             </label>
             <label className="btn job-photo-add-btn">
               🖼️ เลือกรูป
-              <input type="file" accept="image/*" multiple hidden onChange={handleFilesSelected} />
+              <input type="file" accept={IMAGE_ACCEPT} multiple hidden onChange={handleFilesSelected} />
             </label>
             {photosBusy && <span style={{ fontSize: 13, color: '#6b7280' }}>กำลังย่อรูป...</span>}
           </div>

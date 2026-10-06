@@ -3,7 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import client from '../api/client';
 import { jobStatusDef, MAIN_PATH } from '../utils/jobStatus';
 import { formatDbDateTime, todayStr } from '../utils/format';
-import { resizeImageToDataUrl } from '../utils/resizeImage';
+import { resizePhotos, resizeFullPhotos, describePhotoFailures, IMAGE_ACCEPT } from '../utils/resizeImage';
 import DeclineReasonModal from '../components/DeclineReasonModal';
 import ExtraBillModal from '../components/ExtraBillModal';
 import PhotoLightbox from '../components/PhotoLightbox';
@@ -649,12 +649,12 @@ export default function JobDetailPage() {
       // ค่าเริ่มต้นของฟังก์ชัน (ตั้งไว้สำหรับรูปการ์ดอะไหล่เล็ก ๆ) กันรูปแตกตอนเซฟ —
       // เก็บรูปย่อเล็กจริง ๆ คู่กันไปด้วย (thumb) ให้ GET /jobs ใช้โชว์บนการ์ดรายการ
       // งานวันนี้แทนรูปเต็ม (เดิมโหลดหนักทั้งวัน)
-      const resized = await Promise.all(files.map(async (f) => ({
-        full: await resizeImageToDataUrl(f, 1280, 0.85),
-        thumb: await resizeImageToDataUrl(f, 200, 0.5),
-      })));
-      await client.post(`/jobs/${id}/photos`, { photos: resized });
-      await load({ silent: true });
+      const { photos: resized, failed } = await resizePhotos(files);
+      if (resized.length > 0) {
+        await client.post(`/jobs/${id}/photos`, { photos: resized });
+        await load({ silent: true });
+      }
+      if (failed.length > 0) setIntakePhotosError(describePhotoFailures(failed));
     } catch (err) {
       setIntakePhotosError(err.response?.data?.error || 'เพิ่มรูปรถไม่สำเร็จ');
     } finally {
@@ -701,9 +701,12 @@ export default function JobDetailPage() {
     try {
       // ลูกค้าเปิดดูและเซฟรูปเองได้จากหน้าประวัติ (/track) — ใช้ขนาด/คุณภาพสูงกว่า
       // ค่าเริ่มต้นของฟังก์ชัน (ตั้งไว้สำหรับรูปการ์ดอะไหล่เล็ก ๆ) กันรูปแตกตอนเซฟ
-      const resized = await Promise.all(files.map((f) => resizeImageToDataUrl(f, 1280, 0.85)));
-      await client.post(`/jobs/${id}/part-photos`, { photos: resized });
-      await load({ silent: true });
+      const { photos: resized, failed } = await resizeFullPhotos(files);
+      if (resized.length > 0) {
+        await client.post(`/jobs/${id}/part-photos`, { photos: resized });
+        await load({ silent: true });
+      }
+      if (failed.length > 0) setPartPhotosError(describePhotoFailures(failed));
     } catch (err) {
       setPartPhotosError(err.response?.data?.error || 'เพิ่มรูปอะไหล่ไม่สำเร็จ');
     } finally {
@@ -1182,11 +1185,11 @@ export default function JobDetailPage() {
         <div className="job-photo-add-row">
           <label className="btn job-photo-add-btn">
             📷 ถ่ายรูป
-            <input type="file" accept="image/*" capture="environment" multiple hidden disabled={intakePhotosBusy} onChange={handleAddIntakePhotos} />
+            <input type="file" accept={IMAGE_ACCEPT} capture="environment" multiple hidden disabled={intakePhotosBusy} onChange={handleAddIntakePhotos} />
           </label>
           <label className="btn job-photo-add-btn">
             🖼️ เลือกรูป
-            <input type="file" accept="image/*" multiple hidden disabled={intakePhotosBusy} onChange={handleAddIntakePhotos} />
+            <input type="file" accept={IMAGE_ACCEPT} multiple hidden disabled={intakePhotosBusy} onChange={handleAddIntakePhotos} />
           </label>
           {intakePhotosBusy && <span style={{ fontSize: 13, color: '#6b7280' }}>กำลังบันทึก...</span>}
         </div>
@@ -1217,11 +1220,11 @@ export default function JobDetailPage() {
           <div className="job-photo-add-row">
             <label className="btn job-photo-add-btn">
               📷 ถ่ายรูป
-              <input type="file" accept="image/*" capture="environment" multiple hidden disabled={partPhotosBusy} onChange={handleAddPartPhotos} />
+              <input type="file" accept={IMAGE_ACCEPT} capture="environment" multiple hidden disabled={partPhotosBusy} onChange={handleAddPartPhotos} />
             </label>
             <label className="btn job-photo-add-btn">
               🖼️ เลือกรูป
-              <input type="file" accept="image/*" multiple hidden disabled={partPhotosBusy} onChange={handleAddPartPhotos} />
+              <input type="file" accept={IMAGE_ACCEPT} multiple hidden disabled={partPhotosBusy} onChange={handleAddPartPhotos} />
             </label>
             {partPhotosBusy && <span style={{ fontSize: 13, color: '#6b7280' }}>กำลังบันทึก...</span>}
           </div>

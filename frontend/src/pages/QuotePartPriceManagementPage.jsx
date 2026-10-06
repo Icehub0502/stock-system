@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import client from '../api/client';
-import { resizeImageToDataUrl } from '../utils/resizeImage';
+import { resizeImageToDataUrl, IMAGE_ACCEPT } from '../utils/resizeImage';
 import { formatMoney } from '../utils/format';
 
 const emptyForm = { brand: '', model: '', part_name: '', description: '', price: '', image_data: '' };
@@ -337,7 +337,7 @@ export default function QuotePartPriceManagementPage() {
               </div>
               <div className="form-group">
                 <label>รูปสินค้า</label>
-                <input type="file" accept="image/*" onChange={handleImageChange} />
+                <input type="file" accept={IMAGE_ACCEPT} onChange={handleImageChange} />
                 {imageBusy && <div className="loading">กำลังประมวลผลรูป...</div>}
                 {form.image_data && (
                   <div className="qpp-image-preview">
