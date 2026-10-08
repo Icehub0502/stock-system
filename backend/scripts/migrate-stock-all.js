@@ -35,6 +35,15 @@ const CONFIRMED_PAIRS = [
 // ข้อมูลเดิมที่ผิดจริง 2 จุด ใช้ SKU เป็นความจริง (แก้เฉพาะตอนคัดลอก ไม่เขียนกลับตารางเดิม)
 const FIELD_FIXES = { 'IZCA063L-RA': { axle: 'front' }, 'JB-T172 R': { side: 'right' } };
 
+// รูปแบบชื่อ/SKU ที่ตัดคำบอกข้างออกแล้ว ใช้จับคู่ซ้าย-ขวาที่ชื่อพิมพ์ไม่ตรงกันเป๊ะ
+// (เช่น "ขวา Toyota Vios" กับ "ซ้ายToyota Vios", "LH/FI" กับ "RH/FI", "T7U-LA" กับ "T7U-RA")
+function normalizeName(name) {
+  return name.toLowerCase().replace(/ซ้าย|ขวา|lh|rh/g, '').replace(/[\s/\-_.,]+/g, '');
+}
+function normalizeSku(sku) {
+  return sku.toLowerCase().replace(/[\s-]*(la|ra|lh|rh|l|r)$/, '').replace(/\s+/g, '');
+}
+
 function swapThaiSide(name, fromSide) {
   return fromSide === 'left' ? name.replace('ซ้าย', 'ขวา') : name.replace('ขวา', 'ซ้าย');
 }
@@ -159,6 +168,27 @@ async function main() {
       if (!sibling) continue;
       pairs.push(w.side === 'left' ? [w, sibling] : [sibling, w]);
       used.add(w.id); used.add(sibling.id);
+    }
+
+    // รอบที่ 3: ที่เหลือที่ยังไม่มีคู่ จับคู่เมื่อ "ชื่อหรือ SKU ที่ตัดคำบอกข้างแล้ว" ตรงกัน
+    // ตำแหน่ง+เพลาเท่ากัน ข้างตรงข้ามกัน และมีตัวเลือกเดียวเท่านั้น (ถ้ามีหลายตัวที่ตรง
+    // ไม่เดา ปล่อยเป็นรายการเดี่ยวให้ตรวจเอง)
+    const sameSlot = (a, b) =>
+      (a.position || null) === (b.position || null) && (a.axle || null) === (b.axle || null);
+    const looksSame = (a, b) =>
+      normalizeName(a.name) === normalizeName(b.name) ||
+      (normalizeSku(a.sku).length >= 4 && normalizeSku(a.sku) === normalizeSku(b.sku));
+    const leftovers = () => wings.filter((w) => !used.has(w.id) && ['left', 'right'].includes(w.side));
+    const candidatesFor = (w) => leftovers().filter((o) =>
+      o.id !== w.id && o.side !== w.side && sameSlot(o, w) && looksSame(o, w));
+    for (const w of leftovers()) {
+      if (used.has(w.id)) continue;
+      const candidates = candidatesFor(w);
+      if (candidates.length !== 1) continue;
+      const other = candidates[0];
+      if (candidatesFor(other).length !== 1) continue;
+      pairs.push(w.side === 'left' ? [w, other] : [other, w]);
+      used.add(w.id); used.add(other.id);
     }
 
     for (const [left, right] of pairs) {
