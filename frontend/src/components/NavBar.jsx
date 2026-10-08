@@ -9,6 +9,7 @@ const NAV_CATEGORIES = [
     key: "stock",
     label: "สต๊อกสินค้า",
     items: [
+      { to: "/stock-all", label: "สต๊อกรวม" },
       { to: "/stock-rack", label: "StockRack" },
       { to: "/wing-arms", label: "ปีกนก" },
       { to: "/stock-deduction", label: "ตัดสต๊อก" },

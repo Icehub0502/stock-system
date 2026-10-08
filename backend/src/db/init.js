@@ -935,6 +935,96 @@ async function initDatabase() {
     }
   }
 
+  // ══════════════════════════════════════════════════════════════════════
+  // สต๊อกรวม (หน้า /stock-all) — ตารางแยกอิสระ 3 ตัว ไม่แตะ racks/wing_arms เดิมเลย
+  // (ย้ายข้อมูลจากระบบเดิมมาทีหลังเมื่อเจ้าของร้านทดลองใช้แล้ว) แยกจากตาราง parts/
+  // stock_ledger ของแผนรื้อระบบสต๊อกเดิมโดยตั้งใจ: นี่คือเวอร์ชันง่าย — หมวดหมู่ +
+  // รหัส OEM + รายละเอียด + จำนวน — กรอกเองได้ทันทีไม่ต้องรอย้ายข้อมูล
+  // ══════════════════════════════════════════════════════════════════════
+  await conn.query(`
+    CREATE TABLE IF NOT EXISTS stock_categories (
+      id         INT AUTO_INCREMENT PRIMARY KEY,
+      name       VARCHAR(100) NOT NULL UNIQUE,
+      sort_order INT NOT NULL DEFAULT 0,
+      is_active  TINYINT(1) NOT NULL DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  // is_active=0 คือ "ซ่อน" (ไม่ลบจริง ตามกฎห้ามลบข้อมูลโปรดักชัน) รหัส OEM ซ้ำได้
+  // ข้ามหมวดแต่ซ้ำในหมวดเดียวกันไม่ได้
+  await conn.query(`
+    CREATE TABLE IF NOT EXISTS stock_items (
+      id          INT AUTO_INCREMENT PRIMARY KEY,
+      category_id INT NOT NULL,
+      oem_code    VARCHAR(100) NOT NULL,
+      description VARCHAR(500) NOT NULL DEFAULT '',
+      stock_qty   INT NOT NULL DEFAULT 0,
+      min_stock   INT NOT NULL DEFAULT 1,
+      is_active   TINYINT(1) NOT NULL DEFAULT 1,
+      created_at  DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at  DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY uq_stock_item_code (category_id, oem_code),
+      INDEX idx_stock_item_oem (oem_code),
+      CONSTRAINT fk_stock_item_cat FOREIGN KEY (category_id) REFERENCES stock_categories(id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  // ของที่แยกซ้าย/ขวา (ปีกนก ลูกหมาก โช๊ค ฯลฯ): has_sides=1 → ยอดจริงอยู่ที่
+  // stock_left/stock_right ส่วน stock_qty เก็บผลรวมสองข้างไว้ให้ query/รายงานเดิมใช้ได้
+  // (API เป็นตัวเดียวที่เขียน ต้องคงให้เท่ากับ left+right เสมอ) oem_code_right ใช้เมื่อ
+  // รหัสซ้าย/ขวาไม่เหมือนกัน (เช่น 51350/51360) — has_sides เปลี่ยนหลังสร้างไม่ได้
+  await conn.query(`ALTER TABLE stock_items ADD COLUMN has_sides TINYINT(1) NOT NULL DEFAULT 0`).catch(ignoreIfAlreadyApplied);
+  await conn.query(`ALTER TABLE stock_items ADD COLUMN oem_code_right VARCHAR(100) DEFAULT NULL`).catch(ignoreIfAlreadyApplied);
+  await conn.query(`ALTER TABLE stock_items ADD COLUMN stock_left INT NOT NULL DEFAULT 0`).catch(ignoreIfAlreadyApplied);
+  await conn.query(`ALTER TABLE stock_items ADD COLUMN stock_right INT NOT NULL DEFAULT 0`).catch(ignoreIfAlreadyApplied);
+
+  // รุ่นรถ/ปีที่อะไหล่ชิ้นนี้ใช้ได้ (ได้หลายแถวต่อชิ้น) year_from/year_to เป็น NULL =
+  // ไม่ระบุปี
+  await conn.query(`
+    CREATE TABLE IF NOT EXISTS stock_item_fitments (
+      id        BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+      item_id   INT NOT NULL,
+      brand     VARCHAR(100) NOT NULL,
+      model     VARCHAR(100) NOT NULL,
+      year_from INT DEFAULT NULL,
+      year_to   INT DEFAULT NULL,
+      INDEX idx_sif_item (item_id),
+      INDEX idx_sif_model (brand, model),
+      CONSTRAINT fk_sif_item FOREIGN KEY (item_id) REFERENCES stock_items(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
+  // ประวัติทุกครั้งที่ยอดเปลี่ยน (เขียนอย่างเดียว) ไว้ไล่ตรวจย้อนหลังว่าใครแก้ยอดอะไร
+  // เมื่อไหร่ โดยไม่ต้องขุด binlog
+  await conn.query(`
+    CREATE TABLE IF NOT EXISTS stock_item_movements (
+      id         BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+      item_id    INT NOT NULL,
+      qty_before INT NOT NULL,
+      qty_after  INT NOT NULL,
+      reason     ENUM('create','adjust','set') NOT NULL,
+      note       VARCHAR(255) DEFAULT NULL,
+      user_id    INT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      INDEX idx_sim_item (item_id, created_at),
+      CONSTRAINT fk_sim_item FOREIGN KEY (item_id) REFERENCES stock_items(id),
+      CONSTRAINT fk_sim_user FOREIGN KEY (user_id) REFERENCES users(id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+  // ของแยกซ้าย/ขวา: บอกว่าแถวประวัตินี้เปลี่ยนข้างไหน (qty_before/after เป็นยอดของข้างนั้น)
+  await conn.query(`ALTER TABLE stock_item_movements ADD COLUMN side ENUM('left','right') DEFAULT NULL`).catch(ignoreIfAlreadyApplied);
+
+  // หมวดตั้งต้น — ใส่เฉพาะตอนตารางยังว่างเปล่า (ถ้าเจ้าของร้านลบ/เปลี่ยนชื่อหมวดแล้ว
+  // บูตครั้งต่อไปต้องไม่งอกกลับมา)
+  const [[{ catCount }]] = await conn.query('SELECT COUNT(*) AS catCount FROM stock_categories');
+  if (catCount === 0) {
+    const defaults = ['แร็ค', 'ปีกนก', 'โช๊ค', 'ลูกหมากกันโคลง', 'ยางรัดกันโคลง', 'ลูกหมากปลาย'];
+    for (let i = 0; i < defaults.length; i += 1) {
+      await conn.query('INSERT INTO stock_categories (name, sort_order) VALUES (?, ?)', [defaults[i], i + 1]);
+    }
+  }
+
   const [userRows] = await conn.query(
     'SELECT COUNT(*) AS c FROM users'
   );

@@ -16,6 +16,7 @@ import LoginPage from "./pages/LoginPage";
 // accounts never pull in the office-only pages below.
 const DashboardPage = lazy(() => import("./pages/DashboardPage"));
 const StockRackPage = lazy(() => import("./pages/StockRackPage"));
+const StockAllPage = lazy(() => import("./pages/StockAllPage"));
 const TechnicianScanPage = lazy(() => import("./pages/TechnicianScanPage"));
 const TransactionHistoryPage = lazy(() => import("./pages/TransactionHistoryPage"));
 const ReceiptSessionPage = lazy(() => import("./pages/ReceiptSessionPage"));
@@ -91,6 +92,14 @@ function AppRoutes() {
             element={
               <ProtectedRoute roles={["office"]}>
                 <DashboardPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/stock-all"
+            element={
+              <ProtectedRoute roles={["office"]}>
+                <StockAllPage />
               </ProtectedRoute>
             }
           />
