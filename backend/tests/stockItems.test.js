@@ -122,31 +122,61 @@ describe('/api/stock-items — สต๊อกรวม', () => {
     expect(got.body[0]).toMatchObject({ description: 'แก้แล้ว', min_stock: 2, stock_qty: 3 });
   });
 
-  test('ของแยกซ้าย/ขวา: ยอดแต่ละข้าง + ผลรวม + ปรับทีละข้าง + ประวัติบอกข้าง', async () => {
+  test('ของแยกซ้าย/ขวา: ยอดแต่ละข้าง + ผลรวม + ปรับทีละข้าง + ประวัติบอกตำแหน่ง', async () => {
     const { status, body } = await createItem({
-      has_sides: true, oem_code_right: `R-${suffix}`, stock_left: 2, stock_right: 3, stock_qty: undefined,
+      has_sides: true, oem_code_right: `R-${suffix}`, stocks: { left: 2, right: 3 }, stock_qty: undefined,
     });
     expect(status).toBe(201);
     const id = body.id;
     const get = async () => (await auth(request(app).get('/api/stock-items')).query({ q: `R-${suffix}` })).body[0];
-    expect(await get()).toMatchObject({ has_sides: 1, stock_left: 2, stock_right: 3, stock_qty: 5, oem_code_right: `R-${suffix}` });
+    expect(await get()).toMatchObject({
+      has_sides: 1, has_axles: 0, stock_qty: 5, oem_code_right: `R-${suffix}`,
+      positions: [{ position: 'left', qty: 2 }, { position: 'right', qty: 3 }],
+    });
 
-    const up = await auth(request(app).patch(`/api/stock-items/${id}/qty`)).send({ side: 'right', delta: 2 });
-    expect(up.body).toMatchObject({ stock_qty: 7, side: 'right', qty: 5 });
-    expect(await get()).toMatchObject({ stock_left: 2, stock_right: 5, stock_qty: 7 });
+    const up = await auth(request(app).patch(`/api/stock-items/${id}/qty`)).send({ position: 'right', delta: 2 });
+    expect(up.body).toMatchObject({ stock_qty: 7, position: 'right', qty: 5 });
+    expect((await get()).positions).toEqual([{ position: 'left', qty: 2 }, { position: 'right', qty: 5 }]);
 
-    const noSide = await auth(request(app).patch(`/api/stock-items/${id}/qty`)).send({ delta: 1 });
-    expect(noSide.status).toBe(400);
-    const below = await auth(request(app).patch(`/api/stock-items/${id}/qty`)).send({ side: 'left', delta: -3 });
+    const noPos = await auth(request(app).patch(`/api/stock-items/${id}/qty`)).send({ delta: 1 });
+    expect(noPos.status).toBe(400);
+    const wrongPos = await auth(request(app).patch(`/api/stock-items/${id}/qty`)).send({ position: 'front', delta: 1 });
+    expect(wrongPos.status).toBe(400);
+    const below = await auth(request(app).patch(`/api/stock-items/${id}/qty`)).send({ position: 'left', delta: -3 });
     expect(below.status).toBe(400);
 
     const moves = await auth(request(app).get(`/api/stock-items/${id}/movements`));
-    expect(moves.body[0]).toMatchObject({ side: 'right', qty_before: 3, qty_after: 5, reason: 'adjust' });
+    expect(moves.body[0]).toMatchObject({ position: 'right', qty_before: 3, qty_after: 5, reason: 'adjust' });
   });
 
-  test('ของธรรมดาห้ามส่ง side', async () => {
+  test('โช๊ค: แยกทั้งหน้า/หลังและซ้าย/ขวา = 4 ตำแหน่ง ยอดรวมถูก', async () => {
+    const { status, body } = await createItem({
+      has_sides: true, has_axles: true, oem_code_right: null, stock_qty: undefined,
+      stocks: { front_left: 1, front_right: 2, rear_left: 3, rear_right: 4 },
+    });
+    expect(status).toBe(201);
+    const item = (await auth(request(app).get('/api/stock-items')).query({ q: 'OEM-' + suffix })).body.find((i) => i.id === body.id);
+    expect(item.stock_qty).toBe(10);
+    expect(item.positions.map((p) => p.position)).toEqual(['front_left', 'front_right', 'rear_left', 'rear_right']);
+    const res = await auth(request(app).patch(`/api/stock-items/${body.id}/qty`)).send({ position: 'rear_right', set_to: 0 });
+    expect(res.body).toMatchObject({ stock_qty: 6, qty: 0 });
+    const left = await auth(request(app).patch(`/api/stock-items/${body.id}/qty`)).send({ position: 'left', delta: 1 });
+    expect(left.status).toBe(400);
+  });
+
+  test('โช๊คแยกหน้า/หลังอย่างเดียว = 2 ตำแหน่ง', async () => {
+    const { status, body } = await createItem({
+      has_axles: true, stock_qty: undefined, stocks: { front: 5, rear: 1 },
+    });
+    expect(status).toBe(201);
+    const item = (await auth(request(app).get('/api/stock-items')).query({ q: 'OEM-' + suffix })).body.find((i) => i.id === body.id);
+    expect(item).toMatchObject({ has_sides: 0, has_axles: 1, stock_qty: 6 });
+    expect(item.positions).toEqual([{ position: 'front', qty: 5 }, { position: 'rear', qty: 1 }]);
+  });
+
+  test('ของธรรมดาห้ามส่ง position', async () => {
     const { body } = await createItem({ stock_qty: 2 });
-    const res = await auth(request(app).patch(`/api/stock-items/${body.id}/qty`)).send({ side: 'left', delta: 1 });
+    const res = await auth(request(app).patch(`/api/stock-items/${body.id}/qty`)).send({ position: 'left', delta: 1 });
     expect(res.status).toBe(400);
   });
 

@@ -26,10 +26,27 @@ function cleanText(value, maxLen) {
 }
 
 const ITEM_COLUMNS = `i.id, i.category_id, c.name AS category_name, i.oem_code, i.oem_code_right,
-  i.description, i.has_sides, i.stock_qty, i.stock_left, i.stock_right, i.min_stock, i.updated_at`;
+  i.description, i.has_sides, i.has_axles, i.stock_qty, i.min_stock, i.updated_at`;
 
-const SIDES = ['left', 'right'];
-const SIDE_COLUMN = { left: 'stock_left', right: 'stock_right' };
+// ตำแหน่งที่ของชิ้นนี้แยกยอด: ติ๊กซ้าย/ขวา และ/หรือ หน้า/หลัง (ไม่ติ๊กเลย = ยอดเดียว)
+function positionsFor(hasSides, hasAxles) {
+  if (hasSides && hasAxles) return ['front_left', 'front_right', 'rear_left', 'rear_right'];
+  if (hasSides) return ['left', 'right'];
+  if (hasAxles) return ['front', 'rear'];
+  return [];
+}
+
+// อ่านยอดแต่ละตำแหน่งจากข้อมูลที่ส่งมา ({ position: qty }) — ตำแหน่งที่ไม่ส่ง = 0
+// คืน { stocks } หรือ { error }
+function parseStocks(raw, positions) {
+  const stocks = {};
+  for (const position of positions) {
+    const value = raw && raw[position] !== undefined ? parseQty(raw[position]) : 0;
+    if (value === null) return { error: 'จำนวนต้องเป็นเลขจำนวนเต็มตั้งแต่ 0 ขึ้นไป' };
+    stocks[position] = value;
+  }
+  return { stocks };
+}
 const MIN_YEAR = 1950;
 const MAX_YEAR = 2100;
 
@@ -160,10 +177,18 @@ router.get('/', async (req, res) => {
        ORDER BY c.sort_order, i.oem_code`,
       params
     );
-    // รุ่นรถของทุกชิ้นที่ได้มา ดึงรอบเดียวแล้วแจกตาม item_id (ไม่ยิง query ต่อชิ้น)
+    // รุ่นรถ + ยอดแต่ละตำแหน่งของทุกชิ้นที่ได้มา ดึงรอบเดียวแล้วแจกตาม item_id (ไม่ยิง query ต่อชิ้น)
     const fitmentsByItem = {};
+    const positionsByItem = {};
     if (rows.length > 0) {
       const ids = rows.map((r) => r.id);
+      const [posRows] = await pool.query(
+        'SELECT item_id, position, qty FROM stock_item_positions WHERE item_id IN (?)',
+        [ids]
+      );
+      posRows.forEach((p) => {
+        (positionsByItem[p.item_id] = positionsByItem[p.item_id] || {})[p.position] = p.qty;
+      });
       const [fitRows] = await pool.query(
         `SELECT item_id, brand, model, year_from, year_to
          FROM stock_item_fitments WHERE item_id IN (?) ORDER BY brand, model, year_from`,
@@ -175,7 +200,14 @@ router.get('/', async (req, res) => {
         });
       });
     }
-    res.json(rows.map((r) => ({ ...r, fitments: fitmentsByItem[r.id] || [] })));
+    res.json(rows.map((r) => ({
+      ...r,
+      // เรียงตามลำดับมาตรฐาน (หน้าซ้าย หน้าขวา หลังซ้าย หลังขวา) ตำแหน่งที่ยังไม่มีแถว = 0
+      positions: positionsFor(r.has_sides, r.has_axles).map((position) => ({
+        position, qty: (positionsByItem[r.id] || {})[position] || 0,
+      })),
+      fitments: fitmentsByItem[r.id] || [],
+    })));
   } catch (err) {
     console.error('Error loading stock items:', err);
     res.status(500).json({ error: 'โหลดรายการสต๊อกไม่สำเร็จ' });
@@ -188,13 +220,14 @@ router.post('/', async (req, res) => {
   const oemCode = cleanText(body.oem_code, 100);
   const description = cleanText(body.description, 500);
   const hasSides = body.has_sides === true || body.has_sides === 1;
+  const hasAxles = body.has_axles === true || body.has_axles === 1;
   const oemCodeRight = hasSides ? cleanText(body.oem_code_right, 100) || null : null;
   const minStock = body.min_stock === undefined ? 1 : parseQty(body.min_stock);
-  // ของแยกซ้าย/ขวา: ยอดมาจาก stock_left/stock_right แล้ว stock_qty = ผลรวม
-  const stockLeft = hasSides ? (body.stock_left === undefined ? 0 : parseQty(body.stock_left)) : 0;
-  const stockRight = hasSides ? (body.stock_right === undefined ? 0 : parseQty(body.stock_right)) : 0;
-  const stockQty = hasSides
-    ? (stockLeft === null || stockRight === null ? null : stockLeft + stockRight)
+  // ของแยกตำแหน่ง: ยอดมาจาก body.stocks ({ position: qty }) แล้ว stock_qty = ผลรวม
+  const positions = positionsFor(hasSides, hasAxles);
+  const parsedStocks = parseStocks(body.stocks, positions);
+  const stockQty = positions.length
+    ? (parsedStocks.stocks ? Object.values(parsedStocks.stocks).reduce((a, b) => a + b, 0) : null)
     : (body.stock_qty === undefined ? 0 : parseQty(body.stock_qty));
   if (!categoryId || !oemCode) {
     return res.status(400).json({ error: 'กรุณาเลือกหมวดหมู่และกรอกรหัส OEM' });
@@ -202,6 +235,7 @@ router.post('/', async (req, res) => {
   if (stockQty === null || minStock === null) {
     return res.status(400).json({ error: 'จำนวนต้องเป็นเลขจำนวนเต็มตั้งแต่ 0 ขึ้นไป' });
   }
+  const stocks = parsedStocks.stocks || {};
   const parsedFit = parseFitments(body.fitments);
   if (parsedFit.error) return res.status(400).json({ error: parsedFit.error });
 
@@ -226,29 +260,36 @@ router.post('/', async (req, res) => {
     if (hidden) {
       itemId = hidden.id;
       await conn.execute(
-        `UPDATE stock_items SET description = ?, has_sides = ?, oem_code_right = ?, stock_qty = ?,
-                stock_left = ?, stock_right = ?, min_stock = ?, is_active = 1 WHERE id = ?`,
-        [description, hasSides ? 1 : 0, oemCodeRight, stockQty, stockLeft, stockRight, minStock, itemId]
+        `UPDATE stock_items SET description = ?, has_sides = ?, has_axles = ?, oem_code_right = ?,
+                stock_qty = ?, min_stock = ?, is_active = 1 WHERE id = ?`,
+        [description, hasSides ? 1 : 0, hasAxles ? 1 : 0, oemCodeRight, stockQty, minStock, itemId]
       );
+      await conn.execute('DELETE FROM stock_item_positions WHERE item_id = ?', [itemId]);
     } else {
       const [result] = await conn.execute(
-        `INSERT INTO stock_items (category_id, oem_code, oem_code_right, description, has_sides,
-                                  stock_qty, stock_left, stock_right, min_stock)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [categoryId, oemCode, oemCodeRight, description, hasSides ? 1 : 0, stockQty, stockLeft, stockRight, minStock]
+        `INSERT INTO stock_items (category_id, oem_code, oem_code_right, description, has_sides, has_axles,
+                                  stock_qty, min_stock)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [categoryId, oemCode, oemCodeRight, description, hasSides ? 1 : 0, hasAxles ? 1 : 0, stockQty, minStock]
       );
       itemId = result.insertId;
     }
     await replaceFitments(conn, itemId, parsedFit.fitments);
-    const opening = hasSides
-      ? [['left', stockLeft], ['right', stockRight]]
+    for (const position of positions) {
+      await conn.execute(
+        'INSERT INTO stock_item_positions (item_id, position, qty) VALUES (?, ?, ?)',
+        [itemId, position, stocks[position]]
+      );
+    }
+    const opening = positions.length
+      ? positions.map((position) => [position, stocks[position]])
       : [[null, stockQty]];
-    for (const [side, qty] of opening) {
+    for (const [position, qty] of opening) {
       if (qty > 0) {
         await conn.execute(
-          `INSERT INTO stock_item_movements (item_id, qty_before, qty_after, reason, side, user_id)
+          `INSERT INTO stock_item_movements (item_id, qty_before, qty_after, reason, position, user_id)
            VALUES (?, 0, ?, 'create', ?, ?)`,
-          [itemId, qty, side, req.user.id]
+          [itemId, qty, position, req.user.id]
         );
       }
     }
@@ -327,14 +368,14 @@ router.put('/:id', async (req, res) => {
 });
 
 // ปรับจำนวน: ส่ง { delta } (เพิ่ม/ลด) หรือ { set_to } (ตั้งยอดตรง ๆ) อย่างใดอย่างหนึ่ง
-// ของแยกซ้าย/ขวาต้องส่ง side ('left'|'right') ด้วย ของธรรมดาห้ามส่ง
+// ของแยกตำแหน่งต้องส่ง position (เช่น 'left', 'front_right') ที่ตรงกับชิ้นนั้น ของธรรมดาห้ามส่ง
 // ล็อกแถวก่อนอ่านยอดเดิม กันสองเครื่องกดพร้อมกันแล้วยอดเพี้ยน ยอดติดลบไม่ได้
 router.patch('/:id/qty', async (req, res) => {
   const id = parseId(req.params.id);
   const hasDelta = req.body?.delta !== undefined;
   const hasSetTo = req.body?.set_to !== undefined;
-  const side = req.body?.side ?? null;
-  if (!id || hasDelta === hasSetTo || (side !== null && !SIDES.includes(side))) {
+  const position = req.body?.position ?? null;
+  if (!id || hasDelta === hasSetTo || (position !== null && typeof position !== 'string')) {
     return res.status(400).json({ error: 'ข้อมูลไม่ถูกต้อง' });
   }
   const delta = hasDelta ? Number(req.body.delta) : null;
@@ -352,7 +393,7 @@ router.patch('/:id/qty', async (req, res) => {
     conn = await pool.getConnection();
     await conn.beginTransaction();
     const [[item]] = await conn.execute(
-      `SELECT id, has_sides, stock_qty, stock_left, stock_right
+      `SELECT id, has_sides, has_axles, stock_qty
        FROM stock_items WHERE id = ? AND is_active = 1 FOR UPDATE`,
       [id]
     );
@@ -360,11 +401,21 @@ router.patch('/:id/qty', async (req, res) => {
       await conn.rollback();
       return res.status(404).json({ error: 'ไม่พบรายการ' });
     }
-    if (Boolean(item.has_sides) !== (side !== null)) {
+    const validPositions = positionsFor(item.has_sides, item.has_axles);
+    if (validPositions.length > 0 ? !validPositions.includes(position) : position !== null) {
       await conn.rollback();
-      return res.status(400).json({ error: item.has_sides ? 'รายการนี้แยกซ้าย/ขวา ต้องระบุข้าง' : 'รายการนี้ไม่แยกซ้าย/ขวา' });
+      return res.status(400).json({
+        error: validPositions.length > 0 ? 'รายการนี้แยกตำแหน่ง ต้องระบุตำแหน่งให้ถูกต้อง' : 'รายการนี้ไม่แยกตำแหน่ง',
+      });
     }
-    const before = side ? item[SIDE_COLUMN[side]] : item.stock_qty;
+    let before = item.stock_qty;
+    if (position) {
+      const [[row]] = await conn.execute(
+        'SELECT qty FROM stock_item_positions WHERE item_id = ? AND position = ? FOR UPDATE',
+        [id, position]
+      );
+      before = row ? row.qty : 0;
+    }
     const after = hasDelta ? before + delta : setTo;
     if (after < 0 || after > MAX_QTY) {
       await conn.rollback();
@@ -372,27 +423,31 @@ router.patch('/:id/qty', async (req, res) => {
     }
     let total = item.stock_qty;
     if (after !== before) {
-      if (side) {
-        const left = side === 'left' ? after : item.stock_left;
-        const right = side === 'right' ? after : item.stock_right;
-        total = left + right;
+      if (position) {
         await conn.execute(
-          'UPDATE stock_items SET stock_left = ?, stock_right = ?, stock_qty = ? WHERE id = ?',
-          [left, right, total, id]
+          `INSERT INTO stock_item_positions (item_id, position, qty) VALUES (?, ?, ?)
+           ON DUPLICATE KEY UPDATE qty = VALUES(qty)`,
+          [id, position, after]
         );
+        const [[sum]] = await conn.execute(
+          'SELECT COALESCE(SUM(qty), 0) AS total FROM stock_item_positions WHERE item_id = ?',
+          [id]
+        );
+        total = Number(sum.total);
+        await conn.execute('UPDATE stock_items SET stock_qty = ? WHERE id = ?', [total, id]);
       } else {
         total = after;
         await conn.execute('UPDATE stock_items SET stock_qty = ? WHERE id = ?', [after, id]);
       }
       await conn.execute(
-        `INSERT INTO stock_item_movements (item_id, qty_before, qty_after, reason, side, note, user_id)
+        `INSERT INTO stock_item_movements (item_id, qty_before, qty_after, reason, position, note, user_id)
          VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [id, before, after, hasDelta ? 'adjust' : 'set', side, note, req.user.id]
+        [id, before, after, hasDelta ? 'adjust' : 'set', position, note, req.user.id]
       );
     }
     await conn.commit();
     emitStockEvent('stock:item-updated', { entityType: 'stock_item', entityId: id, actorId: req.user.id });
-    res.json({ success: true, stock_qty: total, side, qty: after });
+    res.json({ success: true, stock_qty: total, position, qty: after });
   } catch (err) {
     if (conn) await conn.rollback().catch(() => {});
     console.error('Error adjusting stock qty:', err);
@@ -407,7 +462,7 @@ router.get('/:id/movements', async (req, res) => {
   if (!id) return res.status(400).json({ error: 'ข้อมูลไม่ถูกต้อง' });
   try {
     const [rows] = await pool.execute(
-      `SELECT m.id, m.qty_before, m.qty_after, m.reason, m.side, m.note, m.created_at,
+      `SELECT m.id, m.qty_before, m.qty_after, m.reason, m.position, m.note, m.created_at,
               u.full_name AS user_name
        FROM stock_item_movements m
        JOIN users u ON u.id = m.user_id

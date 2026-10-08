@@ -970,14 +970,27 @@ async function initDatabase() {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
 
-  // ของที่แยกซ้าย/ขวา (ปีกนก ลูกหมาก โช๊ค ฯลฯ): has_sides=1 → ยอดจริงอยู่ที่
-  // stock_left/stock_right ส่วน stock_qty เก็บผลรวมสองข้างไว้ให้ query/รายงานเดิมใช้ได้
-  // (API เป็นตัวเดียวที่เขียน ต้องคงให้เท่ากับ left+right เสมอ) oem_code_right ใช้เมื่อ
-  // รหัสซ้าย/ขวาไม่เหมือนกัน (เช่น 51350/51360) — has_sides เปลี่ยนหลังสร้างไม่ได้
+  // ของที่แยกตำแหน่ง (ปีกนก ลูกหมาก โช๊ค ฯลฯ): has_sides = แยกซ้าย/ขวา, has_axles = แยก
+  // หน้า/หลัง ติ๊กได้ทั้งสองอย่างพร้อมกัน (โช๊ค = หน้าซ้าย/หน้าขวา/หลังซ้าย/หลังขวา) —
+  // ยอดจริงแต่ละตำแหน่งอยู่ที่ stock_item_positions ส่วน stock_qty เก็บผลรวมทุกตำแหน่ง
+  // (API เป็นตัวเดียวที่เขียน ต้องคงให้เท่ากับผลรวมเสมอ) oem_code_right ใช้เมื่อรหัสซ้าย/
+  // ขวาไม่เหมือนกัน (เช่น 51350/51360) — has_sides/has_axles เปลี่ยนหลังสร้างไม่ได้
+  // (stock_left/stock_right เป็นคอลัมน์รุ่นแรกที่เลิกใช้แล้ว อาจยังค้างอยู่ในฐานข้อมูลที่
+  // เคยรันรุ่นแรก ไม่มีโค้ดไหนอ่าน/เขียนอีก)
   await conn.query(`ALTER TABLE stock_items ADD COLUMN has_sides TINYINT(1) NOT NULL DEFAULT 0`).catch(ignoreIfAlreadyApplied);
+  await conn.query(`ALTER TABLE stock_items ADD COLUMN has_axles TINYINT(1) NOT NULL DEFAULT 0`).catch(ignoreIfAlreadyApplied);
   await conn.query(`ALTER TABLE stock_items ADD COLUMN oem_code_right VARCHAR(100) DEFAULT NULL`).catch(ignoreIfAlreadyApplied);
-  await conn.query(`ALTER TABLE stock_items ADD COLUMN stock_left INT NOT NULL DEFAULT 0`).catch(ignoreIfAlreadyApplied);
-  await conn.query(`ALTER TABLE stock_items ADD COLUMN stock_right INT NOT NULL DEFAULT 0`).catch(ignoreIfAlreadyApplied);
+
+  // position: left | right | front | rear | front_left | front_right | rear_left | rear_right
+  await conn.query(`
+    CREATE TABLE IF NOT EXISTS stock_item_positions (
+      item_id  INT NOT NULL,
+      position VARCHAR(20) NOT NULL,
+      qty      INT NOT NULL DEFAULT 0,
+      PRIMARY KEY (item_id, position),
+      CONSTRAINT fk_sip_item FOREIGN KEY (item_id) REFERENCES stock_items(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
 
   // รุ่นรถ/ปีที่อะไหล่ชิ้นนี้ใช้ได้ (ได้หลายแถวต่อชิ้น) year_from/year_to เป็น NULL =
   // ไม่ระบุปี
@@ -1012,8 +1025,9 @@ async function initDatabase() {
       CONSTRAINT fk_sim_user FOREIGN KEY (user_id) REFERENCES users(id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
-  // ของแยกซ้าย/ขวา: บอกว่าแถวประวัตินี้เปลี่ยนข้างไหน (qty_before/after เป็นยอดของข้างนั้น)
-  await conn.query(`ALTER TABLE stock_item_movements ADD COLUMN side ENUM('left','right') DEFAULT NULL`).catch(ignoreIfAlreadyApplied);
+  // ของแยกตำแหน่ง: บอกว่าแถวประวัตินี้เปลี่ยนตำแหน่งไหน (qty_before/after เป็นยอดของ
+  // ตำแหน่งนั้น) NULL = ของธรรมดา (คอลัมน์ side รุ่นแรกเลิกใช้แล้ว)
+  await conn.query(`ALTER TABLE stock_item_movements ADD COLUMN position VARCHAR(20) DEFAULT NULL`).catch(ignoreIfAlreadyApplied);
 
   // หมวดตั้งต้น — ใส่เฉพาะตอนตารางยังว่างเปล่า (ถ้าเจ้าของร้านลบ/เปลี่ยนชื่อหมวดแล้ว
   // บูตครั้งต่อไปต้องไม่งอกกลับมา)

@@ -53,24 +53,35 @@ async function main() {
     const [[userRow]] = await conn.query("SELECT id FROM users WHERE role = 'office' ORDER BY id LIMIT 1");
     const userId = userRow.id;
 
-    async function insertItem({ categoryId, oem, oemRight, description, hasSides, qty, left, right, minStock }) {
+    // positions: { left: n, right: n } สำหรับของแยกซ้าย/ขวา (hasSides) — ของธรรมดาใช้ qty
+    async function insertItem({ categoryId, oem, oemRight, description, hasSides, qty, positions, minStock }) {
       const [exists] = await conn.query(
         'SELECT id FROM stock_items WHERE category_id = ? AND oem_code = ?', [categoryId, oem]
       );
       if (exists.length) return null;
       const [ins] = await conn.query(
         `INSERT INTO stock_items (category_id, oem_code, oem_code_right, description, has_sides,
-                                  stock_qty, stock_left, stock_right, min_stock)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [categoryId, oem, oemRight, description, hasSides ? 1 : 0, qty, left, right, minStock]
+                                  stock_qty, min_stock)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [categoryId, oem, oemRight, description, hasSides ? 1 : 0, qty, minStock]
       );
-      const openings = hasSides ? [['left', left], ['right', right]] : [[null, qty]];
-      for (const [side, n] of openings) {
+      if (hasSides) {
+        for (const position of ['left', 'right']) {
+          await conn.query(
+            'INSERT INTO stock_item_positions (item_id, position, qty) VALUES (?, ?, ?)',
+            [ins.insertId, position, positions[position]]
+          );
+        }
+      }
+      const openings = hasSides
+        ? [['left', positions.left], ['right', positions.right]]
+        : [[null, qty]];
+      for (const [position, n] of openings) {
         if (n > 0) {
           await conn.query(
-            `INSERT INTO stock_item_movements (item_id, qty_before, qty_after, reason, side, note, user_id)
+            `INSERT INTO stock_item_movements (item_id, qty_before, qty_after, reason, position, note, user_id)
              VALUES (?, 0, ?, 'create', ?, 'ย้ายจากระบบสต๊อกเดิม', ?)`,
-            [ins.insertId, n, side, userId]
+            [ins.insertId, n, position, userId]
           );
         }
       }
@@ -108,7 +119,7 @@ async function main() {
     for (const r of racks) {
       const id = await insertItem({
         categoryId: rackCat.id, oem: r.model_code, oemRight: null, description: r.name,
-        hasSides: false, qty: r.stock_qty, left: 0, right: 0, minStock: r.min_stock,
+        hasSides: false, qty: r.stock_qty, positions: null, minStock: r.min_stock,
       });
       if (!id) { report.racksSkipped += 1; continue; }
       report.racksNew += 1;
@@ -153,7 +164,8 @@ async function main() {
     for (const [left, right] of pairs) {
       const id = await insertItem({
         categoryId: wingCat.id, oem: left.sku, oemRight: right.sku, description: left.name,
-        hasSides: true, qty: left.stock_qty + right.stock_qty, left: left.stock_qty, right: right.stock_qty,
+        hasSides: true, qty: left.stock_qty + right.stock_qty,
+        positions: { left: left.stock_qty, right: right.stock_qty },
         minStock: Math.max(left.min_stock, right.min_stock),
       });
       if (!id) { report.wingSkipped += 2; continue; }
@@ -169,8 +181,9 @@ async function main() {
       const sided = !bothInName && ['left', 'right'].includes(w.side);
       const id = await insertItem({
         categoryId: wingCat.id, oem: w.sku, oemRight: null, description: w.name, hasSides: sided,
-        qty: w.stock_qty, left: sided && w.side === 'left' ? w.stock_qty : 0,
-        right: sided && w.side === 'right' ? w.stock_qty : 0, minStock: w.min_stock,
+        qty: w.stock_qty,
+        positions: { left: sided && w.side === 'left' ? w.stock_qty : 0, right: sided && w.side === 'right' ? w.stock_qty : 0 },
+        minStock: w.min_stock,
       });
       if (!id) { report.wingSkipped += 1; continue; }
       report.singlesNew += 1;
@@ -184,8 +197,9 @@ async function main() {
     const [[newRack]] = await conn.query('SELECT COALESCE(SUM(stock_qty),0) s FROM stock_items WHERE category_id = ?', [rackCat.id]);
     const [[newWing]] = await conn.query('SELECT COALESCE(SUM(stock_qty),0) s FROM stock_items WHERE category_id = ?', [wingCat.id]);
     const [[badSum]] = await conn.query(
-      'SELECT COUNT(*) c FROM stock_items WHERE has_sides = 1 AND stock_qty <> stock_left + stock_right');
-    if (badSum.c > 0) throw new Error('ยอดรวมไม่เท่ากับซ้าย+ขวา — ยกเลิก');
+      `SELECT COUNT(*) c FROM stock_items i
+       WHERE i.has_sides = 1 AND i.stock_qty <> (SELECT COALESCE(SUM(p.qty), 0) FROM stock_item_positions p WHERE p.item_id = i.id)`);
+    if (badSum.c > 0) throw new Error('ยอดรวมไม่เท่ากับผลรวมทุกตำแหน่ง — ยกเลิก');
     // ถ้าไม่เคยมีรายการถูกข้ามไปก่อน (รันครั้งแรก) ผลรวมต้องเท่าของเดิมเป๊ะ
     const firstRun = report.racksSkipped === 0 && report.wingSkipped === 0;
     if (firstRun && (Number(newRack.s) !== Number(rackSum.s) || Number(newWing.s) !== Number(wingSum.s))) {

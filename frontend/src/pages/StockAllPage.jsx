@@ -5,14 +5,25 @@ import useRealtimeEvent from '../hooks/useRealtimeEvent';
 const ALL_TAB = 'all';
 const emptyFitment = { brand: '', model: '', year_from: '', year_to: '' };
 const emptyForm = {
-  category_id: '', oem_code: '', oem_code_right: '', description: '', has_sides: false,
-  stock_qty: 0, stock_left: 0, stock_right: 0, min_stock: 1, fitments: [],
+  category_id: '', oem_code: '', oem_code_right: '', description: '', has_sides: false, has_axles: false,
+  stock_qty: 0, stocks: {}, min_stock: 1, fitments: [],
 };
-const SIDE_LABEL = { left: 'ซ้าย', right: 'ขวา' };
+const POSITION_LABEL = {
+  left: 'ซ้าย', right: 'ขวา', front: 'หน้า', rear: 'หลัง',
+  front_left: 'หน้าซ้าย', front_right: 'หน้าขวา', rear_left: 'หลังซ้าย', rear_right: 'หลังขวา',
+};
 
-// ของแยกซ้าย/ขวา ต้องมีครบคู่ถึงใช้ได้ → นับเป็น "ใกล้หมด/หมด" ตามข้างที่น้อยกว่า
+// ตำแหน่งที่แยกยอด — ต้องตรงกับ positionsFor ใน backend/src/routes/stockItems.routes.js
+function positionsFor(hasSides, hasAxles) {
+  if (hasSides && hasAxles) return ['front_left', 'front_right', 'rear_left', 'rear_right'];
+  if (hasSides) return ['left', 'right'];
+  if (hasAxles) return ['front', 'rear'];
+  return [];
+}
+
+// ของแยกตำแหน่ง ต้องมีครบทุกตำแหน่งถึงใช้ได้ → นับเป็น "ใกล้หมด/หมด" ตามตำแหน่งที่น้อยที่สุด
 function effectiveQty(item) {
-  return item.has_sides ? Math.min(item.stock_left, item.stock_right) : item.stock_qty;
+  return item.positions.length > 0 ? Math.min(...item.positions.map((p) => p.qty)) : item.stock_qty;
 }
 
 function formatFitment(f) {
@@ -121,9 +132,9 @@ export default function StockAllPage() {
       oem_code_right: item.oem_code_right || '',
       description: item.description,
       has_sides: Boolean(item.has_sides),
+      has_axles: Boolean(item.has_axles),
       stock_qty: item.stock_qty,
-      stock_left: item.stock_left,
-      stock_right: item.stock_right,
+      stocks: Object.fromEntries(item.positions.map((p) => [p.position, p.qty])),
       min_stock: item.min_stock,
       fitments: item.fitments.map((f) => ({
         brand: f.brand, model: f.model, year_from: f.year_from ?? '', year_to: f.year_to ?? '',
@@ -163,11 +174,11 @@ export default function StockAllPage() {
       if (editingItem) {
         await client.put(`/stock-items/${editingItem.id}`, payload);
         const note = 'แก้ไขจากหน้าแก้ไขรายการ';
-        if (editingItem.has_sides) {
-          for (const side of ['left', 'right']) {
-            const value = Number(form[`stock_${side}`]);
-            if (value !== editingItem[`stock_${side}`]) {
-              await client.patch(`/stock-items/${editingItem.id}/qty`, { side, set_to: value, note });
+        if (editingItem.positions.length > 0) {
+          for (const { position, qty } of editingItem.positions) {
+            const value = Number(form.stocks[position]);
+            if (value !== qty) {
+              await client.patch(`/stock-items/${editingItem.id}/qty`, { position, set_to: value, note });
             }
           }
         } else if (Number(form.stock_qty) !== editingItem.stock_qty) {
@@ -177,9 +188,11 @@ export default function StockAllPage() {
         await client.post('/stock-items', {
           ...payload,
           has_sides: form.has_sides,
+          has_axles: form.has_axles,
           stock_qty: Number(form.stock_qty),
-          stock_left: Number(form.stock_left),
-          stock_right: Number(form.stock_right),
+          stocks: Object.fromEntries(
+            positionsFor(form.has_sides, form.has_axles).map((p) => [p, Number(form.stocks[p] || 0)])
+          ),
         });
       }
       closeForm();
@@ -191,11 +204,11 @@ export default function StockAllPage() {
     }
   }
 
-  async function adjustQty(item, delta, side = null) {
+  async function adjustQty(item, delta, position = null) {
     if (busyId === item.id) return;
     setBusyId(item.id);
     try {
-      await client.patch(`/stock-items/${item.id}/qty`, side ? { delta, side } : { delta });
+      await client.patch(`/stock-items/${item.id}/qty`, position ? { delta, position } : { delta });
       await load();
     } catch (err) {
       alert(err.response?.data?.error || 'ปรับจำนวนไม่สำเร็จ');
@@ -352,19 +365,16 @@ export default function StockAllPage() {
                   )}
                 </td>
                 <td data-label="จำนวน">
-                  {(item.has_sides ? ['left', 'right'] : [null]).map((side) => {
-                    const qty = side ? item[`stock_${side}`] : item.stock_qty;
-                    return (
-                      <div key={side || 'all'} className="stock-all-qty-control">
-                        {side && <span className="stock-all-side-label">{SIDE_LABEL[side]}</span>}
-                        <button type="button" className="stock-all-step" disabled={busyId === item.id || qty === 0}
-                          onClick={() => adjustQty(item, -1, side)} aria-label={`ลดหนึ่งชิ้น${side ? SIDE_LABEL[side] : ''}`}>−</button>
-                        <QtyBadge qty={qty} minStock={item.min_stock} />
-                        <button type="button" className="stock-all-step" disabled={busyId === item.id}
-                          onClick={() => adjustQty(item, 1, side)} aria-label={`เพิ่มหนึ่งชิ้น${side ? SIDE_LABEL[side] : ''}`}>+</button>
-                      </div>
-                    );
-                  })}
+                  {(item.positions.length > 0 ? item.positions : [{ position: null, qty: item.stock_qty }]).map(({ position, qty }) => (
+                    <div key={position || 'all'} className="stock-all-qty-control">
+                      {position && <span className="stock-all-side-label">{POSITION_LABEL[position]}</span>}
+                      <button type="button" className="stock-all-step" disabled={busyId === item.id || qty === 0}
+                        onClick={() => adjustQty(item, -1, position)} aria-label={`ลดหนึ่งชิ้น${position ? POSITION_LABEL[position] : ''}`}>−</button>
+                      <QtyBadge qty={qty} minStock={item.min_stock} />
+                      <button type="button" className="stock-all-step" disabled={busyId === item.id}
+                        onClick={() => adjustQty(item, 1, position)} aria-label={`เพิ่มหนึ่งชิ้น${position ? POSITION_LABEL[position] : ''}`}>+</button>
+                    </div>
+                  ))}
                 </td>
                 <td data-label="จัดการ" className="actions">
                   <button onClick={() => openEdit(item)}>แก้ไข</button>
@@ -401,8 +411,17 @@ export default function StockAllPage() {
                 />
                 ชิ้นนี้แยกซ้าย / ขวา{editingItem ? ' (เปลี่ยนหลังสร้างไม่ได้)' : ''}
               </label>
+              <label className="stock-all-check">
+                <input
+                  type="checkbox"
+                  checked={form.has_axles}
+                  disabled={Boolean(editingItem)}
+                  onChange={(e) => setForm({ ...form, has_axles: e.target.checked })}
+                />
+                ชิ้นนี้แยกหน้า / หลัง (เช่น โช๊ค){editingItem ? ' (เปลี่ยนหลังสร้างไม่ได้)' : ''}
+              </label>
 
-              <label>{form.has_sides ? 'รหัส OEM ซ้าย' : 'รหัส OEM'}</label>
+              <label>{form.has_sides ? 'รหัส OEM (ซ้าย)' : 'รหัส OEM'}</label>
               <input
                 placeholder="เช่น 45510-0K010"
                 value={form.oem_code}
@@ -432,18 +451,15 @@ export default function StockAllPage() {
                 onChange={(e) => setForm({ ...form, description: e.target.value })}
               />
 
-              {form.has_sides ? (
+              {positionsFor(form.has_sides, form.has_axles).length > 0 ? (
                 <div className="stock-all-side-inputs">
-                  <div>
-                    <label>จำนวนซ้าย</label>
-                    <input type="number" min="0" step="1" value={form.stock_left}
-                      onChange={(e) => setForm({ ...form, stock_left: e.target.value })} required />
-                  </div>
-                  <div>
-                    <label>จำนวนขวา</label>
-                    <input type="number" min="0" step="1" value={form.stock_right}
-                      onChange={(e) => setForm({ ...form, stock_right: e.target.value })} required />
-                  </div>
+                  {positionsFor(form.has_sides, form.has_axles).map((position) => (
+                    <div key={position}>
+                      <label>จำนวน{POSITION_LABEL[position]}</label>
+                      <input type="number" min="0" step="1" value={form.stocks[position] ?? 0}
+                        onChange={(e) => setForm({ ...form, stocks: { ...form.stocks, [position]: e.target.value } })} required />
+                    </div>
+                  ))}
                 </div>
               ) : (
                 <>
@@ -499,7 +515,7 @@ export default function StockAllPage() {
                       {movements.map((m) => (
                         <li key={m.id}>
                           <span>{formatDateTime(m.created_at)} · {m.user_name}</span>
-                          <span>{REASON_LABEL[m.reason] || m.reason}{m.side ? ` (${SIDE_LABEL[m.side]})` : ''}: {m.qty_before} → <strong>{m.qty_after}</strong></span>
+                          <span>{REASON_LABEL[m.reason] || m.reason}{m.position ? ` (${POSITION_LABEL[m.position] || m.position})` : ''}: {m.qty_before} → <strong>{m.qty_after}</strong></span>
                           {m.note && <em>{m.note}</em>}
                         </li>
                       ))}
