@@ -124,19 +124,23 @@ describe('/api/stock-items — สต๊อกรวม', () => {
 
   test('ของแยกซ้าย/ขวา: ยอดแต่ละข้าง + ผลรวม + ปรับทีละข้าง + ประวัติบอกตำแหน่ง', async () => {
     const { status, body } = await createItem({
-      has_sides: true, oem_code_right: `R-${suffix}`, stocks: { left: 2, right: 3 }, stock_qty: undefined,
+      has_sides: true, oem_code: undefined, codes: { left: `L-${suffix}`, right: `R-${suffix}` },
+      stocks: { left: 2, right: 3 }, stock_qty: undefined,
     });
     expect(status).toBe(201);
     const id = body.id;
-    const get = async () => (await auth(request(app).get('/api/stock-items')).query({ q: `R-${suffix}` })).body[0];
+    const get = async () => (await auth(request(app).get('/api/stock-items')).query({ q: `R-${suffix}` })).body.find((i) => i.id === id);
     expect(await get()).toMatchObject({
-      has_sides: 1, has_axles: 0, stock_qty: 5, oem_code_right: `R-${suffix}`,
-      positions: [{ position: 'left', qty: 2 }, { position: 'right', qty: 3 }],
+      has_sides: 1, has_axles: 0, stock_qty: 5, oem_code: `L-${suffix}`,
+      positions: [
+        { position: 'left', qty: 2, oem_code: `L-${suffix}` },
+        { position: 'right', qty: 3, oem_code: `R-${suffix}` },
+      ],
     });
 
     const up = await auth(request(app).patch(`/api/stock-items/${id}/qty`)).send({ position: 'right', delta: 2 });
     expect(up.body).toMatchObject({ stock_qty: 7, position: 'right', qty: 5 });
-    expect((await get()).positions).toEqual([{ position: 'left', qty: 2 }, { position: 'right', qty: 5 }]);
+    expect((await get()).positions.map((p) => p.qty)).toEqual([2, 5]);
 
     const noPos = await auth(request(app).patch(`/api/stock-items/${id}/qty`)).send({ delta: 1 });
     expect(noPos.status).toBe(400);
@@ -151,12 +155,32 @@ describe('/api/stock-items — สต๊อกรวม', () => {
 
   test('โช๊ค: แยกทั้งหน้า/หลังและซ้าย/ขวา = 4 ตำแหน่ง ยอดรวมถูก', async () => {
     const { status, body } = await createItem({
-      has_sides: true, has_axles: true, oem_code_right: null, stock_qty: undefined,
+      has_sides: true, has_axles: true, oem_code: undefined, stock_qty: undefined,
+      codes: { front_left: `FL-${suffix}`, front_right: `FR-${suffix}`, rear_left: '', rear_right: `RR-${suffix}` },
       stocks: { front_left: 1, front_right: 2, rear_left: 3, rear_right: 4 },
     });
     expect(status).toBe(201);
-    const item = (await auth(request(app).get('/api/stock-items')).query({ q: 'OEM-' + suffix })).body.find((i) => i.id === body.id);
+    const item = (await auth(request(app).get('/api/stock-items')).query({ q: `FL-${suffix}` })).body.find((i) => i.id === body.id);
     expect(item.stock_qty).toBe(10);
+    // รหัสหลัก = รหัสแรกที่มีค่า, ตำแหน่งที่ไม่กรอกรหัสเป็น null
+    expect(item.oem_code).toBe(`FL-${suffix}`);
+    expect(item.positions.map((p) => p.oem_code)).toEqual([`FL-${suffix}`, `FR-${suffix}`, null, `RR-${suffix}`]);
+    // ค้นหาด้วยรหัสของตำแหน่งอื่นก็เจอ
+    const byRear = await auth(request(app).get('/api/stock-items')).query({ q: `RR-${suffix}` });
+    expect(byRear.body.map((i) => i.id)).toContain(body.id);
+    // แก้รหัสทีหลัง
+    const put = await auth(request(app).put(`/api/stock-items/${body.id}`)).send({
+      category_id: categoryId, description: '', min_stock: 1,
+      codes: { front_left: '', front_right: `FR2-${suffix}`, rear_left: `RL-${suffix}`, rear_right: '' },
+    });
+    expect(put.status).toBe(200);
+    const edited = (await auth(request(app).get('/api/stock-items')).query({ q: `RL-${suffix}` })).body.find((i) => i.id === body.id);
+    expect(edited.oem_code).toBe(`FR2-${suffix}`);
+    expect(edited.positions.map((p) => p.qty)).toEqual([1, 2, 3, 4]);
+    const noCode = await auth(request(app).put(`/api/stock-items/${body.id}`)).send({
+      category_id: categoryId, description: '', min_stock: 1, codes: {},
+    });
+    expect(noCode.status).toBe(400);
     expect(item.positions.map((p) => p.position)).toEqual(['front_left', 'front_right', 'rear_left', 'rear_right']);
     const res = await auth(request(app).patch(`/api/stock-items/${body.id}/qty`)).send({ position: 'rear_right', set_to: 0 });
     expect(res.body).toMatchObject({ stock_qty: 6, qty: 0 });
@@ -171,7 +195,7 @@ describe('/api/stock-items — สต๊อกรวม', () => {
     expect(status).toBe(201);
     const item = (await auth(request(app).get('/api/stock-items')).query({ q: 'OEM-' + suffix })).body.find((i) => i.id === body.id);
     expect(item).toMatchObject({ has_sides: 0, has_axles: 1, stock_qty: 6 });
-    expect(item.positions).toEqual([{ position: 'front', qty: 5 }, { position: 'rear', qty: 1 }]);
+    expect(item.positions.map((p) => [p.position, p.qty])).toEqual([['front', 5], ['rear', 1]]);
   });
 
   test('ของธรรมดาห้ามส่ง position', async () => {

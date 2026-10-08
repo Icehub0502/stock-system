@@ -992,6 +992,26 @@ async function initDatabase() {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
 
+  // รหัส OEM ของแต่ละตำแหน่ง (ซ้าย/ขวา/หน้า/หลัง ฯลฯ มักคนละรหัส) — stock_items.oem_code
+  // ยังเป็นรหัสหลัก (รหัสของตำแหน่งแรกที่มีรหัส) ไว้ใช้เป็นกุญแจไม่ซ้ำและค้นหา ส่วน
+  // oem_code_right เลิกใช้แล้ว เพิ่มคอลัมน์ได้ครั้งแรกเท่านั้นถึงจะคัดลอกรหัสเดิมเข้ามา
+  // (กันรันซ้ำทุกครั้งที่บูตแล้วทับรหัสที่ผู้ใช้เคลียร์ออกเอง)
+  let addedPositionCode = true;
+  await conn.query(`ALTER TABLE stock_item_positions ADD COLUMN oem_code VARCHAR(100) DEFAULT NULL`)
+    .catch((err) => { ignoreIfAlreadyApplied(err); addedPositionCode = false; });
+  if (addedPositionCode) {
+    await conn.query(`
+      UPDATE stock_item_positions p JOIN stock_items i ON i.id = p.item_id
+      SET p.oem_code = i.oem_code
+      WHERE p.position IN ('left', 'front', 'front_left')
+    `);
+    await conn.query(`
+      UPDATE stock_item_positions p JOIN stock_items i ON i.id = p.item_id
+      SET p.oem_code = i.oem_code_right
+      WHERE p.position IN ('right', 'rear', 'front_right') AND i.oem_code_right IS NOT NULL
+    `);
+  }
+
   // รุ่นรถ/ปีที่อะไหล่ชิ้นนี้ใช้ได้ (ได้หลายแถวต่อชิ้น) year_from/year_to เป็น NULL =
   // ไม่ระบุปี
   await conn.query(`

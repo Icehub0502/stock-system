@@ -63,22 +63,21 @@ async function main() {
     const userId = userRow.id;
 
     // positions: { left: n, right: n } สำหรับของแยกซ้าย/ขวา (hasSides) — ของธรรมดาใช้ qty
-    async function insertItem({ categoryId, oem, oemRight, description, hasSides, qty, positions, minStock }) {
+    async function insertItem({ categoryId, oem, codes, description, hasSides, qty, positions, minStock }) {
       const [exists] = await conn.query(
         'SELECT id FROM stock_items WHERE category_id = ? AND oem_code = ?', [categoryId, oem]
       );
       if (exists.length) return null;
       const [ins] = await conn.query(
-        `INSERT INTO stock_items (category_id, oem_code, oem_code_right, description, has_sides,
-                                  stock_qty, min_stock)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [categoryId, oem, oemRight, description, hasSides ? 1 : 0, qty, minStock]
+        `INSERT INTO stock_items (category_id, oem_code, description, has_sides, stock_qty, min_stock)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [categoryId, oem, description, hasSides ? 1 : 0, qty, minStock]
       );
       if (hasSides) {
         for (const position of ['left', 'right']) {
           await conn.query(
-            'INSERT INTO stock_item_positions (item_id, position, qty) VALUES (?, ?, ?)',
-            [ins.insertId, position, positions[position]]
+            'INSERT INTO stock_item_positions (item_id, position, qty, oem_code) VALUES (?, ?, ?, ?)',
+            [ins.insertId, position, positions[position], codes ? codes[position] : null]
           );
         }
       }
@@ -127,7 +126,7 @@ async function main() {
     const rackFit = await readIfTableExists('rack_fitments');
     for (const r of racks) {
       const id = await insertItem({
-        categoryId: rackCat.id, oem: r.model_code, oemRight: null, description: r.name,
+        categoryId: rackCat.id, oem: r.model_code, codes: null, description: r.name,
         hasSides: false, qty: r.stock_qty, positions: null, minStock: r.min_stock,
       });
       if (!id) { report.racksSkipped += 1; continue; }
@@ -193,7 +192,7 @@ async function main() {
 
     for (const [left, right] of pairs) {
       const id = await insertItem({
-        categoryId: wingCat.id, oem: left.sku, oemRight: right.sku, description: left.name,
+        categoryId: wingCat.id, oem: left.sku, codes: { left: left.sku, right: right.sku }, description: left.name,
         hasSides: true, qty: left.stock_qty + right.stock_qty,
         positions: { left: left.stock_qty, right: right.stock_qty },
         minStock: Math.max(left.min_stock, right.min_stock),
@@ -210,7 +209,7 @@ async function main() {
       const bothInName = w.name.includes('ซ้าย') && w.name.includes('ขวา');
       const sided = !bothInName && ['left', 'right'].includes(w.side);
       const id = await insertItem({
-        categoryId: wingCat.id, oem: w.sku, oemRight: null, description: w.name, hasSides: sided,
+        categoryId: wingCat.id, oem: w.sku, codes: { left: sided && w.side === 'left' ? w.sku : null, right: sided && w.side === 'right' ? w.sku : null }, description: w.name, hasSides: sided,
         qty: w.stock_qty,
         positions: { left: sided && w.side === 'left' ? w.stock_qty : 0, right: sided && w.side === 'right' ? w.stock_qty : 0 },
         minStock: w.min_stock,

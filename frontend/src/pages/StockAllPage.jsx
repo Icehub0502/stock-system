@@ -5,13 +5,35 @@ import useRealtimeEvent from '../hooks/useRealtimeEvent';
 const ALL_TAB = 'all';
 const emptyFitment = { brand: '', model: '', year_from: '', year_to: '' };
 const emptyForm = {
-  category_id: '', oem_code: '', oem_code_right: '', description: '', has_sides: false, has_axles: false,
-  stock_qty: 0, stocks: {}, min_stock: 1, fitments: [],
+  category_id: '', oem_code: '', description: '', has_sides: false, has_axles: false,
+  stock_qty: 0, stocks: {}, codes: {}, min_stock: 1, fitments: [],
 };
 const POSITION_LABEL = {
   left: 'ซ้าย', right: 'ขวา', front: 'หน้า', rear: 'หลัง',
   front_left: 'หน้าซ้าย', front_right: 'หน้าขวา', rear_left: 'หลังซ้าย', rear_right: 'หลังขวา',
 };
+
+// สีประจำตำแหน่ง (ตัวอักษร / พื้นอ่อน) ใช้ทั้งในตารางและในฟอร์ม ให้รู้ทันทีว่ารหัส/จำนวนไหนคือด้านไหน
+// ซ้าย=น้ำเงิน ขวา=แดง หน้า=ม่วง หลัง=ส้ม — โช๊ค 4 ตำแหน่งใช้ 4 สีไม่ซ้ำกัน
+const POSITION_COLOR = {
+  left: { fg: '#1d4ed8', bg: '#dbeafe' },
+  right: { fg: '#b91c1c', bg: '#fee2e2' },
+  front: { fg: '#6d28d9', bg: '#ede9fe' },
+  rear: { fg: '#c2410c', bg: '#ffedd5' },
+  front_left: { fg: '#1d4ed8', bg: '#dbeafe' },
+  front_right: { fg: '#b91c1c', bg: '#fee2e2' },
+  rear_left: { fg: '#047857', bg: '#d1fae5' },
+  rear_right: { fg: '#c2410c', bg: '#ffedd5' },
+};
+
+function PositionChip({ position }) {
+  const color = POSITION_COLOR[position] || { fg: '#374151', bg: '#e5e7eb' };
+  return (
+    <span className="stock-all-chip-pos" style={{ color: color.fg, background: color.bg }}>
+      {POSITION_LABEL[position] || position}
+    </span>
+  );
+}
 
 // ตำแหน่งที่แยกยอด — ต้องตรงกับ positionsFor ใน backend/src/routes/stockItems.routes.js
 function positionsFor(hasSides, hasAxles) {
@@ -61,7 +83,6 @@ export default function StockAllPage() {
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
   const [movements, setMovements] = useState([]);
-  const [busyId, setBusyId] = useState(null);
 
   const load = useCallback(async () => {
     try {
@@ -96,7 +117,7 @@ export default function StockAllPage() {
     return items.filter((i) => {
       // พิมพ์ค้นหา = ค้นข้ามทุกหมวด (ไม่ติดแท็บ) จะได้หารหัสเจอแม้ไม่รู้ว่าอยู่หมวดไหน
       if (!term && activeTab !== ALL_TAB && i.category_id !== activeTab) return false;
-      if (term && !`${i.oem_code} ${i.oem_code_right || ''} ${i.description} ${i.fitments.map(formatFitment).join(' ')}`.toLowerCase().includes(term)) return false;
+      if (term && !`${i.oem_code} ${i.positions.map((p) => p.oem_code || '').join(' ')} ${i.description} ${i.fitments.map(formatFitment).join(' ')}`.toLowerCase().includes(term)) return false;
       const qty = effectiveQty(i);
       if (stockFilter === 'out' && qty !== 0) return false;
       if (stockFilter === 'low' && !(qty > 0 && qty <= i.min_stock)) return false;
@@ -112,6 +133,8 @@ export default function StockAllPage() {
     () => [...new Set(items.flatMap((i) => i.fitments.map((f) => f.model)))].sort(),
     [items]
   );
+
+  const formPositions = positionsFor(form.has_sides, form.has_axles);
 
   const showCategoryColumn = activeTab === ALL_TAB || searchTerm.trim() !== '';
   const activeCategory = categories.find((c) => c.id === activeTab) || null;
@@ -129,12 +152,12 @@ export default function StockAllPage() {
     setForm({
       category_id: item.category_id,
       oem_code: item.oem_code,
-      oem_code_right: item.oem_code_right || '',
       description: item.description,
       has_sides: Boolean(item.has_sides),
       has_axles: Boolean(item.has_axles),
       stock_qty: item.stock_qty,
       stocks: Object.fromEntries(item.positions.map((p) => [p.position, p.qty])),
+      codes: Object.fromEntries(item.positions.map((p) => [p.position, p.oem_code || ''])),
       min_stock: item.min_stock,
       fitments: item.fitments.map((f) => ({
         brand: f.brand, model: f.model, year_from: f.year_from ?? '', year_to: f.year_to ?? '',
@@ -159,13 +182,17 @@ export default function StockAllPage() {
 
   async function handleSubmit(e) {
     e.preventDefault();
+    if (formPositions.length > 0 && !formPositions.some((p) => (form.codes[p] || '').trim())) {
+      setErrorMsg('กรุณากรอกรหัส OEM อย่างน้อยหนึ่งตำแหน่ง');
+      return;
+    }
     setSaving(true);
     setErrorMsg('');
     try {
       const payload = {
         category_id: Number(form.category_id),
         oem_code: form.oem_code,
-        oem_code_right: form.has_sides ? form.oem_code_right : '',
+        codes: Object.fromEntries(formPositions.map((p) => [p, form.codes[p] || ''])),
         description: form.description,
         min_stock: Number(form.min_stock),
         // แถวที่ยังไม่กรอกยี่ห้อ/รุ่นเลย (กด "เพิ่มรุ่นรถ" ค้างไว้) ไม่ส่งไป
@@ -201,19 +228,6 @@ export default function StockAllPage() {
       setErrorMsg(err.response?.data?.error || 'บันทึกไม่สำเร็จ');
     } finally {
       setSaving(false);
-    }
-  }
-
-  async function adjustQty(item, delta, position = null) {
-    if (busyId === item.id) return;
-    setBusyId(item.id);
-    try {
-      await client.patch(`/stock-items/${item.id}/qty`, position ? { delta, position } : { delta });
-      await load();
-    } catch (err) {
-      alert(err.response?.data?.error || 'ปรับจำนวนไม่สำเร็จ');
-    } finally {
-      setBusyId(null);
     }
   }
 
@@ -346,10 +360,16 @@ export default function StockAllPage() {
               <tr key={item.id}>
                 {showCategoryColumn && <td data-label="หมวด">{item.category_name}</td>}
                 <td data-label="รหัส OEM">
-                  <strong>{item.oem_code}</strong>
-                  {item.has_sides && item.oem_code_right && (
-                    <div className="stock-all-code-right">ขวา: {item.oem_code_right}</div>
-                  )}
+                  {item.positions.length === 0 ? (
+                    <strong className="stock-all-code">{item.oem_code}</strong>
+                  ) : item.positions.map(({ position, oem_code: code }) => (
+                    <div key={position} className="stock-all-pos-row">
+                      <PositionChip position={position} />
+                      <span className="stock-all-code" style={{ color: POSITION_COLOR[position]?.fg }}>
+                        {code || '—'}
+                      </span>
+                    </div>
+                  ))}
                 </td>
                 <td data-label="รายละเอียด">{item.description || '—'}</td>
                 <td data-label="ใช้กับรถ">
@@ -365,18 +385,16 @@ export default function StockAllPage() {
                   )}
                 </td>
                 <td data-label="จำนวน">
-                  {(item.positions.length > 0 ? item.positions : [{ position: null, qty: item.stock_qty }]).map(({ position, qty }) => (
-                    <div key={position || 'all'} className="stock-all-qty-control">
-                      {position && <span className="stock-all-side-label">{POSITION_LABEL[position]}</span>}
-                      <button type="button" className="stock-all-step" disabled={busyId === item.id || qty === 0}
-                        onClick={() => adjustQty(item, -1, position)} aria-label={`ลดหนึ่งชิ้น${position ? POSITION_LABEL[position] : ''}`}>−</button>
+                  {item.positions.length === 0 ? (
+                    <QtyBadge qty={item.stock_qty} minStock={item.min_stock} />
+                  ) : item.positions.map(({ position, qty }) => (
+                    <div key={position} className="stock-all-pos-row">
+                      <PositionChip position={position} />
                       <QtyBadge qty={qty} minStock={item.min_stock} />
-                      <button type="button" className="stock-all-step" disabled={busyId === item.id}
-                        onClick={() => adjustQty(item, 1, position)} aria-label={`เพิ่มหนึ่งชิ้น${position ? POSITION_LABEL[position] : ''}`}>+</button>
                     </div>
                   ))}
                 </td>
-                <td data-label="จัดการ" className="actions">
+                <td data-label="จัดการ" className="stock-all-actions">
                   <button onClick={() => openEdit(item)}>แก้ไข</button>
                 </td>
               </tr>
@@ -421,24 +439,16 @@ export default function StockAllPage() {
                 ชิ้นนี้แยกหน้า / หลัง (เช่น โช๊ค){editingItem ? ' (เปลี่ยนหลังสร้างไม่ได้)' : ''}
               </label>
 
-              <label>{form.has_sides ? 'รหัส OEM (ซ้าย)' : 'รหัส OEM'}</label>
-              <input
-                placeholder="เช่น 45510-0K010"
-                value={form.oem_code}
-                maxLength={100}
-                onChange={(e) => setForm({ ...form, oem_code: e.target.value })}
-                required
-                autoFocus
-              />
-
-              {form.has_sides && (
+              {formPositions.length === 0 && (
                 <>
-                  <label>รหัส OEM ขวา (ถ้าไม่เหมือนฝั่งซ้าย)</label>
+                  <label>รหัส OEM</label>
                   <input
-                    placeholder="เว้นว่างได้ถ้าใช้รหัสเดียวกัน"
-                    value={form.oem_code_right}
+                    placeholder="เช่น 45510-0K010"
+                    value={form.oem_code}
                     maxLength={100}
-                    onChange={(e) => setForm({ ...form, oem_code_right: e.target.value })}
+                    onChange={(e) => setForm({ ...form, oem_code: e.target.value })}
+                    required
+                    autoFocus
                   />
                 </>
               )}
@@ -451,11 +461,22 @@ export default function StockAllPage() {
                 onChange={(e) => setForm({ ...form, description: e.target.value })}
               />
 
-              {positionsFor(form.has_sides, form.has_axles).length > 0 ? (
-                <div className="stock-all-side-inputs">
-                  {positionsFor(form.has_sides, form.has_axles).map((position) => (
-                    <div key={position}>
-                      <label>จำนวน{POSITION_LABEL[position]}</label>
+              {formPositions.length > 0 ? (
+                <div className="stock-all-pos-form">
+                  <div className="stock-all-pos-form-head">
+                    <span />
+                    <span>รหัส OEM ของตำแหน่งนี้</span>
+                    <span>จำนวน</span>
+                  </div>
+                  {formPositions.map((position) => (
+                    <div key={position} className="stock-all-pos-form-row">
+                      <PositionChip position={position} />
+                      <input
+                        placeholder="รหัส OEM"
+                        value={form.codes[position] ?? ''}
+                        maxLength={100}
+                        onChange={(e) => setForm({ ...form, codes: { ...form.codes, [position]: e.target.value } })}
+                      />
                       <input type="number" min="0" step="1" value={form.stocks[position] ?? 0}
                         onChange={(e) => setForm({ ...form, stocks: { ...form.stocks, [position]: e.target.value } })} required />
                     </div>

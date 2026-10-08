@@ -25,7 +25,7 @@ function cleanText(value, maxLen) {
   return String(value ?? '').trim().slice(0, maxLen);
 }
 
-const ITEM_COLUMNS = `i.id, i.category_id, c.name AS category_name, i.oem_code, i.oem_code_right,
+const ITEM_COLUMNS = `i.id, i.category_id, c.name AS category_name, i.oem_code,
   i.description, i.has_sides, i.has_axles, i.stock_qty, i.min_stock, i.updated_at`;
 
 // ตำแหน่งที่ของชิ้นนี้แยกยอด: ติ๊กซ้าย/ขวา และ/หรือ หน้า/หลัง (ไม่ติ๊กเลย = ยอดเดียว)
@@ -34,6 +34,24 @@ function positionsFor(hasSides, hasAxles) {
   if (hasSides) return ['left', 'right'];
   if (hasAxles) return ['front', 'rear'];
   return [];
+}
+
+// รหัส OEM ของแต่ละตำแหน่ง ({ position: code }) — ว่าง = NULL (ยังไม่ทราบรหัส)
+function parseCodes(raw, positions) {
+  const codes = {};
+  for (const position of positions) {
+    codes[position] = cleanText(raw ? raw[position] : '', 100) || null;
+  }
+  return codes;
+}
+
+// รหัสหลักของชิ้น = รหัสแรกที่มีค่าตามลำดับตำแหน่ง (ใช้เป็นกุญแจไม่ซ้ำในหมวด + ค้นหา)
+// ไม่มีรหัสตำแหน่งเลยก็ใช้ oem_code ที่ส่งมาตรง ๆ แทน (fallback)
+function primaryCode(positions, codes, fallback) {
+  for (const position of positions) {
+    if (codes[position]) return codes[position];
+  }
+  return fallback;
 }
 
 // อ่านยอดแต่ละตำแหน่งจากข้อมูลที่ส่งมา ({ position: qty }) — ตำแหน่งที่ไม่ส่ง = 0
@@ -164,7 +182,8 @@ router.get('/', async (req, res) => {
     const q = cleanText(req.query.q, 100);
     if (q) {
       const like = `%${q}%`;
-      where.push(`(i.oem_code LIKE ? OR i.oem_code_right LIKE ? OR i.description LIKE ?
+      where.push(`(i.oem_code LIKE ? OR i.description LIKE ?
+        OR EXISTS (SELECT 1 FROM stock_item_positions p WHERE p.item_id = i.id AND p.oem_code LIKE ?)
         OR EXISTS (SELECT 1 FROM stock_item_fitments f WHERE f.item_id = i.id
                    AND CONCAT(f.brand, ' ', f.model) LIKE ?))`);
       params.push(like, like, like, like);
@@ -183,11 +202,11 @@ router.get('/', async (req, res) => {
     if (rows.length > 0) {
       const ids = rows.map((r) => r.id);
       const [posRows] = await pool.query(
-        'SELECT item_id, position, qty FROM stock_item_positions WHERE item_id IN (?)',
+        'SELECT item_id, position, qty, oem_code FROM stock_item_positions WHERE item_id IN (?)',
         [ids]
       );
       posRows.forEach((p) => {
-        (positionsByItem[p.item_id] = positionsByItem[p.item_id] || {})[p.position] = p.qty;
+        (positionsByItem[p.item_id] = positionsByItem[p.item_id] || {})[p.position] = p;
       });
       const [fitRows] = await pool.query(
         `SELECT item_id, brand, model, year_from, year_to
@@ -203,9 +222,10 @@ router.get('/', async (req, res) => {
     res.json(rows.map((r) => ({
       ...r,
       // เรียงตามลำดับมาตรฐาน (หน้าซ้าย หน้าขวา หลังซ้าย หลังขวา) ตำแหน่งที่ยังไม่มีแถว = 0
-      positions: positionsFor(r.has_sides, r.has_axles).map((position) => ({
-        position, qty: (positionsByItem[r.id] || {})[position] || 0,
-      })),
+      positions: positionsFor(r.has_sides, r.has_axles).map((position) => {
+        const row = (positionsByItem[r.id] || {})[position];
+        return { position, qty: row ? row.qty : 0, oem_code: row ? row.oem_code : null };
+      }),
       fitments: fitmentsByItem[r.id] || [],
     })));
   } catch (err) {
@@ -217,11 +237,9 @@ router.get('/', async (req, res) => {
 router.post('/', async (req, res) => {
   const body = req.body || {};
   const categoryId = parseId(body.category_id);
-  const oemCode = cleanText(body.oem_code, 100);
   const description = cleanText(body.description, 500);
   const hasSides = body.has_sides === true || body.has_sides === 1;
   const hasAxles = body.has_axles === true || body.has_axles === 1;
-  const oemCodeRight = hasSides ? cleanText(body.oem_code_right, 100) || null : null;
   const minStock = body.min_stock === undefined ? 1 : parseQty(body.min_stock);
   // ของแยกตำแหน่ง: ยอดมาจาก body.stocks ({ position: qty }) แล้ว stock_qty = ผลรวม
   const positions = positionsFor(hasSides, hasAxles);
@@ -229,8 +247,10 @@ router.post('/', async (req, res) => {
   const stockQty = positions.length
     ? (parsedStocks.stocks ? Object.values(parsedStocks.stocks).reduce((a, b) => a + b, 0) : null)
     : (body.stock_qty === undefined ? 0 : parseQty(body.stock_qty));
+  const codes = parseCodes(body.codes, positions);
+  const oemCode = primaryCode(positions, codes, cleanText(body.oem_code, 100));
   if (!categoryId || !oemCode) {
-    return res.status(400).json({ error: 'กรุณาเลือกหมวดหมู่และกรอกรหัส OEM' });
+    return res.status(400).json({ error: 'กรุณาเลือกหมวดหมู่และกรอกรหัส OEM (อย่างน้อยหนึ่งตำแหน่ง)' });
   }
   if (stockQty === null || minStock === null) {
     return res.status(400).json({ error: 'จำนวนต้องเป็นเลขจำนวนเต็มตั้งแต่ 0 ขึ้นไป' });
@@ -260,25 +280,25 @@ router.post('/', async (req, res) => {
     if (hidden) {
       itemId = hidden.id;
       await conn.execute(
-        `UPDATE stock_items SET description = ?, has_sides = ?, has_axles = ?, oem_code_right = ?,
+        `UPDATE stock_items SET description = ?, has_sides = ?, has_axles = ?, oem_code_right = NULL,
                 stock_qty = ?, min_stock = ?, is_active = 1 WHERE id = ?`,
-        [description, hasSides ? 1 : 0, hasAxles ? 1 : 0, oemCodeRight, stockQty, minStock, itemId]
+        [description, hasSides ? 1 : 0, hasAxles ? 1 : 0, stockQty, minStock, itemId]
       );
       await conn.execute('DELETE FROM stock_item_positions WHERE item_id = ?', [itemId]);
     } else {
       const [result] = await conn.execute(
-        `INSERT INTO stock_items (category_id, oem_code, oem_code_right, description, has_sides, has_axles,
+        `INSERT INTO stock_items (category_id, oem_code, description, has_sides, has_axles,
                                   stock_qty, min_stock)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [categoryId, oemCode, oemCodeRight, description, hasSides ? 1 : 0, hasAxles ? 1 : 0, stockQty, minStock]
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [categoryId, oemCode, description, hasSides ? 1 : 0, hasAxles ? 1 : 0, stockQty, minStock]
       );
       itemId = result.insertId;
     }
     await replaceFitments(conn, itemId, parsedFit.fitments);
     for (const position of positions) {
       await conn.execute(
-        'INSERT INTO stock_item_positions (item_id, position, qty) VALUES (?, ?, ?)',
-        [itemId, position, stocks[position]]
+        'INSERT INTO stock_item_positions (item_id, position, qty, oem_code) VALUES (?, ?, ?, ?)',
+        [itemId, position, stocks[position], codes[position]]
       );
     }
     const opening = positions.length
@@ -314,11 +334,9 @@ router.put('/:id', async (req, res) => {
   const body = req.body || {};
   const id = parseId(req.params.id);
   const categoryId = parseId(body.category_id);
-  const oemCode = cleanText(body.oem_code, 100);
-  const oemCodeRight = cleanText(body.oem_code_right, 100) || null;
   const description = cleanText(body.description, 500);
   const minStock = parseQty(body.min_stock);
-  if (!id || !categoryId || !oemCode || minStock === null) {
+  if (!id || !categoryId || minStock === null) {
     return res.status(400).json({ error: 'ข้อมูลไม่ถูกต้อง' });
   }
   const replaceFit = body.fitments !== undefined;
@@ -338,19 +356,34 @@ router.put('/:id', async (req, res) => {
       return res.status(404).json({ error: 'ไม่พบหมวดหมู่' });
     }
     const [[item]] = await conn.execute(
-      'SELECT id, has_sides FROM stock_items WHERE id = ? AND is_active = 1 FOR UPDATE',
+      'SELECT id, has_sides, has_axles FROM stock_items WHERE id = ? AND is_active = 1 FOR UPDATE',
       [id]
     );
     if (!item) {
       await conn.rollback();
       return res.status(404).json({ error: 'ไม่พบรายการ' });
     }
-    // oem_code_right มีความหมายเฉพาะของแยกซ้าย/ขวา
+    // ของแยกตำแหน่ง: รหัสอยู่ที่ตำแหน่งละรหัส (รหัสหลักคำนวณจากรหัสแรกที่มีค่า)
+    // ของธรรมดา: ใช้ oem_code ตรง ๆ
+    const itemPositions = positionsFor(item.has_sides, item.has_axles);
+    const codes = parseCodes(body.codes, itemPositions);
+    const oemCode = primaryCode(itemPositions, codes, cleanText(body.oem_code, 100));
+    if (!oemCode) {
+      await conn.rollback();
+      return res.status(400).json({ error: 'กรุณากรอกรหัส OEM (อย่างน้อยหนึ่งตำแหน่ง)' });
+    }
     await conn.execute(
-      `UPDATE stock_items SET category_id = ?, oem_code = ?, oem_code_right = ?, description = ?, min_stock = ?
+      `UPDATE stock_items SET category_id = ?, oem_code = ?, oem_code_right = NULL, description = ?, min_stock = ?
        WHERE id = ?`,
-      [categoryId, oemCode, item.has_sides ? oemCodeRight : null, description, minStock, id]
+      [categoryId, oemCode, description, minStock, id]
     );
+    for (const position of itemPositions) {
+      await conn.execute(
+        `INSERT INTO stock_item_positions (item_id, position, qty, oem_code) VALUES (?, ?, 0, ?)
+         ON DUPLICATE KEY UPDATE oem_code = VALUES(oem_code)`,
+        [id, position, codes[position]]
+      );
+    }
     if (replaceFit) await replaceFitments(conn, id, parsedFit.fitments);
     await conn.commit();
     emitStockEvent('stock:item-updated', { entityType: 'stock_item', entityId: id, actorId: req.user.id });
