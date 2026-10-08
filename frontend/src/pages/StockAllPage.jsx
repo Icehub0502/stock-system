@@ -84,6 +84,15 @@ export default function StockAllPage() {
   const [saving, setSaving] = useState(false);
   const [movements, setMovements] = useState([]);
 
+  // ── เลือกหลายรายการเพื่อพิมพ์ป้าย QR (เหมือนหน้า StockRack เดิม) ──
+  // หนึ่งรายการแยกตำแหน่งได้หลายป้าย (หนึ่งป้ายต่อรหัส OEM ของแต่ละตำแหน่ง) ป้ายพิมพ์ผ่าน
+  // #qr-print-area ตัวเดียวกับหน้าเดิม (สไตล์อยู่ใน app.css) QR เป็นรหัสล้วน ๆ จึงสแกนที่
+  // หน้า /scan ได้ และป้ายเก่าที่ติดของไปแล้วก็ใช้ต่อได้เพราะรหัสเดียวกัน
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [printLoading, setPrintLoading] = useState(false);
+  const [printQueue, setPrintQueue] = useState([]);
+
   const load = useCallback(async () => {
     try {
       const [catRes, itemRes] = await Promise.all([
@@ -101,6 +110,19 @@ export default function StockAllPage() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  // สั่งพิมพ์เมื่อโหลดป้ายเสร็จ (หน่วงเล็กน้อยให้รูป QR เรนเดอร์ก่อน) และล้างคิวหลังพิมพ์/ยกเลิก
+  useEffect(() => {
+    if (printQueue.length === 0) return undefined;
+    const timer = setTimeout(() => window.print(), 300);
+    return () => clearTimeout(timer);
+  }, [printQueue]);
+
+  useEffect(() => {
+    const handleAfterPrint = () => setPrintQueue([]);
+    window.addEventListener('afterprint', handleAfterPrint);
+    return () => window.removeEventListener('afterprint', handleAfterPrint);
+  }, []);
 
   // ฟอร์มเปิดอยู่ = กำลังพิมพ์ ไม่รีเฟรชทับ (ข้อมูลฟอร์มอยู่ใน state แยกอยู่แล้ว แต่รายการ
   // ข้างหลังเปลี่ยนได้ปลอดภัย) — รีเฟรชเงียบ ๆ ทุกครั้งที่เครื่องอื่นแก้สต๊อก
@@ -138,6 +160,35 @@ export default function StockAllPage() {
 
   const showCategoryColumn = activeTab === ALL_TAB || searchTerm.trim() !== '';
   const activeCategory = categories.find((c) => c.id === activeTab) || null;
+
+  function toggleSelectMode() {
+    setSelectMode((prev) => !prev);
+    setSelectedIds([]);
+  }
+
+  function toggleSelectOne(id) {
+    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  }
+
+  async function handlePrintSelected() {
+    // เฉพาะรายการที่ยังมีอยู่ในตาราง (เครื่องอื่นอาจซ่อนไปแล้วระหว่างเลือก)
+    const ids = selectedIds.filter((id) => items.some((i) => i.id === id));
+    if (ids.length === 0) return;
+    setPrintLoading(true);
+    setErrorMsg('');
+    try {
+      const res = await client.get('/stock-receive/qrcodes', { params: { ids: ids.join(',') } });
+      if (res.data.labels.length === 0) {
+        setErrorMsg('รายการที่เลือกยังไม่มีรหัส OEM จึงไม่มี QR ให้พิมพ์');
+      } else {
+        setPrintQueue(res.data.labels);
+      }
+    } catch (err) {
+      setErrorMsg(err.response?.data?.error || 'โหลด QR Code ไม่สำเร็จ ลองใหม่อีกครั้ง');
+    } finally {
+      setPrintLoading(false);
+    }
+  }
 
   function openAdd() {
     setEditingItem(null);
@@ -289,7 +340,22 @@ export default function StockAllPage() {
       <div className="dashboard-header">
         <h2>สต๊อกรวม <span className="dashboard-header-sub">— แยกตามหมวดหมู่ ค้นด้วยรหัส OEM</span></h2>
         <div className="header-actions">
-          <button className="btn-primary" onClick={openAdd} disabled={categories.length === 0}>+ เพิ่มรายการ</button>
+          {!selectMode ? (
+            <>
+              <button type="button" onClick={toggleSelectMode}>🖨️ เลือกพิมพ์ QR</button>
+              <button className="btn-primary" onClick={openAdd} disabled={categories.length === 0}>+ เพิ่มรายการ</button>
+            </>
+          ) : (
+            <>
+              <button type="button" onClick={() => setSelectedIds(visibleItems.map((i) => i.id))}>เลือกทั้งหมดที่เห็น</button>
+              <button type="button" onClick={() => setSelectedIds([])}>ล้างที่เลือก</button>
+              <button type="button" className="btn-primary" disabled={selectedIds.length === 0 || printLoading}
+                onClick={handlePrintSelected}>
+                {printLoading ? 'กำลังโหลด...' : `พิมพ์ QR ที่เลือก (${selectedIds.length})`}
+              </button>
+              <button type="button" onClick={toggleSelectMode}>ยกเลิก</button>
+            </>
+          )}
         </div>
       </div>
 
@@ -347,6 +413,7 @@ export default function StockAllPage() {
         <table className="rack-table">
           <thead>
             <tr>
+              {selectMode && <th></th>}
               {showCategoryColumn && <th>หมวด</th>}
               <th>รหัส OEM</th>
               <th>รายละเอียด</th>
@@ -358,6 +425,11 @@ export default function StockAllPage() {
           <tbody>
             {visibleItems.map((item) => (
               <tr key={item.id}>
+                {selectMode && (
+                  <td data-label="เลือก">
+                    <input type="checkbox" checked={selectedIds.includes(item.id)} onChange={() => toggleSelectOne(item.id)} />
+                  </td>
+                )}
                 {showCategoryColumn && <td data-label="หมวด">{item.category_name}</td>}
                 <td data-label="รหัส OEM">
                   {item.positions.length === 0 ? (
@@ -401,13 +473,26 @@ export default function StockAllPage() {
             ))}
             {visibleItems.length === 0 && (
               <tr>
-                <td colSpan={showCategoryColumn ? 6 : 5} className="no-result-text">
+                <td colSpan={(showCategoryColumn ? 6 : 5) + (selectMode ? 1 : 0)} className="no-result-text">
                   {items.length === 0 ? 'ยังไม่มีรายการ กด "+ เพิ่มรายการ" เพื่อเริ่มกรอก' : 'ไม่พบรายการที่ตรงเงื่อนไข'}
                 </td>
               </tr>
             )}
           </tbody>
         </table>
+      </div>
+
+      {/* ── พื้นที่พิมพ์ป้าย QR (ซ่อนบนจอ แสดงเฉพาะตอนพิมพ์ — ดู #qr-print-area ใน app.css) ── */}
+      <div id="qr-print-area">
+        {printQueue.map((label) => (
+          <div className="qr-print-label" key={`${label.item_id}-${label.position || 'one'}`}>
+            <img src={label.qrcode} alt={label.code} />
+            <div className="qr-print-text">
+              <div className="qr-print-code">{label.code}</div>
+              <div className="qr-print-name">{label.name}</div>
+            </div>
+          </div>
+        ))}
       </div>
 
       {showForm && (

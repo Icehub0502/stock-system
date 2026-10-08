@@ -14,6 +14,7 @@
 //   ที่เหลือจับคู่ไม่ได้ → คัดลอกเป็นรายการเดี่ยว (ดูรายงานท้ายสคริปต์ให้ตรวจ)
 require('dotenv').config();
 const pool = require('../src/db/pool');
+const { stripSideWords } = require('../src/utils/pairName');
 
 const APPLY = process.argv.includes('--apply');
 
@@ -192,7 +193,7 @@ async function main() {
 
     for (const [left, right] of pairs) {
       const id = await insertItem({
-        categoryId: wingCat.id, oem: left.sku, codes: { left: left.sku, right: right.sku }, description: left.name,
+        categoryId: wingCat.id, oem: left.sku, codes: { left: left.sku, right: right.sku }, description: stripSideWords(left.name),
         hasSides: true, qty: left.stock_qty + right.stock_qty,
         positions: { left: left.stock_qty, right: right.stock_qty },
         minStock: Math.max(left.min_stock, right.min_stock),

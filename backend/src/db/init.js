@@ -1049,6 +1049,21 @@ async function initDatabase() {
   // ตำแหน่งนั้น) NULL = ของธรรมดา (คอลัมน์ side รุ่นแรกเลิกใช้แล้ว)
   await conn.query(`ALTER TABLE stock_item_movements ADD COLUMN position VARCHAR(20) DEFAULT NULL`).catch(ignoreIfAlreadyApplied);
 
+  // รับเข้าตามบิล (หน้าสแกน → สต๊อกรวม): reason='receive' ผูกกับ receipt_sessions ผ่าน
+  // receipt_session_id — voided_at = ยกเลิกรายการรับเข้านี้แล้ว (ไม่ลบแถว เก็บประวัติไว้ และ
+  // ยอดถูกหักคืนด้วยแถว 'adjust' ใหม่) ENUM ขยายเฉพาะเมื่อยังไม่มีค่า 'receive' (กัน ALTER
+  // ซ้ำทุกครั้งที่บูต)
+  await conn.query(`ALTER TABLE stock_item_movements ADD COLUMN receipt_session_id INT DEFAULT NULL`).catch(ignoreIfAlreadyApplied);
+  await conn.query(`ALTER TABLE stock_item_movements ADD COLUMN voided_at DATETIME DEFAULT NULL`).catch(ignoreIfAlreadyApplied);
+  await conn.query(`ALTER TABLE stock_item_movements ADD INDEX idx_sim_session (receipt_session_id)`).catch(ignoreIfAlreadyApplied);
+  const [[reasonCol]] = await conn.query(
+    `SELECT COLUMN_TYPE AS t FROM information_schema.columns
+     WHERE table_schema = DATABASE() AND table_name = 'stock_item_movements' AND column_name = 'reason'`
+  );
+  if (reasonCol && !reasonCol.t.includes("'receive'")) {
+    await conn.query(`ALTER TABLE stock_item_movements MODIFY reason ENUM('create','adjust','set','receive') NOT NULL`);
+  }
+
   // หมวดตั้งต้น — ใส่เฉพาะตอนตารางยังว่างเปล่า (ถ้าเจ้าของร้านลบ/เปลี่ยนชื่อหมวดแล้ว
   // บูตครั้งต่อไปต้องไม่งอกกลับมา)
   const [[{ catCount }]] = await conn.query('SELECT COUNT(*) AS catCount FROM stock_categories');

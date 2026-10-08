@@ -451,6 +451,118 @@ function Toast({ msg, onDone }) {
 // ─────────────────────────────────────────
 //  MAIN PAGE
 // ─────────────────────────────────────────
+// ─────────────────────────────────────────
+//  สต๊อกรวม (โหมดรับเข้า) — ผลค้นหา/สแกนจาก /stock-receive หนึ่งแถว = หนึ่งตำแหน่งของหนึ่งรายการ
+// ─────────────────────────────────────────
+const POSITION_COLOR = {
+  left: '#1d4ed8', right: '#b91c1c', front: '#6d28d9', rear: '#c2410c',
+  front_left: '#1d4ed8', front_right: '#b91c1c', rear_left: '#047857', rear_right: '#c2410c',
+};
+
+// แปลงผลจาก /stock-receive เป็นรูปแบบเดียวกับ item ที่ ConfirmSheet/OrderRow ใช้อยู่
+function matchToItem(m) {
+  const where = m.position_label ? ` (${m.position_label})` : '';
+  return {
+    item_id: m.item_id,
+    position: m.position,
+    name: `${m.category_name} · ${m.description || m.code}${where}`,
+    model_code: m.code,
+    stock_qty: m.qty,
+    min_stock: m.min_stock,
+  };
+}
+
+function MatchRow({ match, onPick }) {
+  return (
+    <button style={styles.manualRow} onClick={() => onPick(match)}>
+      <div style={{ flex: 1, minWidth: 0, textAlign: 'left' }}>
+        <p style={{ fontFamily: 'monospace', fontSize: 12, fontWeight: 700, color: POSITION_COLOR[match.position] || '#374151', marginBottom: 2 }}>
+          {match.position_label ? `${match.position_label} · ` : ''}{match.code || '—'}
+        </p>
+        <p style={{ fontSize: 13, fontWeight: 500, color: '#111', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          {match.category_name} · {match.description || '—'}
+        </p>
+      </div>
+      <span style={{ fontSize: 12, color: '#6b7280', flexShrink: 0 }}>เหลือ {match.qty}</span>
+    </button>
+  );
+}
+
+// สแกนแล้วเจอหลายรายการที่รหัสซ้ำกัน — ให้เลือกเอง
+function MatchPickSheet({ matches, onPick, onCancel }) {
+  return (
+    <div style={styles.sheetBackdrop}>
+      <div style={{ ...styles.sheet, maxHeight: '85vh', overflowY: 'auto' }}>
+        <div style={{ width: 36, height: 4, borderRadius: 2, background: '#d1d5db', margin: '0 auto 16px' }} />
+        <p style={{ fontSize: 15, fontWeight: 700, color: '#111', marginBottom: 2 }}>รหัสนี้ตรงกับหลายรายการ</p>
+        <p style={{ fontSize: 12, color: '#6b7280', marginBottom: 12 }}>เลือกรายการที่ต้องการรับเข้า</p>
+        <div style={{ maxHeight: 320, overflowY: 'auto', margin: '0 -4px' }}>
+          {matches.map((m) => <MatchRow key={`${m.item_id}-${m.position || 'one'}`} match={m} onPick={onPick} />)}
+        </div>
+        <button style={styles.cancelLink} onClick={onCancel}>ยกเลิก</button>
+      </div>
+    </div>
+  );
+}
+
+// ค้นเองในสต๊อกรวมตอน QR เสีย (รหัส / รายละเอียด / ยี่ห้อ-รุ่นรถ) — รายการใหม่ที่ยังไม่มีในระบบ
+// ให้ไปเพิ่มที่หน้า "สต๊อกรวม" ก่อน แล้วค่อยกลับมารับเข้า
+function StockSearchSheet({ onPick, onCancel }) {
+  const [query, setQuery] = useState('');
+  const [matches, setMatches] = useState([]);
+  const [searching, setSearching] = useState(false);
+
+  useEffect(() => {
+    const term = query.trim();
+    if (term.length < 2) { setMatches([]); return undefined; }
+    let cancelled = false;
+    setSearching(true);
+    const t = setTimeout(() => {
+      client.get('/stock-receive/search', { params: { q: term } })
+        .then((res) => { if (!cancelled) setMatches(res.data.matches || []); })
+        .catch(() => { if (!cancelled) setMatches([]); })
+        .finally(() => { if (!cancelled) setSearching(false); });
+    }, 250);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [query]);
+
+  const term = query.trim();
+  return (
+    <div style={styles.sheetBackdrop}>
+      <div style={{ ...styles.sheet, maxHeight: '85vh', overflowY: 'auto' }}>
+        <div style={{ width: 36, height: 4, borderRadius: 2, background: '#d1d5db', margin: '0 auto 16px' }} />
+        <p style={{ fontSize: 15, fontWeight: 700, color: '#111', marginBottom: 2 }}>กรอกรายการเอง</p>
+        <p style={{ fontSize: 12, color: '#6b7280', marginBottom: 12 }}>
+          ใช้ตอน QR เสียหรือสแกนไม่ติด — ค้นหาในสต๊อกรวมด้วยรหัส ชื่อรายการ หรือรุ่นรถ
+        </p>
+        <div style={{ position: 'relative', marginBottom: 12 }}>
+          <span style={{ position: 'absolute', left: 12, top: 11, color: '#9ca3af' }}><IconSearch /></span>
+          <input
+            autoFocus
+            type="text"
+            placeholder="พิมพ์รหัส ชื่อรายการ หรือรุ่นรถ..."
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            style={{ ...styles.input, fontFamily: 'inherit', fontWeight: 400, paddingLeft: 38 }}
+          />
+        </div>
+        <div style={{ maxHeight: 320, overflowY: 'auto', margin: '0 -4px' }}>
+          {term.length < 2 && (
+            <p style={{ textAlign: 'center', color: '#9ca3af', fontSize: 12, padding: '24px 0' }}>พิมพ์อย่างน้อย 2 ตัวอักษร</p>
+          )}
+          {term.length >= 2 && matches.length === 0 && !searching && (
+            <p style={{ textAlign: 'center', color: '#9ca3af', fontSize: 12, padding: '24px 0' }}>
+              ไม่พบรายการ "{query}" — ถ้าเป็นของใหม่ ให้เพิ่มที่หน้า "สต๊อกรวม" ก่อน
+            </p>
+          )}
+          {matches.map((m) => <MatchRow key={`${m.item_id}-${m.position || 'one'}`} match={m} onPick={onPick} />)}
+        </div>
+        <button style={styles.cancelLink} onClick={onCancel}>ยกเลิก</button>
+      </div>
+    </div>
+  );
+}
+
 export default function TechnicianScanPage() {
   const { user } = useAuth();
   const location = useLocation();
@@ -467,7 +579,8 @@ export default function TechnicianScanPage() {
   const [scanning, setScanning]   = useState(false);          // กล้องเปิด/ปิด
   const [manualOpen, setManualOpen] = useState(false);        // แผงกรอกเอง (QR เสีย)
   const [scannedItem, setScannedItem] = useState(null);       // item ที่รอยืนยัน
-  const [scannedType, setScannedType] = useState(null);       // 'rack' | 'wing-arm'
+  const [scannedType, setScannedType] = useState(null);       // 'rack' | 'wing-arm' | 'stock_item'
+  const [pickMatches, setPickMatches] = useState(null);       // สแกนเจอหลายรายการ (โหมดรับเข้า) รอเลือก
   const [confirmLoading, setConfirmLoading] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
 
@@ -491,7 +604,7 @@ export default function TechnicianScanPage() {
           name: it.rack_name,
           qty: Number(it.qty),
           txId: it.id,
-          type: it.item_type === 'rack' ? 'rack' : 'wing-arm',
+          type: it.item_type === 'rack' ? 'rack' : it.item_type === 'stock_item' ? 'stock_item' : 'wing-arm',
         }));
         setOrders(existing.reverse()); // ในหน้านี้เรียงใหม่สุดอยู่บน
       })
@@ -526,6 +639,14 @@ export default function TechnicianScanPage() {
   };
 
   // ── เลือกรายการจากแผง "กรอกเอง" (QR เสีย) — ไหลต่อเข้าหน้ายืนยันจำนวนเหมือนสแกนปกติ ──
+  // เลือกจากผลค้นหา/ผลสแกนของสต๊อกรวม (โหมดรับเข้า) → ไปหน้ายืนยันจำนวนเหมือนปกติ
+  const handleStockPick = (match) => {
+    setManualOpen(false);
+    setPickMatches(null);
+    setScannedItem(matchToItem(match));
+    setScannedType('stock_item');
+  };
+
   const handleManualPick = (item, type) => {
     setManualOpen(false);
     setScannedItem(item);
@@ -540,7 +661,9 @@ export default function TechnicianScanPage() {
     }
     setDeletingId(order.txId);
     try {
-      await client.delete(`/transactions/${order.txId}`);
+      await client.delete(order.type === 'stock_item'
+        ? `/stock-receive/movements/${order.txId}`
+        : `/transactions/${order.txId}`);
       setOrders((prev) => prev.filter((o) => o.txId !== order.txId));
       setToast({ ok: true, title: 'ลบรายการแล้ว', body: `${order.name} — คืนสต็อกเรียบร้อย` });
     } catch (err) {
@@ -554,6 +677,26 @@ export default function TechnicianScanPage() {
   const handleScan = useCallback(async (code) => {
     if (!code) return;
     setScanning(false);
+
+    // โหมดรับเข้า = รับเข้าสต๊อกรวมเท่านั้น (ไม่ย้อนไปสต๊อกแบบเก่า) QR คือรหัส OEM ล้วน ๆ
+    if (mode === 'IN') {
+      try {
+        const res = await client.get('/stock-receive/lookup', { params: { code: String(code).trim() } });
+        const found = res.data.matches || [];
+        if (found.length === 1) {
+          handleStockPick(found[0]);
+        } else if (found.length > 1) {
+          setPickMatches(found);
+        } else {
+          setToast({ ok: false, title: 'ไม่พบรหัสนี้ในสต๊อกรวม', body: 'ตรวจสอบว่า QR ถูกต้อง หรือเพิ่มรายการที่หน้าสต๊อกรวมก่อน' });
+          setScanning(true);
+        }
+      } catch (err) {
+        setToast({ ok: false, title: 'ค้นหารหัสไม่สำเร็จ', body: err?.response?.data?.error || '' });
+        setScanning(true);
+      }
+      return;
+    }
 
     let parsed = code;
     // QR ของเราเข้ารหัส JSON → parse ก่อน
@@ -587,7 +730,7 @@ export default function TechnicianScanPage() {
     // ไม่เจอเลย
     setToast({ ok: false, title: 'ไม่พบรหัสนี้', body: 'ตรวจสอบว่า QR ถูกต้อง' });
     setScanning(true); // เปิดกล้องต่อ
-  }, []);
+  }, [mode]);
 
   // ── ยืนยันจำนวน ──
   const handleConfirm = async (qty) => {
@@ -597,7 +740,16 @@ export default function TechnicianScanPage() {
 
       let txId = null;
 
-      if (scannedType === 'rack') {
+      if (scannedType === 'stock_item') {
+        const res = await client.post('/stock-receive/receive', {
+          item_id: scannedItem.item_id,
+          position: scannedItem.position || undefined,
+          qty,
+          receipt_session_id: session ? session.id : undefined,
+        });
+        remaining = res.data.qty_after;
+        txId = res.data.movement_id ?? null;
+      } else if (scannedType === 'rack') {
         const endpoint = mode === 'IN' ? '/transactions/in' : '/transactions/out';
         const payload  = { model_code: scannedItem.model_code, qty };
         if (mode === 'IN' && session) payload.receipt_session_id = session.id;
@@ -647,7 +799,7 @@ export default function TechnicianScanPage() {
     setInvoice(''); setInvoiceErr(''); setOrders([]);
     setBillDate(todayStr());
     setScannedItem(null); setScannedType(null); setScanning(false);
-    setManualOpen(false);
+    setManualOpen(false); setPickMatches(null);
   };
 
   const isIN = mode === 'IN';
@@ -854,12 +1006,26 @@ export default function TechnicianScanPage() {
           )}
 
           {/* แผงกรอกเอง (QR เสีย/สแกนไม่ติด) */}
-          {manualOpen && (
+          {manualOpen && (mode === 'IN' ? (
+            <StockSearchSheet
+              onPick={handleStockPick}
+              onCancel={() => setManualOpen(false)}
+            />
+          ) : (
             <ManualEntrySheet
               mode={mode}
-              canCreate={isOffice && mode === 'IN'}
+              canCreate={false}
               onPick={handleManualPick}
               onCancel={() => setManualOpen(false)}
+            />
+          ))}
+
+          {/* สแกนเจอรหัสซ้ำหลายรายการ ให้เลือก */}
+          {pickMatches && (
+            <MatchPickSheet
+              matches={pickMatches}
+              onPick={handleStockPick}
+              onCancel={() => { setPickMatches(null); setScanning(true); }}
             />
           )}
 

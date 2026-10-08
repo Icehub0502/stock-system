@@ -4,6 +4,12 @@ const { authenticate, requireRole } = require('../middleware/auth');
 const { vehicleModelFromRackName } = require('../utils/vehicleModelFromName');
 const { resolveTransactionDate } = require('../utils/resolveTransactionDate');
 const { emitStockEvent, emitStockTxEvent, emitReceiptSessionEvent } = require('../realtime');
+const { voidReceiveMovement } = require('./stockReceive.routes');
+
+const POSITION_LABEL = {
+  left: 'ซ้าย', right: 'ขวา', front: 'หน้า', rear: 'หลัง',
+  front_left: 'หน้าซ้าย', front_right: 'หน้าขวา', rear_left: 'หลังซ้าย', rear_right: 'หลังขวา',
+};
 
 const router = express.Router();
 router.use(authenticate);
@@ -53,12 +59,14 @@ router.get('/receipt-sessions', requireRole('office'), async (req, res) => {
       SELECT
         s.id, s.invoice_no, s.created_at, s.bill_date,
         u.full_name,
-        COUNT(t.id) AS item_count,
-        COALESCE(SUM(t.qty), 0) AS total_qty
+        (SELECT COUNT(*) FROM transactions t WHERE t.receipt_session_id = s.id AND t.type = 'IN')
+          + (SELECT COUNT(*) FROM stock_item_movements m
+             WHERE m.receipt_session_id = s.id AND m.reason = 'receive' AND m.voided_at IS NULL) AS item_count,
+        (SELECT COALESCE(SUM(t.qty), 0) FROM transactions t WHERE t.receipt_session_id = s.id AND t.type = 'IN')
+          + (SELECT COALESCE(SUM(m.qty_after - m.qty_before), 0) FROM stock_item_movements m
+             WHERE m.receipt_session_id = s.id AND m.reason = 'receive' AND m.voided_at IS NULL) AS total_qty
       FROM receipt_sessions s
       JOIN users u ON u.id = s.user_id
-      LEFT JOIN transactions t ON t.receipt_session_id = s.id AND t.type = 'IN'
-      GROUP BY s.id
       ORDER BY s.bill_date DESC, s.created_at DESC
       LIMIT 200
     `);
@@ -93,7 +101,33 @@ router.get('/receipt-sessions/:id', requireRole('office'), async (req, res) => {
       ORDER BY t.created_at ASC
     `, [req.params.id]);
 
-    res.json({ session, items });
+    // ของที่รับเข้าสต๊อกรวม — source='stock_item' ให้หน้าเว็บรู้ว่าต้องลบผ่าน
+    // /stock-receive/movements/:id (id ชนกับ transactions.id ได้ จึงต้องแยกด้วย source)
+    const [stockItems] = await pool.execute(
+      `SELECT m.id, (m.qty_after - m.qty_before) AS qty, m.created_at, m.position,
+              COALESCE(p.oem_code, i.oem_code) AS model_code,
+              i.description AS rack_name, c.name AS category_name
+       FROM stock_item_movements m
+       JOIN stock_items i ON i.id = m.item_id
+       JOIN stock_categories c ON c.id = i.category_id
+       LEFT JOIN stock_item_positions p ON p.item_id = m.item_id AND p.position = m.position
+       WHERE m.receipt_session_id = ? AND m.reason = 'receive' AND m.voided_at IS NULL
+       ORDER BY m.created_at ASC`,
+      [req.params.id]
+    );
+
+    res.json({
+      session,
+      items: [
+        ...items.map((it) => ({ ...it, source: 'legacy' })),
+        ...stockItems.map((it) => ({
+          ...it,
+          source: 'stock_item',
+          item_type: 'stock_item',
+          rack_name: it.position ? `${it.rack_name} (${POSITION_LABEL[it.position] || it.position})` : it.rack_name,
+        })),
+      ].sort((a, b) => new Date(a.created_at) - new Date(b.created_at)),
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'โหลดรายละเอียดบิลไม่สำเร็จ' });
@@ -139,6 +173,21 @@ router.delete('/receipt-sessions/:id', requireRole('office'), async (req, res) =
       await conn.query(`UPDATE ${table} SET stock_qty = ? WHERE id = ?`, [newQty, itemId]);
     }
 
+    // ของที่รับเข้าสต๊อกรวมในบิลนี้ — ยกเลิกทีละรายการ (หักยอดคืน) ถ้ารายการไหนทำให้ติดลบจะไม่ลบทั้งบิล
+    const [stockMovements] = await conn.query(
+      `SELECT id FROM stock_item_movements
+       WHERE receipt_session_id = ? AND reason = 'receive' AND voided_at IS NULL`,
+      [req.params.id]
+    );
+    for (const mv of stockMovements) {
+      const result = await voidReceiveMovement(conn, mv.id, req.user.id);
+      if (result.error) {
+        await conn.rollback();
+        return res.status(result.status).json({ error: result.error });
+      }
+    }
+    // แถวประวัติของบิลนี้ยังอยู่ (เก็บไว้ตรวจย้อนหลัง) แค่ตัดการผูกกับบิลที่กำลังจะถูกลบ
+    await conn.query('UPDATE stock_item_movements SET receipt_session_id = NULL WHERE receipt_session_id = ?', [req.params.id]);
     await conn.query(`DELETE FROM transactions WHERE receipt_session_id = ? AND type = 'IN'`, [req.params.id]);
     await conn.query('DELETE FROM receipt_sessions WHERE id = ?', [req.params.id]);
     await conn.commit();

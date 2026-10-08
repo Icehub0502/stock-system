@@ -125,10 +125,15 @@ export default function ReceiptSessionPage() {
   // ลบรายการในบิล — backend คืนสต็อกให้เองในทรานแซกชันเดียว (DELETE /transactions/:id)
   const handleDeleteItem = async (item) => {
     if (!window.confirm(`ลบ "${item.rack_name}" ออกจากบิลนี้? ระบบจะคืนสต็อกให้อัตโนมัติ`)) return;
-    setDeletingId(item.id);
+    setDeletingId(`${item.source}-${item.id}`);
     try {
-      await client.delete(`/transactions/${item.id}`);
-      setSelected((prev) => prev && ({ ...prev, items: prev.items.filter((it) => it.id !== item.id) }));
+      await client.delete(item.source === 'stock_item'
+        ? `/stock-receive/movements/${item.id}`
+        : `/transactions/${item.id}`);
+      setSelected((prev) => prev && ({
+        ...prev,
+        items: prev.items.filter((it) => !(it.id === item.id && it.source === item.source)),
+      }));
       loadSessions(); // ยอดรวมในรายการด้านหลังต้องอัปเดตตามด้วย
     } catch (err) {
       alert(err?.response?.data?.error || 'ลบรายการไม่สำเร็จ');
@@ -346,11 +351,13 @@ export default function ReceiptSessionPage() {
                   </thead>
                   <tbody>
                     {selected.items.map((item, i) => (
-                      <tr key={item.id}>
+                      <tr key={`${item.source}-${item.id}`}>
                         <td className="col-no" data-label="ลำดับ">{i + 1}</td>
                         <td data-label="รหัส" style={{ fontFamily: 'Consolas, monospace', fontWeight: 700 }}>
                           {item.model_code}
-                          <span className="intake-kind-chip">{item.item_type === 'rack' ? 'แร็ค' : 'ปีกนก'}</span>
+                          <span className="intake-kind-chip">
+                            {item.item_type === 'stock_item' ? (item.category_name || 'สต๊อกรวม') : item.item_type === 'rack' ? 'แร็ค' : 'ปีกนก'}
+                          </span>
                         </td>
                         <td data-label="รายการ">{item.rack_name}</td>
                         <td className="col-amount" data-label="จำนวน">
@@ -363,7 +370,7 @@ export default function ReceiptSessionPage() {
                           <button
                             className="intake-del-btn"
                             onClick={() => handleDeleteItem(item)}
-                            disabled={deletingId === item.id}
+                            disabled={deletingId === `${item.source}-${item.id}`}
                             aria-label={`ลบ ${item.rack_name}`}
                           >
                             <IconTrash />
