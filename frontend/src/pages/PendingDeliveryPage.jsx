@@ -98,6 +98,12 @@ export default function PendingDeliveryPage() {
     }
   };
 
+  // ย้ายรถที่เลือกไปแฟ้มวันอื่น (เปลี่ยน job_date) แล้วโหลดรายการใหม่ — โยน error ต่อให้ modal แจ้งผู้ใช้
+  const moveJobs = async (ids, targetDate) => {
+    await client.patch('/jobs/move-date', { ids, job_date: targetDate });
+    await load({ silent: true });
+  };
+
   const selectedDayJobs = useMemo(() => {
     if (!selectedDate) return [];
     return jobs.filter((j) => j.job_date === selectedDate);
@@ -189,6 +195,7 @@ export default function PendingDeliveryPage() {
           savingId={savingId}
           onLocalChange={updateLocal}
           onPersist={persistField}
+          onMoveJobs={moveJobs}
           onClose={() => setSelectedDate(null)}
         />
       )}

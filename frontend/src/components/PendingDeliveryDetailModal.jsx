@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { jobStatusDef } from '../utils/jobStatus';
 import { formatMoney, todayStr } from '../utils/format';
@@ -11,6 +11,12 @@ function formatDateShort(dateStr) {
   // DATETIME/TIMESTAMP เท่านั้น ใช้กับ DATE ล้วนจะกลายเป็นเที่ยงคืน UTC เลื่อนวันผิด)
   const [y, m, d] = dateStr.split('-').map(Number);
   return new Date(y, m - 1, d).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+function addDays(dateStr, amount) {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const next = new Date(y, m - 1, d + amount);
+  return `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}-${String(next.getDate()).padStart(2, '0')}`;
 }
 
 // วันนี้ผ่านไปแล้วยังไม่ส่ง = เตือนสีแดง (เกินกำหนดที่ตั้งไว้เอง)
@@ -31,8 +37,48 @@ function isOverdue(expectedPickupDate) {
  * แก้ไข/บันทึกฟิลด์ยังคงยกให้ parent เป็นเจ้าของ state เดิม (savingId/onLocalChange/
  * onPersist) กันไม่ให้ state ซ้อนกัน 2 ที่
  */
-export default function PendingDeliveryDetailModal({ date, jobs, savingId, onLocalChange, onPersist, onClose }) {
+export default function PendingDeliveryDetailModal({ date, jobs, savingId, onLocalChange, onPersist, onMoveJobs, onClose }) {
   const [exportingImage, setExportingImage] = useState(false);
+  // เลือกหลายคันแล้วย้ายไปแฟ้มวันก่อนหน้า/ถัดไป — เหมือนหน้าสรุปยอดขายรายวัน
+  const [selectedIds, setSelectedIds] = useState(new Set());
+  const [moving, setMoving] = useState(false);
+
+  // คันที่ถูกย้ายออกไปแล้ว/หายจากรายการ ต้องไม่ค้างอยู่ในชุดที่เลือก
+  useEffect(() => {
+    setSelectedIds((prev) => {
+      const alive = new Set(jobs.map((j) => j.id));
+      const next = new Set([...prev].filter((id) => alive.has(id)));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [jobs]);
+
+  const toggleSelected = (jobId) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(jobId)) next.delete(jobId);
+      else next.add(jobId);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    setSelectedIds((prev) => (prev.size === jobs.length ? new Set() : new Set(jobs.map((j) => j.id))));
+  };
+
+  const handleMoveByDays = async (amount) => {
+    if (selectedIds.size === 0 || moving) return;
+    const targetDate = addDays(date, amount);
+    if (!window.confirm(`ย้ายรถ ${selectedIds.size} คันที่เลือกไปแฟ้มวันที่ ${formatDateTh(targetDate)} ใช่หรือไม่?\n(จะเปลี่ยน "วันที่รับเข้า" ของงานเป็นวันนั้น และอยู่ในรายการงานของวันนั้น)`)) return;
+    setMoving(true);
+    try {
+      await onMoveJobs(Array.from(selectedIds), targetDate);
+      setSelectedIds(new Set());
+    } catch (err) {
+      alert(err.response?.data?.error || 'ย้ายรถไม่สำเร็จ');
+    } finally {
+      setMoving(false);
+    }
+  };
   const captureRef = useRef(null);
 
   const handleExportImage = async () => {
@@ -45,6 +91,10 @@ export default function PendingDeliveryDetailModal({ date, jobs, savingId, onLoc
         scale: 2,
         windowWidth: 1400,
         onclone: (clonedDoc) => {
+          // ช่องเลือกคันเป็นของใช้บนหน้าจอเท่านั้น ไม่ใส่ในรูปที่บันทึก
+          clonedDoc.querySelectorAll('.pending-delivery-detail-capture-area .daily-summary-checkbox-cell').forEach((cell) => {
+            cell.remove();
+          });
           clonedDoc.querySelectorAll('.pending-delivery-detail-capture-area input[type="date"]').forEach((inp) => {
             const span = clonedDoc.createElement('span');
             span.textContent = inp.value ? formatDateShort(inp.value) : '-';
@@ -112,13 +162,39 @@ export default function PendingDeliveryDetailModal({ date, jobs, savingId, onLoc
           <div className="empty-message">ไม่มีรถค้างส่งในวันนี้</div>
         ) : (
           <>
-            <div className="quotation-actions" style={{ justifyContent: 'flex-end', marginBottom: 12, gap: 8 }}>
-              <button className="btn btn-secondary" onClick={handleExportImage} disabled={exportingImage}>
-                🖼️ {exportingImage ? 'กำลังบันทึก...' : 'บันทึกเป็นรูปภาพ'}
-              </button>
-              <button className="btn btn-secondary" onClick={handleExportExcel}>
-                📊 บันทึกเป็น Excel
-              </button>
+            <div className="quotation-actions" style={{ justifyContent: 'space-between', marginBottom: 12, gap: 8 }}>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                <label className="daily-summary-select-all-toggle">
+                  <input
+                    type="checkbox"
+                    checked={jobs.length > 0 && selectedIds.size === jobs.length}
+                    onChange={toggleSelectAll}
+                  />
+                  เลือกทั้งหมด
+                </label>
+                <button
+                  className="btn btn-secondary"
+                  onClick={() => handleMoveByDays(-1)}
+                  disabled={selectedIds.size === 0 || moving}
+                >
+                  ⬅️ {moving ? 'กำลังย้าย...' : `ย้ายไปวันก่อนหน้า (${selectedIds.size})`}
+                </button>
+                <button
+                  className="btn btn-primary"
+                  onClick={() => handleMoveByDays(1)}
+                  disabled={selectedIds.size === 0 || moving}
+                >
+                  ➡️ {moving ? 'กำลังย้าย...' : `ย้ายไปวันถัดไป (${selectedIds.size})`}
+                </button>
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button className="btn btn-secondary" onClick={handleExportImage} disabled={exportingImage}>
+                  🖼️ {exportingImage ? 'กำลังบันทึก...' : 'บันทึกเป็นรูปภาพ'}
+                </button>
+                <button className="btn btn-secondary" onClick={handleExportExcel}>
+                  📊 บันทึกเป็น Excel
+                </button>
+              </div>
             </div>
 
             <div ref={captureRef} className="pending-delivery-detail-capture-area">
@@ -127,6 +203,14 @@ export default function PendingDeliveryDetailModal({ date, jobs, savingId, onLoc
                 <table className="quotation-table">
                   <thead>
                     <tr>
+                      <th className="col-no daily-summary-checkbox-cell">
+                        <input
+                          type="checkbox"
+                          aria-label="เลือกทั้งหมด"
+                          checked={jobs.length > 0 && selectedIds.size === jobs.length}
+                          onChange={toggleSelectAll}
+                        />
+                      </th>
                       <th className="col-no">ลำดับ</th>
                       <th>ชื่อลูกค้า</th>
                       <th>รุ่นรถ</th>
@@ -144,7 +228,15 @@ export default function PendingDeliveryDetailModal({ date, jobs, savingId, onLoc
                       const st = jobStatusDef(j.status);
                       const overdue = isOverdue(j.expected_pickup_date);
                       return (
-                        <tr key={j.id}>
+                        <tr key={j.id} className={selectedIds.has(j.id) ? 'is-selected-row' : ''}>
+                          <td className="col-no daily-summary-checkbox-cell">
+                            <input
+                              type="checkbox"
+                              aria-label={`เลือกคันที่ ${idx + 1}`}
+                              checked={selectedIds.has(j.id)}
+                              onChange={() => toggleSelected(j.id)}
+                            />
+                          </td>
                           <td className="col-no" data-label="ลำดับ">{idx + 1}</td>
                           <td className="col-customer-name" data-label="ชื่อลูกค้า">
                             <Link to={`/jobs/${j.id}`}>{j.customer_name || '-'}</Link>
