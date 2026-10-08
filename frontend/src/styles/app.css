@@ -5912,3 +5912,376 @@ td.stock-all-actions button { padding: 8px 14px; font-size: 0.85em; min-height: 
   .rack-table td.stock-all-actions::before { display: none; }
   .rack-table td.stock-all-actions button { flex: 1; width: auto; }
 }
+
+/* ════════════════════════════════════════════════════════════════════
+   หน้าสแกน QR (TechnicianScanPage) — ธีมเดียวกับระบบ: ดำ/ขาว + เหลืองแบรนด์ (#facc15)
+   รับเข้า = เขียว, จ่ายออก = แดง, ตำแหน่ง ซ้าย/ขวา/หน้า/หลัง = สีประจำตำแหน่ง
+   ชั้น z-index: เมนูล่างมือถือ 55 → ปุ่มล่างของหน้านี้ 40 → ชีทยืนยัน 80 → กล้อง 90 → แจ้งเตือน 100
+   (ชีท/กล้องต้องอยู่เหนือเมนูล่าง ไม่งั้นปุ่มยืนยันถูกเมนูบัง)
+   ════════════════════════════════════════════════════════════════════ */
+.scan-page {
+  text-align: left; /* ทับ .scan-page { text-align: center } เก่าด้านบนของไฟล์ */
+  min-height: 100vh;
+  background: #f3f4f6;
+  padding: 16px 12px 28px;
+  color: #111827;
+}
+.scan-page *, .scan-page *::before, .scan-page *::after { box-sizing: border-box; }
+.scan-shell { width: 100%; margin: 0 auto; }
+.scan-shell--narrow { max-width: 480px; }
+.scan-shell--wide { max-width: 720px; }
+.scan-shell--has-dock { padding-bottom: 8px; }
+
+/* ── หัวหน้า ── */
+.scan-head { display: flex; align-items: center; gap: 12px; margin: 4px 0 18px; }
+.scan-head-icon {
+  width: 46px; height: 46px; border-radius: 14px; flex-shrink: 0;
+  background: #111827; color: #facc15;
+  display: flex; align-items: center; justify-content: center;
+}
+.scan-head-icon svg { width: 26px; height: 26px; }
+.scan-title { margin: 0; font-size: 22px; line-height: 1.2; font-weight: 800; letter-spacing: -0.02em; }
+.scan-subtitle { margin: 3px 0 0; font-size: 13px; color: #6b7280; }
+.scan-icon-btn {
+  width: 42px; height: 42px; flex-shrink: 0; border-radius: 12px;
+  background: #fff; border: 1px solid #e5e7eb; color: #374151; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; padding: 0; min-height: 0;
+}
+.scan-icon-btn:hover { background: #f9fafb; }
+
+/* ── ปุ่มทั่วไป ── */
+.scan-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  height: 48px; padding: 0 20px; border-radius: 14px; border: 1px solid transparent;
+  font-family: inherit; font-size: 15px; font-weight: 700; cursor: pointer; min-height: 0;
+  transition: transform 0.08s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+.scan-btn svg { width: 20px; height: 20px; }
+.scan-btn:active:not(:disabled) { transform: scale(0.98); }
+.scan-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.scan-btn--block { display: flex; width: 100%; }
+.scan-btn--lg { height: 54px; font-size: 16px; }
+.scan-btn--sm { height: 36px; padding: 0 14px; font-size: 13px; border-radius: 10px; }
+.scan-btn--primary { background: #facc15; color: #111827; box-shadow: 0 2px 10px rgba(234, 179, 8, 0.35); }
+.scan-btn--primary:hover:not(:disabled) { background: #eab308; }
+.scan-btn--dark { background: #111827; color: #fff; }
+.scan-btn--dark:hover:not(:disabled) { background: #1f2937; }
+.scan-btn--ghost { background: #fff; color: #111827; border-color: #d1d5db; }
+.scan-btn--ghost:hover:not(:disabled) { background: #f9fafb; }
+.scan-btn--in { background: #15803d; color: #fff; }
+.scan-btn--in:hover:not(:disabled) { background: #166534; }
+.scan-btn--out { background: #b91c1c; color: #fff; }
+.scan-btn--out:hover:not(:disabled) { background: #991b1b; }
+
+/* ── ขั้นเลือกโหมด ── */
+.scan-mode-grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
+.scan-mode-card {
+  display: flex; align-items: center; gap: 14px; width: 100%; text-align: left;
+  padding: 18px 16px; border-radius: 18px; background: #fff; cursor: pointer;
+  border: 1.5px solid #e5e7eb; font-family: inherit; min-height: 0;
+  transition: transform 0.12s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+}
+.scan-mode-card:hover { transform: translateY(-1px); box-shadow: 0 6px 18px rgba(17, 24, 39, 0.08); }
+.scan-mode-card--in { border-color: #bbf7d0; }
+.scan-mode-card--out { border-color: #fecaca; }
+.scan-mode-icon {
+  width: 56px; height: 56px; border-radius: 16px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+}
+.scan-mode-card--in .scan-mode-icon { background: #dcfce7; color: #166534; }
+.scan-mode-card--out .scan-mode-icon { background: #fee2e2; color: #991b1b; }
+.scan-mode-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.scan-mode-text strong { font-size: 16px; font-weight: 700; color: #111827; }
+.scan-mode-text small { font-size: 12.5px; color: #6b7280; }
+.scan-mode-chevron { margin-left: auto; font-size: 28px; line-height: 1; color: #9ca3af; }
+
+/* ── การ์ด/ฟอร์มเปิดบิล ── */
+.scan-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 18px; overflow: hidden; }
+.scan-card-head { display: flex; align-items: center; gap: 12px; padding: 14px 18px; background: #111827; color: #fff; }
+.scan-card-head strong { display: block; font-size: 14.5px; }
+.scan-card-head small { display: block; margin-top: 2px; font-size: 12px; color: #d1d5db; }
+.scan-card-head-icon {
+  width: 38px; height: 38px; border-radius: 11px; flex-shrink: 0;
+  background: rgba(250, 204, 21, 0.16); color: #facc15;
+  display: flex; align-items: center; justify-content: center;
+}
+.scan-card-body { padding: 18px; }
+.scan-label { display: block; margin: 16px 0 6px; font-size: 13px; font-weight: 700; color: #374151; }
+.scan-card-body .scan-label:first-child { margin-top: 0; }
+.scan-input {
+  width: 100%; height: 48px; padding: 0 14px; border-radius: 12px;
+  border: 1.5px solid #e5e7eb; background: #f9fafb; color: #111827;
+  font-family: inherit; font-size: 16px; outline: none;
+}
+.scan-input--mono { font-family: Consolas, 'Courier New', monospace; font-weight: 700; letter-spacing: 0.02em; }
+.scan-input:focus { border-color: #111827; background: #fff; box-shadow: 0 0 0 3px rgba(250, 204, 21, 0.45); }
+.scan-input.has-error { border-color: #ef4444; }
+.scan-error { margin: 6px 0 0; font-size: 12.5px; color: #dc2626; }
+.scan-backdate {
+  margin: 10px 0 0; padding: 9px 12px; border-radius: 10px;
+  background: #fffbeb; border: 1px solid #fde68a; color: #92400e; font-size: 12.5px; line-height: 1.5;
+}
+.scan-hint { margin: 12px 0 18px; font-size: 12px; line-height: 1.6; color: #9ca3af; }
+
+/* ── แถบบนของขั้นสแกน ── */
+.scan-topbar {
+  display: flex; align-items: center; gap: 12px; margin-bottom: 12px;
+  padding: 10px 12px; border-radius: 16px; background: #fff; border: 1px solid #e5e7eb;
+}
+.scan-topbar-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.scan-topbar-text strong { font-size: 16px; font-weight: 800; }
+.scan-topbar-text small { font-size: 12px; color: #6b7280; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.scan-pill {
+  display: inline-flex; align-items: center; padding: 5px 14px; border-radius: 999px;
+  font-size: 12px; font-weight: 800; letter-spacing: 0.04em; flex-shrink: 0;
+}
+.scan-pill--in { background: #dcfce7; color: #166534; }
+.scan-pill--out { background: #fee2e2; color: #991b1b; }
+
+/* ── การ์ดบิล + สถิติ ── */
+.scan-bill {
+  display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 12px 16px;
+  margin-bottom: 14px; padding: 14px 16px; border-radius: 16px;
+  background: #111827; color: #fff;
+}
+.scan-bill-main { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.scan-bill-label { font-size: 11.5px; font-weight: 700; color: #facc15; letter-spacing: 0.03em; }
+.scan-bill-no {
+  font-family: Consolas, 'Courier New', monospace; font-size: 17px; font-weight: 800;
+  overflow-wrap: anywhere; line-height: 1.25;
+}
+.scan-stats { display: flex; gap: 18px; }
+.scan-stats > div { display: flex; flex-direction: column; align-items: center; min-width: 52px; }
+.scan-stats b { font-size: 20px; line-height: 1.1; font-weight: 800; }
+.scan-stats span { font-size: 11.5px; color: #d1d5db; margin-top: 2px; }
+.scan-bill .scan-btn--ghost {
+  grid-column: 1 / -1; background: transparent; color: #fff; border-color: rgba(255, 255, 255, 0.28);
+}
+.scan-bill .scan-btn--ghost:hover { background: rgba(255, 255, 255, 0.1); }
+
+/* ── รายการ ── */
+.scan-list { display: flex; flex-direction: column; gap: 8px; }
+.scan-row {
+  display: flex; align-items: center; gap: 12px; padding: 12px 14px;
+  border-radius: 14px; background: #fff; border: 1px solid #e5e7eb;
+}
+.scan-row-no {
+  width: 28px; height: 28px; border-radius: 50%; flex-shrink: 0;
+  background: #f3f4f6; color: #6b7280; font-size: 12px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+}
+.scan-row-main { flex: 1; min-width: 0; }
+.scan-row-code { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.scan-code { font-family: Consolas, 'Courier New', monospace; font-size: 14px; font-weight: 800; overflow-wrap: anywhere; }
+.scan-chip {
+  display: inline-block; min-width: 46px; padding: 2px 9px; border-radius: 999px;
+  font-size: 12px; font-weight: 800; text-align: center; flex-shrink: 0; line-height: 1.5;
+}
+.scan-kind { font-size: 11px; color: #6b7280; background: #f3f4f6; border-radius: 6px; padding: 1px 7px; }
+.scan-row-name {
+  margin: 4px 0 0; font-size: 13px; line-height: 1.4; color: #4b5563;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.scan-qty {
+  min-width: 54px; padding: 6px 10px; border-radius: 10px; flex-shrink: 0;
+  text-align: center; font-size: 15px; font-weight: 800;
+}
+.scan-qty.is-in { background: #dcfce7; color: #166534; }
+.scan-qty.is-out { background: #fee2e2; color: #991b1b; }
+.scan-del {
+  width: 38px; height: 38px; flex-shrink: 0; padding: 0; min-height: 0; cursor: pointer;
+  border-radius: 10px; border: 1px solid #fecaca; background: #fef2f2; color: #dc2626;
+  display: flex; align-items: center; justify-content: center;
+}
+.scan-del:disabled { opacity: 0.4; }
+.scan-empty {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  min-height: 220px; padding: 24px; text-align: center; color: #9ca3af;
+  border: 1.5px dashed #d1d5db; border-radius: 18px; background: rgba(255, 255, 255, 0.6);
+}
+.scan-empty-icon { color: #d1d5db; margin-bottom: 10px; }
+.scan-empty-icon svg { width: 52px; height: 52px; }
+.scan-empty p { margin: 0; font-size: 15px; font-weight: 700; color: #6b7280; }
+.scan-empty small { margin-top: 4px; font-size: 13px; }
+
+/* ── แถบปุ่มล่าง (กรอกเอง / สแกน / เสร็จสิ้น) ── */
+.scan-dock { position: sticky; bottom: 14px; z-index: 40; margin-top: 16px; }
+.scan-dock-inner {
+  display: grid; grid-template-columns: 1fr 1.5fr 1fr; gap: 10px;
+  padding: 10px; border-radius: 22px; background: rgba(255, 255, 255, 0.94);
+  border: 1px solid #e5e7eb; box-shadow: 0 8px 28px rgba(17, 24, 39, 0.16);
+  backdrop-filter: blur(8px);
+}
+.scan-dock-btn {
+  position: relative; height: 62px; border-radius: 16px; min-height: 0; padding: 0 6px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+  font-family: inherit; font-size: 13px; font-weight: 700; cursor: pointer; border: 1px solid transparent;
+}
+.scan-dock-btn svg { width: 24px; height: 24px; }
+.scan-dock-btn--side { background: #fff; color: #111827; border-color: #d1d5db; }
+.scan-dock-btn--side:hover:not(:disabled) { background: #f9fafb; }
+.scan-dock-btn--finish { background: #111827; color: #fff; border-color: #111827; }
+.scan-dock-btn--finish:hover:not(:disabled) { background: #1f2937; }
+.scan-dock-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.scan-dock-btn--scan {
+  background: #facc15; color: #111827; font-size: 15px; font-weight: 800;
+  box-shadow: 0 4px 14px rgba(234, 179, 8, 0.45);
+}
+.scan-dock-btn--scan:hover { background: #eab308; }
+.scan-dock-btn--scan svg { width: 28px; height: 28px; }
+.scan-dock-badge {
+  position: absolute; top: -7px; right: -5px; min-width: 22px; height: 22px; padding: 0 6px;
+  border-radius: 11px; background: #ef4444; color: #fff; border: 2px solid #fff;
+  font-style: normal; font-size: 11px; font-weight: 800; line-height: 18px; text-align: center;
+}
+
+/* ── หน้าสรุป ── */
+.scan-summary { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px; }
+.scan-summary-tile { display: flex; flex-direction: column; gap: 4px; padding: 14px 18px; border-radius: 16px; background: #fff; border: 1px solid #e5e7eb; }
+.scan-summary-tile span { font-size: 12.5px; color: #6b7280; }
+.scan-summary-tile b { font-size: 28px; font-weight: 800; line-height: 1.15; }
+.scan-summary-tile b small { font-size: 14px; font-weight: 600; color: #6b7280; }
+.is-in .scan-summary-tile--accent { background: #ecfdf5; border-color: #bbf7d0; }
+.is-in .scan-summary-tile--accent b { color: #166534; }
+.is-out .scan-summary-tile--accent { background: #fef2f2; border-color: #fecaca; }
+.is-out .scan-summary-tile--accent b { color: #991b1b; }
+.scan-note { margin: 4px 2px 10px; font-size: 13px; color: #6b7280; }
+.scan-actions { display: grid; grid-template-columns: 1.4fr 1fr; gap: 10px; margin-top: 20px; }
+
+/* ── ชีทยืนยัน/ค้นหา (เหนือเมนูล่าง) ── */
+.scan-sheet-backdrop {
+  position: fixed; inset: 0; z-index: 80; background: rgba(17, 24, 39, 0.55);
+  display: flex; align-items: flex-end; justify-content: center;
+}
+.scan-sheet {
+  width: 100%; max-width: 520px; max-height: 92vh; overflow-y: auto;
+  padding: 12px 20px calc(22px + env(safe-area-inset-bottom, 0px));
+  background: #fff; border-radius: 24px 24px 0 0; box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.25);
+}
+.scan-sheet-handle { width: 42px; height: 4px; border-radius: 2px; background: #d1d5db; margin: 0 auto 16px; }
+.scan-sheet-title { margin: 0; font-size: 18px; font-weight: 800; }
+.scan-sheet-sub { margin: 4px 0 14px; font-size: 13px; color: #6b7280; line-height: 1.5; }
+.scan-sheet-cancel {
+  display: block; width: 100%; margin-top: 6px; padding: 12px; min-height: 0;
+  background: none; border: none; color: #6b7280; font-family: inherit; font-size: 14px; cursor: pointer;
+}
+.scan-sheet-empty { margin: 0; padding: 28px 8px; text-align: center; font-size: 13px; color: #9ca3af; }
+.scan-confirm-item { padding: 2px 0 12px; }
+.scan-confirm-code { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.scan-confirm-code .scan-code { font-size: 17px; }
+.scan-confirm-name { margin: 6px 0 0; font-size: 14px; line-height: 1.5; color: #374151; }
+.scan-confirm-stock {
+  display: flex; justify-content: space-between; align-items: center; gap: 12px;
+  padding: 11px 0; border-top: 1px solid #e5e7eb; border-bottom: 1px solid #e5e7eb;
+  font-size: 13px; color: #6b7280;
+}
+.scan-confirm-stock strong { font-size: 15px; }
+.scan-confirm-stock .is-ok { color: #15803d; }
+.scan-confirm-stock .is-low { color: #b45309; }
+.scan-confirm-stock .is-out { color: #b91c1c; }
+.scan-stepper { display: flex; align-items: center; justify-content: center; gap: 16px; margin: 20px 0 10px; }
+.scan-stepper-btn {
+  width: 54px; height: 54px; border-radius: 50%; padding: 0; min-height: 0; cursor: pointer;
+  border: 1.5px solid #d1d5db; background: #fff; color: #111827; font-size: 28px; line-height: 1;
+  display: flex; align-items: center; justify-content: center;
+}
+.scan-stepper-btn:active { background: #f3f4f6; }
+.scan-stepper-input {
+  width: 104px; height: 58px; border-radius: 14px; border: 1.5px solid #e5e7eb; background: #f9fafb;
+  text-align: center; font-family: inherit; font-size: 30px; font-weight: 800; color: #111827; outline: none;
+}
+.scan-stepper-input:focus { border-color: #111827; background: #fff; box-shadow: 0 0 0 3px rgba(250, 204, 21, 0.45); }
+.scan-confirm-result { margin: 0 0 18px; text-align: center; font-size: 13.5px; color: #6b7280; }
+.scan-confirm-result b { color: #111827; font-size: 15px; }
+.scan-search { position: relative; margin-bottom: 12px; }
+.scan-search-icon { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: #9ca3af; display: flex; }
+.scan-search-input { padding-left: 42px; font-family: inherit; font-weight: 500; }
+.scan-match-list { max-height: 46vh; overflow-y: auto; margin: 0 -2px; padding: 0 2px; }
+.scan-match {
+  display: flex; align-items: center; gap: 12px; width: 100%; margin-bottom: 8px; padding: 12px 14px;
+  border-radius: 14px; border: 1px solid #e5e7eb; background: #fff; text-align: left; cursor: pointer;
+  font-family: inherit; min-height: 0;
+}
+.scan-match:hover { background: #f9fafb; }
+.scan-match-main { flex: 1; min-width: 0; }
+.scan-match-qty { display: flex; flex-direction: column; align-items: center; min-width: 46px; flex-shrink: 0; }
+.scan-match-qty b { font-size: 18px; font-weight: 800; }
+.scan-match-qty small { font-size: 11px; color: #9ca3af; }
+
+/* ── กล้อง ── */
+.scan-camera { position: fixed; inset: 0; z-index: 90; background: #000; display: flex; flex-direction: column; }
+.scan-camera-top {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: calc(14px + env(safe-area-inset-top, 0px)) 16px 12px; position: relative; z-index: 2;
+}
+.scan-camera-close {
+  width: 44px; height: 44px; border-radius: 50%; padding: 0; min-height: 0; cursor: pointer;
+  background: rgba(255, 255, 255, 0.14); border: 1px solid rgba(255, 255, 255, 0.25); color: #fff;
+  display: flex; align-items: center; justify-content: center;
+}
+.scan-camera-view { flex: 1; position: relative; width: 100%; max-width: 720px; margin: 0 auto; }
+.scan-camera-hint { margin: 0; padding: 16px 32px calc(28px + env(safe-area-inset-bottom, 0px)); text-align: center; font-size: 13.5px; color: rgba(255, 255, 255, 0.75); }
+
+/* ── แจ้งเตือน ── */
+.scan-toast {
+  position: fixed; z-index: 100; top: calc(12px + env(safe-area-inset-top, 0px)); left: 12px; right: 12px;
+  max-width: 460px; margin: 0 auto; display: flex; align-items: center; gap: 12px;
+  padding: 12px 14px; border-radius: 14px; background: #111827; color: #fff;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3); border-left: 5px solid #22c55e;
+}
+.scan-toast.is-error { border-left-color: #ef4444; }
+.scan-toast-icon {
+  width: 28px; height: 28px; border-radius: 50%; flex-shrink: 0; background: #16a34a;
+  display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 800;
+}
+.scan-toast.is-error .scan-toast-icon { background: #dc2626; }
+.scan-toast-title { margin: 0; font-size: 14px; font-weight: 700; }
+.scan-toast-body { margin: 2px 0 0; font-size: 12px; color: rgba(255, 255, 255, 0.7); }
+
+/* ── จอกว้าง (คอม/แท็บเล็ต): กลางหน้า ไม่ชิดซ้าย สัดส่วนสมดุล ── */
+@media (min-width: 641px) {
+  .scan-page { padding: 28px 20px 40px; }
+  .scan-mode-grid { grid-template-columns: 1fr 1fr; }
+  .scan-mode-card { flex-direction: column; align-items: flex-start; gap: 16px; padding: 22px; }
+  .scan-mode-chevron { display: none; }
+  .scan-shell--narrow:has(.scan-mode-grid) { max-width: 640px; }
+  .scan-sheet-backdrop { align-items: center; }
+  .scan-sheet { border-radius: 24px; padding-bottom: 22px; }
+}
+
+/* ── มือถือ/แท็บเล็ตที่มีเมนูล่างติดจอ: ยกแถบปุ่มขึ้นเหนือเมนู ไม่ให้ถูกบัง ── */
+@media (max-width: 1024px), (hover: none) and (pointer: coarse) {
+  .scan-page { padding-bottom: 84px; }
+  .scan-shell--has-dock { padding-bottom: 96px; }
+  .scan-dock {
+    position: fixed; left: 0; right: 0; margin: 0;
+    bottom: calc(56px + env(safe-area-inset-bottom, 0px));
+    padding: 0 12px 10px;
+  }
+  .scan-dock-inner { max-width: 696px; margin: 0 auto; }
+}
+
+@media (max-width: 380px) {
+  .scan-title { font-size: 20px; }
+  .scan-stats { gap: 12px; }
+  .scan-dock-btn { font-size: 12px; }
+  .scan-actions { grid-template-columns: 1fr; }
+}
+
+/* ปุ่ม QR ท้ายแถว + หน้าต่างดู QR ของรายการเดียว (สต๊อกรวม) */
+.stock-all-actions-row { display: flex; gap: 6px; align-items: center; }
+.stock-all-qr-btn { display: inline-flex; align-items: center; gap: 5px; font-weight: 700; }
+.stock-all-qr-desc { margin: 0 0 12px; font-size: 13px; color: #6b7280; }
+.stock-all-qr-note { margin: 12px 0; text-align: center; color: #6b7280; font-size: 13px; }
+.stock-all-qr-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin: 8px 0 14px; }
+.stock-all-qr-card {
+  margin: 0; padding: 12px; border: 1px solid #e5e7eb; border-radius: 14px; background: #fff;
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+}
+.stock-all-qr-card img { width: 100%; max-width: 220px; height: auto; image-rendering: pixelated; }
+.stock-all-qr-card figcaption { font-family: Consolas, 'Courier New', monospace; font-weight: 800; font-size: 14px; text-align: center; overflow-wrap: anywhere; }
+.stock-all-qr-modal { max-width: 560px; }
+@media (max-width: 640px) {
+  .rack-table td.stock-all-actions .stock-all-actions-row { width: 100%; }
+  .rack-table td.stock-all-actions .stock-all-actions-row button { flex: 1; }
+}

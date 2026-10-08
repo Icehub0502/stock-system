@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import client from '../api/client';
 import QRScanner from '../components/QRScanner';
 import { useAuth } from '../context/AuthContext';
+import { POSITION_LABEL, POSITION_COLOR, NEUTRAL_POSITION_COLOR } from '../utils/stockPositions';
 
 // ─────────────────────────────────────────
 //  ICONS
@@ -84,7 +85,27 @@ function todayStr() {
 }
 
 // ─────────────────────────────────────────
-//  QUANTITY BOTTOM SHEET
+//  ชิ้นส่วนที่ใช้ซ้ำ
+// ─────────────────────────────────────────
+function PositionChip({ position }) {
+  if (!position) return null;
+  const color = POSITION_COLOR[position] || NEUTRAL_POSITION_COLOR;
+  return (
+    <span className="scan-chip" style={{ color: color.fg, background: color.bg }}>
+      {POSITION_LABEL[position] || position}
+    </span>
+  );
+}
+
+// ป้ายประเภทของรายการในบิล (ข้างรหัส)
+function kindLabel(type) {
+  if (type === 'stock_item') return 'สต๊อกรวม';
+  if (type === 'rack') return 'แร็ค';
+  return 'ปีกนก';
+}
+
+// ─────────────────────────────────────────
+//  QUANTITY BOTTOM SHEET — ยืนยันจำนวนหลังสแกน/เลือกรายการ
 // ─────────────────────────────────────────
 function ConfirmSheet({ item, mode, onConfirm, onCancel, loading }) {
   const [qty, setQty] = useState(1);
@@ -94,53 +115,62 @@ function ConfirmSheet({ item, mode, onConfirm, onCancel, loading }) {
 
   if (!item) return null;
 
-  const stockAfter = isIN
-    ? (item.stock_qty ?? item.stock ?? 0) + qty
-    : Math.max(0, (item.stock_qty ?? item.stock ?? 0) - qty);
-
-  const label = item.name || item.model_name || '—';
-  const code  = item.sku  || item.model_code || '—';
   const stock = item.stock_qty ?? item.stock ?? 0;
+  const stockAfter = isIN ? stock + qty : Math.max(0, stock - qty);
+  const label = item.name || item.model_name || '—';
+  const code = item.sku || item.model_code || '—';
+  const stockClass = stock === 0 ? 'is-out' : stock <= (item.min_stock || 1) ? 'is-low' : 'is-ok';
+
+  const setQtyFromInput = (value) => {
+    const n = Math.floor(Number(value));
+    setQty(Number.isFinite(n) && n >= 1 ? Math.min(n, 100000) : 1);
+  };
 
   return (
-    <div style={styles.sheetBackdrop}>
-      <div style={styles.sheet}>
-        {/* drag handle */}
-        <div style={{ width: 36, height: 4, borderRadius: 2, background: '#d1d5db', margin: '0 auto 16px' }} />
+    <div className="scan-sheet-backdrop">
+      <div className="scan-sheet" role="dialog" aria-modal="true" aria-label="ยืนยันจำนวน">
+        <div className="scan-sheet-handle" />
 
-        <p style={{ fontSize: 14, fontWeight: 600, color: '#111', marginBottom: 2 }}>{label}</p>
-        <p style={{ fontFamily: 'monospace', fontSize: 12, color: '#6b7280', marginBottom: 12 }}>{code}</p>
-
-        {/* current stock */}
-        <div style={styles.stockRow}>
-          <span style={{ fontSize: 12, color: '#6b7280' }}>สต็อกปัจจุบัน</span>
-          <span style={{
-            fontSize: 13, fontWeight: 600,
-            color: stock === 0 ? '#dc2626' : stock <= (item.min_stock || 1) ? '#d97706' : '#15803d',
-          }}>
-            {stock === 0 ? 'หมด' : `${stock} ชิ้น`}
-          </span>
+        <div className="scan-confirm-item">
+          <div className="scan-confirm-code">
+            <PositionChip position={item.position} />
+            <span className="scan-code">{code}</span>
+          </div>
+          <p className="scan-confirm-name">{label}</p>
         </div>
 
-        {/* qty picker */}
-        <div style={styles.qtyRow}>
-          <button style={styles.qtyBtn} onClick={() => setQty(q => Math.max(1, q - 1))}>−</button>
-          <span style={styles.qtyNum}>{qty}</span>
-          <button style={styles.qtyBtn} onClick={() => setQty(q => q + 1)}>+</button>
+        <div className="scan-confirm-stock">
+          <span>สต็อกปัจจุบัน{item.position ? ` (${POSITION_LABEL[item.position] || ''})` : ''}</span>
+          <strong className={stockClass}>{stock === 0 ? 'หมด' : `${stock} ชิ้น`}</strong>
         </div>
 
-        <p style={{ textAlign: 'center', fontSize: 12, color: '#6b7280', marginBottom: 16 }}>
-          {isIN ? 'รับเข้า' : 'จ่ายออก'} {qty} ชิ้น → คงเหลือ {stockAfter} ชิ้น
+        <div className="scan-stepper">
+          <button type="button" className="scan-stepper-btn" onClick={() => setQty((q) => Math.max(1, q - 1))} aria-label="ลดจำนวน">−</button>
+          <input
+            className="scan-stepper-input"
+            type="number"
+            inputMode="numeric"
+            min="1"
+            value={qty}
+            onChange={(e) => setQtyFromInput(e.target.value)}
+            aria-label="จำนวน"
+          />
+          <button type="button" className="scan-stepper-btn" onClick={() => setQty((q) => Math.min(100000, q + 1))} aria-label="เพิ่มจำนวน">+</button>
+        </div>
+
+        <p className="scan-confirm-result">
+          {isIN ? 'รับเข้า' : 'จ่ายออก'} <b>{qty}</b> ชิ้น → คงเหลือ <b>{stockAfter}</b> ชิ้น
         </p>
 
         <button
-          style={{ ...styles.primaryBtn, opacity: loading ? 0.6 : 1 }}
+          type="button"
+          className={`scan-btn scan-btn--block scan-btn--lg ${isIN ? 'scan-btn--in' : 'scan-btn--out'}`}
           onClick={() => onConfirm(qty)}
           disabled={loading}
         >
-          {loading ? 'กำลังบันทึก...' : <><IconCheck /> ยืนยัน {isIN ? 'รับเข้า' : 'จ่ายออก'}</>}
+          {loading ? 'กำลังบันทึก...' : <><IconCheck /> ยืนยัน{isIN ? 'รับเข้า' : 'จ่ายออก'}</>}
         </button>
-        <button style={styles.cancelLink} onClick={onCancel}>ยกเลิก</button>
+        <button type="button" className="scan-sheet-cancel" onClick={onCancel}>ยกเลิก</button>
       </div>
     </div>
   );
@@ -372,56 +402,58 @@ function ManualEntrySheet({ mode, canCreate, onPick, onCancel }) {
 function ScanOverlay({ active, mode, onResult, onClose }) {
   const isIN = mode === 'IN';
   return (
-    <div style={styles.scanBg}>
-      {/* top close */}
-      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, padding: '16px', display: 'flex', justifyContent: 'flex-end', zIndex: 2 }}>
-        <button onClick={onClose} style={styles.scanCloseBtn} aria-label="ปิดกล้อง">
+    <div className="scan-camera">
+      <div className="scan-camera-top">
+        <span className={`scan-pill ${isIN ? 'scan-pill--in' : 'scan-pill--out'}`}>
+          {isIN ? '▼ รับเข้าสต็อก' : '▲ จ่ายออก'}
+        </span>
+        <button type="button" onClick={onClose} className="scan-camera-close" aria-label="ปิดกล้อง">
           <IconX />
         </button>
       </div>
 
-      {/* mode badge */}
-      <div style={{ position: 'absolute', top: 60, left: 0, right: 0, display: 'flex', justifyContent: 'center', zIndex: 2 }}>
-        <span style={{ ...styles.badge, ...(isIN ? styles.badgeIN : styles.badgeOUT) }}>
-          {isIN ? '▼ รับเข้าสต็อก' : '▲ จ่ายออก'}
-        </span>
-      </div>
-
-      {/* QR scanner */}
-      <div style={{ width: '100%', flex: 1, position: 'relative' }}>
+      <div className="scan-camera-view">
         {active && <QRScanner active={active} onResult={onResult} />}
       </div>
 
-      <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: 13, textAlign: 'center', padding: '16px 32px 32px' }}>
-        วาง QR Code ในกรอบ — ระบบจะสแกนอัตโนมัติ
-      </p>
+      <p className="scan-camera-hint">วาง QR Code ในกรอบ — ระบบจะสแกนอัตโนมัติ</p>
     </div>
   );
 }
 
 // ─────────────────────────────────────────
-//  ORDER ITEM ROW
+//  ORDER ITEM ROW — แถวรายการในบิล (หน้าสแกนและหน้าสรุปใช้ร่วมกัน)
 // ─────────────────────────────────────────
-function OrderRow({ item, index, mode }) {
+function OrderRow({ item, index, mode, onDelete, deleting }) {
   const isIN = mode === 'IN';
+  const color = item.position ? (POSITION_COLOR[item.position] || NEUTRAL_POSITION_COLOR) : null;
   return (
-    <div style={styles.orderRow}>
-      <div style={styles.orderNum}>{index + 1}</div>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <p style={{ fontFamily: 'monospace', fontSize: 11, color: '#9ca3af', marginBottom: 2 }}>
-          {item.sku || item.model_code}
-        </p>
-        <p style={{ fontSize: 13, fontWeight: 500, color: '#111', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-          {item.name || item.model_name}
-        </p>
+    <div className="scan-row">
+      <span className="scan-row-no">{index}</span>
+      <div className="scan-row-main">
+        <div className="scan-row-code">
+          <PositionChip position={item.position} />
+          <span className="scan-code" style={color ? { color: color.fg } : undefined}>
+            {item.sku || item.model_code}
+          </span>
+          <span className="scan-kind">{kindLabel(item.type)}</span>
+        </div>
+        <p className="scan-row-name">{item.name || item.model_name}</p>
       </div>
-      <div style={{
-        fontSize: 12, fontWeight: 600, padding: '4px 10px', borderRadius: 8, flexShrink: 0,
-        background: isIN ? '#dcfce7' : '#fee2e2',
-        color: isIN ? '#166534' : '#991b1b',
-      }}>
+      <span className={`scan-qty ${isIN ? 'is-in' : 'is-out'}`}>
         {isIN ? '+' : '−'}{item.qty}
-      </div>
+      </span>
+      {onDelete && (
+        <button
+          type="button"
+          className="scan-del"
+          onClick={() => onDelete(item)}
+          disabled={deleting}
+          aria-label={`ลบ ${item.name}`}
+        >
+          <IconTrash />
+        </button>
+      )}
     </div>
   );
 }
@@ -431,33 +463,26 @@ function OrderRow({ item, index, mode }) {
 // ─────────────────────────────────────────
 function Toast({ msg, onDone }) {
   useEffect(() => {
-    if (!msg) return;
-    const t = setTimeout(onDone, 2400);
+    if (!msg) return undefined;
+    const t = setTimeout(onDone, 2600);
     return () => clearTimeout(t);
   }, [msg, onDone]);
 
   if (!msg) return null;
   return (
-    <div style={styles.toast}>
-      <span style={{ fontSize: 18 }}>{msg.ok ? '✅' : '❌'}</span>
+    <div className={`scan-toast ${msg.ok ? 'is-ok' : 'is-error'}`} role="status">
+      <span className="scan-toast-icon">{msg.ok ? '✓' : '!'}</span>
       <div>
-        <p style={{ fontSize: 13, fontWeight: 600, color: msg.ok ? '#4ade80' : '#fca5a5' }}>{msg.title}</p>
-        <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.65)', marginTop: 2 }}>{msg.body}</p>
+        <p className="scan-toast-title">{msg.title}</p>
+        {msg.body ? <p className="scan-toast-body">{msg.body}</p> : null}
       </div>
     </div>
   );
 }
 
 // ─────────────────────────────────────────
-//  MAIN PAGE
-// ─────────────────────────────────────────
-// ─────────────────────────────────────────
 //  สต๊อกรวม (โหมดรับเข้า) — ผลค้นหา/สแกนจาก /stock-receive หนึ่งแถว = หนึ่งตำแหน่งของหนึ่งรายการ
 // ─────────────────────────────────────────
-const POSITION_COLOR = {
-  left: '#1d4ed8', right: '#b91c1c', front: '#6d28d9', rear: '#c2410c',
-  front_left: '#1d4ed8', front_right: '#b91c1c', rear_left: '#047857', rear_right: '#c2410c',
-};
 
 // แปลงผลจาก /stock-receive เป็นรูปแบบเดียวกับ item ที่ ConfirmSheet/OrderRow ใช้อยู่
 function matchToItem(m) {
@@ -473,17 +498,20 @@ function matchToItem(m) {
 }
 
 function MatchRow({ match, onPick }) {
+  const color = match.position ? (POSITION_COLOR[match.position] || NEUTRAL_POSITION_COLOR) : null;
   return (
-    <button style={styles.manualRow} onClick={() => onPick(match)}>
-      <div style={{ flex: 1, minWidth: 0, textAlign: 'left' }}>
-        <p style={{ fontFamily: 'monospace', fontSize: 12, fontWeight: 700, color: POSITION_COLOR[match.position] || '#374151', marginBottom: 2 }}>
-          {match.position_label ? `${match.position_label} · ` : ''}{match.code || '—'}
-        </p>
-        <p style={{ fontSize: 13, fontWeight: 500, color: '#111', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-          {match.category_name} · {match.description || '—'}
-        </p>
+    <button type="button" className="scan-match" onClick={() => onPick(match)}>
+      <div className="scan-match-main">
+        <div className="scan-row-code">
+          <PositionChip position={match.position} />
+          <span className="scan-code" style={color ? { color: color.fg } : undefined}>{match.code || '—'}</span>
+        </div>
+        <p className="scan-row-name">{match.category_name} · {match.description || '—'}</p>
       </div>
-      <span style={{ fontSize: 12, color: '#6b7280', flexShrink: 0 }}>เหลือ {match.qty}</span>
+      <span className="scan-match-qty">
+        <b>{match.qty}</b>
+        <small>คงเหลือ</small>
+      </span>
     </button>
   );
 }
@@ -491,15 +519,15 @@ function MatchRow({ match, onPick }) {
 // สแกนแล้วเจอหลายรายการที่รหัสซ้ำกัน — ให้เลือกเอง
 function MatchPickSheet({ matches, onPick, onCancel }) {
   return (
-    <div style={styles.sheetBackdrop}>
-      <div style={{ ...styles.sheet, maxHeight: '85vh', overflowY: 'auto' }}>
-        <div style={{ width: 36, height: 4, borderRadius: 2, background: '#d1d5db', margin: '0 auto 16px' }} />
-        <p style={{ fontSize: 15, fontWeight: 700, color: '#111', marginBottom: 2 }}>รหัสนี้ตรงกับหลายรายการ</p>
-        <p style={{ fontSize: 12, color: '#6b7280', marginBottom: 12 }}>เลือกรายการที่ต้องการรับเข้า</p>
-        <div style={{ maxHeight: 320, overflowY: 'auto', margin: '0 -4px' }}>
+    <div className="scan-sheet-backdrop">
+      <div className="scan-sheet scan-sheet--tall" role="dialog" aria-modal="true" aria-label="เลือกรายการ">
+        <div className="scan-sheet-handle" />
+        <h2 className="scan-sheet-title">รหัสนี้ตรงกับหลายรายการ</h2>
+        <p className="scan-sheet-sub">เลือกรายการที่ต้องการรับเข้า</p>
+        <div className="scan-match-list">
           {matches.map((m) => <MatchRow key={`${m.item_id}-${m.position || 'one'}`} match={m} onPick={onPick} />)}
         </div>
-        <button style={styles.cancelLink} onClick={onCancel}>ยกเลิก</button>
+        <button type="button" className="scan-sheet-cancel" onClick={onCancel}>ยกเลิก</button>
       </div>
     </div>
   );
@@ -528,41 +556,40 @@ function StockSearchSheet({ onPick, onCancel }) {
 
   const term = query.trim();
   return (
-    <div style={styles.sheetBackdrop}>
-      <div style={{ ...styles.sheet, maxHeight: '85vh', overflowY: 'auto' }}>
-        <div style={{ width: 36, height: 4, borderRadius: 2, background: '#d1d5db', margin: '0 auto 16px' }} />
-        <p style={{ fontSize: 15, fontWeight: 700, color: '#111', marginBottom: 2 }}>กรอกรายการเอง</p>
-        <p style={{ fontSize: 12, color: '#6b7280', marginBottom: 12 }}>
-          ใช้ตอน QR เสียหรือสแกนไม่ติด — ค้นหาในสต๊อกรวมด้วยรหัส ชื่อรายการ หรือรุ่นรถ
-        </p>
-        <div style={{ position: 'relative', marginBottom: 12 }}>
-          <span style={{ position: 'absolute', left: 12, top: 11, color: '#9ca3af' }}><IconSearch /></span>
+    <div className="scan-sheet-backdrop">
+      <div className="scan-sheet scan-sheet--tall" role="dialog" aria-modal="true" aria-label="กรอกรายการเอง">
+        <div className="scan-sheet-handle" />
+        <h2 className="scan-sheet-title">กรอกรายการเอง</h2>
+        <p className="scan-sheet-sub">ใช้ตอน QR เสียหรือสแกนไม่ติด — ค้นหาด้วยรหัส ชื่อรายการ หรือรุ่นรถ</p>
+        <div className="scan-search">
+          <span className="scan-search-icon"><IconSearch /></span>
           <input
             autoFocus
             type="text"
+            className="scan-input scan-search-input"
             placeholder="พิมพ์รหัส ชื่อรายการ หรือรุ่นรถ..."
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            style={{ ...styles.input, fontFamily: 'inherit', fontWeight: 400, paddingLeft: 38 }}
           />
         </div>
-        <div style={{ maxHeight: 320, overflowY: 'auto', margin: '0 -4px' }}>
-          {term.length < 2 && (
-            <p style={{ textAlign: 'center', color: '#9ca3af', fontSize: 12, padding: '24px 0' }}>พิมพ์อย่างน้อย 2 ตัวอักษร</p>
-          )}
+        <div className="scan-match-list">
+          {term.length < 2 && <p className="scan-sheet-empty">พิมพ์อย่างน้อย 2 ตัวอักษร</p>}
           {term.length >= 2 && matches.length === 0 && !searching && (
-            <p style={{ textAlign: 'center', color: '#9ca3af', fontSize: 12, padding: '24px 0' }}>
+            <p className="scan-sheet-empty">
               ไม่พบรายการ "{query}" — ถ้าเป็นของใหม่ ให้เพิ่มที่หน้า "สต๊อกรวม" ก่อน
             </p>
           )}
           {matches.map((m) => <MatchRow key={`${m.item_id}-${m.position || 'one'}`} match={m} onPick={onPick} />)}
         </div>
-        <button style={styles.cancelLink} onClick={onCancel}>ยกเลิก</button>
+        <button type="button" className="scan-sheet-cancel" onClick={onCancel}>ยกเลิก</button>
       </div>
     </div>
   );
 }
 
+// ─────────────────────────────────────────
+//  MAIN PAGE
+// ─────────────────────────────────────────
 export default function TechnicianScanPage() {
   const { user } = useAuth();
   const location = useLocation();
@@ -605,6 +632,7 @@ export default function TechnicianScanPage() {
           qty: Number(it.qty),
           txId: it.id,
           type: it.item_type === 'rack' ? 'rack' : it.item_type === 'stock_item' ? 'stock_item' : 'wing-arm',
+          position: it.position || null,
         }));
         setOrders(existing.reverse()); // ในหน้านี้เรียงใหม่สุดอยู่บน
       })
@@ -776,6 +804,7 @@ export default function TechnicianScanPage() {
       setOrders(prev => [{
         sku: code, name: label, qty, txId,
         type: scannedType, id: scannedItem.id,
+        position: scannedItem.position || null,
       }, ...prev]);
 
       setToast({
@@ -803,199 +832,182 @@ export default function TechnicianScanPage() {
   };
 
   const isIN = mode === 'IN';
+  const totalQty = orders.reduce((s, o) => s + Number(o.qty || 0), 0);
+  const sign = isIN ? '+' : '−';
 
   // ─────────────────────────────
-  //  RENDER
+  //  RENDER — จัดวางด้วยคลาส scan-* (สไตล์อยู่ท้าย styles/app.css) ใช้ได้ทั้งมือถือและจอคอม
   // ─────────────────────────────
   return (
-    <div style={styles.page}>
+    <div className={`scan-page ${step === STEP.SCAN || step === STEP.DONE ? (isIN ? 'is-in' : 'is-out') : ''}`}>
 
-      {/* ════════════════════════════
-          STEP 1 — เลือก IN / OUT
-      ════════════════════════════ */}
+      {/* ════════════ STEP 1 — เลือก IN / OUT ════════════ */}
       {step === STEP.MODE && (
-        <div style={styles.container}>
-          <div style={styles.pageHeader}>
-            <span style={{ color: '#6b7280' }}><IconQR /></span>
-            <h2 style={styles.pageTitle}>สแกน QR Code</h2>
-          </div>
-          <p style={{ fontSize: 13, color: '#6b7280', marginBottom: 20 }}>เลือกประเภทรายการก่อนเริ่ม</p>
+        <div className="scan-shell scan-shell--narrow">
+          <header className="scan-head">
+            <span className="scan-head-icon"><IconQR /></span>
+            <div>
+              <h1 className="scan-title">สแกน QR Code</h1>
+              <p className="scan-subtitle">เลือกประเภทรายการก่อนเริ่ม</p>
+            </div>
+          </header>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div className="scan-mode-grid">
             {isOffice && (
-              <button style={styles.modeCard} onClick={() => selectMode('IN')}>
-                <div style={{ ...styles.modeIcon, background: '#dcfce7' }}>
-                  <span style={{ color: '#166534' }}><IconArrowDown /></span>
-                </div>
-                <div>
-                  <p style={styles.modeLabel}>รับเข้าสต็อก</p>
-                  <p style={styles.modeSub}>นำสินค้าเข้าคลัง · ต้องใส่เลขบิล</p>
-                </div>
+              <button type="button" className="scan-mode-card scan-mode-card--in" onClick={() => selectMode('IN')}>
+                <span className="scan-mode-icon"><IconArrowDown /></span>
+                <span className="scan-mode-text">
+                  <strong>รับเข้าสต็อก</strong>
+                  <small>นำสินค้าเข้าคลัง · ต้องใส่เลขบิล</small>
+                </span>
+                <span className="scan-mode-chevron" aria-hidden="true">›</span>
               </button>
             )}
-            <button style={{ ...styles.modeCard, borderColor: '#fecaca' }} onClick={() => selectMode('OUT')}>
-              <div style={{ ...styles.modeIcon, background: '#fee2e2' }}>
-                <span style={{ color: '#991b1b' }}><IconArrowUp /></span>
-              </div>
-              <div>
-                <p style={styles.modeLabel}>จ่ายออกจากสต็อก</p>
-                <p style={styles.modeSub}>นำสินค้าออกใช้งาน</p>
-              </div>
+            <button type="button" className="scan-mode-card scan-mode-card--out" onClick={() => selectMode('OUT')}>
+              <span className="scan-mode-icon"><IconArrowUp /></span>
+              <span className="scan-mode-text">
+                <strong>จ่ายออกจากสต็อก</strong>
+                <small>นำสินค้าออกใช้งาน</small>
+              </span>
+              <span className="scan-mode-chevron" aria-hidden="true">›</span>
             </button>
           </div>
         </div>
       )}
 
-      {/* ════════════════════════════
-          STEP 2 — กรอกเลขบิล (IN)
-      ════════════════════════════ */}
+      {/* ════════════ STEP 2 — กรอกเลขบิล (IN) ════════════ */}
       {step === STEP.INVOICE && (
-        <div style={styles.container}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
-            <button onClick={resetAll} style={styles.backBtn}><IconArrowLeft /></button>
+        <div className="scan-shell scan-shell--narrow">
+          <header className="scan-head">
+            <button type="button" className="scan-icon-btn" onClick={resetAll} aria-label="ย้อนกลับ"><IconArrowLeft /></button>
             <div>
-              <h2 style={{ ...styles.pageTitle, margin: 0 }}>เปิดบิลรับสินค้า</h2>
-              <p style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>กรอกเลขบิลก่อนเริ่มสแกน</p>
+              <h1 className="scan-title">เปิดบิลรับสินค้า</h1>
+              <p className="scan-subtitle">กรอกเลขบิลก่อนเริ่มสแกน</p>
             </div>
-          </div>
+          </header>
 
-          <div style={styles.invoiceCard}>
-            <div style={styles.invoiceHeader}>
-              <div style={styles.invoiceHeaderIcon}><IconReceipt /></div>
+          <section className="scan-card">
+            <div className="scan-card-head">
+              <span className="scan-card-head-icon"><IconReceipt /></span>
               <div>
-                <p style={{ color: '#fff', fontWeight: 600, fontSize: 14 }}>เลขที่บิล / Invoice No.</p>
-                <p style={{ color: '#93c5fd', fontSize: 12, marginTop: 2 }}>กรอกเลขจากซัพพลายเออร์</p>
+                <strong>เลขที่บิล / Invoice No.</strong>
+                <small>กรอกเลขจากซัพพลายเออร์</small>
               </div>
             </div>
-            <div style={{ padding: '16px' }}>
-              <label style={styles.fieldLabel}>เลขที่บิล</label>
+            <div className="scan-card-body">
+              <label className="scan-label" htmlFor="scan-invoice">เลขที่บิล</label>
               <input
+                id="scan-invoice"
                 autoFocus
                 type="text"
+                className={`scan-input scan-input--mono${invoiceErr ? ' has-error' : ''}`}
                 placeholder="เช่น INV-2026-0001"
                 value={invoice}
-                onChange={e => setInvoice(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && startSession()}
-                style={{ ...styles.input, borderColor: invoiceErr ? '#ef4444' : '#e5e7eb' }}
+                onChange={(e) => setInvoice(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && startSession()}
               />
-              {invoiceErr && <p style={styles.errText}>{invoiceErr}</p>}
+              {invoiceErr && <p className="scan-error">{invoiceErr}</p>}
 
-              <label style={{ ...styles.fieldLabel, marginTop: 14 }}>วันที่ของบิล</label>
+              <label className="scan-label" htmlFor="scan-bill-date">วันที่ของบิล</label>
               <input
+                id="scan-bill-date"
                 type="date"
+                className="scan-input"
                 value={billDate}
                 max={todayStr()}
-                onChange={e => setBillDate(e.target.value)}
-                style={{ ...styles.input, fontFamily: 'inherit', fontWeight: 500 }}
+                onChange={(e) => setBillDate(e.target.value)}
               />
               {billDate !== todayStr() && (
-                <p style={styles.backdateNote}>
-                  📅 กำลังคีย์บิลย้อนหลัง — บิลนี้จะไปอยู่ในวันที่ที่เลือก
-                </p>
+                <p className="scan-backdate">📅 กำลังคีย์บิลย้อนหลัง — บิลนี้จะไปอยู่ในวันที่ที่เลือก</p>
               )}
 
-              <p style={{ fontSize: 11, color: '#9ca3af', marginTop: 8, lineHeight: 1.6 }}>
+              <p className="scan-hint">
                 สินค้าทุกชิ้นที่สแกนในรอบนี้จะถูกผูกกับบิลนี้ · ลืมคีย์ย้อนหลังได้โดยเลือกวันที่
               </p>
               <button
-                style={{ ...styles.primaryBtn, marginTop: 14, opacity: starting ? 0.6 : 1 }}
+                type="button"
+                className="scan-btn scan-btn--primary scan-btn--block scan-btn--lg"
                 onClick={startSession}
                 disabled={starting}
               >
                 {starting ? 'กำลังเปิดบิล...' : 'เริ่มสแกน'}
               </button>
             </div>
-          </div>
+          </section>
         </div>
       )}
 
-      {/* ════════════════════════════
-          STEP 3 — สแกน + order list
-      ════════════════════════════ */}
+      {/* ════════════ STEP 3 — สแกน + รายการ ════════════ */}
       {step === STEP.SCAN && (
-        <div style={styles.scanPage}>
+        <div className="scan-shell scan-shell--wide scan-shell--has-dock">
 
-          {/* top bar */}
-          <div style={styles.scanTopBar}>
-            <button onClick={resetAll} style={styles.backBtn}><IconX /></button>
-            <div style={{ flex: 1 }}>
-              <p style={{ fontSize: 14, fontWeight: 600, color: '#111', lineHeight: 1 }}>
-                {isIN ? 'รับเข้าสต็อก' : 'จ่ายออกจากสต็อก'}
-              </p>
-              <p style={{ fontSize: 11, color: '#6b7280', marginTop: 2 }}>
-                {isIN && session ? session.invoice_no : 'สแกน QR เพื่อทำรายการ'}
-              </p>
+          <header className="scan-topbar">
+            <button type="button" className="scan-icon-btn" onClick={resetAll} aria-label="ออกจากหน้านี้"><IconX /></button>
+            <div className="scan-topbar-text">
+              <strong>{isIN ? 'รับเข้าสต็อก' : 'จ่ายออกจากสต็อก'}</strong>
+              <small>{isIN ? 'สแกน QR เพื่อรับของเข้าบิลนี้' : 'สแกน QR เพื่อจ่ายของออก'}</small>
             </div>
-            <span style={{ ...styles.badge, ...(isIN ? styles.badgeIN : styles.badgeOUT) }}>
-              {isIN ? 'IN' : 'OUT'}
-            </span>
-          </div>
+            <span className={`scan-pill ${isIN ? 'scan-pill--in' : 'scan-pill--out'}`}>{isIN ? 'IN' : 'OUT'}</span>
+          </header>
 
-          {/* session bar (IN only) */}
-          {isIN && session && (
-            <div style={styles.sessionBar}>
-              <div>
-                <p style={{ fontSize: 11, color: '#3b82f6', fontWeight: 600 }}>บิลปัจจุบัน</p>
-                <p style={{ fontFamily: 'monospace', fontSize: 13, fontWeight: 700, color: '#1e40af' }}>
-                  {session.invoice_no}
-                </p>
-                <p style={{ fontSize: 11, color: '#6b7280', marginTop: 1 }}>สแกนแล้ว {orders.length} รายการ</p>
-              </div>
+          <section className="scan-bill">
+            <div className="scan-bill-main">
+              <span className="scan-bill-label">{isIN && session ? 'บิลปัจจุบัน' : 'รอบนี้'}</span>
+              <span className="scan-bill-no">{isIN && session ? session.invoice_no : 'จ่ายออกจากคลัง'}</span>
+            </div>
+            <div className="scan-stats">
+              <div><b>{orders.length}</b><span>รายการ</span></div>
+              <div><b>{sign}{totalQty}</b><span>ชิ้น</span></div>
+            </div>
+            {isIN && session && (
               <button
-                style={styles.closeBillBtn}
+                type="button"
+                className="scan-btn scan-btn--ghost scan-btn--sm"
                 onClick={() => { setStep(STEP.INVOICE); setSession(null); setOrders([]); setInvoice(''); }}
               >
-                ✓ ปิดบิล / เปิดใหม่
+                ปิดบิล / เปิดใหม่
               </button>
-            </div>
-          )}
+            )}
+          </section>
 
-          {/* order list */}
-          <div style={styles.orderList}>
+          <section className="scan-list" aria-label="รายการที่สแกน">
             {orders.length === 0 ? (
-              <div style={styles.emptyState}>
-                <span style={{ fontSize: 48, color: '#d1d5db' }}><IconPackage /></span>
-                <p style={{ fontSize: 13, color: '#9ca3af', marginTop: 8 }}>
-                  กดปุ่มสแกน <span style={{ fontSize: 18 }}>⬇</span> เพื่อเริ่ม
-                </p>
+              <div className="scan-empty">
+                <span className="scan-empty-icon"><IconQR /></span>
+                <p>ยังไม่มีรายการ</p>
+                <small>กดปุ่ม "สแกน QR" ด้านล่างเพื่อเริ่ม</small>
               </div>
             ) : (
-              orders.map((o, i) => <OrderRow key={i} item={o} index={i} mode={mode} />)
+              orders.map((o, i) => (
+                <OrderRow key={o.txId || `${o.sku}-${i}`} item={o} index={orders.length - i} mode={mode} />
+              ))
             )}
-            {/* spacer for FAB */}
-            <div style={{ height: 96 }} />
-          </div>
+          </section>
 
-          {/* แถบปุ่มล่าง — กรอกเอง / สแกน / เสร็จสิ้น */}
-          <div style={styles.actionBar}>
-            <button style={styles.sideBtn} onClick={() => setManualOpen(true)}>
-              <IconSearch />
-              <span style={styles.sideBtnLabel}>กรอกเอง</span>
-            </button>
-
-            <button style={styles.fab} onClick={() => setScanning(true)} aria-label="สแกน QR">
-              <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
+          {/* แถบปุ่มล่าง — กรอกเอง / สแกน / เสร็จสิ้น (วางเหนือเมนูล่างบนมือถือ ไม่ถูกบัง) */}
+          <div className="scan-dock">
+            <div className="scan-dock-inner">
+              <button type="button" className="scan-dock-btn scan-dock-btn--side" onClick={() => setManualOpen(true)}>
+                <IconSearch />
+                <span>กรอกเอง</span>
+              </button>
+              <button type="button" className="scan-dock-btn scan-dock-btn--scan" onClick={() => setScanning(true)}>
                 <IconQR />
-                <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.85)', fontWeight: 500, letterSpacing: '0.03em' }}>
-                  สแกน
-                </span>
-              </span>
-              {orders.length > 0 && (
-                <span style={styles.fabBadge}>{orders.length}</span>
-              )}
-            </button>
-
-            <button
-              style={{ ...styles.sideBtn, opacity: orders.length === 0 ? 0.4 : 1 }}
-              onClick={() => setStep(STEP.DONE)}
-              disabled={orders.length === 0}
-            >
-              <IconCheck />
-              <span style={styles.sideBtnLabel}>เสร็จสิ้น</span>
-            </button>
+                <span>สแกน QR</span>
+                {orders.length > 0 && <em className="scan-dock-badge">{orders.length}</em>}
+              </button>
+              <button
+                type="button"
+                className="scan-dock-btn scan-dock-btn--side scan-dock-btn--finish"
+                onClick={() => setStep(STEP.DONE)}
+                disabled={orders.length === 0}
+              >
+                <IconCheck />
+                <span>เสร็จสิ้น</span>
+              </button>
+            </div>
           </div>
 
-          {/* scan overlay (กล้อง) */}
           {scanning && (
             <ScanOverlay
               active={scanning}
@@ -1005,12 +1017,8 @@ export default function TechnicianScanPage() {
             />
           )}
 
-          {/* แผงกรอกเอง (QR เสีย/สแกนไม่ติด) */}
           {manualOpen && (mode === 'IN' ? (
-            <StockSearchSheet
-              onPick={handleStockPick}
-              onCancel={() => setManualOpen(false)}
-            />
+            <StockSearchSheet onPick={handleStockPick} onCancel={() => setManualOpen(false)} />
           ) : (
             <ManualEntrySheet
               mode={mode}
@@ -1020,7 +1028,6 @@ export default function TechnicianScanPage() {
             />
           ))}
 
-          {/* สแกนเจอรหัสซ้ำหลายรายการ ให้เลือก */}
           {pickMatches && (
             <MatchPickSheet
               matches={pickMatches}
@@ -1029,7 +1036,6 @@ export default function TechnicianScanPage() {
             />
           )}
 
-          {/* confirm bottom sheet */}
           {scannedItem && !scanning && (
             <ConfirmSheet
               item={scannedItem}
@@ -1040,88 +1046,62 @@ export default function TechnicianScanPage() {
             />
           )}
 
-          {/* toast */}
           <Toast msg={toast} onDone={clearToast} />
         </div>
       )}
 
-      {/* ════════════════════════════
-          STEP 4 — สรุปของที่สแกนเข้า
-      ════════════════════════════ */}
+      {/* ════════════ STEP 4 — สรุปของที่สแกน ════════════ */}
       {step === STEP.DONE && (
-        <div style={styles.container}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
-            <button onClick={() => setStep(STEP.SCAN)} style={styles.backBtn}><IconArrowLeft /></button>
+        <div className="scan-shell scan-shell--wide">
+          <header className="scan-head">
+            <button type="button" className="scan-icon-btn" onClick={() => setStep(STEP.SCAN)} aria-label="กลับไปสแกน"><IconArrowLeft /></button>
             <div>
-              <h2 style={{ ...styles.pageTitle, margin: 0 }}>สรุปรายการ</h2>
-              <p style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>
+              <h1 className="scan-title">สรุปรายการ</h1>
+              <p className="scan-subtitle">
                 {isIN ? 'รับเข้าสต็อก' : 'จ่ายออกจากสต็อก'}
                 {isIN && session ? ` · บิล ${session.invoice_no}` : ''}
               </p>
             </div>
-          </div>
+          </header>
 
-          <div style={styles.summaryTotal}>
-            <div>
-              <p style={{ fontSize: 12, color: '#6b7280' }}>ทำรายการทั้งหมด</p>
-              <p style={{ fontSize: 26, fontWeight: 700, color: '#111', lineHeight: 1.2 }}>
-                {orders.length} <span style={{ fontSize: 14, fontWeight: 500, color: '#6b7280' }}>รายการ</span>
-              </p>
+          <section className="scan-summary">
+            <div className="scan-summary-tile">
+              <span>ทำรายการทั้งหมด</span>
+              <b>{orders.length}<small> รายการ</small></b>
             </div>
-            <div style={{ textAlign: 'right' }}>
-              <p style={{ fontSize: 12, color: '#6b7280' }}>รวมจำนวน</p>
-              <p style={{ fontSize: 26, fontWeight: 700, color: isIN ? '#166534' : '#991b1b', lineHeight: 1.2 }}>
-                {isIN ? '+' : '−'}{orders.reduce((s, o) => s + Number(o.qty || 0), 0)}
-                <span style={{ fontSize: 14, fontWeight: 500, color: '#6b7280' }}> ชิ้น</span>
-              </p>
+            <div className="scan-summary-tile scan-summary-tile--accent">
+              <span>รวมจำนวน</span>
+              <b>{sign}{totalQty}<small> ชิ้น</small></b>
             </div>
-          </div>
+          </section>
 
-          <p style={{ fontSize: 12, color: '#6b7280', margin: '16px 0 8px' }}>
-            ตรวจทานก่อนปิดงาน — สแกนผิดกดลบแล้วสแกนใหม่ได้
-          </p>
+          <p className="scan-note">ตรวจทานก่อนปิดงาน — สแกนผิดกดถังขยะแล้วสแกนใหม่ได้</p>
 
-          {orders.length === 0 ? (
-            <div style={styles.emptyState}>
-              <span style={{ color: '#d1d5db' }}><IconPackage /></span>
-              <p style={{ fontSize: 13, color: '#9ca3af', marginTop: 8 }}>ไม่มีรายการเหลือแล้ว</p>
-            </div>
-          ) : (
-            orders.map((o, i) => (
-              <div key={o.txId || i} style={styles.orderRow}>
-                <div style={styles.orderNum}>{i + 1}</div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <p style={{ fontFamily: 'monospace', fontSize: 11, color: '#9ca3af', marginBottom: 2 }}>
-                    {o.sku} · {o.type === 'rack' ? 'แร็ค' : 'ปีกนก'}
-                  </p>
-                  <p style={{ fontSize: 13, fontWeight: 500, color: '#111', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {o.name}
-                  </p>
-                </div>
-                <div style={{
-                  fontSize: 12, fontWeight: 600, padding: '4px 10px', borderRadius: 8, flexShrink: 0,
-                  background: isIN ? '#dcfce7' : '#fee2e2',
-                  color: isIN ? '#166534' : '#991b1b',
-                }}>
-                  {isIN ? '+' : '−'}{o.qty}
-                </div>
-                <button
-                  style={{ ...styles.rowDeleteBtn, opacity: deletingId === o.txId ? 0.4 : 1 }}
-                  onClick={() => handleDeleteOrder(o)}
-                  disabled={deletingId === o.txId}
-                  aria-label={`ลบ ${o.name}`}
-                >
-                  <IconTrash />
-                </button>
+          <section className="scan-list" aria-label="สรุปรายการ">
+            {orders.length === 0 ? (
+              <div className="scan-empty">
+                <span className="scan-empty-icon"><IconPackage /></span>
+                <p>ไม่มีรายการเหลือแล้ว</p>
               </div>
-            ))
-          )}
+            ) : (
+              orders.map((o, i) => (
+                <OrderRow
+                  key={o.txId || `${o.sku}-${i}`}
+                  item={o}
+                  index={orders.length - i}
+                  mode={mode}
+                  onDelete={handleDeleteOrder}
+                  deleting={deletingId === o.txId}
+                />
+              ))
+            )}
+          </section>
 
-          <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
-            <button style={{ ...styles.primaryBtn, flex: 1 }} onClick={() => setStep(STEP.SCAN)}>
+          <div className="scan-actions">
+            <button type="button" className="scan-btn scan-btn--primary scan-btn--lg" onClick={() => setStep(STEP.SCAN)}>
               <IconQR /> สแกนเพิ่ม
             </button>
-            <button style={styles.finishBtn} onClick={resetAll}>
+            <button type="button" className="scan-btn scan-btn--dark scan-btn--lg" onClick={resetAll}>
               ปิดงาน
             </button>
           </div>
@@ -1134,281 +1114,66 @@ export default function TechnicianScanPage() {
 }
 
 // ─────────────────────────────────────────
-//  STYLES
+//  STYLES — เฉพาะที่แผง "กรอกเอง" ของโหมดจ่ายออก (ManualEntrySheet) ยังใช้อยู่
+//  ส่วนอื่นของหน้านี้ใช้คลาส scan-* ใน styles/app.css
 // ─────────────────────────────────────────
 const styles = {
-  page: {
-    minHeight: '100vh',
-    background: '#f9fafb',
-  },
-  container: {
-    maxWidth: 480,
-    margin: '0 auto',
-    padding: '20px 16px',
-  },
-  pageHeader: {
-    display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4,
-  },
-  pageTitle: {
-    fontSize: 22, fontWeight: 700, color: '#111', letterSpacing: '-0.03em',
-  },
-  backBtn: {
-    background: 'none', border: 'none', cursor: 'pointer',
-    color: '#6b7280', padding: 4, display: 'flex', alignItems: 'center',
-    borderRadius: 8,
-  },
-  // mode select
-  modeCard: {
-    display: 'flex', alignItems: 'center', gap: 14,
-    padding: '18px 16px', borderRadius: 16,
-    border: '1px solid #bbf7d0', background: '#fff',
-    cursor: 'pointer', width: '100%', textAlign: 'left',
-    transition: 'background 0.15s',
-  },
-  modeIcon: {
-    width: 52, height: 52, borderRadius: 14,
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    flexShrink: 0,
-  },
-  modeLabel: { fontSize: 15, fontWeight: 600, color: '#111', marginBottom: 2 },
-  modeSub:   { fontSize: 12, color: '#6b7280' },
-  // invoice
-  invoiceCard: {
-    background: '#fff', borderRadius: 16,
-    border: '0.5px solid #e5e3de', overflow: 'hidden',
-  },
-  invoiceHeader: {
-    background: '#1e40af', padding: '14px 16px',
-    display: 'flex', alignItems: 'center', gap: 10,
-  },
-  invoiceHeaderIcon: {
-    background: 'rgba(255,255,255,0.15)', borderRadius: 10,
-    width: 36, height: 36, display: 'flex', alignItems: 'center',
-    justifyContent: 'center', color: '#fff',
-  },
   fieldLabel: {
-    display: 'block', fontSize: 11, fontWeight: 600,
-    color: '#374151', letterSpacing: '0.05em',
-    textTransform: 'uppercase', marginBottom: 6,
+    display: 'block', fontSize: 12, fontWeight: 700,
+    color: '#374151', marginBottom: 6,
   },
   input: {
     width: '100%', boxSizing: 'border-box',
-    padding: '10px 12px', fontSize: 14,
+    padding: '11px 12px', fontSize: 15,
     fontFamily: 'monospace', fontWeight: 600,
-    border: '1.5px solid #e5e7eb', borderRadius: 10,
+    border: '1.5px solid #e5e7eb', borderRadius: 12,
     background: '#f9fafb', outline: 'none', color: '#111',
   },
   errText: { color: '#dc2626', fontSize: 12, marginTop: 6 },
-  // scan page — ใช้ fixed layout เพื่อให้ FAB ไม่จมหายใน mobile
-  scanPage: {
-    display: 'flex', flexDirection: 'column',
-    // ไม่ใช้ height:100vh + overflow:hidden เพราะทำให้ FAB absolute ถูกตัด
-    // ใช้ minHeight + position:static แทน แล้วให้ FAB เป็น fixed
-    minHeight: '100vh',
-    background: '#f5f5f0',
-    position: 'relative',
-  },
-  scanTopBar: {
-    background: '#fff',
-    borderBottom: '0.5px solid #e9e7e1',
-    padding: '12px 16px 10px',
-    display: 'flex', alignItems: 'center', gap: 10,
-    // sticky ให้ติดบนสุดขณะ scroll
-    position: 'sticky', top: 0, zIndex: 6,
-  },
-  sessionBar: {
-    background: '#eff6ff', borderBottom: '1px solid #bfdbfe',
-    padding: '10px 16px',
-    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-    position: 'sticky', top: 49, zIndex: 5,  // ต่อจาก topbar
-  },
-  closeBillBtn: {
-    background: '#fff', border: '1px solid #bfdbfe', color: '#2563eb',
-    borderRadius: 8, padding: '6px 12px', fontSize: 12,
-    fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
-    minHeight: 'unset', flexShrink: 0,
-  },
-  orderList: {
-    flex: 1,
-    padding: '10px 12px',
-    // paddingBottom ให้ content ไม่ซ่อนหลัง FAB
-    paddingBottom: 100,
-  },
-  orderRow: {
-    background: '#fff', borderRadius: 12,
-    border: '0.5px solid #e5e3de',
-    padding: '10px 12px', marginBottom: 8,
-    display: 'flex', alignItems: 'center', gap: 10,
-  },
-  orderNum: {
-    width: 22, height: 22, borderRadius: '50%',
-    background: '#f3f4f6', fontSize: 10, fontWeight: 500,
-    color: '#6b7280', display: 'flex', alignItems: 'center',
-    justifyContent: 'center', flexShrink: 0,
-  },
-  emptyState: {
-    display: 'flex', flexDirection: 'column',
-    alignItems: 'center', justifyContent: 'center',
-    minHeight: 260, opacity: 0.7,
-  },
-  // แถบปุ่มล่าง — fixed ติดหน้าจอ วางปุ่มกรอกเอง/สแกน/เสร็จสิ้นให้กดถึงด้วยนิ้วโป้ง
-  actionBar: {
-    position: 'fixed',
-    bottom: 'calc(20px + env(safe-area-inset-bottom, 0px))',
-    left: 0, right: 0,
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    gap: 20,
-    zIndex: 40,
-    pointerEvents: 'none', // ให้กดทะลุช่องว่างระหว่างปุ่มได้
-  },
-  sideBtn: {
-    pointerEvents: 'auto',
-    background: '#fff', border: '1px solid #e5e7eb',
-    borderRadius: 14, padding: '10px 14px',
-    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
-    cursor: 'pointer', color: '#374151',
-    boxShadow: '0 2px 12px rgba(0,0,0,0.10)',
-    minHeight: 'unset',
-  },
-  sideBtnLabel: { fontSize: 11, fontWeight: 600 },
-  // FAB — ไม่โดน overflow:hidden ตัด
-  fab: {
-    pointerEvents: 'auto',
-    position: 'relative',
-    width: 72, height: 72, borderRadius: '50%',
-    background: '#2563eb', border: 'none',
-    cursor: 'pointer', display: 'flex',
-    alignItems: 'center', justifyContent: 'center',
-    boxShadow: '0 4px 24px rgba(37,99,235,0.45)',
-    flexShrink: 0,
-  },
-  fabBadge: {
-    position: 'absolute', top: -4, right: -4,
-    background: '#ef4444', color: '#fff',
-    borderRadius: 10, fontSize: 10, fontWeight: 700,
-    padding: '2px 6px', border: '2px solid #f5f5f0',
-  },
-  // scan overlay — fixed ครอบเต็มหน้าจอ
-  scanBg: {
-    position: 'fixed', inset: 0,
-    background: 'rgba(0,0,0,0.92)',
-    display: 'flex', flexDirection: 'column',
-    alignItems: 'center', zIndex: 50,
-  },
-  scanCloseBtn: {
-    background: 'rgba(255,255,255,0.12)',
-    border: '1px solid rgba(255,255,255,0.2)',
-    color: '#fff', borderRadius: '50%',
-    width: 40, height: 40, cursor: 'pointer',
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    minHeight: 'unset',
-  },
-  // bottom sheet — fixed ยึดด้านล่าง
   sheetBackdrop: {
-    position: 'fixed', inset: 0,
-    background: 'rgba(0,0,0,0.5)',
-    display: 'flex', alignItems: 'flex-end',
-    zIndex: 45,
+    position: 'fixed', inset: 0, zIndex: 80,
+    background: 'rgba(17,24,39,0.55)',
+    display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
   },
   sheet: {
-    background: '#fff', borderRadius: '20px 20px 0 0',
-    padding: '16px 20px',
-    // paddingBottom รองรับ iOS home indicator
-    paddingBottom: 'calc(28px + env(safe-area-inset-bottom, 0px))',
-    width: '100%',
+    background: '#fff', borderRadius: '24px 24px 0 0',
+    padding: '12px 20px calc(22px + env(safe-area-inset-bottom, 0px))',
+    width: '100%', maxWidth: 520,
   },
-  stockRow: {
-    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-    padding: '8px 0', borderTop: '0.5px solid #e5e7eb',
-    borderBottom: '0.5px solid #e5e7eb', marginBottom: 4,
-  },
-  qtyRow: {
-    display: 'flex', alignItems: 'center',
-    justifyContent: 'center', gap: 20, margin: '16px 0',
-  },
-  qtyBtn: {
-    width: 40, height: 40, borderRadius: '50%',
-    border: '1.5px solid #e5e7eb', background: '#f9fafb',
-    fontSize: 22, cursor: 'pointer', color: '#374151',
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-  },
-  qtyNum: { fontSize: 32, fontWeight: 700, color: '#111', minWidth: 48, textAlign: 'center' },
-  // shared
-  primaryBtn: {
-    width: '100%', padding: '13px',
-    background: '#2563eb', color: '#fff',
-    border: 'none', borderRadius: 12,
-    fontSize: 14, fontWeight: 600, cursor: 'pointer',
-    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-  },
-  cancelLink: {
-    width: '100%', padding: '10px',
-    background: 'none', border: 'none',
-    color: '#6b7280', fontSize: 13,
-    cursor: 'pointer', marginTop: 4,
-    display: 'block', textAlign: 'center',
-  },
-  badge: {
-    display: 'inline-flex', alignItems: 'center',
-    padding: '4px 12px', borderRadius: 20,
-    fontSize: 12, fontWeight: 600,
-  },
-  badgeIN:  { background: '#dcfce7', color: '#166534' },
-  badgeOUT: { background: '#fee2e2', color: '#991b1b' },
-  // แจ้งเตือนตอนเลือกวันย้อนหลัง ให้เห็นชัดว่าไม่ใช่วันนี้
-  backdateNote: {
-    marginTop: 8, padding: '8px 10px', borderRadius: 10,
-    background: '#fffbeb', border: '1px solid #fde68a',
-    color: '#92400e', fontSize: 12, lineHeight: 1.5,
-  },
-  // แถวผลค้นหาในแผงกรอกเอง
   manualRow: {
     width: '100%', display: 'flex', alignItems: 'center', gap: 10,
-    padding: '10px 12px', marginBottom: 6,
-    background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12,
+    padding: '12px 14px', marginBottom: 8,
+    background: '#fff', border: '1px solid #e5e7eb', borderRadius: 14,
     cursor: 'pointer', minHeight: 'unset',
   },
   addNewBtn: {
-    width: '100%', marginTop: 10, padding: '11px',
+    width: '100%', marginTop: 10, padding: '12px',
     background: '#f0fdf4', border: '1px dashed #86efac',
     borderRadius: 12, color: '#166534',
     fontSize: 13, fontWeight: 600, cursor: 'pointer',
     display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
   },
   segBtn: {
-    flex: 1, padding: '9px 14px', borderRadius: 10,
+    flex: 1, padding: '10px 14px', borderRadius: 10,
     border: '1.5px solid #e5e7eb', background: '#fff',
     color: '#6b7280', fontSize: 13, fontWeight: 500,
     cursor: 'pointer', minHeight: 'unset',
   },
   segBtnActive: {
-    borderColor: '#2563eb', background: '#2563eb', color: '#fff', fontWeight: 600,
+    borderColor: '#111827', background: '#111827', color: '#fff', fontWeight: 700,
   },
-  // สรุปยอดหน้า "เสร็จสิ้น"
-  summaryTotal: {
-    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-    background: '#fff', border: '0.5px solid #e5e3de', borderRadius: 16,
-    padding: '14px 18px', marginTop: 12,
+  primaryBtn: {
+    width: '100%', padding: '14px',
+    background: '#facc15', color: '#111827',
+    border: 'none', borderRadius: 14,
+    fontSize: 15, fontWeight: 800, cursor: 'pointer',
+    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
   },
-  rowDeleteBtn: {
-    background: '#fef2f2', border: '1px solid #fecaca',
-    color: '#dc2626', borderRadius: 10,
-    width: 34, height: 34, flexShrink: 0,
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
-    cursor: 'pointer', minHeight: 'unset', padding: 0,
-  },
-  finishBtn: {
-    flex: 1, padding: '13px',
-    background: '#111827', color: '#fff',
-    border: 'none', borderRadius: 12,
-    fontSize: 14, fontWeight: 600, cursor: 'pointer',
-  },
-  // toast — fixed ไม่โดน overflow ตัด
-  toast: {
-    position: 'fixed', top: 16, left: 16, right: 16,
-    background: '#022c22', borderRadius: 14,
-    padding: '12px 16px', zIndex: 60,
-    display: 'flex', alignItems: 'center', gap: 12,
-    boxShadow: '0 8px 24px rgba(0,0,0,0.25)',
+  cancelLink: {
+    width: '100%', padding: '12px',
+    background: 'none', border: 'none',
+    color: '#6b7280', fontSize: 14,
+    cursor: 'pointer', marginTop: 4,
+    display: 'block', textAlign: 'center',
   },
 };

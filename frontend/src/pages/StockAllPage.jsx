@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import client from '../api/client';
 import useRealtimeEvent from '../hooks/useRealtimeEvent';
+import { POSITION_LABEL, POSITION_COLOR, NEUTRAL_POSITION_COLOR } from '../utils/stockPositions';
 
 const ALL_TAB = 'all';
 const emptyFitment = { brand: '', model: '', year_from: '', year_to: '' };
@@ -8,26 +9,8 @@ const emptyForm = {
   category_id: '', oem_code: '', description: '', has_sides: false, has_axles: false,
   stock_qty: 0, stocks: {}, codes: {}, min_stock: 1, fitments: [],
 };
-const POSITION_LABEL = {
-  left: 'ซ้าย', right: 'ขวา', front: 'หน้า', rear: 'หลัง',
-  front_left: 'หน้าซ้าย', front_right: 'หน้าขวา', rear_left: 'หลังซ้าย', rear_right: 'หลังขวา',
-};
-
-// สีประจำตำแหน่ง (ตัวอักษร / พื้นอ่อน) ใช้ทั้งในตารางและในฟอร์ม ให้รู้ทันทีว่ารหัส/จำนวนไหนคือด้านไหน
-// ซ้าย=น้ำเงิน ขวา=แดง หน้า=ม่วง หลัง=ส้ม — โช๊ค 4 ตำแหน่งใช้ 4 สีไม่ซ้ำกัน
-const POSITION_COLOR = {
-  left: { fg: '#1d4ed8', bg: '#dbeafe' },
-  right: { fg: '#b91c1c', bg: '#fee2e2' },
-  front: { fg: '#6d28d9', bg: '#ede9fe' },
-  rear: { fg: '#c2410c', bg: '#ffedd5' },
-  front_left: { fg: '#1d4ed8', bg: '#dbeafe' },
-  front_right: { fg: '#b91c1c', bg: '#fee2e2' },
-  rear_left: { fg: '#047857', bg: '#d1fae5' },
-  rear_right: { fg: '#c2410c', bg: '#ffedd5' },
-};
-
 function PositionChip({ position }) {
-  const color = POSITION_COLOR[position] || { fg: '#374151', bg: '#e5e7eb' };
+  const color = POSITION_COLOR[position] || NEUTRAL_POSITION_COLOR;
   return (
     <span className="stock-all-chip-pos" style={{ color: color.fg, background: color.bg }}>
       {POSITION_LABEL[position] || position}
@@ -88,6 +71,10 @@ export default function StockAllPage() {
   // หนึ่งรายการแยกตำแหน่งได้หลายป้าย (หนึ่งป้ายต่อรหัส OEM ของแต่ละตำแหน่ง) ป้ายพิมพ์ผ่าน
   // #qr-print-area ตัวเดียวกับหน้าเดิม (สไตล์อยู่ใน app.css) QR เป็นรหัสล้วน ๆ จึงสแกนที่
   // หน้า /scan ได้ และป้ายเก่าที่ติดของไปแล้วก็ใช้ต่อได้เพราะรหัสเดียวกัน
+  // ดู QR ของรายการเดียว (ปุ่ม QR ท้ายแต่ละบรรทัด) — เปิดให้พนักงานสแกนจากหน้าจอได้ทีละรายการ
+  // หรือกดพิมพ์เฉพาะรายการนี้ ({ item, labels, loading, error } | null)
+  const [qrView, setQrView] = useState(null);
+
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState([]);
   const [printLoading, setPrintLoading] = useState(false);
@@ -160,6 +147,21 @@ export default function StockAllPage() {
 
   const showCategoryColumn = activeTab === ALL_TAB || searchTerm.trim() !== '';
   const activeCategory = categories.find((c) => c.id === activeTab) || null;
+
+  async function handleShowQr(item) {
+    setQrView({ item, labels: [], loading: true, error: '' });
+    try {
+      const res = await client.get('/stock-receive/qrcodes', { params: { ids: String(item.id) } });
+      setQrView({
+        item,
+        labels: res.data.labels,
+        loading: false,
+        error: res.data.labels.length === 0 ? 'รายการนี้ยังไม่มีรหัส OEM จึงยังไม่มี QR — กด "แก้ไข" เพื่อใส่รหัสก่อน' : '',
+      });
+    } catch (err) {
+      setQrView({ item, labels: [], loading: false, error: err.response?.data?.error || 'โหลด QR Code ไม่สำเร็จ' });
+    }
+  }
 
   function toggleSelectMode() {
     setSelectMode((prev) => !prev);
@@ -467,7 +469,17 @@ export default function StockAllPage() {
                   ))}
                 </td>
                 <td data-label="จัดการ" className="stock-all-actions">
-                  <button onClick={() => openEdit(item)}>แก้ไข</button>
+                  <div className="stock-all-actions-row">
+                    <button type="button" className="stock-all-qr-btn" onClick={() => handleShowQr(item)}
+                      aria-label={`ดู QR ของ ${item.oem_code}`}>
+                      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                        <rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" />
+                        <rect x="3" y="14" width="7" height="7" rx="1" /><path d="M14 14h3v3h-3zM19 19h2M14 21h1" />
+                      </svg>
+                      QR
+                    </button>
+                    <button type="button" onClick={() => openEdit(item)}>แก้ไข</button>
+                  </div>
                 </td>
               </tr>
             ))}
@@ -494,6 +506,38 @@ export default function StockAllPage() {
           </div>
         ))}
       </div>
+
+      {qrView && (
+        <div className="modal-backdrop" onClick={() => setQrView(null)}>
+          <div className="modal-card stock-all-qr-modal" role="dialog" aria-modal="true"
+            aria-label={`QR ของ ${qrView.item.oem_code}`} onClick={(e) => e.stopPropagation()}>
+            <h3 className="modal-title">QR Code</h3>
+            <p className="stock-all-qr-desc">{qrView.item.category_name} · {qrView.item.description || qrView.item.oem_code}</p>
+
+            {qrView.loading && <p className="stock-all-qr-note">กำลังโหลด...</p>}
+            {qrView.error && <p className="error-text">{qrView.error}</p>}
+
+            <div className="stock-all-qr-grid">
+              {qrView.labels.map((label) => (
+                <figure className="stock-all-qr-card" key={`${label.item_id}-${label.position || 'one'}`}>
+                  {label.position && <PositionChip position={label.position} />}
+                  <img src={label.qrcode} alt={`QR ${label.code}`} />
+                  <figcaption>{label.code}</figcaption>
+                </figure>
+              ))}
+            </div>
+
+            <div className="modal-actions">
+              {qrView.labels.length > 0 && (
+                <button type="button" className="btn-primary" onClick={() => setPrintQueue(qrView.labels)}>
+                  🖨️ พิมพ์ป้ายนี้
+                </button>
+              )}
+              <button type="button" onClick={() => setQrView(null)}>ปิด</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showForm && (
         <div className="modal-backdrop" onClick={closeForm}>
