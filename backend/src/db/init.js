@@ -979,6 +979,9 @@ async function initDatabase() {
   // เคยรันรุ่นแรก ไม่มีโค้ดไหนอ่าน/เขียนอีก)
   await conn.query(`ALTER TABLE stock_items ADD COLUMN has_sides TINYINT(1) NOT NULL DEFAULT 0`).catch(ignoreIfAlreadyApplied);
   await conn.query(`ALTER TABLE stock_items ADD COLUMN has_axles TINYINT(1) NOT NULL DEFAULT 0`).catch(ignoreIfAlreadyApplied);
+  // has_levels = แยกบน/ล่าง (เช่น ปีกนกบน/ปีกนกล่างของรถคันเดียวกัน) ติ๊กรวมกับซ้าย/ขวา และ
+  // หน้า/หลังได้ — ตำแหน่ง = หน้า/หลัง → บน/ล่าง → ซ้าย/ขวา (ดู utils/stockPositions.js)
+  await conn.query(`ALTER TABLE stock_items ADD COLUMN has_levels TINYINT(1) NOT NULL DEFAULT 0`).catch(ignoreIfAlreadyApplied);
   await conn.query(`ALTER TABLE stock_items ADD COLUMN oem_code_right VARCHAR(100) DEFAULT NULL`).catch(ignoreIfAlreadyApplied);
 
   // position: left | right | front | rear | front_left | front_right | rear_left | rear_right
@@ -1063,6 +1066,27 @@ async function initDatabase() {
   if (reasonCol && !reasonCol.t.includes("'receive'")) {
     await conn.query(`ALTER TABLE stock_item_movements MODIFY reason ENUM('create','adjust','set','receive') NOT NULL`);
   }
+
+  // รายการรับเข้าที่ "ยังไม่บวกสต๊อก" ของบิลที่กำลังสแกน — สแกน/กรอกจำนวนแล้วเก็บไว้ที่นี่ก่อน
+  // (แก้จำนวน/ลบได้) ยอดสต๊อกจริงบวกตอนกดเสร็จสิ้นเท่านั้น (POST /stock-receive/sessions/:id/commit)
+  // ตอนยืนยัน แต่ละแถวจะกลายเป็นแถว 'receive' ใน stock_item_movements แล้วตีตรา applied_at
+  // เก็บไว้เป็นหลักฐาน — แถวที่ยังไม่ยืนยัน (applied_at IS NULL) ค้างอยู่กับบิลได้แม้ปิดหน้าไปก่อน
+  await conn.query(`
+    CREATE TABLE IF NOT EXISTS stock_receive_lines (
+      id                 BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+      receipt_session_id INT NOT NULL,
+      item_id            INT NOT NULL,
+      position           VARCHAR(20) DEFAULT NULL,
+      qty                INT NOT NULL,
+      user_id            INT NOT NULL,
+      created_at         DATETIME DEFAULT CURRENT_TIMESTAMP,
+      applied_at         DATETIME DEFAULT NULL,
+      INDEX idx_srl_session (receipt_session_id, applied_at),
+      CONSTRAINT fk_srl_session FOREIGN KEY (receipt_session_id) REFERENCES receipt_sessions(id) ON DELETE CASCADE,
+      CONSTRAINT fk_srl_item FOREIGN KEY (item_id) REFERENCES stock_items(id),
+      CONSTRAINT fk_srl_user FOREIGN KEY (user_id) REFERENCES users(id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
 
   // หมวดตั้งต้น — ใส่เฉพาะตอนตารางยังว่างเปล่า (ถ้าเจ้าของร้านลบ/เปลี่ยนชื่อหมวดแล้ว
   // บูตครั้งต่อไปต้องไม่งอกกลับมา)

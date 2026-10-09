@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import client from '../api/client';
 import QRScanner from '../components/QRScanner';
 import { useAuth } from '../context/AuthContext';
-import { POSITION_LABEL, POSITION_COLOR, NEUTRAL_POSITION_COLOR } from '../utils/stockPositions';
+import { positionLabel, POSITION_COLOR, NEUTRAL_POSITION_COLOR } from '../utils/stockPositions';
 
 // ─────────────────────────────────────────
 //  ICONS
@@ -66,6 +66,11 @@ const IconTrash = () => (
     <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/>
   </svg>
 );
+const IconEdit = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16">
+    <path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4L16.5 3.5z" />
+  </svg>
+);
 const IconPlus = () => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" width="18" height="18">
     <path d="M12 5v14M5 12h14"/>
@@ -92,7 +97,7 @@ function PositionChip({ position }) {
   const color = POSITION_COLOR[position] || NEUTRAL_POSITION_COLOR;
   return (
     <span className="scan-chip" style={{ color: color.fg, background: color.bg }}>
-      {POSITION_LABEL[position] || position}
+      {positionLabel(position)}
     </span>
   );
 }
@@ -107,7 +112,7 @@ function kindLabel(type) {
 // ─────────────────────────────────────────
 //  QUANTITY BOTTOM SHEET — ยืนยันจำนวนหลังสแกน/เลือกรายการ
 // ─────────────────────────────────────────
-function ConfirmSheet({ item, mode, onConfirm, onCancel, loading }) {
+function ConfirmSheet({ item, mode, onConfirm, onCancel, loading, deferred = false }) {
   const [qty, setQty] = useState(1);
   const isIN = mode === 'IN';
 
@@ -140,7 +145,7 @@ function ConfirmSheet({ item, mode, onConfirm, onCancel, loading }) {
         </div>
 
         <div className="scan-confirm-stock">
-          <span>สต็อกปัจจุบัน{item.position ? ` (${POSITION_LABEL[item.position] || ''})` : ''}</span>
+          <span>สต็อกปัจจุบัน{item.position ? ` (${positionLabel(item.position)})` : ''}</span>
           <strong className={stockClass}>{stock === 0 ? 'หมด' : `${stock} ชิ้น`}</strong>
         </div>
 
@@ -159,7 +164,9 @@ function ConfirmSheet({ item, mode, onConfirm, onCancel, loading }) {
         </div>
 
         <p className="scan-confirm-result">
-          {isIN ? 'รับเข้า' : 'จ่ายออก'} <b>{qty}</b> ชิ้น → คงเหลือ <b>{stockAfter}</b> ชิ้น
+          {deferred
+            ? <>รับเข้า <b>{qty}</b> ชิ้น → จะเป็น <b>{stockAfter}</b> ชิ้น หลังกดเสร็จสิ้น</>
+            : <>{isIN ? 'รับเข้า' : 'จ่ายออก'} <b>{qty}</b> ชิ้น → คงเหลือ <b>{stockAfter}</b> ชิ้น</>}
         </p>
 
         <button
@@ -168,9 +175,70 @@ function ConfirmSheet({ item, mode, onConfirm, onCancel, loading }) {
           onClick={() => onConfirm(qty)}
           disabled={loading}
         >
-          {loading ? 'กำลังบันทึก...' : <><IconCheck /> ยืนยัน{isIN ? 'รับเข้า' : 'จ่ายออก'}</>}
+          {loading ? 'กำลังบันทึก...' : <><IconCheck /> {deferred ? 'เพิ่มเข้ารายการรับเข้า' : `ยืนยัน${isIN ? 'รับเข้า' : 'จ่ายออก'}`}</>}
         </button>
         <button type="button" className="scan-sheet-cancel" onClick={onCancel}>ยกเลิก</button>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────
+//  แก้จำนวน/ลบ รายการรอยืนยันของบิล (พนักงานกรอกผิด) — ยังไม่บวกสต๊อก จึงแก้/ลบได้อิสระ
+// ─────────────────────────────────────────
+function EditQtySheet({ order, onSave, onDelete, onCancel, loading }) {
+  const [qty, setQty] = useState(order.qty);
+
+  useEffect(() => { setQty(order.qty); }, [order]);
+
+  const setQtyFromInput = (value) => {
+    const n = Math.floor(Number(value));
+    setQty(Number.isFinite(n) && n >= 1 ? Math.min(n, 100000) : 1);
+  };
+
+  return (
+    <div className="scan-sheet-backdrop">
+      <div className="scan-sheet" role="dialog" aria-modal="true" aria-label="แก้จำนวน">
+        <div className="scan-sheet-handle" />
+        <h2 className="scan-sheet-title">แก้จำนวนรายการ</h2>
+
+        <div className="scan-confirm-item">
+          <div className="scan-confirm-code">
+            <PositionChip position={order.position} />
+            <span className="scan-code">{order.sku}</span>
+            <span className="scan-pending-chip">รอยืนยัน</span>
+          </div>
+          <p className="scan-confirm-name">{order.name}</p>
+        </div>
+
+        <div className="scan-stepper">
+          <button type="button" className="scan-stepper-btn" onClick={() => setQty((q) => Math.max(1, q - 1))} aria-label="ลดจำนวน">−</button>
+          <input
+            className="scan-stepper-input"
+            type="number"
+            inputMode="numeric"
+            min="1"
+            value={qty}
+            onChange={(e) => setQtyFromInput(e.target.value)}
+            aria-label="จำนวน"
+          />
+          <button type="button" className="scan-stepper-btn" onClick={() => setQty((q) => Math.min(100000, q + 1))} aria-label="เพิ่มจำนวน">+</button>
+        </div>
+
+        <p className="scan-confirm-result">จำนวนที่จะรับเข้า <b>{qty}</b> ชิ้น (ยังไม่บวกสต๊อกจนกว่าจะกดเสร็จสิ้น)</p>
+
+        <button
+          type="button"
+          className="scan-btn scan-btn--block scan-btn--lg scan-btn--in"
+          onClick={() => onSave(qty)}
+          disabled={loading || qty === order.qty}
+        >
+          {loading ? 'กำลังบันทึก...' : <><IconCheck /> บันทึกจำนวน</>}
+        </button>
+        <button type="button" className="scan-sheet-danger" onClick={() => onDelete(order)} disabled={loading}>
+          <IconTrash /> ลบรายการนี้
+        </button>
+        <button type="button" className="scan-sheet-cancel" onClick={onCancel}>ปิด</button>
       </div>
     </div>
   );
@@ -424,11 +492,11 @@ function ScanOverlay({ active, mode, onResult, onClose }) {
 // ─────────────────────────────────────────
 //  ORDER ITEM ROW — แถวรายการในบิล (หน้าสแกนและหน้าสรุปใช้ร่วมกัน)
 // ─────────────────────────────────────────
-function OrderRow({ item, index, mode, onDelete, deleting }) {
+function OrderRow({ item, index, mode, onEdit, onDelete, busy }) {
   const isIN = mode === 'IN';
   const color = item.position ? (POSITION_COLOR[item.position] || NEUTRAL_POSITION_COLOR) : null;
   return (
-    <div className="scan-row">
+    <div className={`scan-row${item.pending ? ' is-pending' : ''}`}>
       <span className="scan-row-no">{index}</span>
       <div className="scan-row-main">
         <div className="scan-row-code">
@@ -437,22 +505,28 @@ function OrderRow({ item, index, mode, onDelete, deleting }) {
             {item.sku || item.model_code}
           </span>
           <span className="scan-kind">{kindLabel(item.type)}</span>
+          {item.pending && <span className="scan-pending-chip">รอยืนยัน</span>}
         </div>
         <p className="scan-row-name">{item.name || item.model_name}</p>
       </div>
-      <span className={`scan-qty ${isIN ? 'is-in' : 'is-out'}`}>
+      <span className={`scan-qty ${item.pending ? 'is-pending' : isIN ? 'is-in' : 'is-out'}`}>
         {isIN ? '+' : '−'}{item.qty}
       </span>
-      {onDelete && (
-        <button
-          type="button"
-          className="scan-del"
-          onClick={() => onDelete(item)}
-          disabled={deleting}
-          aria-label={`ลบ ${item.name}`}
-        >
-          <IconTrash />
-        </button>
+      {(onEdit || onDelete) && (
+        <div className="scan-row-actions">
+          {onEdit && (
+            <button type="button" className="scan-edit" onClick={() => onEdit(item)} disabled={busy}
+              aria-label={`แก้จำนวน ${item.name}`}>
+              <IconEdit />
+            </button>
+          )}
+          {onDelete && (
+            <button type="button" className="scan-del" onClick={() => onDelete(item)} disabled={busy}
+              aria-label={`ลบ ${item.name}`}>
+              <IconTrash />
+            </button>
+          )}
+        </div>
       )}
     </div>
   );
@@ -610,6 +684,9 @@ export default function TechnicianScanPage() {
   const [pickMatches, setPickMatches] = useState(null);       // สแกนเจอหลายรายการ (โหมดรับเข้า) รอเลือก
   const [confirmLoading, setConfirmLoading] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
+  const [editingOrder, setEditingOrder] = useState(null);     // รายการรอยืนยันที่กำลังแก้จำนวน/ลบ
+  const [savingQty, setSavingQty] = useState(false);
+  const [committing, setCommitting] = useState(false);        // กำลังกดเสร็จสิ้น/ยืนยันบวกสต๊อก
 
   const [orders, setOrders]       = useState([]);             // รายการในบิลนี้
   const [toast, setToast]         = useState(null);
@@ -626,14 +703,21 @@ export default function TechnicianScanPage() {
     setStep(STEP.SCAN);
     client.get(`/transactions/receipt-sessions/${resume.id}`)
       .then((res) => {
-        const existing = (res.data.items || []).map((it) => ({
-          sku: it.model_code,
-          name: it.rack_name,
-          qty: Number(it.qty),
-          txId: it.id,
-          type: it.item_type === 'rack' ? 'rack' : it.item_type === 'stock_item' ? 'stock_item' : 'wing-arm',
-          position: it.position || null,
-        }));
+        const existing = (res.data.items || []).map((it) => {
+          // source='pending_line' = สแกนไว้แล้วแต่ยังไม่กดเสร็จสิ้น (ยังไม่บวกสต๊อก) แก้/ลบได้
+          const pending = it.source === 'pending_line';
+          return {
+            key: `${it.source || 'legacy'}-${it.id}`,
+            sku: it.model_code,
+            name: it.rack_name,
+            qty: Number(it.qty),
+            txId: pending ? null : it.id,
+            lineId: pending ? it.id : null,
+            pending,
+            type: it.item_type === 'rack' ? 'rack' : it.item_type === 'stock_item' ? 'stock_item' : 'wing-arm',
+            position: it.position || null,
+          };
+        });
         setOrders(existing.reverse()); // ในหน้านี้เรียงใหม่สุดอยู่บน
       })
       .catch(() => setOrders([]));
@@ -681,23 +765,80 @@ export default function TechnicianScanPage() {
     setScannedType(type);
   };
 
-  // ── ลบรายการที่เพิ่งทำผิด — backend คืนสต็อกให้เองในทรานแซกชันเดียว ──
+  // ── ลบรายการที่ทำผิด ──
+  // รายการรอยืนยัน (ยังไม่บวกสต๊อก) ลบได้เลยไม่มีอะไรต้องคืน ส่วนรายการที่บวกสต๊อกไปแล้วหรือของระบบเดิม
+  // backend คืนสต็อกให้เองในทรานแซกชันเดียว (ติดลบไม่ได้)
   const handleDeleteOrder = async (order) => {
-    if (!order.txId) {
+    const ref = order.pending ? order.lineId : order.txId;
+    if (!ref) {
       setToast({ ok: false, title: 'ลบไม่ได้', body: 'ไม่พบเลขรายการอ้างอิง' });
       return;
     }
-    setDeletingId(order.txId);
+    setDeletingId(order.key);
     try {
-      await client.delete(order.type === 'stock_item'
-        ? `/stock-receive/movements/${order.txId}`
-        : `/transactions/${order.txId}`);
-      setOrders((prev) => prev.filter((o) => o.txId !== order.txId));
-      setToast({ ok: true, title: 'ลบรายการแล้ว', body: `${order.name} — คืนสต็อกเรียบร้อย` });
+      if (order.pending) await client.delete(`/stock-receive/lines/${ref}`);
+      else await client.delete(order.type === 'stock_item' ? `/stock-receive/movements/${ref}` : `/transactions/${ref}`);
+      setOrders((prev) => prev.filter((o) => o.key !== order.key));
+      setToast({
+        ok: true,
+        title: 'ลบรายการแล้ว',
+        body: order.pending ? `${order.name} — ยังไม่เคยบวกสต๊อก` : `${order.name} — คืนสต็อกเรียบร้อย`,
+      });
     } catch (err) {
       setToast({ ok: false, title: 'ลบไม่สำเร็จ', body: err?.response?.data?.error || '' });
     } finally {
       setDeletingId(null);
+    }
+  };
+
+  // แก้จำนวนของรายการรอยืนยัน (พนักงานกรอกผิด)
+  const handleSaveQty = async (qty) => {
+    if (!editingOrder?.lineId) return;
+    setSavingQty(true);
+    try {
+      await client.patch(`/stock-receive/lines/${editingOrder.lineId}`, { qty });
+      setOrders((prev) => prev.map((o) => (o.key === editingOrder.key ? { ...o, qty } : o)));
+      setToast({ ok: true, title: 'แก้จำนวนแล้ว', body: `${editingOrder.name} → ${qty} ชิ้น` });
+      setEditingOrder(null);
+    } catch (err) {
+      setToast({ ok: false, title: 'แก้จำนวนไม่สำเร็จ', body: err?.response?.data?.error || '' });
+    } finally {
+      setSavingQty(false);
+    }
+  };
+
+  const handleDeleteFromSheet = async (order) => {
+    setSavingQty(true);
+    await handleDeleteOrder(order);
+    setSavingQty(false);
+    setEditingOrder(null);
+  };
+
+  // ออกจากหน้า/ปิดบิลทั้งที่ยังมีรายการรอยืนยัน — เตือนก่อน (รายการไม่หาย ค้างอยู่ในบิล เปิดต่อได้
+  // จากหน้าบิลรับเข้า แต่สต๊อกยังไม่บวก)
+  const confirmLeave = (action) => {
+    const pendingCount = orders.filter((o) => o.pending).length;
+    if (mode === 'IN' && pendingCount > 0 && !window.confirm(
+      `ยังมี ${pendingCount} รายการที่ยังไม่บวกสต๊อก\nถ้าออกตอนนี้ รายการจะค้างอยู่ในบิล (เปิดสแกนต่อได้จากหน้า "บิลรับเข้า") แต่สต๊อกจะยังไม่เพิ่ม\n\nออกจากหน้านี้เลยใช่ไหม?`
+    )) return;
+    action();
+  };
+
+  // เสร็จสิ้น: บวกสต๊อกจริงทุกรายการรอยืนยันของบิลในครั้งเดียว
+  const handleCommit = async () => {
+    const pending = orders.filter((o) => o.pending);
+    if (!session || pending.length === 0 || committing) return;
+    const totalQty = pending.reduce((sum, o) => sum + Number(o.qty || 0), 0);
+    if (!window.confirm(`ยืนยันบวกสต๊อก ${pending.length} รายการ (+${totalQty} ชิ้น) เข้าสต๊อกรวม?`)) return;
+    setCommitting(true);
+    try {
+      const res = await client.post(`/stock-receive/sessions/${session.id}/commit`);
+      setToast({ ok: true, title: 'บวกสต๊อกเรียบร้อย', body: `${res.data.applied} รายการ · +${res.data.total_qty} ชิ้น เข้าสต๊อกรวมแล้ว` });
+      resetAll();
+    } catch (err) {
+      setToast({ ok: false, title: 'บันทึกรับเข้าไม่สำเร็จ', body: err?.response?.data?.error || '' });
+    } finally {
+      setCommitting(false);
     }
   };
 
@@ -769,14 +910,38 @@ export default function TechnicianScanPage() {
       let txId = null;
 
       if (scannedType === 'stock_item') {
-        const res = await client.post('/stock-receive/receive', {
+        // รับเข้าสต๊อกรวม: เก็บเป็น "รายการรอยืนยัน" ของบิลก่อน (ยังไม่บวกสต๊อก) แก้จำนวน/ลบได้
+        // — สต๊อกบวกจริงตอนกดเสร็จสิ้น ชิ้น/ตำแหน่งเดิมที่สแกนซ้ำในบิลเดียวกันจะรวมจำนวนในแถวเดิม
+        const res = await client.post('/stock-receive/lines', {
           item_id: scannedItem.item_id,
           position: scannedItem.position || undefined,
           qty,
           receipt_session_id: session ? session.id : undefined,
         });
-        remaining = res.data.qty_after;
-        txId = res.data.movement_id ?? null;
+        const line = res.data.line;
+        const pendingOrder = {
+          key: `line-${line.id}`,
+          sku: line.code,
+          name: `${line.category_name} · ${line.description || line.code}${line.position_label ? ` (${line.position_label})` : ''}`,
+          qty: line.qty,
+          txId: null,
+          lineId: line.id,
+          pending: true,
+          type: 'stock_item',
+          position: line.position,
+        };
+        setOrders((prev) => [pendingOrder, ...prev.filter((o) => o.key !== pendingOrder.key)]);
+        setToast({
+          ok: true,
+          title: `เพิ่มเข้ารายการแล้ว — ${pendingOrder.name.slice(0, 22)}`,
+          body: res.data.merged
+            ? `รวมเป็น ${line.qty} ชิ้น · ยังไม่บวกสต๊อก (กด “เสร็จสิ้น” เพื่อบวก)`
+            : `จำนวน ${line.qty} ชิ้น · ยังไม่บวกสต๊อก (กด “เสร็จสิ้น” เพื่อบวก)`,
+        });
+        setScannedItem(null);
+        setScannedType(null);
+        setScanning(true); // เปิดกล้องต่อทันที
+        return;
       } else if (scannedType === 'rack') {
         const endpoint = mode === 'IN' ? '/transactions/in' : '/transactions/out';
         const payload  = { model_code: scannedItem.model_code, qty };
@@ -802,6 +967,7 @@ export default function TechnicianScanPage() {
       const code  = scannedItem.sku  || scannedItem.model_code;
 
       setOrders(prev => [{
+        key: `legacy-${txId ?? Date.now()}`,
         sku: code, name: label, qty, txId,
         type: scannedType, id: scannedItem.id,
         position: scannedItem.position || null,
@@ -834,6 +1000,9 @@ export default function TechnicianScanPage() {
   const isIN = mode === 'IN';
   const totalQty = orders.reduce((s, o) => s + Number(o.qty || 0), 0);
   const sign = isIN ? '+' : '−';
+  // รายการที่สแกนไว้แล้วแต่ยังไม่บวกสต๊อก (โหมดรับเข้า — บวกจริงตอนกดเสร็จสิ้น/ยืนยัน)
+  const pendingOrders = orders.filter((o) => o.pending);
+  const pendingQty = pendingOrders.reduce((sum, o) => sum + Number(o.qty || 0), 0);
 
   // ─────────────────────────────
   //  RENDER — จัดวางด้วยคลาส scan-* (สไตล์อยู่ท้าย styles/app.css) ใช้ได้ทั้งมือถือและจอคอม
@@ -942,7 +1111,7 @@ export default function TechnicianScanPage() {
         <div className="scan-shell scan-shell--wide scan-shell--has-dock">
 
           <header className="scan-topbar">
-            <button type="button" className="scan-icon-btn" onClick={resetAll} aria-label="ออกจากหน้านี้"><IconX /></button>
+            <button type="button" className="scan-icon-btn" onClick={() => confirmLeave(resetAll)} aria-label="ออกจากหน้านี้"><IconX /></button>
             <div className="scan-topbar-text">
               <strong>{isIN ? 'รับเข้าสต็อก' : 'จ่ายออกจากสต็อก'}</strong>
               <small>{isIN ? 'สแกน QR เพื่อรับของเข้าบิลนี้' : 'สแกน QR เพื่อจ่ายของออก'}</small>
@@ -959,11 +1128,16 @@ export default function TechnicianScanPage() {
               <div><b>{orders.length}</b><span>รายการ</span></div>
               <div><b>{sign}{totalQty}</b><span>ชิ้น</span></div>
             </div>
+            {isIN && pendingOrders.length > 0 && (
+              <p className="scan-pending-note">
+                ⏳ มี {pendingOrders.length} รายการ (+{pendingQty} ชิ้น) ที่ยังไม่บวกสต๊อก — กด “เสร็จสิ้น” เพื่อตรวจและยืนยัน
+              </p>
+            )}
             {isIN && session && (
               <button
                 type="button"
                 className="scan-btn scan-btn--ghost scan-btn--sm"
-                onClick={() => { setStep(STEP.INVOICE); setSession(null); setOrders([]); setInvoice(''); }}
+                onClick={() => confirmLeave(() => { setStep(STEP.INVOICE); setSession(null); setOrders([]); setInvoice(''); })}
               >
                 ปิดบิล / เปิดใหม่
               </button>
@@ -979,7 +1153,13 @@ export default function TechnicianScanPage() {
               </div>
             ) : (
               orders.map((o, i) => (
-                <OrderRow key={o.txId || `${o.sku}-${i}`} item={o} index={orders.length - i} mode={mode} />
+                <OrderRow
+                  key={o.key}
+                  item={o}
+                  index={orders.length - i}
+                  mode={mode}
+                  onEdit={o.pending ? setEditingOrder : undefined}
+                />
               ))
             )}
           </section>
@@ -1043,10 +1223,9 @@ export default function TechnicianScanPage() {
               onConfirm={handleConfirm}
               onCancel={() => { setScannedItem(null); setScannedType(null); setScanning(true); }}
               loading={confirmLoading}
+              deferred={isIN && scannedType === 'stock_item'}
             />
           )}
-
-          <Toast msg={toast} onDone={clearToast} />
         </div>
       )}
 
@@ -1075,7 +1254,11 @@ export default function TechnicianScanPage() {
             </div>
           </section>
 
-          <p className="scan-note">ตรวจทานก่อนปิดงาน — สแกนผิดกดถังขยะแล้วสแกนใหม่ได้</p>
+          <p className="scan-note">
+            {isIN && pendingOrders.length > 0
+              ? 'ตรวจทานก่อนยืนยัน — แก้จำนวนหรือลบรายการที่กรอกผิดได้ สต๊อกจะบวกเมื่อกด “ยืนยันบวกสต๊อก”'
+              : 'ตรวจทานก่อนปิดงาน — สแกนผิดกดถังขยะแล้วสแกนใหม่ได้'}
+          </p>
 
           <section className="scan-list" aria-label="สรุปรายการ">
             {orders.length === 0 ? (
@@ -1086,12 +1269,13 @@ export default function TechnicianScanPage() {
             ) : (
               orders.map((o, i) => (
                 <OrderRow
-                  key={o.txId || `${o.sku}-${i}`}
+                  key={o.key}
                   item={o}
                   index={orders.length - i}
                   mode={mode}
+                  onEdit={o.pending ? setEditingOrder : undefined}
                   onDelete={handleDeleteOrder}
-                  deleting={deletingId === o.txId}
+                  busy={deletingId === o.key}
                 />
               ))
             )}
@@ -1101,14 +1285,30 @@ export default function TechnicianScanPage() {
             <button type="button" className="scan-btn scan-btn--primary scan-btn--lg" onClick={() => setStep(STEP.SCAN)}>
               <IconQR /> สแกนเพิ่ม
             </button>
-            <button type="button" className="scan-btn scan-btn--dark scan-btn--lg" onClick={resetAll}>
-              ปิดงาน
-            </button>
+            {isIN && pendingOrders.length > 0 ? (
+              <button type="button" className="scan-btn scan-btn--in scan-btn--lg" onClick={handleCommit} disabled={committing}>
+                <IconCheck /> {committing ? 'กำลังบันทึก...' : `ยืนยันบวกสต๊อก (${pendingOrders.length})`}
+              </button>
+            ) : (
+              <button type="button" className="scan-btn scan-btn--dark scan-btn--lg" onClick={resetAll}>
+                ปิดงาน
+              </button>
+            )}
           </div>
-
-          <Toast msg={toast} onDone={clearToast} />
         </div>
       )}
+
+      {editingOrder && (
+        <EditQtySheet
+          order={editingOrder}
+          onSave={handleSaveQty}
+          onDelete={handleDeleteFromSheet}
+          onCancel={() => setEditingOrder(null)}
+          loading={savingQty}
+        />
+      )}
+
+      <Toast msg={toast} onDone={clearToast} />
     </div>
   );
 }

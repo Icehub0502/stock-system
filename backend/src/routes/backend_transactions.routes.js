@@ -6,10 +6,7 @@ const { resolveTransactionDate } = require('../utils/resolveTransactionDate');
 const { emitStockEvent, emitStockTxEvent, emitReceiptSessionEvent } = require('../realtime');
 const { voidReceiveMovement } = require('./stockReceive.routes');
 
-const POSITION_LABEL = {
-  left: 'ซ้าย', right: 'ขวา', front: 'หน้า', rear: 'หลัง',
-  front_left: 'หน้าซ้าย', front_right: 'หน้าขวา', rear_left: 'หลังซ้าย', rear_right: 'หลังขวา',
-};
+const { positionLabel } = require('../utils/stockPositions');
 
 const router = express.Router();
 router.use(authenticate);
@@ -62,6 +59,7 @@ router.get('/receipt-sessions', requireRole('office'), async (req, res) => {
         (SELECT COUNT(*) FROM transactions t WHERE t.receipt_session_id = s.id AND t.type = 'IN')
           + (SELECT COUNT(*) FROM stock_item_movements m
              WHERE m.receipt_session_id = s.id AND m.reason = 'receive' AND m.voided_at IS NULL) AS item_count,
+        (SELECT COUNT(*) FROM stock_receive_lines l WHERE l.receipt_session_id = s.id AND l.applied_at IS NULL) AS pending_count,
         (SELECT COALESCE(SUM(t.qty), 0) FROM transactions t WHERE t.receipt_session_id = s.id AND t.type = 'IN')
           + (SELECT COALESCE(SUM(m.qty_after - m.qty_before), 0) FROM stock_item_movements m
              WHERE m.receipt_session_id = s.id AND m.reason = 'receive' AND m.voided_at IS NULL) AS total_qty
@@ -116,15 +114,37 @@ router.get('/receipt-sessions/:id', requireRole('office'), async (req, res) => {
       [req.params.id]
     );
 
+    // รายการที่สแกนไว้แล้วแต่ยังไม่กดเสร็จสิ้น (ยังไม่บวกสต๊อก) — source='pending_line' ให้หน้าเว็บ
+    // แสดงป้าย "รอยืนยัน" และลบผ่าน /stock-receive/lines/:id
+    const [pendingLines] = await pool.execute(
+      `SELECT l.id, l.qty, l.created_at, l.position,
+              COALESCE(p.oem_code, i.oem_code) AS model_code,
+              i.description AS rack_name, c.name AS category_name
+       FROM stock_receive_lines l
+       JOIN stock_items i ON i.id = l.item_id
+       JOIN stock_categories c ON c.id = i.category_id
+       LEFT JOIN stock_item_positions p ON p.item_id = l.item_id AND p.position = l.position
+       WHERE l.receipt_session_id = ? AND l.applied_at IS NULL
+       ORDER BY l.id ASC`,
+      [req.params.id]
+    );
+
     res.json({
       session,
       items: [
         ...items.map((it) => ({ ...it, source: 'legacy' })),
+        ...pendingLines.map((it) => ({
+          ...it,
+          source: 'pending_line',
+          item_type: 'stock_item',
+          pending: true,
+          rack_name: it.position ? `${it.rack_name} (${positionLabel(it.position)})` : it.rack_name,
+        })),
         ...stockItems.map((it) => ({
           ...it,
           source: 'stock_item',
           item_type: 'stock_item',
-          rack_name: it.position ? `${it.rack_name} (${POSITION_LABEL[it.position] || it.position})` : it.rack_name,
+          rack_name: it.position ? `${it.rack_name} (${positionLabel(it.position)})` : it.rack_name,
         })),
       ].sort((a, b) => new Date(a.created_at) - new Date(b.created_at)),
     });

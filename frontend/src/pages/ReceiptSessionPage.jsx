@@ -124,12 +124,18 @@ export default function ReceiptSessionPage() {
 
   // ลบรายการในบิล — backend คืนสต็อกให้เองในทรานแซกชันเดียว (DELETE /transactions/:id)
   const handleDeleteItem = async (item) => {
-    if (!window.confirm(`ลบ "${item.rack_name}" ออกจากบิลนี้? ระบบจะคืนสต็อกให้อัตโนมัติ`)) return;
+    const message = item.pending
+      ? `ลบ "${item.rack_name}" ออกจากบิลนี้? (ยังไม่เคยบวกสต๊อก)`
+      : `ลบ "${item.rack_name}" ออกจากบิลนี้? ระบบจะคืนสต็อกให้อัตโนมัติ`;
+    if (!window.confirm(message)) return;
     setDeletingId(`${item.source}-${item.id}`);
     try {
-      await client.delete(item.source === 'stock_item'
-        ? `/stock-receive/movements/${item.id}`
-        : `/transactions/${item.id}`);
+      // รายการรอยืนยัน (ยังไม่บวกสต๊อก) / รายการสต๊อกรวมที่บวกแล้ว / ของระบบเดิม ลบคนละ endpoint
+      // (id ซ้ำข้ามตารางได้ จึงแยกด้วย source)
+      let url = `/transactions/${item.id}`;
+      if (item.source === 'pending_line') url = `/stock-receive/lines/${item.id}`;
+      else if (item.source === 'stock_item') url = `/stock-receive/movements/${item.id}`;
+      await client.delete(url);
       setSelected((prev) => prev && ({
         ...prev,
         items: prev.items.filter((it) => !(it.id === item.id && it.source === item.source)),
@@ -287,6 +293,9 @@ export default function ReceiptSessionPage() {
                         <td data-label="เลขที่บิล">
                           <strong>{s.invoice_no}</strong>
                           {backdated && <span className="intake-backdate-chip" style={{ marginLeft: 8 }}>คีย์ย้อนหลัง</span>}
+                          {Number(s.pending_count ?? 0) > 0 && (
+                            <span className="scan-pending-chip" style={{ marginLeft: 8 }}>รอยืนยัน {Number(s.pending_count)} รายการ</span>
+                          )}
                         </td>
                         <td data-label="ผู้บันทึก">{s.full_name || '—'}</td>
                         <td data-label="เวลา">{formatDbTime(s.created_at)}</td>
@@ -358,6 +367,7 @@ export default function ReceiptSessionPage() {
                           <span className="intake-kind-chip">
                             {item.item_type === 'stock_item' ? (item.category_name || 'สต๊อกรวม') : item.item_type === 'rack' ? 'แร็ค' : 'ปีกนก'}
                           </span>
+                          {item.pending && <span className="scan-pending-chip" style={{ marginLeft: 6 }}>รอยืนยัน</span>}
                         </td>
                         <td data-label="รายการ">{item.rack_name}</td>
                         <td className="col-amount" data-label="จำนวน">
@@ -384,8 +394,13 @@ export default function ReceiptSessionPage() {
                       <td colSpan={3} style={{ fontWeight: 700 }}>รวมทั้งหมด</td>
                       <td className="col-amount">
                         <span className="intake-detail-total" style={{ fontWeight: 800, fontSize: '1rem' }}>
-                          +{selected.items.reduce((s, it) => s + Number(it.qty ?? 0), 0).toLocaleString()}
+                          +{selected.items.filter((it) => !it.pending).reduce((s, it) => s + Number(it.qty ?? 0), 0).toLocaleString()}
                         </span>
+                        {selected.items.some((it) => it.pending) && (
+                          <div style={{ fontSize: 12, color: '#92400e', marginTop: 2 }}>
+                            +{selected.items.filter((it) => it.pending).reduce((s, it) => s + Number(it.qty ?? 0), 0).toLocaleString()} รอยืนยัน
+                          </div>
+                        )}
                       </td>
                       <td colSpan={2} />
                     </tr>

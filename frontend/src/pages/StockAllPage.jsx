@@ -1,29 +1,21 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import client from '../api/client';
 import useRealtimeEvent from '../hooks/useRealtimeEvent';
-import { POSITION_LABEL, POSITION_COLOR, NEUTRAL_POSITION_COLOR } from '../utils/stockPositions';
+import { positionsFor, positionLabel, POSITION_COLOR, NEUTRAL_POSITION_COLOR } from '../utils/stockPositions';
 
 const ALL_TAB = 'all';
 const emptyFitment = { brand: '', model: '', year_from: '', year_to: '' };
 const emptyForm = {
-  category_id: '', oem_code: '', description: '', has_sides: false, has_axles: false,
+  category_id: '', oem_code: '', description: '', has_sides: false, has_axles: false, has_levels: false,
   stock_qty: 0, stocks: {}, codes: {}, min_stock: 1, fitments: [],
 };
 function PositionChip({ position }) {
   const color = POSITION_COLOR[position] || NEUTRAL_POSITION_COLOR;
   return (
     <span className="stock-all-chip-pos" style={{ color: color.fg, background: color.bg }}>
-      {POSITION_LABEL[position] || position}
+      {positionLabel(position)}
     </span>
   );
-}
-
-// ตำแหน่งที่แยกยอด — ต้องตรงกับ positionsFor ใน backend/src/routes/stockItems.routes.js
-function positionsFor(hasSides, hasAxles) {
-  if (hasSides && hasAxles) return ['front_left', 'front_right', 'rear_left', 'rear_right'];
-  if (hasSides) return ['left', 'right'];
-  if (hasAxles) return ['front', 'rear'];
-  return [];
 }
 
 // ของแยกตำแหน่ง ต้องมีครบทุกตำแหน่งถึงใช้ได้ → นับเป็น "ใกล้หมด/หมด" ตามตำแหน่งที่น้อยที่สุด
@@ -40,9 +32,37 @@ function formatFitment(f) {
 
 const REASON_LABEL = { create: 'เพิ่มรายการ', adjust: 'ปรับ +/−', set: 'ตั้งยอด' };
 
+// จำนวนคงเหลือ: ตัวเลขสีปกติ (ไม่ใช้สีบอกสถานะที่ตัวเลข) ส่วนของใกล้หมด/หมดมีไอคอนเตือนข้างตัวเลข
+// ⚠ สามเหลี่ยม = ใกล้หมด (จำนวน ≤ ค่าแจ้งเตือน) · ⊘ วงกลมกากบาท = หมดแล้ว (0)
+function StockAlertIcon({ qty, minStock }) {
+  if (qty === 0) {
+    return (
+      <span className="stock-all-alert stock-all-alert--out" title="หมดแล้ว" role="img" aria-label="หมดแล้ว">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+          <circle cx="12" cy="12" r="9.5" /><path d="M8.5 8.5l7 7M15.5 8.5l-7 7" />
+        </svg>
+      </span>
+    );
+  }
+  if (qty <= minStock) {
+    return (
+      <span className="stock-all-alert stock-all-alert--low" title="ใกล้หมด" role="img" aria-label="ใกล้หมด">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M12 3.5L2.5 20h19L12 3.5z" /><path d="M12 10v4.5M12 17.4v.1" />
+        </svg>
+      </span>
+    );
+  }
+  return null;
+}
+
 function QtyBadge({ qty, minStock }) {
-  const cls = qty === 0 ? 'stock-all-qty--out' : qty <= minStock ? 'stock-all-qty--low' : 'stock-all-qty--ok';
-  return <span className={`stock-all-qty ${cls}`}>{qty}</span>;
+  return (
+    <span className="stock-all-qty-wrap">
+      <span className="stock-all-qty">{qty}</span>
+      <StockAlertIcon qty={qty} minStock={minStock} />
+    </span>
+  );
 }
 
 function formatDateTime(value) {
@@ -143,7 +163,7 @@ export default function StockAllPage() {
     [items]
   );
 
-  const formPositions = positionsFor(form.has_sides, form.has_axles);
+  const formPositions = positionsFor(form.has_sides, form.has_axles, form.has_levels);
 
   const showCategoryColumn = activeTab === ALL_TAB || searchTerm.trim() !== '';
   const activeCategory = categories.find((c) => c.id === activeTab) || null;
@@ -208,6 +228,7 @@ export default function StockAllPage() {
       description: item.description,
       has_sides: Boolean(item.has_sides),
       has_axles: Boolean(item.has_axles),
+      has_levels: Boolean(item.has_levels),
       stock_qty: item.stock_qty,
       stocks: Object.fromEntries(item.positions.map((p) => [p.position, p.qty])),
       codes: Object.fromEntries(item.positions.map((p) => [p.position, p.oem_code || ''])),
@@ -269,9 +290,10 @@ export default function StockAllPage() {
           ...payload,
           has_sides: form.has_sides,
           has_axles: form.has_axles,
+          has_levels: form.has_levels,
           stock_qty: Number(form.stock_qty),
           stocks: Object.fromEntries(
-            positionsFor(form.has_sides, form.has_axles).map((p) => [p, Number(form.stocks[p] || 0)])
+            positionsFor(form.has_sides, form.has_axles, form.has_levels).map((p) => [p, Number(form.stocks[p] || 0)])
           ),
         });
       }
@@ -567,6 +589,15 @@ export default function StockAllPage() {
                 />
                 ชิ้นนี้แยกหน้า / หลัง (เช่น โช๊ค){editingItem ? ' (เปลี่ยนหลังสร้างไม่ได้)' : ''}
               </label>
+              <label className="stock-all-check">
+                <input
+                  type="checkbox"
+                  checked={form.has_levels}
+                  disabled={Boolean(editingItem)}
+                  onChange={(e) => setForm({ ...form, has_levels: e.target.checked })}
+                />
+                ชิ้นนี้แยกบน / ล่าง (เช่น ปีกนกบน-ล่าง){editingItem ? ' (เปลี่ยนหลังสร้างไม่ได้)' : ''}
+              </label>
 
               {formPositions.length === 0 && (
                 <>
@@ -665,7 +696,7 @@ export default function StockAllPage() {
                       {movements.map((m) => (
                         <li key={m.id}>
                           <span>{formatDateTime(m.created_at)} · {m.user_name}</span>
-                          <span>{REASON_LABEL[m.reason] || m.reason}{m.position ? ` (${POSITION_LABEL[m.position] || m.position})` : ''}: {m.qty_before} → <strong>{m.qty_after}</strong></span>
+                          <span>{REASON_LABEL[m.reason] || m.reason}{m.position ? ` (${positionLabel(m.position)})` : ''}: {m.qty_before} → <strong>{m.qty_after}</strong></span>
                           {m.note && <em>{m.note}</em>}
                         </li>
                       ))}

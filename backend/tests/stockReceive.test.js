@@ -5,7 +5,7 @@ const { getOfficeToken, getTechnicianToken } = require('./helpers');
 
 const app = createApp();
 
-describe('/api/stock-receive — รับเข้าสต๊อกรวมตามบิล + QR', () => {
+describe('/api/stock-receive — รับเข้าสต๊อกรวมตามบิล (เก็บรอยืนยัน → เสร็จสิ้นถึงบวกจริง) + QR', () => {
   let officeToken;
   let techToken;
   let categoryId;
@@ -24,11 +24,12 @@ describe('/api/stock-receive — รับเข้าสต๊อกรวม�
   });
 
   afterAll(async () => {
+    if (sessionIds.length) await pool.query('DELETE FROM receipt_sessions WHERE id IN (?)', [sessionIds]);
     if (itemIds.length) {
+      await pool.query('DELETE FROM stock_receive_lines WHERE item_id IN (?)', [itemIds]);
       await pool.query('DELETE FROM stock_item_movements WHERE item_id IN (?)', [itemIds]);
       await pool.query('DELETE FROM stock_items WHERE id IN (?)', [itemIds]);
     }
-    if (sessionIds.length) await pool.query('DELETE FROM receipt_sessions WHERE id IN (?)', [sessionIds]);
     await pool.execute('DELETE FROM stock_categories WHERE id = ?', [categoryId]);
   });
 
@@ -47,6 +48,8 @@ describe('/api/stock-receive — รับเข้าสต๊อกรวม�
   }
 
   const getItem = async (code) => (await asOffice(request(app).get('/api/stock-items')).query({ q: code })).body[0];
+  const addLine = (as, body) => as(request(app).post('/api/stock-receive/lines')).send(body);
+  const commit = (as, sessionId) => as(request(app).post(`/api/stock-receive/sessions/${sessionId}/commit`));
 
   test('lookup: รหัสของตำแหน่งและรหัสของธรรมดา เจอ / ไม่เจอคืนว่าง', async () => {
     const shock = await createItem({
@@ -69,81 +72,148 @@ describe('/api/stock-receive — รับเข้าสต๊อกรวม�
     expect((await asTech(request(app).get('/api/stock-receive/lookup')).query({ code: '' })).status).toBe(400);
   });
 
-  test('receive: เพิ่มยอดตำแหน่งนั้นเท่านั้น ผูกกับบิล และเห็นในรายการบิล', async () => {
+  test('เพิ่มรายการ = ยังไม่บวกสต๊อก, แก้จำนวนได้, เสร็จสิ้นถึงบวกจริง และขึ้นในบิล', async () => {
     const itemId = await createItem({
       has_sides: true, codes: { left: `RL2-${suffix}`, right: `RR2-${suffix}` }, stocks: { left: 1, right: 1 },
     });
     const sessionId = await openSession(asTech);
-    const res = await asTech(request(app).post('/api/stock-receive/receive'))
-      .send({ item_id: itemId, position: 'right', qty: 3, receipt_session_id: sessionId });
-    expect(res.status).toBe(200);
-    expect(res.body).toMatchObject({ qty_after: 4, stock_qty: 5 });
 
-    const item = await getItem(`RR2-${suffix}`);
-    expect(item.positions.map((p) => p.qty)).toEqual([1, 4]);
-    expect(item.stock_qty).toBe(5);
+    const added = await addLine(asTech, { item_id: itemId, position: 'right', qty: 3, receipt_session_id: sessionId });
+    expect(added.status).toBe(201);
+    expect(added.body).toMatchObject({ merged: false, qty: 3 });
+    expect(added.body.line).toMatchObject({ position: 'right', position_label: 'ขวา', code: `RR2-${suffix}`, current_qty: 1 });
+    const lineId = added.body.line.id;
 
+    // ยังไม่บวก
+    expect((await getItem(`RR2-${suffix}`)).positions.map((p) => p.qty)).toEqual([1, 1]);
+
+    // แก้จำนวนผิด → ถูก
+    expect((await asTech(request(app).patch(`/api/stock-receive/lines/${lineId}`)).send({ qty: 2 })).body.qty).toBe(2);
+    expect((await asTech(request(app).patch(`/api/stock-receive/lines/${lineId}`)).send({ qty: 0 })).status).toBe(400);
+
+    // เห็นในรายการบิลเป็น "รอยืนยัน" ยังไม่นับในยอดรวมบิล
     const detail = await asOffice(request(app).get(`/api/transactions/receipt-sessions/${sessionId}`));
     expect(detail.body.items).toHaveLength(1);
-    expect(detail.body.items[0]).toMatchObject({ source: 'stock_item', item_type: 'stock_item', qty: 3, model_code: `RR2-${suffix}` });
-    expect(detail.body.items[0].rack_name).toContain('(ขวา)');
-
+    expect(detail.body.items[0]).toMatchObject({ source: 'pending_line', pending: true, qty: 2 });
     const list = await asOffice(request(app).get('/api/transactions/receipt-sessions'));
     const row = list.body.find((s) => s.id === sessionId);
-    expect(Number(row.item_count)).toBe(1);
-    expect(Number(row.total_qty)).toBe(3);
+    expect(Number(row.pending_count)).toBe(1);
+    expect(Number(row.item_count)).toBe(0);
+
+    // เสร็จสิ้น → บวกจริง
+    const done = await commit(asTech, sessionId);
+    expect(done.status).toBe(200);
+    expect(done.body).toMatchObject({ applied: 1, total_qty: 2 });
+    const item = await getItem(`RR2-${suffix}`);
+    expect(item.positions.map((p) => p.qty)).toEqual([1, 3]);
+    expect(item.stock_qty).toBe(4);
+
+    const after = await asOffice(request(app).get(`/api/transactions/receipt-sessions/${sessionId}`));
+    expect(after.body.items).toHaveLength(1);
+    expect(after.body.items[0]).toMatchObject({ source: 'stock_item', qty: 2 });
+    expect(Number((await asOffice(request(app).get('/api/transactions/receipt-sessions'))).body.find((s) => s.id === sessionId).item_count)).toBe(1);
+
+    // ยืนยันซ้ำไม่ได้ (ไม่มีรายการรอแล้ว)
+    expect((await commit(asTech, sessionId)).status).toBe(400);
+    // แก้/ลบรายการที่ยืนยันแล้วผ่าน endpoint รอยืนยันไม่ได้
+    expect((await asTech(request(app).patch(`/api/stock-receive/lines/${lineId}`)).send({ qty: 9 })).status).toBe(404);
   });
 
-  test('receive: validation และบิลของคนอื่น', async () => {
+  test('สแกนชิ้น/ตำแหน่งเดิมซ้ำในบิลเดียวกัน = รวมจำนวนในแถวเดิม และลบรายการรอยืนยันได้', async () => {
+    const itemId = await createItem({ oem_code: `M-${suffix}`, stock_qty: 0 });
+    const sessionId = await openSession();
+    const first = await addLine(asOffice, { item_id: itemId, qty: 2, receipt_session_id: sessionId });
+    const second = await addLine(asOffice, { item_id: itemId, qty: 3, receipt_session_id: sessionId });
+    expect(second.status).toBe(200);
+    expect(second.body).toMatchObject({ merged: true, qty: 5 });
+    expect(second.body.line.id).toBe(first.body.line.id);
+
+    const lines = await asOffice(request(app).get(`/api/stock-receive/sessions/${sessionId}/lines`));
+    expect(lines.body.lines).toHaveLength(1);
+
+    expect((await asOffice(request(app).delete(`/api/stock-receive/lines/${first.body.line.id}`))).status).toBe(200);
+    expect((await asOffice(request(app).get(`/api/stock-receive/sessions/${sessionId}/lines`))).body.lines).toEqual([]);
+    expect((await commit(asOffice, sessionId)).status).toBe(400);
+    expect((await getItem(`M-${suffix}`)).stock_qty).toBe(0);
+  });
+
+  test('ตำแหน่งบน/ล่าง: ปีกนกบน-ล่าง × ซ้าย-ขวา รับเข้าตำแหน่งที่ถูกต้อง', async () => {
+    const itemId = await createItem({
+      has_sides: true, has_levels: true,
+      codes: { upper_left: `UL-${suffix}`, upper_right: `UR-${suffix}`, lower_left: `LL-${suffix}`, lower_right: `LR-${suffix}` },
+      stocks: { upper_left: 0, upper_right: 0, lower_left: 0, lower_right: 0 },
+    });
+    expect(itemId).toBeTruthy();
+    const found = await asTech(request(app).get('/api/stock-receive/lookup')).query({ code: `LR-${suffix}` });
+    expect(found.body.matches[0]).toMatchObject({ position: 'lower_right', position_label: 'ล่างขวา' });
+    const sessionId = await openSession();
+    expect((await addLine(asOffice, { item_id: itemId, position: 'lower_right', qty: 2, receipt_session_id: sessionId })).status).toBe(201);
+    expect((await addLine(asOffice, { item_id: itemId, position: 'right', qty: 1, receipt_session_id: sessionId })).status).toBe(400);
+    expect((await commit(asOffice, sessionId)).status).toBe(200);
+    expect((await getItem(`LR-${suffix}`)).positions.map((p) => [p.position, p.qty])).toEqual([
+      ['upper_left', 0], ['upper_right', 0], ['lower_left', 0], ['lower_right', 2],
+    ]);
+  });
+
+  test('validation และบิลของคนอื่น', async () => {
     const shock = await createItem({ has_axles: true, codes: { front: `F-${suffix}`, rear: `R-${suffix}` }, stocks: { front: 0, rear: 0 } });
     const plain = await createItem({ oem_code: `V-${suffix}`, stock_qty: 0 });
-    expect((await asOffice(request(app).post('/api/stock-receive/receive')).send({ item_id: shock, qty: 1 })).status).toBe(400);
-    expect((await asOffice(request(app).post('/api/stock-receive/receive')).send({ item_id: shock, position: 'left', qty: 1 })).status).toBe(400);
-    expect((await asOffice(request(app).post('/api/stock-receive/receive')).send({ item_id: plain, position: 'left', qty: 1 })).status).toBe(400);
-    expect((await asOffice(request(app).post('/api/stock-receive/receive')).send({ item_id: plain, qty: 0 })).status).toBe(400);
-    expect((await asOffice(request(app).post('/api/stock-receive/receive')).send({ item_id: plain, qty: 1.5 })).status).toBe(400);
-    const othersSession = await openSession(asTech);
-    const denied = await asOffice(request(app).post('/api/stock-receive/receive'))
-      .send({ item_id: plain, qty: 1, receipt_session_id: othersSession });
-    expect(denied.status).toBe(403);
-    expect((await asOffice(request(app).post('/api/stock-receive/receive')).send({ item_id: 99999999, qty: 1 })).status).toBe(404);
+    const sessionId = await openSession(asOffice);
+    const body = (extra) => ({ receipt_session_id: sessionId, qty: 1, ...extra });
+    expect((await addLine(asOffice, body({ item_id: shock }))).status).toBe(400);
+    expect((await addLine(asOffice, body({ item_id: shock, position: 'left' }))).status).toBe(400);
+    expect((await addLine(asOffice, body({ item_id: plain, position: 'left' }))).status).toBe(400);
+    expect((await addLine(asOffice, body({ item_id: plain, qty: 0 }))).status).toBe(400);
+    expect((await addLine(asOffice, body({ item_id: plain, qty: 1.5 }))).status).toBe(400);
+    expect((await addLine(asOffice, { item_id: plain, qty: 1 })).status).toBe(400); // ไม่ระบุบิล
+    expect((await addLine(asOffice, body({ item_id: 99999999 }))).status).toBe(404);
+    expect((await addLine(asOffice, { item_id: plain, qty: 1, receipt_session_id: 99999999 })).status).toBe(404);
+
+    // ช่างเพิ่ม/ยืนยัน/แก้/ลบในบิลของ office ไม่ได้
+    expect((await addLine(asTech, body({ item_id: plain }))).status).toBe(403);
+    const mine = await addLine(asOffice, body({ item_id: plain }));
+    expect((await asTech(request(app).patch(`/api/stock-receive/lines/${mine.body.line.id}`)).send({ qty: 5 })).status).toBe(403);
+    expect((await asTech(request(app).delete(`/api/stock-receive/lines/${mine.body.line.id}`))).status).toBe(403);
+    expect((await commit(asTech, sessionId)).status).toBe(403);
+    expect((await asTech(request(app).get(`/api/stock-receive/sessions/${sessionId}/lines`))).status).toBe(403);
   });
 
-  test('ยกเลิกรายการรับเข้า: หักคืน ไม่ติดลบ เฉพาะ office และไม่เห็นในบิลอีก', async () => {
+  test('ยกเลิกรายการที่บวกแล้ว: หักคืน ไม่ติดลบ เฉพาะ office และไม่เห็นในบิลอีก', async () => {
     const itemId = await createItem({ oem_code: `U-${suffix}`, stock_qty: 0 });
     const sessionId = await openSession();
-    const rec = await asOffice(request(app).post('/api/stock-receive/receive'))
-      .send({ item_id: itemId, qty: 2, receipt_session_id: sessionId });
-    const movementId = rec.body.movement_id;
+    await addLine(asOffice, { item_id: itemId, qty: 2, receipt_session_id: sessionId });
+    await commit(asOffice, sessionId);
+    const detail = await asOffice(request(app).get(`/api/transactions/receipt-sessions/${sessionId}`));
+    const movementId = detail.body.items[0].id;
 
     expect((await asTech(request(app).delete(`/api/stock-receive/movements/${movementId}`))).status).toBe(403);
 
     // ของถูกใช้ไปแล้ว (ตั้งยอดลงเหลือ 1) → ยกเลิกไม่ได้เพราะจะติดลบ
     await asOffice(request(app).patch(`/api/stock-items/${itemId}/qty`)).send({ set_to: 1 });
-    const blocked = await asOffice(request(app).delete(`/api/stock-receive/movements/${movementId}`));
-    expect(blocked.status).toBe(400);
+    expect((await asOffice(request(app).delete(`/api/stock-receive/movements/${movementId}`))).status).toBe(400);
 
     await asOffice(request(app).patch(`/api/stock-items/${itemId}/qty`)).send({ set_to: 2 });
-    const ok = await asOffice(request(app).delete(`/api/stock-receive/movements/${movementId}`));
-    expect(ok.status).toBe(200);
+    expect((await asOffice(request(app).delete(`/api/stock-receive/movements/${movementId}`))).status).toBe(200);
     expect((await getItem(`U-${suffix}`)).stock_qty).toBe(0);
-    const detail = await asOffice(request(app).get(`/api/transactions/receipt-sessions/${sessionId}`));
-    expect(detail.body.items).toHaveLength(0);
+    expect((await asOffice(request(app).get(`/api/transactions/receipt-sessions/${sessionId}`))).body.items).toHaveLength(0);
     expect((await asOffice(request(app).delete(`/api/stock-receive/movements/${movementId}`))).status).toBe(404);
   });
 
-  test('ลบบิลทั้งใบ: คืนยอดของสต๊อกรวมในบิลนั้น', async () => {
+  test('ลบบิลทั้งใบ: คืนยอดที่บวกแล้ว และทิ้งรายการรอยืนยัน', async () => {
     const a = await createItem({ oem_code: `DA-${suffix}`, stock_qty: 1 });
     const b = await createItem({ has_sides: true, codes: { left: `DB-${suffix}`, right: '' }, stocks: { left: 0, right: 0 } });
     const sessionId = await openSession();
-    await asOffice(request(app).post('/api/stock-receive/receive')).send({ item_id: a, qty: 4, receipt_session_id: sessionId });
-    await asOffice(request(app).post('/api/stock-receive/receive')).send({ item_id: b, position: 'left', qty: 2, receipt_session_id: sessionId });
+    await addLine(asOffice, { item_id: a, qty: 4, receipt_session_id: sessionId });
+    await commit(asOffice, sessionId); // a บวกแล้ว
+    await addLine(asOffice, { item_id: b, position: 'left', qty: 2, receipt_session_id: sessionId }); // b ยังรอยืนยัน
     expect((await getItem(`DA-${suffix}`)).stock_qty).toBe(5);
 
     const del = await asOffice(request(app).delete(`/api/transactions/receipt-sessions/${sessionId}`));
     expect(del.status).toBe(200);
     expect((await getItem(`DA-${suffix}`)).stock_qty).toBe(1);
     expect((await getItem(`DB-${suffix}`)).stock_qty).toBe(0);
+    const [[left]] = await pool.query('SELECT COUNT(*) AS c FROM stock_receive_lines WHERE receipt_session_id = ?', [sessionId]);
+    expect(left.c).toBe(0);
   });
 
   test('qrcodes: หนึ่งป้ายต่อรหัสของแต่ละตำแหน่ง (ข้ามตำแหน่งที่ไม่มีรหัส) เฉพาะ office', async () => {
