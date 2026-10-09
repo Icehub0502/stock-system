@@ -144,8 +144,8 @@ export default function StockAllPage() {
   const visibleItems = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
     return items.filter((i) => {
-      // พิมพ์ค้นหา = ค้นข้ามทุกหมวด (ไม่ติดแท็บ) จะได้หารหัสเจอแม้ไม่รู้ว่าอยู่หมวดไหน
-      if (!term && activeTab !== ALL_TAB && i.category_id !== activeTab) return false;
+      // ค้นหา/กรองเฉพาะหมวดที่เลือกอยู่ (แท็บ "ทั้งหมด" = ค้นทุกหมวด)
+      if (activeTab !== ALL_TAB && i.category_id !== activeTab) return false;
       if (term && !`${i.oem_code} ${i.positions.map((p) => p.oem_code || '').join(' ')} ${i.description} ${i.fitments.map(formatFitment).join(' ')}`.toLowerCase().includes(term)) return false;
       const qty = effectiveQty(i);
       if (stockFilter === 'out' && qty !== 0) return false;
@@ -165,7 +165,7 @@ export default function StockAllPage() {
 
   const formPositions = positionsFor(form.has_sides, form.has_axles, form.has_levels);
 
-  const showCategoryColumn = activeTab === ALL_TAB || searchTerm.trim() !== '';
+  const showCategoryColumn = activeTab === ALL_TAB;
   const activeCategory = categories.find((c) => c.id === activeTab) || null;
 
   async function handleShowQr(item) {
@@ -414,7 +414,7 @@ export default function StockAllPage() {
       <div className="search-bar">
         <input
           type="text"
-          placeholder="ค้นหารหัส OEM หรือรายละเอียด (ค้นข้ามทุกหมวด)..."
+          placeholder={activeCategory ? `ค้นหาในหมวด ${activeCategory.name} (รหัส OEM / รายละเอียด / รุ่นรถ)...` : 'ค้นหาในทุกหมวด (รหัส OEM / รายละเอียด / รุ่นรถ)...'}
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
         />
