@@ -67,6 +67,15 @@ describe('/api/stock-receive — รับเข้าสต๊อกรวม�
     const plainRes = await asTech(request(app).get('/api/stock-receive/lookup')).query({ code: `PL-${suffix}` });
     expect(plainRes.body.matches[0]).toMatchObject({ item_id: plain, position: null, qty: 2 });
 
+    // ป้ายปีกนกเดิมเข้ารหัสเป็น JSON ({id, sku, name}) — ต้องสแกนเจอเหมือนรหัสล้วน แม้ชื่อยาวเกิน 100 ตัว
+    const jsonQr = JSON.stringify({ id: 1, sku: `PL-${suffix}`, name: 'ปีกนก '.repeat(40) });
+    expect(jsonQr.length).toBeGreaterThan(100);
+    const viaJson = await asTech(request(app).get('/api/stock-receive/lookup')).query({ code: jsonQr });
+    expect(viaJson.status).toBe(200);
+    expect(viaJson.body.matches[0]).toMatchObject({ item_id: plain, position: null });
+    const jsonNoSku = await asTech(request(app).get('/api/stock-receive/lookup')).query({ code: '{"id":1,"name":"x"}' });
+    expect(jsonNoSku.body.matches).toEqual([]);
+
     const none = await asTech(request(app).get('/api/stock-receive/lookup')).query({ code: `NOPE-${suffix}` });
     expect(none.body.matches).toEqual([]);
     expect((await asTech(request(app).get('/api/stock-receive/lookup')).query({ code: '' })).status).toBe(400);

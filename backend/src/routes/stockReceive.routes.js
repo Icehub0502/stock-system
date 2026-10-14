@@ -49,10 +49,29 @@ function shapeMatch(row) {
   };
 }
 
-// ค้นหาด้วยรหัสที่สแกนได้ (ตรงทั้งสตริง ไม่สนตัวพิมพ์เล็กใหญ่ตาม collation) — QR เดิมที่ติดของ
-// ไปแล้วเป็นรหัสล้วน ๆ จึงสแกนเจอเหมือนเดิม ถ้ารหัสซ้ำกันหลายรายการคืนทุกตัวให้ผู้ใช้เลือก
+// ข้อความที่ได้จากการสแกน → รหัสที่ใช้ค้นหา: ป้าย QR ของแร็คเป็นรหัสล้วน ๆ แต่ป้ายปีกนกที่ติดของไปแล้ว
+// เข้ารหัสเป็น JSON ({"id":..,"sku":"..","name":".."}) ต้องแกะ sku ออกมา ไม่งั้นป้ายปีกนกเดิมทุกใบ
+// สแกนไม่เจอในสต๊อกรวม (JSON อาจยาวเกิน 100 ตัวเพราะมีชื่อรายการ จึงแกะก่อนเช็คความยาว)
+function extractScanCode(raw) {
+  const text = String(raw ?? '').trim();
+  if (text.startsWith('{')) {
+    try {
+      const parsed = JSON.parse(text);
+      const code = parsed && (parsed.sku ?? parsed.model_code ?? parsed.code);
+      if (typeof code === 'string' && code.trim()) return code.trim();
+    } catch {
+      // ไม่ใช่ JSON จริง — ใช้ข้อความเดิม
+    }
+  }
+  return text;
+}
+
+// ค้นหาด้วยรหัสที่สแกนได้ (ตรงทั้งสตริง ไม่สนตัวพิมพ์เล็กใหญ่ตาม collation) — ป้าย QR เดิมที่ติดของ
+// ไปแล้วสแกนเจอเหมือนเดิม (ทั้งแบบรหัสล้วนและแบบ JSON) ถ้ารหัสซ้ำกันหลายรายการคืนทุกตัวให้ผู้ใช้เลือก
 router.get('/lookup', async (req, res) => {
-  const code = String(req.query.code ?? '').trim();
+  const rawCode = String(req.query.code ?? '');
+  if (rawCode.length > 2000) return res.status(400).json({ error: 'รหัสไม่ถูกต้อง' });
+  const code = extractScanCode(rawCode);
   if (!code || code.length > 100) return res.status(400).json({ error: 'รหัสไม่ถูกต้อง' });
   try {
     const [rows] = await pool.execute(
