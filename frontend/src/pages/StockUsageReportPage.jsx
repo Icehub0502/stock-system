@@ -47,6 +47,17 @@ function loadCustomFilters() {
 // ตัดย้อนหลังผ่านช่อง "วันที่ตัดสต๊อก" ในหน้าตัดสต๊อกก็ตาม — แต่ละแถวคือ
 // transaction จริง 1 รายการ (ไม่รวมยอดแล้วเหมือนก่อนหน้านี้) เพื่อให้มีปุ่มลบ
 // รายตัวได้ (เรียก DELETE /transactions/:id เดิมที่คืนสต็อกให้ถูกต้องอยู่แล้ว)
+// ประเภทที่แสดง: ของสต๊อกรวมใช้ชื่อหมวด ของระบบเก่าใช้ แร็ค/ปีกนก
+function kindLabel(row) {
+  if (row.source === 'stock_item') return row.category_name || 'สต๊อกรวม';
+  return row.item_type === 'rack' ? 'แร็ค' : 'ปีกนก';
+}
+
+// id ซ้ำข้ามตารางได้ (ของสต๊อกรวม vs ระบบเก่า) จึงใช้ source ประกอบ
+function rowKey(row) {
+  return `${row.source || 'legacy'}-${row.id}`;
+}
+
 export default function StockUsageReportPage() {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -57,7 +68,7 @@ export default function StockUsageReportPage() {
   const [yearValue, setYearValue] = useState(CURRENT_YEAR);
   const [deletingId, setDeletingId] = useState(null);
 
-  const [typeFilter, setTypeFilter] = useState(''); // '' | 'rack' | 'wing_arm'
+  const [typeFilter, setTypeFilter] = useState(''); // '' | ชื่อประเภท (เช่น แร็ค / ปีกนก / หมวดอื่นของสต๊อกรวม)
   const [customFilters, setCustomFilters] = useState(loadCustomFilters);
   const [activeCustomFilter, setActiveCustomFilter] = useState(null);
   const [showAddFilter, setShowAddFilter] = useState(false);
@@ -128,11 +139,15 @@ export default function StockUsageReportPage() {
     if (activeCustomFilter === id) setActiveCustomFilter(null);
   }
 
-  async function handleDelete(id) {
+  async function handleDelete(row) {
     if (!window.confirm('ลบรายการนี้และคืนสต็อกกลับหรือไม่?')) return;
+    const id = rowKey(row);
     setDeletingId(id);
     try {
-      await client.delete(`/transactions/${id}`);
+      // รายการของสต๊อกรวมกับของระบบเก่าอยู่คนละตาราง id ซ้ำข้ามกันได้ จึงลบคนละ endpoint ตาม source
+      await client.delete(row.source === 'stock_item'
+        ? `/stock-deductions/movements/${row.id}`
+        : `/transactions/${row.id}`);
       await load();
     } catch (err) {
       setError(err.response?.data?.error || 'ลบรายการไม่สำเร็จ');
@@ -141,12 +156,18 @@ export default function StockUsageReportPage() {
     }
   }
 
+  // ปุ่มกรองประเภท = ประเภทที่มีอยู่จริงในช่วงที่เลือก (แร็ค/ปีกนกของระบบเก่า + หมวดของสต๊อกรวม)
+  const typeOptions = useMemo(
+    () => [...new Set(rows.map(kindLabel))].sort().map((label) => ({ value: label, label })),
+    [rows]
+  );
+
   // กรองด้วยประเภท (แร็ค/ปีกนก) และตัวกรองที่สร้างเอง — เลือกได้ทีละอย่าง (ติ๊ก
   // ปุ่มเดียว ไม่ใช่หลายปุ่มพร้อมกัน) ง่ายและคาดเดาผลได้ตรงกับที่ขอ
   const filteredRows = useMemo(() => {
     const activeFilter = customFilters.find((f) => f.id === activeCustomFilter);
     return rows.filter((r) => {
-      if (typeFilter && r.item_type !== typeFilter) return false;
+      if (typeFilter && kindLabel(r) !== typeFilter) return false;
       if (activeFilter && !r.part_name?.toLowerCase().includes(activeFilter.keyword.toLowerCase())) return false;
       return true;
     });
@@ -209,7 +230,7 @@ export default function StockUsageReportPage() {
       {/* ── ตัวกรองประเภท + ตัวกรองที่สร้างเอง ── */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', margin: '8px 0 16px', alignItems: 'center' }}>
         <span style={{ fontSize: '13px', color: 'var(--color-text-secondary, #666)', alignSelf: 'center' }}>กรอง:</span>
-        {[{ value: 'rack', label: 'แร็ค' }, { value: 'wing_arm', label: 'ปีกนก' }].map((o) => (
+        {typeOptions.map((o) => (
           <button
             key={o.value}
             type="button"
@@ -314,8 +335,8 @@ export default function StockUsageReportPage() {
                 </thead>
                 <tbody>
                   {day.items.map((r) => (
-                    <tr key={r.id}>
-                      <td data-label="ประเภท">{r.item_type === 'rack' ? 'แร็ค' : 'ปีกนก'}</td>
+                    <tr key={rowKey(r)}>
+                      <td data-label="ประเภท">{kindLabel(r)}</td>
                       <td data-label="รหัสอะไหล่">{r.part_code}</td>
                       <td data-label="ชื่ออะไหล่">{r.part_name}</td>
                       <td data-label="รุ่นรถ">{r.vehicle_model || '-'}</td>
@@ -325,10 +346,10 @@ export default function StockUsageReportPage() {
                         <button
                           type="button"
                           className="btn-danger"
-                          disabled={deletingId === r.id}
-                          onClick={() => handleDelete(r.id)}
+                          disabled={deletingId === rowKey(r)}
+                          onClick={() => handleDelete(r)}
                         >
-                          {deletingId === r.id ? '...' : '🗑️ ลบ'}
+                          {deletingId === rowKey(r) ? '...' : '🗑️ ลบ'}
                         </button>
                       </td>
                     </tr>

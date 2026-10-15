@@ -1063,9 +1063,17 @@ async function initDatabase() {
     `SELECT COLUMN_TYPE AS t FROM information_schema.columns
      WHERE table_schema = DATABASE() AND table_name = 'stock_item_movements' AND column_name = 'reason'`
   );
-  if (reasonCol && !reasonCol.t.includes("'receive'")) {
-    await conn.query(`ALTER TABLE stock_item_movements MODIFY reason ENUM('create','adjust','set','receive') NOT NULL`);
+  // 'deduct' = ตัดสต๊อก (หน้าตัดสต๊อก/จ่ายออกที่หน้าสแกน) — ขยาย ENUM เมื่อยังไม่มีค่านี้
+  if (reasonCol && !reasonCol.t.includes("'deduct'")) {
+    await conn.query(`ALTER TABLE stock_item_movements MODIFY reason ENUM('create','adjust','set','receive','deduct') NOT NULL`);
   }
+  // การตัดสต๊อก: vehicle_model = รถที่ใช้อะไหล่ชิ้นนี้ (ไว้สรุปรายงาน), moved_at = วันที่ของออกจริง
+  // (ตัดย้อนหลังได้ — NULL = ใช้ created_at), legacy_tx_id = รายการจากตาราง transactions ของ
+  // ระบบเก่าที่ซิงก์เข้ามา (UNIQUE กันซิงก์ซ้ำ) ดู scripts/sync-legacy-deductions.js
+  await conn.query(`ALTER TABLE stock_item_movements ADD COLUMN vehicle_model VARCHAR(150) DEFAULT NULL`).catch(ignoreIfAlreadyApplied);
+  await conn.query(`ALTER TABLE stock_item_movements ADD COLUMN moved_at DATETIME DEFAULT NULL`).catch(ignoreIfAlreadyApplied);
+  await conn.query(`ALTER TABLE stock_item_movements ADD COLUMN legacy_tx_id BIGINT DEFAULT NULL`).catch(ignoreIfAlreadyApplied);
+  await conn.query(`ALTER TABLE stock_item_movements ADD UNIQUE KEY uq_sim_legacy_tx (legacy_tx_id)`).catch(ignoreIfAlreadyApplied);
 
   // รายการรับเข้าที่ "ยังไม่บวกสต๊อก" ของบิลที่กำลังสแกน — สแกน/กรอกจำนวนแล้วเก็บไว้ที่นี่ก่อน
   // (แก้จำนวน/ลบได้) ยอดสต๊อกจริงบวกตอนกดเสร็จสิ้นเท่านั้น (POST /stock-receive/sessions/:id/commit)

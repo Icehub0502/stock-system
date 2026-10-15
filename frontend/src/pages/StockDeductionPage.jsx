@@ -1,95 +1,42 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import client from '../api/client';
 import useRealtimeEvent from '../hooks/useRealtimeEvent';
+import PositionChip from '../components/PositionChip';
+import { positionLabel } from '../utils/stockPositions';
 
-// รวมรายการจาก racks + wing_arms มาค้นหา/เลือกในหน้าเดียว (แค่ระดับหน้าเว็บ ไม่ได้
-// รวมตารางฐานข้อมูลจริง — เจ้าของร้านเลือกไม่รวมเพราะมี QR code พิมพ์ติดชั้นวางจริง
-// ที่อ้างอิง endpoint เดิมของแต่ละระบบอยู่แล้ว) กดตัดสต๊อกแล้วเรียก endpoint เดิมของ
-// แต่ละระบบตรง ๆ ไม่เขียนตรรกะตัดสต๊อกซ้ำเลย — เลือกอะไหล่แล้วเลือก "รุ่นรถ" แบบ
-// 2 ขั้น (ยี่ห้อก่อน แล้วค่อยรุ่น) จากแคตตาล็อก vehicle_models ที่มีอยู่แล้ว (ใช้
-// endpoint เดียวกับหน้าคีออส/จัดการราคาอะไหล่) ไม่เดาให้เลย ให้พนักงานเลือกตรง ๆ
-// (เจ้าของร้านสั่งตัดการเดาออก หลังลองใช้ช่องพิมพ์ข้อความอิสระแล้วไม่ชอบ) เอาไปสรุป
-// ในหน้ารายงาน (StockUsageReportPage.jsx) — ฟอร์มยืนยันเปิดเป็น modal ทับหน้า
-// รายการเดิม (ไม่สลับเนื้อหาทั้งหน้า) ปิด modal แล้วกลับมาเห็นรายการเดิมทันที
+// หน้าตัดสต๊อก — ตัดจาก "สต๊อกรวม" (stock_items) ผ่าน POST /api/stock-deductions
+// (เดิมตัดจากตารางเก่า racks/wing_arms ทำให้ยอดสต๊อกรวมไม่ลด)
 //
-// ปีกนก (wing_arm) ใช้ทีละคู่เสมอ (ซ้าย+ขวา) — เลือกข้างไหนก็ได้ 1 ตัว ระบบหาคู่ให้
-// อัตโนมัติ แล้วตัดสต๊อกทั้งคู่พร้อมกันผ่าน PATCH /wing-arms/pair-stock (อะตอมิกฝั่ง
-// backend) ถ้าหาคู่ไม่เจอ (ข้อมูลจริงไม่มีคู่ในระบบ) จะตัดได้แค่ข้างที่เลือกพร้อมเตือน
-//
-// จับคู่ 2 ชั้น (ตรวจข้อมูลจริงทั้ง 328 แถวแล้วออกแบบตามนี้ — เจอ 6/328 แถวที่
-// ชั้นแรกอย่างเดียวไม่พอ, เหลือแค่ 2/328 หลังรวมชั้นสองที่เป็น gap ข้อมูลจริง ไม่ใช่
-// บั๊ก คือ SKU เดี่ยวไม่มีคู่ในระบบเลย):
-//   1) รหัส SKU ยาวเท่ากัน + ต่างกันตำแหน่งเดียว + ตำแหน่งนั้นเป็น L↔R (เช่น
-//      "FDCA039U-RB"/"FDCA039U-LB", "3A2-MGZSL /333"/"3A2-MGZSR /333") — น่าเชื่อถือ
-//      สุด เพราะทนต่อ typo ในชื่อ/คอลัมน์ side-axle ที่พบว่ากรอกผิดได้จริง (เช่น SKU
-//      ...-RA แต่ side ในฐานข้อมูลดันเป็น 'left' เหมือนคู่ซ้ายของมัน)
-//   2) ชั้นสำรอง (เจอเมื่อ SKU ไม่ใช่รูปแบบ L/R เช่นรหัสอะไหล่ยี่ห้อ Honda ที่ต่างกัน
-//      ด้วยตัวเลขไม่ใช่ตัวอักษร) — axle/position ตรงกัน + side ตรงข้าม + ชื่อตัดคำ
-//      "ซ้าย"/"ขวา"/"LH"/"RH" แล้วเหมือนกัน
-function findSkuSideDiffIndex(codeA, codeB) {
-  const a = String(codeA || '').toUpperCase();
-  const b = String(codeB || '').toUpperCase();
-  if (a.length !== b.length) return -1;
-  let diffIndex = -1;
-  for (let i = 0; i < a.length; i += 1) {
-    if (a[i] !== b[i]) {
-      if (diffIndex !== -1) return -1; // ต่างกันมากกว่า 1 ตำแหน่ง ไม่ใช่คู่
-      diffIndex = i;
-    }
-  }
-  if (diffIndex === -1) return -1; // รหัสเดียวกันเป๊ะ ไม่นับ
-  const pair = [a[diffIndex], b[diffIndex]].sort().join('');
-  return pair === 'LR' ? diffIndex : -1;
-}
+// ชิ้นที่แยกตำแหน่ง (ซ้าย/ขวา/หน้า/หลัง/บน/ล่าง) เลือกได้ว่าจะตัดตำแหน่งไหนบ้างและกี่ชิ้นต่อตำแหน่ง
+// แล้วตัดพร้อมกันในครั้งเดียว (ตำแหน่งไหนสต๊อกไม่พอ = ไม่ตัดเลยสักตำแหน่ง) — ชิ้นที่แยกซ้าย/ขวาอย่าง
+// เดียว (ปีกนกใช้ทีละคู่) ติ๊กทั้งสองข้างไว้ให้เป็นค่าเริ่มต้น
+// เลือก "รุ่นรถ" แบบ 2 ขั้น (ยี่ห้อ → รุ่น) จากแคตตาล็อก vehicle_models ไว้สรุปในหน้ารายงาน
 
-function stripSideWord(name) {
-  return String(name || '')
-    .replace(/(ซ้าย|ขวา)/g, '')
-    .replace(/\bLH\b|\bRH\b/gi, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
+const ALL_TAB = 'all';
 
-function findWingArmPair(item, wingArms) {
-  const skuMatch = wingArms.find((w) => w.id !== item.id && findSkuSideDiffIndex(item.code, w.code) !== -1);
-  if (skuMatch) return skuMatch;
-  return wingArms.find((w) =>
-    w.id !== item.id &&
-    w.axle === item.axle &&
-    w.position === item.position &&
-    w.side !== item.side &&
-    stripSideWord(w.name) === stripSideWord(item.name)
-  ) || null;
-}
-
-// ข้างไหนคือ "ซ้าย" — ถ้าจับคู่ได้ด้วย SKU ใช้ตัวอักษร L/R ที่ตำแหน่งต่างกันของ SKU
-// เอง (แม่นกว่าคอลัมน์ side จาก DB ที่พิสูจน์แล้วว่ามีข้อมูลกรอกผิดจริง) ถ้าจับคู่
-// ได้ผ่านชั้นสำรอง (ชื่อ/side) ค่อย fallback ไปเชื่อคอลัมน์ side แทน (เชื่อถือได้ใน
-// เคสนี้ เพราะเป็นเงื่อนไขที่ใช้จับคู่ตั้งแต่แรกอยู่แล้ว)
-function skuSide(item, pair) {
-  const idx = findSkuSideDiffIndex(item.code, pair.code);
-  if (idx !== -1) return item.code.toUpperCase()[idx] === 'L' ? 'left' : 'right';
-  return item.side || null;
-}
-
-// วันที่วันนี้ตามเวลาเครื่องผู้ใช้ (ไม่ใช้ toISOString ตรง ๆ เพราะนั่นคือเวลา UTC
-// อาจข้ามวันไปแล้วถ้าผู้ใช้อยู่ timezone +7)
 function todayLocalDate() {
   const now = new Date();
-  const yyyy = now.getFullYear();
-  const mm = String(now.getMonth() + 1).padStart(2, '0');
-  const dd = String(now.getDate()).padStart(2, '0');
-  return `${yyyy}-${mm}-${dd}`;
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+}
+
+// ค่าเริ่มต้นของแถวที่จะตัด: ชิ้นธรรมดาแถวเดียว / ปีกนก (ซ้าย-ขวา) ติ๊กทั้งคู่ / อื่น ๆ ยังไม่ติ๊ก
+function defaultLines(item) {
+  if (item.positions.length === 0) return { _: { checked: true, qty: '' } };
+  const pairByDefault = Boolean(item.has_sides) && !item.has_axles && !item.has_levels;
+  return Object.fromEntries(
+    item.positions.map((p) => [p.position, { checked: pairByDefault && p.qty > 0, qty: '1' }])
+  );
 }
 
 export default function StockDeductionPage() {
-  const [racks, setRacks] = useState([]);
-  const [wingArms, setWingArms] = useState([]);
+  const [items, setItems] = useState([]);
+  const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState(ALL_TAB);
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState(null);
+  const [lines, setLines] = useState({});
 
-  const [qty, setQty] = useState('');
   const [brands, setBrands] = useState([]);
   const [brand, setBrand] = useState('');
   const [models, setModels] = useState([]);
@@ -100,29 +47,26 @@ export default function StockDeductionPage() {
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
 
-  const loadItems = async ({ silent } = {}) => {
+  const loadItems = useCallback(async ({ silent } = {}) => {
     try {
       if (!silent) setLoading(true);
-      const [racksRes, wingArmsRes] = await Promise.all([
-        client.get('/racks'),
-        client.get('/wing-arms'),
+      const [itemsRes, catRes] = await Promise.all([
+        client.get('/stock-items'),
+        client.get('/stock-items/categories'),
       ]);
-      setRacks(racksRes.data || []);
-      setWingArms(wingArmsRes.data || []);
+      setItems(itemsRes.data || []);
+      setCategories(catRes.data || []);
     } catch (err) {
       setErrorMsg('โหลดรายการอะไหล่ไม่สำเร็จ');
     } finally {
       if (!silent) setLoading(false);
     }
-  };
+  }, []);
 
-  useEffect(() => { loadItems(); }, []);
+  useEffect(() => { loadItems(); }, [loadItems]);
 
-  // Realtime: จำนวนคงเหลือของแร็ค/ปีกนกเปลี่ยนจากเครื่องอื่น ให้รีเฟรชอัตโนมัติ —
-  // เลื่อนออกไปก่อนถ้ากำลังเลือกรายการเพื่อตัดสต๊อกอยู่ (selected เก็บ stock_qty
-  // ไว้ตรวจ max ในฟอร์ม จะเพี้ยนถ้าข้อมูลเปลี่ยนกลางทาง) หรือกำลังส่งฟอร์มอยู่
-  // (submitting) — ไม่ subscribe stock:tx-* เพราะหน้านี้ต้องการแค่จำนวนคงเหลือ
-  // ปัจจุบัน ไม่ใช่ประวัติ transaction
+  // Realtime: ยอดคงเหลือเปลี่ยนจากเครื่องอื่น → รีเฟรชเงียบ ๆ แต่เลื่อนไว้ถ้ากำลังเปิดฟอร์มตัดสต๊อกอยู่
+  // (selected เก็บยอดไว้ตรวจ max ของฟอร์ม จะเพี้ยนถ้าข้อมูลเปลี่ยนกลางทาง) หรือกำลังส่งฟอร์ม
   const pendingRefreshRef = useRef(false);
   useRealtimeEvent(
     ['stock:item-created', 'stock:item-updated', 'stock:item-deleted'],
@@ -134,47 +78,43 @@ export default function StockDeductionPage() {
       loadItems({ silent: true });
     }
   );
-
   useEffect(() => {
     if (selected === null && !submitting && pendingRefreshRef.current) {
       pendingRefreshRef.current = false;
       loadItems({ silent: true });
     }
-  }, [selected, submitting]);
+  }, [selected, submitting, loadItems]);
 
   useEffect(() => {
-    client.get('/vehicle-models/brands').then((res) => setBrands(res.data.data || []));
+    client.get('/vehicle-models/brands').then((res) => setBrands(res.data.data || [])).catch(() => setBrands([]));
   }, []);
 
   useEffect(() => {
     if (!brand) { setModels([]); setModel(''); return; }
-    client.get('/vehicle-models/models', { params: { brand } }).then((res) => setModels(res.data.data || []));
+    client.get('/vehicle-models/models', { params: { brand } }).then((res) => setModels(res.data.data || [])).catch(() => setModels([]));
   }, [brand]);
 
-  const combined = useMemo(() => [
-    ...racks.map((r) => ({ type: 'rack', id: r.id, code: r.model_code, name: r.name, stock_qty: r.stock_qty })),
-    ...wingArms.map((w) => ({
-      type: 'wing_arm', id: w.id, code: w.sku, name: w.name, stock_qty: w.stock_qty,
-      axle: w.axle, position: w.position, side: w.side,
-    })),
-  ], [racks, wingArms]);
+  const countsByCategory = useMemo(() => {
+    const map = {};
+    items.forEach((i) => { map[i.category_id] = (map[i.category_id] || 0) + 1; });
+    return map;
+  }, [items]);
 
   const filtered = useMemo(() => {
     const term = search.trim().toLowerCase();
-    if (!term) return combined;
-    return combined.filter((it) => it.code.toLowerCase().includes(term) || it.name.toLowerCase().includes(term));
-  }, [combined, search]);
+    return items.filter((i) => {
+      if (activeTab !== ALL_TAB && i.category_id !== activeTab) return false;
+      if (!term) return true;
+      const text = `${i.oem_code} ${i.positions.map((p) => p.oem_code || '').join(' ')} ${i.description}`.toLowerCase();
+      return text.includes(term);
+    });
+  }, [items, activeTab, search]);
 
-  // ปีกนกที่กำลังเลือก จะพยายามหาคู่ซ้าย-ขวาให้เสมอ — คำนวณใหม่ทุกครั้งที่ wingArms
-  // โหลดใหม่ (กันสต๊อกคงเหลือของคู่ไม่อัปเดตหลังตัดไปแล้วรอบก่อน)
-  const pair = useMemo(() => {
-    if (!selected || selected.type !== 'wing_arm') return null;
-    return findWingArmPair(selected, wingArms);
-  }, [selected, wingArms]);
+  const activeCategory = categories.find((c) => c.id === activeTab) || null;
 
   const selectItem = (item) => {
     setSelected(item);
-    setQty('');
+    setLines(defaultLines(item));
     setBrand('');
     setModel('');
     setTxDate(todayLocalDate());
@@ -184,55 +124,59 @@ export default function StockDeductionPage() {
 
   const resetForm = () => {
     setSelected(null);
-    setQty('');
+    setLines({});
     setBrand('');
     setModel('');
     setNote('');
     setTxDate(todayLocalDate());
   };
 
-  const maxQty = useMemo(() => {
-    if (!selected) return 0;
-    return pair ? Math.min(selected.stock_qty, pair.stock_qty) : selected.stock_qty;
-  }, [selected, pair]);
+  const updateLine = (key, changes) => setLines((prev) => ({ ...prev, [key]: { ...prev[key], ...changes } }));
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setErrorMsg('');
     setSuccessMsg('');
-    const quantity = Number(qty);
     if (!selected) return setErrorMsg('กรุณาเลือกอะไหล่ก่อน');
-    if (!quantity || quantity <= 0) return setErrorMsg('กรุณาระบุจำนวนที่มากกว่า 0');
-    if (quantity > maxQty) return setErrorMsg(`สต๊อกเหลือไม่พอ (คงเหลือสูงสุด ${maxQty})`);
+
+    // ประกอบรายการที่จะตัด + ตรวจจำนวนต่อตำแหน่งไม่เกินยอดคงเหลือ
+    const payloadLines = [];
+    if (selected.positions.length === 0) {
+      const quantity = Number(lines._?.qty);
+      if (!Number.isInteger(quantity) || quantity <= 0) return setErrorMsg('กรุณาระบุจำนวนเต็มที่มากกว่า 0');
+      if (quantity > selected.stock_qty) return setErrorMsg(`สต๊อกเหลือไม่พอ (คงเหลือ ${selected.stock_qty})`);
+      payloadLines.push({ qty: quantity });
+    } else {
+      for (const p of selected.positions) {
+        const line = lines[p.position];
+        if (!line?.checked) continue;
+        const quantity = Number(line.qty);
+        if (!Number.isInteger(quantity) || quantity <= 0) return setErrorMsg(`${positionLabel(p.position)}: กรุณาระบุจำนวนเต็มที่มากกว่า 0`);
+        if (quantity > p.qty) return setErrorMsg(`${positionLabel(p.position)}: สต๊อกเหลือไม่พอ (คงเหลือ ${p.qty})`);
+        payloadLines.push({ position: p.position, qty: quantity });
+      }
+      if (payloadLines.length === 0) return setErrorMsg('กรุณาติ๊กเลือกตำแหน่งที่จะตัดอย่างน้อย 1 ตำแหน่ง');
+    }
     if (!txDate) return setErrorMsg('กรุณาระบุวันที่ตัดสต๊อก');
     if (txDate > todayLocalDate()) return setErrorMsg('เลือกวันที่ในอนาคตไม่ได้');
 
     setSubmitting(true);
     try {
       const modelLabel = models.find((m) => m.model === model)?.label || model;
-      const vehicle_model = brand ? `${brand} ${modelLabel}`.trim() : null;
-      // ส่ง transaction_date ไปด้วยเสมอ — ถ้าเป็นวันนี้ backend จะใช้เวลาปัจจุบันตามปกติ
-      // (ดู resolveTransactionDate.js) เผื่อกรณีของออกวันนี้แต่พนักงานลืมตัด มาตัด
-      // ย้อนหลังทีหลัง จะได้เลือกวันที่จริงที่ของออกแทนวันที่กดตัดจริง
-      if (selected.type === 'rack') {
-        await client.post('/transactions/out', { model_code: selected.code, qty: quantity, note, vehicle_model, transaction_date: txDate });
-      } else if (pair) {
-        const isSelectedLeft = skuSide(selected, pair) === 'left';
-        const leftItem = isSelectedLeft ? selected : pair;
-        const rightItem = isSelectedLeft ? pair : selected;
-        await client.patch('/wing-arms/pair-stock', {
-          left_id: leftItem.id, right_id: rightItem.id, qty: quantity, note, vehicle_model, transaction_date: txDate,
-        });
-      } else {
-        await client.patch(`/wing-arms/${selected.id}/stock`, { delta: -quantity, note, vehicle_model, transaction_date: txDate });
-      }
-      setSuccessMsg(
-        pair
-          ? `ตัดสต๊อก "${selected.name}" (ซ้าย+ขวา) จำนวน ${quantity} คู่ สำเร็จ`
-          : `ตัดสต๊อก "${selected.name}" จำนวน ${quantity} สำเร็จ`
-      );
+      const vehicleModel = brand ? `${brand} ${modelLabel}`.trim() : null;
+      await client.post('/stock-deductions', {
+        item_id: selected.id,
+        lines: payloadLines,
+        vehicle_model: vehicleModel,
+        deduction_date: txDate,
+        note,
+      });
+      const summary = payloadLines
+        .map((l) => (l.position ? `${positionLabel(l.position)} ${l.qty}` : `${l.qty}`))
+        .join(' + ');
+      setSuccessMsg(`ตัดสต๊อก "${selected.description || selected.oem_code}" (${summary}) สำเร็จ`);
       resetForm();
-      loadItems();
+      loadItems({ silent: true });
     } catch (err) {
       setErrorMsg(err.response?.data?.error || 'ตัดสต๊อกไม่สำเร็จ');
     } finally {
@@ -243,13 +187,28 @@ export default function StockDeductionPage() {
   return (
     <div className="office-dashboard container">
       <div className="dashboard-header">
-        <h2>ตัดสต๊อก <span className="dashboard-header-sub">— เบิกอะไหล่ออกจากสต็อก (แร็ค/ปีกนก)</span></h2>
+        <h2>ตัดสต๊อก <span className="dashboard-header-sub">— เบิกอะไหล่ออกจากสต๊อกรวม</span></h2>
+      </div>
+
+      <div className="stock-all-tabs" role="tablist">
+        <button type="button" role="tab" aria-selected={activeTab === ALL_TAB}
+          className={`stock-all-tab${activeTab === ALL_TAB ? ' stock-all-tab--active' : ''}`}
+          onClick={() => setActiveTab(ALL_TAB)}>
+          ทั้งหมด <span className="stock-all-tab-count">{items.length}</span>
+        </button>
+        {categories.map((c) => (
+          <button key={c.id} type="button" role="tab" aria-selected={activeTab === c.id}
+            className={`stock-all-tab${activeTab === c.id ? ' stock-all-tab--active' : ''}`}
+            onClick={() => setActiveTab(c.id)}>
+            {c.name} <span className="stock-all-tab-count">{countsByCategory[c.id] || 0}</span>
+          </button>
+        ))}
       </div>
 
       <div className="search-bar">
         <input
           type="text"
-          placeholder="ค้นหาด้วยรหัสรุ่น/SKU หรือชื่อรายการ..."
+          placeholder={activeCategory ? `ค้นหาในหมวด ${activeCategory.name} (รหัส OEM / รายละเอียด)...` : 'ค้นหาในทุกหมวด (รหัส OEM / รายละเอียด)...'}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
@@ -265,27 +224,41 @@ export default function StockDeductionPage() {
           <table className="rack-table">
             <thead>
               <tr>
-                <th>ประเภท</th>
-                <th>รหัส</th>
-                <th>รายการ</th>
-                <th>สต็อกคงเหลือ</th>
+                {activeTab === ALL_TAB && <th>หมวด</th>}
+                <th>รหัส OEM</th>
+                <th>รายละเอียด</th>
+                <th>คงเหลือ</th>
                 <th></th>
               </tr>
             </thead>
             <tbody>
               {filtered.map((it) => (
-                <tr key={`${it.type}-${it.id}`} className="clickable-row" onClick={() => selectItem(it)}>
-                  <td data-label="ประเภท">{it.type === 'rack' ? 'แร็ค' : 'ปีกนก'}</td>
-                  <td data-label="รหัส">{it.code}</td>
-                  <td data-label="รายการ">{it.name}</td>
-                  <td data-label="สต็อกคงเหลือ">{it.stock_qty}</td>
+                <tr key={it.id} className="clickable-row" onClick={() => selectItem(it)}>
+                  {activeTab === ALL_TAB && <td data-label="หมวด">{it.category_name}</td>}
+                  <td data-label="รหัส OEM">
+                    {it.positions.length === 0 ? <strong>{it.oem_code}</strong> : it.positions.map((p) => (
+                      <div key={p.position} className="stock-all-pos-row">
+                        <PositionChip position={p.position} />
+                        <span className="stock-all-code">{p.oem_code || '—'}</span>
+                      </div>
+                    ))}
+                  </td>
+                  <td data-label="รายละเอียด">{it.description || '—'}</td>
+                  <td data-label="คงเหลือ">
+                    {it.positions.length === 0 ? <strong>{it.stock_qty}</strong> : it.positions.map((p) => (
+                      <div key={p.position} className="stock-all-pos-row">
+                        <PositionChip position={p.position} />
+                        <strong>{p.qty}</strong>
+                      </div>
+                    ))}
+                  </td>
                   <td data-label=""><button type="button" className="btn-primary">เลือก</button></td>
                 </tr>
               ))}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="no-result-text">
-                    {combined.length === 0 ? 'ยังไม่มีรายการอะไหล่ในสต๊อก' : `ไม่พบรายการที่ตรงกับ "${search}"`}
+                  <td colSpan={activeTab === ALL_TAB ? 5 : 4} className="no-result-text">
+                    {items.length === 0 ? 'ยังไม่มีรายการอะไหล่ในสต๊อกรวม' : 'ไม่พบรายการที่ตรงเงื่อนไข'}
                   </td>
                 </tr>
               )}
@@ -294,46 +267,51 @@ export default function StockDeductionPage() {
         </div>
       )}
 
-      {/* เปิดเป็น modal ทับหน้ารายการเดิม — ไม่สลับเนื้อหาทั้งหน้า ปิดแล้วกลับมาเห็น
-          รายการเดิมทันที (search/scroll position ไม่หาย) */}
+      {/* เปิดเป็น modal ทับหน้ารายการเดิม — ปิดแล้วกลับมาเห็นรายการ/คำค้นเดิมทันที */}
       {selected && (
         <div className="modal-backdrop" onClick={resetForm}>
-          <div className="modal-card" style={{ maxWidth: 480 }} onClick={(e) => e.stopPropagation()}>
-            <h3 className="modal-title">📦 ตัดสต๊อก: {selected.name}</h3>
-            <p style={{ marginBottom: 4 }}><strong>รหัส:</strong> {selected.code}</p>
-            <p style={{ marginBottom: selected.type === 'wing_arm' ? 4 : 16 }}>
-              <strong>สต็อกคงเหลือ:</strong> {selected.stock_qty}
-            </p>
-
-            {selected.type === 'wing_arm' && (
-              pair ? (
-                <p style={{ marginBottom: 16, color: '#15803d', fontSize: 14 }}>
-                  ✅ พบคู่: <strong>{pair.code}</strong> ({skuSide(pair, selected) === 'left' ? 'ซ้าย' : 'ขวา'}) สต็อกคงเหลือ {pair.stock_qty} — จะตัดพร้อมกันทั้งคู่
-                </p>
-              ) : (
-                <p style={{ marginBottom: 16, color: '#92400e', fontSize: 14 }}>
-                  ⚠️ ไม่พบคู่ซ้าย-ขวาอัตโนมัติ จะตัดสต๊อกเฉพาะรายการนี้รายการเดียว
-                </p>
-              )
-            )}
+          <div className="modal-card" style={{ maxWidth: 520 }} onClick={(e) => e.stopPropagation()}>
+            <h3 className="modal-title">📦 ตัดสต๊อก: {selected.description || selected.oem_code}</h3>
+            <p style={{ margin: '0 0 12px', color: '#6b7280', fontSize: 13 }}>{selected.category_name}</p>
 
             <form onSubmit={handleSubmit} className="modal-form">
-              <label>จำนวนที่ตัดออก{pair ? ' (ต่อข้าง)' : ''}</label>
-              <input
-                type="number"
-                min="1"
-                max={maxQty}
-                value={qty}
-                onChange={(e) => setQty(e.target.value)}
-                required
-              />
+              {selected.positions.length === 0 ? (
+                <>
+                  <p style={{ margin: 0 }}><strong>รหัส:</strong> {selected.oem_code} · <strong>คงเหลือ:</strong> {selected.stock_qty}</p>
+                  <label>จำนวนที่ตัดออก</label>
+                  <input type="number" min="1" step="1" max={selected.stock_qty} value={lines._?.qty ?? ''}
+                    onChange={(e) => updateLine('_', { qty: e.target.value })} required autoFocus />
+                </>
+              ) : (
+                <>
+                  <label>เลือกตำแหน่งที่จะตัด และจำนวนต่อตำแหน่ง</label>
+                  <div className="ded-pos-list">
+                    {selected.positions.map((p) => {
+                      const line = lines[p.position] || { checked: false, qty: '1' };
+                      return (
+                        <div key={p.position} className={`ded-pos-row${line.checked ? ' is-on' : ''}${p.qty === 0 ? ' is-empty' : ''}`}>
+                          <label className="ded-pos-main">
+                            <input type="checkbox" checked={Boolean(line.checked)} disabled={p.qty === 0}
+                              onChange={(e) => updateLine(p.position, { checked: e.target.checked })} />
+                            <PositionChip position={p.position} />
+                            <span className="stock-all-code">{p.oem_code || '—'}</span>
+                          </label>
+                          <span className="ded-pos-stock">คงเหลือ {p.qty}</span>
+                          <input type="number" min="1" step="1" max={p.qty} value={line.qty}
+                            disabled={!line.checked}
+                            onChange={(e) => updateLine(p.position, { qty: e.target.value })}
+                            aria-label={`จำนวนที่ตัด ${positionLabel(p.position)}`} />
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
 
               <label>ยี่ห้อรถ</label>
               <select value={brand} onChange={(e) => { setBrand(e.target.value); setModel(''); }}>
                 <option value="">-- เลือกยี่ห้อ --</option>
-                {brands.map((b) => (
-                  <option key={b} value={b}>{b}</option>
-                ))}
+                {brands.map((b) => <option key={b} value={b}>{b}</option>)}
               </select>
 
               {brand && (
@@ -341,21 +319,13 @@ export default function StockDeductionPage() {
                   <label>รุ่นรถ</label>
                   <select value={model} onChange={(e) => setModel(e.target.value)}>
                     <option value="">-- เลือกรุ่น --</option>
-                    {models.map((m) => (
-                      <option key={m.model} value={m.model}>{m.label}</option>
-                    ))}
+                    {models.map((m) => <option key={m.model} value={m.model}>{m.label}</option>)}
                   </select>
                 </>
               )}
 
               <label>วันที่ตัดสต๊อก</label>
-              <input
-                type="date"
-                value={txDate}
-                max={todayLocalDate()}
-                onChange={(e) => setTxDate(e.target.value)}
-                required
-              />
+              <input type="date" value={txDate} max={todayLocalDate()} onChange={(e) => setTxDate(e.target.value)} required />
               {txDate !== todayLocalDate() && (
                 <p style={{ margin: '4px 0 0', color: '#92400e', fontSize: 13 }}>
                   ⚠️ กำลังตัดสต๊อกย้อนหลัง — จะถูกบันทึกเป็นวันที่ {txDate}
@@ -363,7 +333,7 @@ export default function StockDeductionPage() {
               )}
 
               <label>หมายเหตุ</label>
-              <input type="text" placeholder="เช่น คิว 12 / ใบเสร็จ IV..." value={note} onChange={(e) => setNote(e.target.value)} />
+              <input type="text" placeholder="เช่น คิว 12 / ใบเสร็จ IV..." value={note} maxLength={255} onChange={(e) => setNote(e.target.value)} />
 
               {errorMsg && <p className="error-text">{errorMsg}</p>}
 
@@ -379,6 +349,7 @@ export default function StockDeductionPage() {
       )}
 
       {successMsg && <p style={{ color: '#15803d', fontWeight: 600, marginTop: 12 }}>✅ {successMsg}</p>}
+      {errorMsg && !selected && <p className="error-text">{errorMsg}</p>}
     </div>
   );
 }

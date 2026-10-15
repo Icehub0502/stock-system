@@ -25,6 +25,7 @@ const authRoutes = require('./routes/auth.routes');
 const rackRoutes = require('./routes/racks.routes');
 const stockItemsRoutes = require('./routes/stockItems.routes');
 const stockReceiveRoutes = require('./routes/stockReceive.routes');
+const stockDeductionsRoutes = require('./routes/stockDeductions.routes');
 const transactionRoutes = require('./routes/backend_transactions.routes');
 const userRoutes = require('./routes/users.routes');
 const productCostRoutes = require('./routes/productCostRoutes');
@@ -131,6 +132,7 @@ function createApp() {
   app.use('/api/racks', rackRoutes);
   app.use('/api/stock-items', stockItemsRoutes);
   app.use('/api/stock-receive', stockReceiveRoutes);
+  app.use('/api/stock-deductions', stockDeductionsRoutes);
   app.use('/api/transactions', transactionRoutes);
   app.use('/api/users', userRoutes);
   app.use('/api/product-costs', productCostRoutes);

@@ -6317,3 +6317,16 @@ td.stock-all-actions button { padding: 8px 14px; font-size: 0.85em; min-height: 
   .scan-row { gap: 8px; padding: 10px; }
   .scan-edit, .scan-del { width: 34px; height: 34px; }
 }
+
+/* หน้าตัดสต๊อก (สต๊อกรวม): แถวเลือกตำแหน่งที่จะตัด + จำนวนต่อตำแหน่ง */
+.ded-pos-list { display: flex; flex-direction: column; gap: 8px; }
+.ded-pos-row {
+  display: grid; grid-template-columns: 1fr auto 90px; gap: 10px; align-items: center;
+  padding: 8px 10px; border: 1px solid #e5e7eb; border-radius: 10px; background: #fff;
+}
+.ded-pos-row.is-on { background: #fef2f2; border-color: #fecaca; }
+.ded-pos-row.is-empty { opacity: 0.5; }
+.ded-pos-main { display: flex; align-items: center; gap: 8px; margin: 0; font-weight: 400; min-width: 0; }
+.ded-pos-main input { width: auto; }
+.ded-pos-stock { font-size: 12px; color: #6b7280; white-space: nowrap; }
+.ded-pos-row input[type="number"] { width: 90px; min-width: 0; }

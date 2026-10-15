@@ -71,11 +71,6 @@ const IconEdit = () => (
     <path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4L16.5 3.5z" />
   </svg>
 );
-const IconPlus = () => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" width="18" height="18">
-    <path d="M12 5v14M5 12h14"/>
-  </svg>
-);
 
 // ─────────────────────────────────────────
 //  STEP CONSTANTS
@@ -239,226 +234,6 @@ function EditQtySheet({ order, onSave, onDelete, onCancel, loading }) {
           <IconTrash /> ลบรายการนี้
         </button>
         <button type="button" className="scan-sheet-cancel" onClick={onCancel}>ปิด</button>
-      </div>
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────
-//  MANUAL ENTRY SHEET — ใช้ตอน QR เสีย/อ่านไม่ออก
-// ─────────────────────────────────────────
-//  ค้นหาอะไหล่ที่มีอยู่แล้วในระบบ (แร็ค + ปีกนก) แล้วเลือกทำรายการได้เหมือนสแกน
-//  ถ้าเป็นของใหม่ที่ยังไม่เคยลงระบบ (เฉพาะโหมดรับเข้า/office) กดเพิ่มเข้าคลังได้เลย
-//  ที่นี่ ไม่ต้องออกไปหน้าจัดการก่อน
-function ManualEntrySheet({ mode, canCreate, onPick, onCancel }) {
-  const [query, setQuery] = useState('');
-  const [racks, setRacks] = useState([]);
-  const [wingArms, setWingArms] = useState([]);
-  const [searching, setSearching] = useState(false);
-  const [creating, setCreating] = useState(false);
-  const [createErr, setCreateErr] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({
-    kind: 'rack', code: '', name: '',
-    position: 'lower', axle: 'front', side: 'left',
-  });
-
-  // แร็คมีไม่มาก โหลดครั้งเดียวแล้วกรองฝั่งหน้าเว็บ (แบบเดียวกับหน้าตัดสต๊อก)
-  useEffect(() => {
-    client.get('/racks').then((res) => setRacks(res.data || [])).catch(() => setRacks([]));
-  }, []);
-
-  // ปีกนกมีเยอะและช่างไม่มีสิทธิ์ดึงรายการเต็ม — ใช้ endpoint ค้นหาแทน
-  useEffect(() => {
-    const term = query.trim();
-    if (term.length < 2) { setWingArms([]); return; }
-    let cancelled = false;
-    setSearching(true);
-    const t = setTimeout(() => {
-      client.get('/wing-arms/search', { params: { q: term } })
-        .then((res) => { if (!cancelled) setWingArms(res.data || []); })
-        .catch(() => { if (!cancelled) setWingArms([]); })
-        .finally(() => { if (!cancelled) setSearching(false); });
-    }, 250);
-    return () => { cancelled = true; clearTimeout(t); };
-  }, [query]);
-
-  const term = query.trim().toLowerCase();
-  const rackHits = term.length < 1 ? [] : racks.filter(
-    (r) => r.model_code?.toLowerCase().includes(term) || r.name?.toLowerCase().includes(term)
-  ).slice(0, 30);
-
-  const results = [
-    ...rackHits.map((r) => ({ kind: 'rack', id: r.id, code: r.model_code, name: r.name, stock_qty: r.stock_qty, min_stock: r.min_stock, raw: r })),
-    ...wingArms.map((w) => ({ kind: 'wing-arm', id: w.id, code: w.sku, name: w.name, stock_qty: w.stock_qty, min_stock: w.min_stock, raw: w })),
-  ];
-
-  const handleCreate = async () => {
-    setCreateErr('');
-    if (!form.code.trim() || !form.name.trim()) {
-      setCreateErr('กรุณากรอกทั้งรหัสและชื่อรายการ');
-      return;
-    }
-    setSaving(true);
-    try {
-      if (form.kind === 'rack') {
-        const res = await client.post('/racks', {
-          model_code: form.code.trim(), name: form.name.trim(), stock_qty: 0, min_stock: 1,
-        });
-        onPick(res.data, 'rack');
-      } else {
-        const res = await client.post('/wing-arms', {
-          sku: form.code.trim(), name: form.name.trim(),
-          position: form.position, axle: form.axle, side: form.side,
-          stock_qty: 0, min_stock: 1,
-        });
-        onPick(res.data, 'wing-arm');
-      }
-    } catch (err) {
-      setCreateErr(err?.response?.data?.error || 'เพิ่มอะไหล่ใหม่ไม่สำเร็จ');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <div style={styles.sheetBackdrop}>
-      <div style={{ ...styles.sheet, maxHeight: '85vh', overflowY: 'auto' }}>
-        <div style={{ width: 36, height: 4, borderRadius: 2, background: '#d1d5db', margin: '0 auto 16px' }} />
-
-        {!creating ? (
-          <>
-            <p style={{ fontSize: 15, fontWeight: 700, color: '#111', marginBottom: 2 }}>กรอกรายการเอง</p>
-            <p style={{ fontSize: 12, color: '#6b7280', marginBottom: 12 }}>
-              ใช้ตอน QR เสียหรือสแกนไม่ติด — ค้นหาด้วยรหัสหรือชื่อรายการ
-            </p>
-
-            <div style={{ position: 'relative', marginBottom: 12 }}>
-              <span style={{ position: 'absolute', left: 12, top: 11, color: '#9ca3af' }}><IconSearch /></span>
-              <input
-                autoFocus
-                type="text"
-                placeholder="พิมพ์รหัส หรือชื่อรายการ..."
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                style={{ ...styles.input, fontFamily: 'inherit', fontWeight: 400, paddingLeft: 38 }}
-              />
-            </div>
-
-            <div style={{ maxHeight: 300, overflowY: 'auto', margin: '0 -4px' }}>
-              {term.length < 1 && (
-                <p style={{ textAlign: 'center', color: '#9ca3af', fontSize: 12, padding: '24px 0' }}>
-                  พิมพ์เพื่อค้นหารายการ
-                </p>
-              )}
-              {term.length >= 1 && results.length === 0 && !searching && (
-                <p style={{ textAlign: 'center', color: '#9ca3af', fontSize: 12, padding: '24px 0' }}>
-                  ไม่พบรายการที่ตรงกับ "{query}"
-                </p>
-              )}
-              {results.map((it) => (
-                <button
-                  key={`${it.kind}-${it.id}`}
-                  style={styles.manualRow}
-                  onClick={() => onPick(it.raw, it.kind)}
-                >
-                  <div style={{ flex: 1, minWidth: 0, textAlign: 'left' }}>
-                    <p style={{ fontFamily: 'monospace', fontSize: 11, color: '#9ca3af', marginBottom: 2 }}>
-                      {it.code} · {it.kind === 'rack' ? 'แร็ค' : 'ปีกนก'}
-                    </p>
-                    <p style={{ fontSize: 13, fontWeight: 500, color: '#111', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      {it.name}
-                    </p>
-                  </div>
-                  <span style={{ fontSize: 12, color: '#6b7280', flexShrink: 0 }}>
-                    เหลือ {it.stock_qty}
-                  </span>
-                </button>
-              ))}
-            </div>
-
-            {canCreate && (
-              <button style={styles.addNewBtn} onClick={() => { setCreating(true); setCreateErr(''); }}>
-                <IconPlus /> เพิ่มอะไหล่ใหม่ที่ยังไม่มีในระบบ
-              </button>
-            )}
-            <button style={styles.cancelLink} onClick={onCancel}>ยกเลิก</button>
-          </>
-        ) : (
-          <>
-            <p style={{ fontSize: 15, fontWeight: 700, color: '#111', marginBottom: 2 }}>เพิ่มอะไหล่ใหม่</p>
-            <p style={{ fontSize: 12, color: '#6b7280', marginBottom: 14 }}>
-              สร้างรายการใหม่เข้าคลัง แล้วรับเข้าสต็อกต่อได้ทันที (เริ่มที่ 0 ชิ้น)
-            </p>
-
-            <label style={styles.fieldLabel}>ประเภท</label>
-            <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-              {[{ v: 'rack', l: 'แร็ค' }, { v: 'wing-arm', l: 'ปีกนก' }].map((o) => (
-                <button
-                  key={o.v}
-                  onClick={() => setForm({ ...form, kind: o.v })}
-                  style={{ ...styles.segBtn, ...(form.kind === o.v ? styles.segBtnActive : {}) }}
-                >
-                  {o.l}
-                </button>
-              ))}
-            </div>
-
-            <label style={styles.fieldLabel}>{form.kind === 'rack' ? 'รหัสรุ่น' : 'รหัส SKU'}</label>
-            <input
-              type="text"
-              placeholder={form.kind === 'rack' ? 'เช่น RTTO5201' : 'เช่น CHCA005L-LA'}
-              value={form.code}
-              onChange={(e) => setForm({ ...form, code: e.target.value })}
-              style={{ ...styles.input, marginBottom: 12 }}
-            />
-
-            <label style={styles.fieldLabel}>ชื่อรายการ</label>
-            <input
-              type="text"
-              placeholder="ชื่อรายการอะไหล่"
-              value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
-              style={{ ...styles.input, fontFamily: 'inherit', fontWeight: 400, marginBottom: 12 }}
-            />
-
-            {form.kind === 'wing-arm' && (
-              <>
-                <label style={styles.fieldLabel}>ตำแหน่ง / เพลา / ด้าน</label>
-                <div style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
-                  {[
-                    { k: 'position', opts: [{ v: 'upper', l: 'บน' }, { v: 'lower', l: 'ล่าง' }] },
-                    { k: 'axle', opts: [{ v: 'front', l: 'หน้า' }, { v: 'rear', l: 'หลัง' }] },
-                    { k: 'side', opts: [{ v: 'left', l: 'ซ้าย' }, { v: 'right', l: 'ขวา' }] },
-                  ].map((g) => (
-                    <div key={g.k} style={{ display: 'flex', gap: 4 }}>
-                      {g.opts.map((o) => (
-                        <button
-                          key={o.v}
-                          onClick={() => setForm({ ...form, [g.k]: o.v })}
-                          style={{ ...styles.segBtn, padding: '7px 12px', ...(form[g.k] === o.v ? styles.segBtnActive : {}) }}
-                        >
-                          {o.l}
-                        </button>
-                      ))}
-                    </div>
-                  ))}
-                </div>
-              </>
-            )}
-
-            {createErr && <p style={styles.errText}>{createErr}</p>}
-
-            <button
-              style={{ ...styles.primaryBtn, marginTop: 6, opacity: saving ? 0.6 : 1 }}
-              onClick={handleCreate}
-              disabled={saving}
-            >
-              {saving ? 'กำลังบันทึก...' : 'เพิ่มแล้วทำรายการต่อ'}
-            </button>
-            <button style={styles.cancelLink} onClick={() => setCreating(false)}>ย้อนกลับ</button>
-          </>
-        )}
       </div>
     </div>
   );
@@ -759,12 +534,6 @@ export default function TechnicianScanPage() {
     setScannedType('stock_item');
   };
 
-  const handleManualPick = (item, type) => {
-    setManualOpen(false);
-    setScannedItem(item);
-    setScannedType(type);
-  };
-
   // ── ลบรายการที่ทำผิด ──
   // รายการรอยืนยัน (ยังไม่บวกสต๊อก) ลบได้เลยไม่มีอะไรต้องคืน ส่วนรายการที่บวกสต๊อกไปแล้วหรือของระบบเดิม
   // backend คืนสต็อกให้เองในทรานแซกชันเดียว (ติดลบไม่ได้)
@@ -777,7 +546,8 @@ export default function TechnicianScanPage() {
     setDeletingId(order.key);
     try {
       if (order.pending) await client.delete(`/stock-receive/lines/${ref}`);
-      else await client.delete(order.type === 'stock_item' ? `/stock-receive/movements/${ref}` : `/transactions/${ref}`);
+      else if (order.type !== 'stock_item') await client.delete(`/transactions/${ref}`); // บิลเก่าของระบบเดิม
+      else await client.delete(mode === 'OUT' ? `/stock-deductions/movements/${ref}` : `/stock-receive/movements/${ref}`);
       setOrders((prev) => prev.filter((o) => o.key !== order.key));
       setToast({
         ok: true,
@@ -847,69 +617,31 @@ export default function TechnicianScanPage() {
     if (!code) return;
     setScanning(false);
 
-    // โหมดรับเข้า = รับเข้าสต๊อกรวมเท่านั้น (ไม่ย้อนไปสต๊อกแบบเก่า) QR คือรหัส OEM ล้วน ๆ
-    if (mode === 'IN') {
-      try {
-        const res = await client.get('/stock-receive/lookup', { params: { code: String(code).trim() } });
-        const found = res.data.matches || [];
-        if (found.length === 1) {
-          handleStockPick(found[0]);
-        } else if (found.length > 1) {
-          setPickMatches(found);
-        } else {
-          setToast({ ok: false, title: 'ไม่พบรหัสนี้ในสต๊อกรวม', body: 'ตรวจสอบว่า QR ถูกต้อง หรือเพิ่มรายการที่หน้าสต๊อกรวมก่อน' });
-          setScanning(true);
-        }
-      } catch (err) {
-        setToast({ ok: false, title: 'ค้นหารหัสไม่สำเร็จ', body: err?.response?.data?.error || '' });
+    // ทั้งรับเข้าและจ่ายออกใช้สต๊อกรวมเท่านั้น (ไม่ย้อนไปตารางเก่า) — ป้าย QR เป็นรหัส OEM ล้วน ๆ หรือ
+    // JSON ของป้ายปีกนกเดิม (backend แกะ sku ให้เอง)
+    try {
+      const res = await client.get('/stock-receive/lookup', { params: { code: String(code).trim() } });
+      const found = res.data.matches || [];
+      if (found.length === 1) {
+        handleStockPick(found[0]);
+      } else if (found.length > 1) {
+        setPickMatches(found);
+      } else {
+        setToast({ ok: false, title: 'ไม่พบรหัสนี้ในสต๊อกรวม', body: 'ตรวจสอบว่า QR ถูกต้อง หรือเพิ่มรายการที่หน้าสต๊อกรวมก่อน' });
         setScanning(true);
       }
-      return;
+    } catch (err) {
+      setToast({ ok: false, title: 'ค้นหารหัสไม่สำเร็จ', body: err?.response?.data?.error || '' });
+      setScanning(true);
     }
-
-    let parsed = code;
-    // QR ของเราเข้ารหัส JSON → parse ก่อน
-    try { parsed = JSON.parse(code); } catch { /* plain text */ }
-
-    // ดึง sku หรือ model_code จาก QR data
-    const sku       = parsed?.sku       || (typeof parsed === 'string' ? parsed : null);
-    const modelCode = parsed?.model_code || null;
-
-    // ลอง rack ก่อน
-    if (modelCode || sku) {
-      const rackKey = modelCode || sku;
-      try {
-        const res = await client.get(`/racks/lookup/${encodeURIComponent(rackKey)}`);
-        setScannedItem(res.data);
-        setScannedType('rack');
-        return;
-      } catch { /* ไม่ใช่ rack */ }
-    }
-
-    // ลอง wing-arm ด้วย sku
-    if (sku) {
-      try {
-        const res = await client.get(`/wing-arms/lookup/${encodeURIComponent(sku)}`);
-        setScannedItem(res.data);
-        setScannedType('wing-arm');
-        return;
-      } catch { /* ไม่ใช่ wing-arm */ }
-    }
-
-    // ไม่เจอเลย
-    setToast({ ok: false, title: 'ไม่พบรหัสนี้', body: 'ตรวจสอบว่า QR ถูกต้อง' });
-    setScanning(true); // เปิดกล้องต่อ
   }, [mode]);
 
   // ── ยืนยันจำนวน ──
   const handleConfirm = async (qty) => {
+    if (!scannedItem) return;
     setConfirmLoading(true);
     try {
-      let remaining;
-
-      let txId = null;
-
-      if (scannedType === 'stock_item') {
+      if (mode === 'IN') {
         // รับเข้าสต๊อกรวม: เก็บเป็น "รายการรอยืนยัน" ของบิลก่อน (ยังไม่บวกสต๊อก) แก้จำนวน/ลบได้
         // — สต๊อกบวกจริงตอนกดเสร็จสิ้น ชิ้น/ตำแหน่งเดิมที่สแกนซ้ำในบิลเดียวกันจะรวมจำนวนในแถวเดิม
         const res = await client.post('/stock-receive/lines', {
@@ -938,47 +670,30 @@ export default function TechnicianScanPage() {
             ? `รวมเป็น ${line.qty} ชิ้น · ยังไม่บวกสต๊อก (กด “เสร็จสิ้น” เพื่อบวก)`
             : `จำนวน ${line.qty} ชิ้น · ยังไม่บวกสต๊อก (กด “เสร็จสิ้น” เพื่อบวก)`,
         });
-        setScannedItem(null);
-        setScannedType(null);
-        setScanning(true); // เปิดกล้องต่อทันที
-        return;
-      } else if (scannedType === 'rack') {
-        const endpoint = mode === 'IN' ? '/transactions/in' : '/transactions/out';
-        const payload  = { model_code: scannedItem.model_code, qty };
-        if (mode === 'IN' && session) payload.receipt_session_id = session.id;
-        const res = await client.post(endpoint, payload);
-        remaining = res.data.rack.stock_qty;
-        txId = res.data.transaction_id ?? null;
       } else {
-        // wing-arm — ต้องส่ง receipt_session_id ไปด้วย ไม่งั้นของหลุดออกจากบิล
-        // (เดิมส่งแค่ note ทำให้ปีกนกไม่โผล่ในหน้ารายละเอียดบิลเลย)
-        const delta = mode === 'IN' ? qty : -qty;
-        const payload = { delta };
-        if (mode === 'IN' && session) {
-          payload.note = `บิล ${session.invoice_no}`;
-          payload.receipt_session_id = session.id;
-        }
-        const res = await client.patch(`/wing-arms/${scannedItem.id}/stock`, payload);
-        remaining = res.data.stock_qty;
-        txId = res.data.transaction_id ?? null;
+        // จ่ายออก: ตัดสต๊อกรวมทันที (ติดลบ/เกินยอดไม่ได้) ยกเลิกได้จากหน้าสรุป
+        const res = await client.post('/stock-deductions', {
+          item_id: scannedItem.item_id,
+          lines: [{ position: scannedItem.position || undefined, qty }],
+        });
+        const label = scannedItem.name;
+        const movementId = res.data.movement_ids?.[0] ?? null;
+        setOrders((prev) => [{
+          key: `deduct-${movementId ?? Date.now()}`,
+          sku: scannedItem.model_code,
+          name: label,
+          qty,
+          txId: movementId,
+          type: 'stock_item',
+          position: scannedItem.position || null,
+        }, ...prev]);
+        const remaining = res.data.items?.[0]?.qty_after;
+        setToast({
+          ok: true,
+          title: `จ่ายออกสำเร็จ — ${label.slice(0, 22)}`,
+          body: `จำนวน ${qty} ชิ้น · คงเหลือ ${remaining} ชิ้น`,
+        });
       }
-
-      const label = scannedItem.name || scannedItem.model_name;
-      const code  = scannedItem.sku  || scannedItem.model_code;
-
-      setOrders(prev => [{
-        key: `legacy-${txId ?? Date.now()}`,
-        sku: code, name: label, qty, txId,
-        type: scannedType, id: scannedItem.id,
-        position: scannedItem.position || null,
-      }, ...prev]);
-
-      setToast({
-        ok: true,
-        title: `${mode === 'IN' ? 'รับเข้า' : 'จ่ายออก'}สำเร็จ — ${label.slice(0, 22)}`,
-        body:  `จำนวน ${qty} ชิ้น · คงเหลือ ${remaining} ชิ้น`,
-      });
-
       setScannedItem(null);
       setScannedType(null);
       setScanning(true); // เปิดกล้องต่อทันที
@@ -1197,16 +912,9 @@ export default function TechnicianScanPage() {
             />
           )}
 
-          {manualOpen && (mode === 'IN' ? (
+          {manualOpen && (
             <StockSearchSheet onPick={handleStockPick} onCancel={() => setManualOpen(false)} />
-          ) : (
-            <ManualEntrySheet
-              mode={mode}
-              canCreate={false}
-              onPick={handleManualPick}
-              onCancel={() => setManualOpen(false)}
-            />
-          ))}
+          )}
 
           {pickMatches && (
             <MatchPickSheet
@@ -1312,68 +1020,3 @@ export default function TechnicianScanPage() {
     </div>
   );
 }
-
-// ─────────────────────────────────────────
-//  STYLES — เฉพาะที่แผง "กรอกเอง" ของโหมดจ่ายออก (ManualEntrySheet) ยังใช้อยู่
-//  ส่วนอื่นของหน้านี้ใช้คลาส scan-* ใน styles/app.css
-// ─────────────────────────────────────────
-const styles = {
-  fieldLabel: {
-    display: 'block', fontSize: 12, fontWeight: 700,
-    color: '#374151', marginBottom: 6,
-  },
-  input: {
-    width: '100%', boxSizing: 'border-box',
-    padding: '11px 12px', fontSize: 15,
-    fontFamily: 'monospace', fontWeight: 600,
-    border: '1.5px solid #e5e7eb', borderRadius: 12,
-    background: '#f9fafb', outline: 'none', color: '#111',
-  },
-  errText: { color: '#dc2626', fontSize: 12, marginTop: 6 },
-  sheetBackdrop: {
-    position: 'fixed', inset: 0, zIndex: 80,
-    background: 'rgba(17,24,39,0.55)',
-    display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
-  },
-  sheet: {
-    background: '#fff', borderRadius: '24px 24px 0 0',
-    padding: '12px 20px calc(22px + env(safe-area-inset-bottom, 0px))',
-    width: '100%', maxWidth: 520,
-  },
-  manualRow: {
-    width: '100%', display: 'flex', alignItems: 'center', gap: 10,
-    padding: '12px 14px', marginBottom: 8,
-    background: '#fff', border: '1px solid #e5e7eb', borderRadius: 14,
-    cursor: 'pointer', minHeight: 'unset',
-  },
-  addNewBtn: {
-    width: '100%', marginTop: 10, padding: '12px',
-    background: '#f0fdf4', border: '1px dashed #86efac',
-    borderRadius: 12, color: '#166534',
-    fontSize: 13, fontWeight: 600, cursor: 'pointer',
-    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-  },
-  segBtn: {
-    flex: 1, padding: '10px 14px', borderRadius: 10,
-    border: '1.5px solid #e5e7eb', background: '#fff',
-    color: '#6b7280', fontSize: 13, fontWeight: 500,
-    cursor: 'pointer', minHeight: 'unset',
-  },
-  segBtnActive: {
-    borderColor: '#111827', background: '#111827', color: '#fff', fontWeight: 700,
-  },
-  primaryBtn: {
-    width: '100%', padding: '14px',
-    background: '#facc15', color: '#111827',
-    border: 'none', borderRadius: 14,
-    fontSize: 15, fontWeight: 800, cursor: 'pointer',
-    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-  },
-  cancelLink: {
-    width: '100%', padding: '12px',
-    background: 'none', border: 'none',
-    color: '#6b7280', fontSize: 14,
-    cursor: 'pointer', marginTop: 4,
-    display: 'block', textAlign: 'center',
-  },
-};

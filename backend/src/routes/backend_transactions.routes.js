@@ -463,7 +463,41 @@ router.get('/deduction-history', requireRole('office'), async (req, res) => {
       WHERE t.type = 'OUT'${dateFilter}
       ORDER BY tx_date DESC, t.created_at DESC
     `, params);
-    res.json({ success: true, data: rows });
+
+    // การตัดสต๊อกของสต๊อกรวม (หน้าตัดสต๊อกใหม่/จ่ายออกที่หน้าสแกน) — วันที่ใช้ moved_at (วันที่ของออกจริง
+    // ตัดย้อนหลังได้) ถ้าไม่มีใช้ created_at; source ให้หน้าเว็บรู้ว่าลบผ่าน /stock-deductions
+    const moveParams = [];
+    let moveFilter = '';
+    if (from) { moveFilter += ' AND COALESCE(m.moved_at, m.created_at) >= ?'; moveParams.push(`${from} 00:00:00`); }
+    if (to) { moveFilter += ' AND COALESCE(m.moved_at, m.created_at) <= ?'; moveParams.push(`${to} 23:59:59`); }
+    const [moves] = await pool.execute(`
+      SELECT m.id, COALESCE(m.moved_at, m.created_at) AS created_at, m.vehicle_model, m.position,
+             (m.qty_before - m.qty_after) AS qty,
+             COALESCE(p.oem_code, i.oem_code) AS part_code,
+             i.description AS part_name, c.name AS category_name
+      FROM stock_item_movements m
+      JOIN stock_items i ON i.id = m.item_id
+      JOIN stock_categories c ON c.id = i.category_id
+      LEFT JOIN stock_item_positions p ON p.item_id = m.item_id AND p.position = m.position
+      WHERE m.reason = 'deduct' AND m.voided_at IS NULL${moveFilter}
+    `, moveParams);
+
+    const data = [
+      ...rows.map((r) => ({ ...r, source: 'legacy' })),
+      ...moves.map((m) => ({
+        id: m.id,
+        created_at: m.created_at,
+        tx_date: String(m.created_at).slice(0, 10),
+        vehicle_model: m.vehicle_model,
+        qty: m.qty,
+        part_code: m.part_code,
+        part_name: m.position ? `${m.part_name} (${positionLabel(m.position)})` : m.part_name,
+        item_type: 'stock_item',
+        category_name: m.category_name,
+        source: 'stock_item',
+      })),
+    ].sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
+    res.json({ success: true, data });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'โหลดรายงานไม่สำเร็จ' });
