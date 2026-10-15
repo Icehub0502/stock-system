@@ -2220,6 +2220,25 @@ button:disabled { background: #f3f4f6; color: #9ca3af; cursor: not-allowed; }
 .pay-chip-credit   { background: #ede9fe; border-color: #c4b5fd; color: #6d28d9; }
 .pay-chip-cash     { background: #dcfce7; border-color: #86efac; color: #15803d; }
 .pay-chip-qr       { background: #ffedd5; border-color: #fdba74; color: #c2410c; }
+.pay-chip-gsb      { background: #fce7f3; border-color: #f9a8d4; color: #be185d; }
+.pay-chip-click    { background: #dbeafe; border-color: #93c5fd; color: #1d4ed8; }
+.pay-chip-jpm      { background: #ccfbf1; border-color: #5eead4; color: #0f766e; }
+.pay-chip-other    { background: #f3f4f6; border-color: #d1d5db; color: #4b5563; }
+
+/* ── Payment breakdown cards (dashboard / daily+monthly summary) ── */
+.pay-breakdown { margin-bottom: 16px; }
+.pay-breakdown-title { font-size: 0.85rem; font-weight: 700; color: #374151; margin-bottom: 8px; }
+.pay-breakdown-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+.pay-breakdown-card { border: 1px solid; border-radius: 10px; padding: 10px 14px; }
+.pay-breakdown-label { font-size: 0.8rem; font-weight: 700; }
+.pay-breakdown-value { font-size: 1.15rem; font-weight: 800; margin-top: 2px; }
+.pay-breakdown-count { font-size: 0.75rem; opacity: 0.8; }
+.pay-breakdown-compact { margin-bottom: 0; }
+.pay-breakdown-compact .pay-breakdown-grid { gap: 6px; }
+.pay-breakdown-compact .pay-breakdown-card { padding: 4px 10px; display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.pay-breakdown-compact .pay-breakdown-value { font-size: 0.85rem; margin-top: 0; }
+.pay-breakdown-compact .pay-breakdown-count { display: none; }
+.pay-breakdown-row > td { background: #fafafa; padding: 10px 12px; }
 
 .daily-summary-total-banner {
   display: flex;

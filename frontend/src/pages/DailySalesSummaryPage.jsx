@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import client from "../api/client";
 import DailySummaryDetailModal from "../components/DailySummaryDetailModal";
+import PaymentBreakdown from "../components/PaymentBreakdown";
+import { methodsFromObject } from "../utils/paymentMethods";
 
 const THAI_MONTHS = [
   'มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
@@ -41,6 +43,7 @@ export default function DailySalesSummaryPage() {
   // เดือนที่ "เปิดแฟ้ม" อยู่ — ค่าเริ่มต้นคือเดือนปัจจุบันเดือนเดียว เดือนเก่ากว่านั้น
   // พับเก็บไว้เหมือนแฟ้มเอกสาร กดหัวเดือนเพื่อเปิดดูรายวันข้างในทีหลังได้
   const [expandedMonths, setExpandedMonths] = useState(null);
+  // วันที่กางดูยอดแยกช่องทางชำระอยู่ (กดที่แถววันที่ = เปิดรายละเอียดบิล ส่วนแถบยอดแสดงใต้แถวเสมอ)
 
   const fetchSummary = async () => {
     try {
@@ -158,17 +161,33 @@ export default function DailySalesSummaryPage() {
                         </td>
                         <td colSpan={2} className="amount">฿{formatBaht(month.total_revenue)}</td>
                       </tr>
-                      {isOpen && days.map((row) => (
-                        <tr
-                          key={row.date}
-                          className="clickable-row"
-                          onClick={() => setSelectedDate(row.date)}
-                        >
-                          <td data-label="วันที่"><strong>{formatDateTh(row.date)}</strong></td>
-                          <td data-label="จำนวนบิล">{Number(row.bill_count).toLocaleString('en-US')}</td>
-                          <td data-label="จำนวนลูกค้า">{Number(row.customer_count).toLocaleString('en-US')}</td>
-                          <td className="amount" data-label="ยอดขายรวม">฿{formatBaht(row.total_revenue)}</td>
+                      {isOpen && (
+                        <tr className="pay-breakdown-row">
+                          <td colSpan={4}>
+                            <PaymentBreakdown
+                              title={`ยอดเข้าบัญชี/ช่องทาง ประจำเดือน${formatMonthTh(month.month)}`}
+                              items={methodsFromObject(month.by_method)}
+                            />
+                          </td>
                         </tr>
+                      )}
+                      {isOpen && days.map((row) => (
+                        <React.Fragment key={row.date}>
+                          <tr
+                            className="clickable-row"
+                            onClick={() => setSelectedDate(row.date)}
+                          >
+                            <td data-label="วันที่"><strong>{formatDateTh(row.date)}</strong></td>
+                            <td data-label="จำนวนบิล">{Number(row.bill_count).toLocaleString('en-US')}</td>
+                            <td data-label="จำนวนลูกค้า">{Number(row.customer_count).toLocaleString('en-US')}</td>
+                            <td className="amount" data-label="ยอดขายรวม">฿{formatBaht(row.total_revenue)}</td>
+                          </tr>
+                          <tr className="pay-breakdown-row pay-breakdown-row-day">
+                            <td colSpan={4}>
+                              <PaymentBreakdown items={methodsFromObject(row.by_method)} compact />
+                            </td>
+                          </tr>
+                        </React.Fragment>
                       ))}
                     </React.Fragment>
                   );

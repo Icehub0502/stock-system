@@ -107,6 +107,8 @@ const OPTIONAL_LABELS = {
 // บางตัวมีวงเล็บจริง ๆ ในข้อความ (เช่น "ช่องทางการชำระ (โอน/บัตรเครดิต/เงินสด/QRCode)")
 // ถ้าไม่ escape วงเล็บจะกลายเป็น capturing group เพิ่ม ทำให้ index ของ match[1]/match[2]
 // เพี้ยนไปหมด
+const { normalizePaymentMethod } = require('./paymentMethods');
+
 function escapeRegExp(str) {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
@@ -129,6 +131,8 @@ const PAYMENT_LABELS = {
   // ต้องเขียนตัวที่มีวงเล็บไว้ก่อนตัวเปล่าเสมอ (⚠️ กติกาเดียวกับ OPTIONAL_LABELS
   // ด้านบน) ไม่งั้น "ช่องทางการชำระ" เปล่าจะแมตช์ก่อนแล้วเหลือ " (โอน/...):ค่า" ติด
   // มากับ value ที่พาร์สได้
+  'ช่องทางการชำระ (ออมสิน/คลิก/JPM/เงินสด/บัตรเครดิต)': 'payment_method',
+  // เทมเพลตเวอร์ชันเก่าที่พนักงานยังคัดลอกใช้อยู่ — ยังอ่านได้
   'ช่องทางการชำระ (โอน/บัตรเครดิต/เงินสด/QRCode)': 'payment_method',
   ช่องทางการชำระ: 'payment_method',
   'ลูกค้าชำระเงิน (ยอดที่ได้รับจริง)': 'paid_amount',
@@ -193,19 +197,6 @@ function parseThaiShortDate(value) {
 function todayStr() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-}
-
-// ปรับ "ช่องทางการชำระ:" ให้ตรงกับตัวเลือกใน select ของหน้าสรุปยอดประจำวันเป๊ะ ๆ
-// (DailySummaryDetailModal.jsx: ['โอน','บัตรเครดิต','เงินสด','QRCode']) — พนักงานพิมพ์
-// "QRcode"/"qrcode"/"QR" มาก็ต้องกลายเป็น "QRCode" ตัวใหญ่-เล็กแบบนี้เป๊ะ ไม่งั้น select
-// ฝั่งหน้าเว็บจะไม่มีตัวเลือกไหนตรง กลายเป็นแสดงว่างเปล่า ค่าที่ไม่รู้จักคงข้อความเดิม
-// ไว้ตามที่พิมพ์มา ให้หน้างานแก้เองทีหลังในแอปได้
-function normalizePaymentMethod(raw) {
-  const value = raw.trim();
-  if (!value) return null;
-  const compact = value.toLowerCase().replace(/\s+/g, '');
-  if (compact === 'qrcode' || compact === 'qr') return 'QRCode';
-  return value;
 }
 
 // แปลงค่าดิบหลัง label หนึ่งตัวของ PAYMENT_LABELS ให้เป็นค่าที่พร้อมเก็บลง result —

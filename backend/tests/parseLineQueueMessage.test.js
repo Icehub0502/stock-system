@@ -549,13 +549,13 @@ describe('parseLineQueueMessage', () => {
       expect(afterDivider.payment_method).toBe('โอน');
     });
 
-    test('ช่องทางการชำระ QRcode/qrcode/QR → normalize เป็น QRCode เป๊ะ', () => {
-      const variants = ['QRcode', 'qrcode', 'QR', 'qr code'];
-      for (const variant of variants) {
+    test('ช่องทางการชำระ → normalize เป็นชื่อมาตรฐานของร้านเป๊ะ', () => {
+      const variants = { ออมสิน: 'ออมสิน', GSB: 'ออมสิน', คลิก: 'คลิก', jpm: 'JPM', 'J P M': 'JPM', เงินสด: 'เงินสด', บัตรเครดิต: 'บัตรเครดิต', credit: 'บัตรเครดิต' };
+      for (const [variant, expected] of Object.entries(variants)) {
         const parsed = parseLineQueueMessage(
           `คิว 3\nชื่อ:คุณอี\nรายการ:\n<--สิ้นสุดรายการ-->\nช่องทางการชำระ:${variant}`
         );
-        expect(parsed.payment_method).toBe('QRCode');
+        expect(parsed.payment_method).toBe(expected);
       }
     });
 

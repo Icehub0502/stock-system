@@ -2,13 +2,8 @@ import React, { useEffect, useRef, useState } from "react";
 import client from "../api/client";
 import TechnicianMultiSelect from "./TechnicianMultiSelect";
 
-const PAYMENT_METHODS = ['โอน', 'บัตรเครดิต', 'เงินสด', 'QRCode'];
-const PAYMENT_METHOD_CLASS = {
-  'โอน': 'pay-chip-transfer',
-  'บัตรเครดิต': 'pay-chip-credit',
-  'เงินสด': 'pay-chip-cash',
-  'QRCode': 'pay-chip-qr',
-};
+import PaymentBreakdown from "./PaymentBreakdown";
+import { PAYMENT_METHODS, PAYMENT_METHOD_CLASS, summarizeByMethod } from "../utils/paymentMethods";
 
 function formatDateTh(dateStr) {
   const d = new Date(dateStr);
@@ -336,6 +331,7 @@ export default function DailySummaryDetailModal({ date, onClose, onReceiptsMoved
 
             <div ref={captureRef} className="daily-summary-capture-area">
             <div className="daily-summary-capture-title">สรุปยอดขายประจำวันที่ {formatDateTh(date)}</div>
+            <PaymentBreakdown items={summarizeByMethod(receipts)} />
             <div className="quotation-table-wrap">
               <table className="quotation-table">
                 <thead>
@@ -389,6 +385,9 @@ export default function DailySummaryDetailModal({ date, onClose, onReceiptsMoved
                           onChange={(e) => handlePaymentMethodChange(r.id, e.target.value)}
                         >
                           <option value="">-- เลือก --</option>
+                          {r.payment_method && !PAYMENT_METHODS.includes(r.payment_method) && (
+                            <option value={r.payment_method}>{r.payment_method}</option>
+                          )}
                           {PAYMENT_METHODS.map((method) => (
                             <option key={method} value={method}>{method}</option>
                           ))}

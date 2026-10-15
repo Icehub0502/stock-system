@@ -361,6 +361,25 @@ router.get('/top-customers', async (req, res) => {
   }
 });
 
+// รวมยอดแยกตามช่องทางชำระ → { [period]: { [method]: { bill_count, total } } }
+// period = สตริงวัน/เดือนจาก SQL; บิลที่ยังไม่ระบุช่องทางนับเป็น "ไม่ระบุ"
+async function loadMethodBreakdown(periodExpr) {
+  const [rows] = await pool.execute(
+    `SELECT ${periodExpr} AS period,
+            COALESCE(NULLIF(TRIM(payment_method), ''), 'ไม่ระบุ') AS method,
+            COUNT(*) AS bill_count,
+            SUM(total_amount) AS total
+     FROM receipts
+     GROUP BY period, method`
+  );
+  const out = {};
+  for (const r of rows) {
+    if (!out[r.period]) out[r.period] = {};
+    out[r.period][r.method] = { bill_count: Number(r.bill_count), total: Number(r.total || 0) };
+  }
+  return out;
+}
+
 router.get('/daily-summary', async (req, res) => {
   try {
     // ไม่ใส่ LIMIT อีกต่อไป — หน้าสรุปยอดฝั่งเว็บเก็บเดือนเก่าไว้เป็น "แฟ้ม" ย้อนหลัง
@@ -374,7 +393,14 @@ router.get('/daily-summary', async (req, res) => {
        GROUP BY DATE(receipt_date)
        ORDER BY date DESC`
     );
-    res.json({ success: true, data: rows });
+    const breakdown = await loadMethodBreakdown("DATE_FORMAT(receipt_date, '%Y-%m-%d')");
+    const data = rows.map((r) => {
+      const key = r.date instanceof Date
+        ? `${r.date.getFullYear()}-${String(r.date.getMonth() + 1).padStart(2, '0')}-${String(r.date.getDate()).padStart(2, '0')}`
+        : String(r.date).slice(0, 10);
+      return { ...r, by_method: breakdown[key] || {} };
+    });
+    res.json({ success: true, data });
   } catch (err) {
     console.error('Error loading daily summary:', err);
     res.status(500).json({ error: 'โหลดสรุปยอดรายวันไม่สำเร็จ' });
@@ -396,7 +422,9 @@ router.get('/monthly-summary', async (req, res) => {
        GROUP BY DATE_FORMAT(receipt_date, '%Y-%m-01')
        ORDER BY month DESC`
     );
-    res.json({ success: true, data: rows });
+    const breakdown = await loadMethodBreakdown("DATE_FORMAT(receipt_date, '%Y-%m-01')");
+    const data = rows.map((r) => ({ ...r, by_method: breakdown[String(r.month).slice(0, 10)] || {} }));
+    res.json({ success: true, data });
   } catch (err) {
     console.error('Error loading monthly summary:', err);
     res.status(500).json({ error: 'โหลดสรุปยอดรายเดือนไม่สำเร็จ' });

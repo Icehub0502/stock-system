@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import client from "../api/client";
+import PaymentBreakdown from "../components/PaymentBreakdown";
+import { methodsFromObject, mergeByMethod } from "../utils/paymentMethods";
 
 function todayStr() {
   const d = new Date();
@@ -56,6 +58,8 @@ const QUICK_LINKS = [
 export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [todaySummary, setTodaySummary] = useState({ bill_count: 0, customer_count: 0, total_revenue: 0 });
+  const [todayMethods, setTodayMethods] = useState([]);
+  const [monthMethods, setMonthMethods] = useState([]);
   const [lowStockCount, setLowStockCount] = useState(0);
   const [lowStockItems, setLowStockItems] = useState([]);
   const [topProducts, setTopProducts] = useState([]);
@@ -89,6 +93,11 @@ export default function DashboardPage() {
         customer_count: Number(todayRow?.customer_count ?? 0),
         total_revenue: Number(todayRow?.total_revenue ?? 0),
       });
+
+      setTodayMethods(methodsFromObject(todayRow?.by_method));
+      setMonthMethods(methodsFromObject(mergeByMethod(
+        dailyRows.filter((r) => String(r.date).slice(0, 7) === today.slice(0, 7)).map((r) => r.by_method)
+      )));
 
       setRevenueTrend(buildTrendDays(dailyRows, 14));
 
@@ -154,6 +163,9 @@ export default function DashboardPage() {
               <div className="dash-stat-value">{lowStockCount.toLocaleString('en-US')}</div>
             </div>
           </div>
+
+          <PaymentBreakdown title="ยอดวันนี้ แยกตามช่องทางชำระ" items={todayMethods} />
+          <PaymentBreakdown title="ยอดเดือนนี้ แยกตามช่องทางชำระ" items={monthMethods} />
 
           {/* ── Today's scheduled appointments — surfaced prominently so staff
               can't miss a customer who's due in today ── */}

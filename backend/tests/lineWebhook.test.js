@@ -1077,11 +1077,11 @@ describe('POST /api/line/webhook', () => {
       expect(text).toContain('<--สิ้นสุดรายการ-->');
       expect(text).toContain('วันนัดหมาย:');
       expect(text).toContain('<--ลูกค้าชำระเงิน-->');
-      expect(text).toContain('ช่องทางการชำระ (โอน/บัตรเครดิต/เงินสด/QRCode):');
+      expect(text).toContain('ช่องทางการชำระ (ออมสิน/คลิก/JPM/เงินสด/บัตรเครดิต):');
       expect(text).toContain('ลูกค้าชำระเงิน (ยอดที่ได้รับจริง):');
       // วันนัดหมาย ต้องอยู่ก่อนเส้นแบ่งที่สอง ซึ่งอยู่ก่อนช่องทางการชำระ (ลำดับตกลงกับเจ้าของร้าน)
       expect(text.indexOf('วันนัดหมาย:')).toBeLessThan(text.indexOf('<--ลูกค้าชำระเงิน-->'));
-      expect(text.indexOf('<--ลูกค้าชำระเงิน-->')).toBeLessThan(text.indexOf('ช่องทางการชำระ (โอน/บัตรเครดิต/เงินสด/QRCode):'));
+      expect(text.indexOf('<--ลูกค้าชำระเงิน-->')).toBeLessThan(text.indexOf('ช่องทางการชำระ (ออมสิน/คลิก/JPM/เงินสด/บัตรเครดิต):'));
     });
 
     test('พิมพ์ "คิว" ซ้ำ (message id เดิม) → ไม่ตอบซ้ำ/ไม่มีผลข้างเคียงเพิ่ม', async () => {
@@ -1204,7 +1204,7 @@ describe('POST /api/line/webhook', () => {
       expect(Number(receipt.total_amount)).toBe(10000); // มัดจำ 6000 + จ่ายปิดบิล 4000 = 10000
     });
 
-    test('ช่องทางการชำระ "QRcode" (พิมพ์ผิดตัวใหญ่เล็ก) → normalize เป็น "QRCode" ลงใบเสร็จ ตรงกับ select ฝั่งหน้าเว็บ', async () => {
+    test('ช่องทางการชำระ "jpm" (พิมพ์ตัวเล็ก) → normalize เป็น "JPM" ลงใบเสร็จ ตรงกับ select ฝั่งหน้าเว็บ', async () => {
       const uniq = Date.now().toString().slice(-7);
       const phone = `064${uniq}`;
       const queueNo = `4${uniq}`;
@@ -1214,7 +1214,7 @@ describe('POST /api/line/webhook', () => {
         phone,
         plate: `3กง${uniq.slice(0, 4)}`,
         items: [{ name: 'ค่าแรง', price: 1000 }],
-        payment: { paidAmount: 1000, method: 'QRcode', confirm: true },
+        payment: { paidAmount: 1000, method: 'jpm', confirm: true },
       });
 
       const res = await postWebhook(eventsBody([messageEvent(text, `msg-tmpl-qr-${uniq}`)]));
@@ -1223,7 +1223,7 @@ describe('POST /api/line/webhook', () => {
       const [[quotation]] = await pool.query('SELECT converted_receipt_id, customer_id FROM quotations WHERE quotation_no = ?', [res.body.created[0]]);
       createdCustomerIds.push(quotation.customer_id);
       const [[receipt]] = await pool.query('SELECT payment_method FROM receipts WHERE id = ?', [quotation.converted_receipt_id]);
-      expect(receipt.payment_method).toBe('QRCode');
+      expect(receipt.payment_method).toBe('JPM');
     });
 
     test('วลีแจ้งจ่ายเงินแล้วมาแต่ไม่มีรายการสินค้าเลย → ไม่สร้างใบเสร็จ ไม่ปิดบิล (ไม่มี closed_at)', async () => {
