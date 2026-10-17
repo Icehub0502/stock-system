@@ -19,6 +19,7 @@ const { emitQuotationEvent, emitReceiptEvent, emitJobEvent } = require('../realt
 const { generateJobNo } = require('../utils/generateJobNo');
 const { syncJobOnQuotationStatusChange } = require('../utils/jobQuotationSync');
 const { LINE_MESSAGE_DEFAULTS } = require('../utils/lineMessageDefaults');
+const { applyReceiptSplits, parseSplitsFromText } = require('../utils/paymentMethods');
 
 const router = express.Router();
 
@@ -928,6 +929,7 @@ async function createQuotationFromQueue(parsed) {
             'UPDATE receipts SET payment_method = ?, total_amount = ? WHERE id = ?',
             [parsed.payment_method || null, paymentAmount, receiptId]
           );
+          await applyReceiptSplits(conn, receiptId, parseSplitsFromText(parsed.payment_method), paymentAmount, { strict: false });
           const [[receiptRow]] = await conn.query('SELECT receipt_no FROM receipts WHERE id = ?', [receiptId]);
           paymentReceiptNo = receiptRow ? receiptRow.receipt_no : null;
           await conn.execute('UPDATE quotations SET closed_at = NOW() WHERE id = ?', [quotationId]);
@@ -950,6 +952,7 @@ async function createQuotationFromQueue(parsed) {
             [receipt_no, customerId, vehicleId, parsed.mileage ?? 0, parsed.remark || null, parsed.payment_method || null, paymentAmount, null, parsed.deposit_amount ?? null, parsed.deposit_date || null, car_sequence_no]
           );
           const receiptId = receiptResult.insertId;
+          await applyReceiptSplits(conn, receiptId, parseSplitsFromText(parsed.payment_method), paymentAmount, { strict: false });
           for (const item of resolvedItems) {
             await conn.execute(
               `INSERT INTO receipt_items (receipt_id, service_item_id, product_name_snapshot, qty, price, amount, warranty_name, warranty_year, warranty_month, warranty_km)
@@ -1174,6 +1177,7 @@ async function closeQuotationByQueue(parsed) {
         'UPDATE receipts SET payment_method = ?, total_amount = ?, deposit_amount = ?, deposit_date = ? WHERE id = ?',
         [parsed.payment_method || null, receiptAmount, quotation.deposit_amount, quotation.deposit_date, receiptId]
       );
+      await applyReceiptSplits(conn, receiptId, parseSplitsFromText(parsed.payment_method), receiptAmount, { strict: false });
       const [[receiptRow]] = await conn.query('SELECT receipt_no FROM receipts WHERE id = ?', [receiptId]);
       receipt_no = receiptRow ? receiptRow.receipt_no : null;
     } else {
@@ -1187,6 +1191,7 @@ async function closeQuotationByQueue(parsed) {
         [receipt_no, quotation.customer_id, quotation.vehicle_id, 0, null, parsed.payment_method || null, receiptAmount, null, quotation.deposit_amount, quotation.deposit_date, car_sequence_no]
       );
       receiptId = receiptResult.insertId;
+      await applyReceiptSplits(conn, receiptId, parseSplitsFromText(parsed.payment_method), receiptAmount, { strict: false });
       for (const item of items) {
         await conn.execute(
           `INSERT INTO receipt_items (receipt_id, service_item_id, product_name_snapshot, qty, price, amount, warranty_name, warranty_year, warranty_month, warranty_km)

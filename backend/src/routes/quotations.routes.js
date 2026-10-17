@@ -5,6 +5,7 @@ const { formatPhone } = require('../utils/parseLineQueueMessage');
 const { computeReceiptAmount } = require('./lineWebhook.routes');
 const { emitQuotationEvent, emitReceiptEvent, emitJobEvent } = require('../realtime');
 const { syncJobOnQuotationStatusChange } = require('../utils/jobQuotationSync');
+const { applyReceiptSplits } = require('../utils/paymentMethods');
 
 // ทำให้ตรงรูปแบบเดียวกับที่ customers.routes.js ใช้ กันเบอร์ที่พิมพ์ไม่มีขีดตรงนี้
 // ไปหลุดจากการค้นหาของบอทไลน์ (lineWebhook.routes.js เทียบแบบ phone = ? ตรง ๆ)
@@ -746,7 +747,7 @@ router.patch('/:id/approve', async (req, res) => {
 // เสมอ — endpoint นี้ทำหน้าที่เดียวกับปิดบิลผ่านไลน์ แต่เรียกจากเว็บตรง ๆ
 router.patch('/:id/close', async (req, res) => {
   const { id } = req.params;
-  const { payment_method, paid_amount } = req.body || {};
+  const { payment_method, paid_amount, payment_splits } = req.body || {};
 
   let conn;
   try {
@@ -781,6 +782,16 @@ router.patch('/:id/close', async (req, res) => {
       'UPDATE receipts SET payment_method = ?, total_amount = ? WHERE id = ?',
       [payment_method || null, receiptAmount, quotation.converted_receipt_id]
     );
+    // จ่ายหลายช่องทาง: [{ method, amount }] ≥ 2 ช่อง — ยอดรวมต้องเท่ายอดที่รับจริง ไม่งั้น 400
+    if (Array.isArray(payment_splits)) {
+      const splits = payment_splits.map((s) => ({
+        method: String(s?.method ?? ''),
+        amount: s?.amount === '' || s?.amount == null ? null : Number(s.amount),
+      }));
+      await applyReceiptSplits(conn, quotation.converted_receipt_id, splits, receiptAmount);
+    } else {
+      await applyReceiptSplits(conn, quotation.converted_receipt_id, [], receiptAmount);
+    }
     await conn.execute('UPDATE quotations SET closed_at = NOW() WHERE id = ?', [id]);
 
     await conn.commit();
@@ -793,6 +804,7 @@ router.patch('/:id/close', async (req, res) => {
     if (conn) {
       try { await conn.rollback(); } catch (rollbackErr) { console.error('Rollback error:', rollbackErr); }
     }
+    if (err.status === 400) return res.status(400).json({ error: err.message });
     console.error('Error closing quotation:', err);
     res.status(500).json({ error: 'ปิดบิลไม่สำเร็จ' });
   } finally {

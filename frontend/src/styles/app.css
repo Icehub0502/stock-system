@@ -6349,3 +6349,92 @@ td.stock-all-actions button { padding: 8px 14px; font-size: 0.85em; min-height: 
 .ded-pos-main input { width: auto; }
 .ded-pos-stock { font-size: 12px; color: #6b7280; white-space: nowrap; }
 .ded-pos-row input[type="number"] { width: 90px; min-width: 0; }
+
+/* ── Daily summary modal (DailySummaryDetailModal) — roomy, clean layout ── */
+.modal-card.ds-modal { max-width: min(1560px, 96vw); width: 96vw; padding: 24px 28px 28px; }
+.ds-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 18px; }
+.ds-header h2, .ds-header h3 { margin: 0; font-size: 1.3rem; color: #111827; }
+.ds-sub { margin: 4px 0 0; font-size: 0.85rem; color: #6b7280; }
+.ds-toolbar { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 18px; padding: 10px 14px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 12px; }
+.ds-toolbar-group { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.ds-selected-count { font-size: 0.85rem; font-weight: 600; color: #4f46e5; }
+.ds-capture { padding: 4px; }
+.ds-stats { display: grid; grid-template-columns: 1fr 1fr 2fr; gap: 12px; margin-bottom: 16px; }
+.ds-stat { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 14px 18px; display: flex; flex-direction: column; gap: 2px; }
+.ds-stat span { font-size: 0.8rem; color: #6b7280; font-weight: 600; }
+.ds-stat strong { font-size: 1.5rem; color: #111827; }
+.ds-stat-total { background: #111; border-color: #111; }
+.ds-stat-total span { color: #d1d5db; }
+.ds-stat-total strong { color: #fff; }
+.ds-table-wrap { margin-top: 6px; border: 1px solid #e5e7eb; border-radius: 12px; overflow-x: auto; background: #fff; }
+.ds-table { width: 100%; border-collapse: separate; border-spacing: 0; min-width: 1180px; }
+.ds-table th { text-align: left; font-size: 0.78rem; font-weight: 700; letter-spacing: 0.02em; color: #6b7280; background: #f9fafb; padding: 12px 14px; border-bottom: 1px solid #e5e7eb; white-space: nowrap; }
+.ds-table td { padding: 16px 14px; vertical-align: top; border-bottom: 1px solid #f0f1f3; font-size: 0.92rem; color: #374151; background: #fff; }
+.ds-table tbody tr:last-child td { border-bottom: none; }
+.ds-table tbody tr:hover td { background: #fafafa; }
+.ds-table tbody tr.is-selected-row td { background: #eef2ff; }
+.ds-col-check { width: 44px; text-align: center !important; }
+.ds-col-check input { width: 17px; height: 17px; cursor: pointer; }
+.ds-col-no { width: 40px; color: #9ca3af; }
+.ds-col-detail { min-width: 240px; max-width: 320px; }
+.ds-col-pay { min-width: 190px; }
+.ds-col-amount { min-width: 150px; text-align: right; }
+.ds-col-tech { min-width: 150px; }
+.ds-col-remark { min-width: 190px; }
+.ds-col-actions { width: 56px; }
+.ds-main { font-weight: 700; color: #111827; line-height: 1.35; }
+.ds-subtext { font-size: 0.78rem; color: #9ca3af; margin-top: 3px; }
+.ds-detail-text { line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.ds-pay-btn { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; width: 100%; min-height: 40px; padding: 6px 8px; background: #fff; border: 1px dashed #d1d5db; border-radius: 10px; cursor: pointer; text-align: left; }
+.ds-pay-btn:hover { border-color: #6366f1; background: #f5f7ff; }
+.ds-pay-empty { color: #6366f1; font-size: 0.85rem; font-weight: 600; }
+.ds-edit-hint { margin-left: auto; color: #9ca3af; font-size: 0.85rem; }
+.ds-pay-chip { display: inline-flex; align-items: baseline; gap: 6px; padding: 3px 10px; border: 1px solid; border-radius: 999px; font-size: 0.82rem; font-weight: 700; }
+.ds-pay-chip em { font-style: normal; font-weight: 600; opacity: 0.85; }
+.ds-delete-btn { padding: 6px 12px; background: #fff; border: 1px solid #fecaca; color: #dc2626; border-radius: 8px; font-size: 0.8rem; cursor: pointer; }
+.ds-delete-btn:hover { background: #fef2f2; }
+.ds-table .daily-summary-amount-input { width: 120px; }
+.ds-table .daily-summary-remark-input { min-height: 56px; }
+.ds-pay-backdrop { z-index: 1100; }
+.ds-pay-modal { max-width: 520px; padding: 24px; }
+
+@media (max-width: 760px) {
+  .modal-card.ds-modal { padding: 16px 14px 20px; }
+  .ds-stats { grid-template-columns: 1fr 1fr; }
+  .ds-stat-total { grid-column: 1 / -1; }
+  .ds-table-wrap { border: none; overflow: visible; background: transparent; }
+  .ds-table { min-width: 0; display: block; }
+  .ds-table thead { display: none; }
+  .ds-table tbody { display: grid; gap: 12px; }
+  .ds-table tr { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 12px; padding: 14px; background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; }
+  .ds-table td { display: block; padding: 0; border: none; background: transparent !important; }
+  .ds-table td::before { content: attr(data-label); display: block; font-size: 0.72rem; font-weight: 700; color: #9ca3af; margin-bottom: 3px; }
+  .ds-table td.ds-col-check, .ds-table td.ds-col-no { display: none; }
+  .ds-table td.ds-col-detail, .ds-table td.ds-col-pay, .ds-table td.ds-col-remark, .ds-table td.ds-col-actions, .ds-table td.ds-col-amount, .ds-table td.ds-col-tech { grid-column: 1 / -1; max-width: none; text-align: left; }
+  .ds-table td.ds-col-check { display: block; grid-column: 1 / -1; }
+  .ds-table td.ds-col-actions::before { display: none; }
+  .ds-table .daily-summary-amount-edit { justify-content: flex-start; }
+}
+
+/* ── Multi-channel payment selector (PaymentSplitEditor) ── */
+.pay-split-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.pay-split-chip { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border: 1px solid; border-radius: 999px; font-weight: 700; font-size: 0.9rem; cursor: pointer; opacity: 0.55; background: #fff; }
+.pay-split-chip.is-on { opacity: 1; box-shadow: 0 0 0 2px currentColor inset; }
+.pay-split-check { display: inline-block; width: 14px; text-align: center; }
+.pay-split-hint { margin-top: 10px; font-size: 0.82rem; color: #6b7280; }
+.pay-split-amounts { margin-top: 12px; display: grid; gap: 8px; }
+.pay-split-amount-row { display: grid; grid-template-columns: 110px 1fr auto; align-items: center; gap: 10px; font-weight: 600; }
+.pay-split-amount-row input { min-height: 40px; padding: 6px 10px; border: 1px solid #d1d5db; border-radius: 8px; text-align: right; font-size: 1rem; }
+.pay-split-unit { color: #6b7280; font-weight: 500; font-size: 0.85rem; }
+.pay-split-status { font-size: 0.85rem; font-weight: 600; padding: 8px 12px; border-radius: 8px; }
+.pay-split-status.is-ok { background: #ecfdf5; color: #047857; }
+.pay-split-status.is-bad { background: #fef2f2; color: #b91c1c; }
+
+/* ── AddJobModal: หลายคันในฟอร์มเดียว ── */
+.ajm-car + .ajm-car { margin-top: 18px; padding-top: 18px; border-top: 2px dashed #e5e7eb; }
+.ajm-car-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; font-size: 1rem; color: #111827; }
+.ajm-car-remove { background: none; border: none; color: #dc2626; font-size: 0.85rem; cursor: pointer; }
+.ajm-queue-auto { margin: 10px 0 0; font-size: 0.82rem; color: #6b7280; }
+.ajm-add-car { width: 100%; margin-top: 16px; padding: 12px; border: 2px dashed #a5b4fc; border-radius: 12px; background: #f5f7ff; color: #4f46e5; font-weight: 700; font-size: 0.95rem; cursor: pointer; }
+.ajm-add-car:hover { background: #eef2ff; }
+.ajm-car { display: flex; flex-direction: column; gap: 6px; }

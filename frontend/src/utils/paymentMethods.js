@@ -15,12 +15,19 @@ export const UNSPECIFIED_METHOD = 'ไม่ระบุ';
 // ตามด้วยค่าอื่นที่เหลือ (บิลเก่าที่เป็น "โอน"/"QRCode") และ "ไม่ระบุ" ท้ายสุด
 export function summarizeByMethod(receipts) {
   const map = new Map();
-  for (const r of receipts) {
-    const key = r.payment_method || UNSPECIFIED_METHOD;
+  const add = (key, amount) => {
     const cur = map.get(key) || { method: key, bill_count: 0, total: 0 };
     cur.bill_count += 1;
-    cur.total += Number(r.total_amount || 0);
+    cur.total += Number(amount || 0);
     map.set(key, cur);
+  };
+  for (const r of receipts) {
+    // บิลที่แบ่งจ่ายหลายช่องทางนับยอดตามที่แบ่งไว้ ส่วนบิลช่องทางเดียวใช้ยอดบิลทั้งก้อน
+    if (Array.isArray(r.payments) && r.payments.length > 0) {
+      for (const p of r.payments) add(p.method, p.amount);
+    } else {
+      add(r.payment_method || UNSPECIFIED_METHOD, r.total_amount);
+    }
   }
   return orderMethods(Array.from(map.values()));
 }

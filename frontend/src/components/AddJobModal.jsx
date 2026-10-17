@@ -15,6 +15,9 @@ import { resizePhotos, describePhotoFailures, IMAGE_ACCEPT } from '../utils/resi
  * ครบในหน้าเดียวตามตัวอย่างที่เจ้าของร้านให้มา (คิว/วันที่/ชื่อ/เบอร์/ยี่ห้อ/รุ่น/
  * ทะเบียน/สี/เลขไมล์/อาการ) ยี่ห้อ-รุ่นที่พิมพ์ใหม่ (ไม่มีในแคตตาล็อก) จะถูกเพิ่ม
  * เข้า vehicle_models ให้อัตโนมัติตอนบันทึก เพื่อให้ครั้งหน้าเด้งเป็นตัวเลือกได้เลย
+ *
+ * เพิ่มได้ทีละหลายคัน (ปุ่ม "+ เพิ่มอีกคัน") — แต่ละคันมีฟอร์มของตัวเอง กดบันทึกครั้งเดียว
+ * สร้างคิวทุกคันต่อเนื่องกัน ลูกค้าคนเดียวกัน (ชื่อ+เบอร์ตรงกัน) ใช้ลูกค้ารายเดียว ไม่สร้างซ้ำ
  */
 // prefill: ใช้ตอนกด "สร้างคิว" จากใบเสนอราคาเดิมในหน้านัดหมาย (ลูกค้ามัดจำ/นัดวันไว้
 // แล้ว วันนัดถึงแล้วมาทำจริง) — เติมข้อมูลลูกค้า/รถ/อาการจากใบเดิมให้ทันที ไม่ต้อง
@@ -22,68 +25,63 @@ import { resizePhotos, describePhotoFailures, IMAGE_ACCEPT } from '../utils/resi
 // มาอยู่แล้ว (เป็นรถเดิม) ดังนั้น matchedVehicle ด้านล่างจะ resolve เจอเองตามปกติ
 // โดยไม่ต้องเขียน branch แยก — quotation_id ต้องส่งต่อไปกับ POST /jobs ด้วยเพื่อผูก
 // งานใหม่เข้ากับใบเสนอราคาเดิมตั้งแต่ตอนสร้าง (กันสร้างใบเสนอราคาซ้ำซ้อน)
-export default function AddJobModal({ onClose, onCreated, prefill = null }) {
-  const [vehicles, setVehicles] = useState([]);
-  const [brands, setBrands] = useState([]);
+// โหมด prefill เป็นคันเดียวเสมอ (ผูกกับใบเสนอราคาใบเดียว) จึงไม่มีปุ่มเพิ่มอีกคัน
+
+let carKeySeq = 0;
+function newCar(overrides = {}) {
+  carKeySeq += 1;
+  return {
+    key: carKeySeq,
+    plate: '', customerName: '', phone: '', brand: '', model: '', color: '',
+    year: '', mileage: '', symptom: '', photos: [], photosBusy: false,
+    openQuotation: null, pullIn: false,
+    ...overrides,
+  };
+}
+
+function findVehicle(vehicles, plate) {
+  const upper = plate.trim().toUpperCase();
+  return upper ? vehicles.find((v) => (v.license_plate || '').trim().toUpperCase() === upper) : null;
+}
+
+// ฟอร์มของรถหนึ่งคัน (controlled — state อยู่ที่ AddJobModal) มี effect ค้นข้อมูลรถเดิม/ใบเสนอราคาค้างของตัวเอง
+function CarForm({
+  car, index, total, vehicles, brands, prefill, onChange, onRemove,
+  queueNo, onQueueNoChange, setError,
+}) {
   const [models, setModels] = useState([]);
-  const [loadingVehicles, setLoadingVehicles] = useState(true);
-
-  const [queueNo, setQueueNo] = useState('');
-  const [plate, setPlate] = useState(prefill?.license_plate || '');
-  const [customerName, setCustomerName] = useState(prefill?.customer_name || '');
-  const [customerPhone, setCustomerPhone] = useState(prefill?.phone || '');
-  const [brand, setBrand] = useState(prefill?.brand || '');
-  const [model, setModel] = useState(prefill?.model || '');
-  const [color, setColor] = useState(prefill?.color || '');
-  const [mileage, setMileage] = useState(prefill?.mileage ? String(prefill.mileage) : '');
-  const [symptom, setSymptom] = useState(prefill?.symptom || '');
-  const [photos, setPhotos] = useState([]);
-  const [photosBusy, setPhotosBusy] = useState(false);
-
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState('');
-
-  // ใบเสนอราคาเดิมที่ยังเปิดอยู่ของรถคันนี้ (ไม่จำกัดวันที่ ต่างจากการจับคู่อัตโนมัติ
-  // ตอนบันทึกที่จำกัดแค่วันเดียวกัน) — เจอทะเบียนแล้วเช็คว่ามีใบค้างไว้ไหม (เช่นคุยไว้
-  // ทางไลน์เมื่อวาน มีรายการ/มัดจำอยู่แล้ว) ให้พนักงานเลือกดึงเข้ามาผูกกับคิววันนี้ได้
-  // เอง แทนที่จะพึ่งการจับคู่อัตโนมัติ/พิมพ์ไลน์ซ้ำ (เคยเจอปัญหาไลน์ทับรายการเดิมมาแล้ว)
-  const [openQuotation, setOpenQuotation] = useState(null);
-  const [pullInQuotation, setPullInQuotation] = useState(false);
+  const matchedVehicle = useMemo(() => findVehicle(vehicles, car.plate), [vehicles, car.plate]);
 
   useEffect(() => {
-    client.get('/vehicles').then((res) => setVehicles(res.data.data || [])).finally(() => setLoadingVehicles(false));
-    client.get('/vehicle-models/brands').then((res) => setBrands(res.data.data || []));
-    client.get('/jobs/next-queue-no').then((res) => setQueueNo(res.data.queue_no || ''));
-  }, []);
-
-  useEffect(() => {
-    if (!brand.trim()) { setModels([]); return; }
-    client.get('/vehicle-models/models', { params: { brand: brand.trim() } }).then((res) => setModels(res.data.data || []));
-  }, [brand]);
-
-  const plateUpper = plate.trim().toUpperCase();
-  const matchedVehicle = useMemo(
-    () => plateUpper ? vehicles.find((v) => (v.license_plate || '').trim().toUpperCase() === plateUpper) : null,
-    [vehicles, plateUpper]
-  );
+    if (!car.brand.trim()) { setModels([]); return; }
+    client.get('/vehicle-models/models', { params: { brand: car.brand.trim() } }).then((res) => setModels(res.data.data || []));
+  }, [car.brand]);
 
   // เจอทะเบียนเดิม — เติมข้อมูลลูกค้า/รถให้อัตโนมัติเหมือนเดิม (พนักงานยังแก้ต่อ
   // ได้ทุกช่อง เผื่อเปลี่ยนเบอร์/สี ฯลฯ) ไม่ทับค่าที่พิมพ์เองไปแล้วถ้าทะเบียนไม่ตรง
   useEffect(() => {
     if (!matchedVehicle) return;
-    setCustomerName(matchedVehicle.customer_name || '');
-    setBrand(matchedVehicle.brand || '');
-    setModel(matchedVehicle.model || '');
-    setColor(matchedVehicle.color || '');
+    onChange({
+      customerName: matchedVehicle.customer_name || '',
+      brand: matchedVehicle.brand || '',
+      model: matchedVehicle.model || '',
+      color: matchedVehicle.color || '',
+      year: matchedVehicle.year ? String(matchedVehicle.year) : '',
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [matchedVehicle]);
 
+  // ใบเสนอราคาเดิมที่ยังเปิดอยู่ของรถคันนี้ (ไม่จำกัดวันที่ ต่างจากการจับคู่อัตโนมัติ
+  // ตอนบันทึกที่จำกัดแค่วันเดียวกัน) — เจอทะเบียนแล้วเช็คว่ามีใบค้างไว้ไหม (เช่นคุยไว้
+  // ทางไลน์เมื่อวาน มีรายการ/มัดจำอยู่แล้ว) ให้พนักงานเลือกดึงเข้ามาผูกกับคิววันนี้ได้
+  // เอง แทนที่จะพึ่งการจับคู่อัตโนมัติ/พิมพ์ไลน์ซ้ำ (เคยเจอปัญหาไลน์ทับรายการเดิมมาแล้ว)
   useEffect(() => {
-    setOpenQuotation(null);
-    setPullInQuotation(false);
+    onChange({ openQuotation: null, pullIn: false });
     if (!matchedVehicle) return;
     client.get(`/vehicles/${matchedVehicle.id}/open-quotation`)
-      .then((res) => setOpenQuotation(res.data.data))
+      .then((res) => onChange({ openQuotation: res.data.data }))
       .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [matchedVehicle]);
 
   // อัปโหลดกี่รูปก็ได้ — ทั้งถ่ายจากกล้อง (input capture="environment") และเลือก
@@ -93,201 +91,345 @@ export default function AddJobModal({ onClose, onCreated, prefill = null }) {
     const files = Array.from(e.target.files || []);
     e.target.value = '';
     if (files.length === 0) return;
-    setPhotosBusy(true);
+    onChange({ photosBusy: true });
     try {
       // รูปรถตอนรับเข้า — ลูกค้าเปิดดูและเซฟรูปเองได้จากหน้าประวัติ (/track) ใช้ขนาด/
       // คุณภาพสูงกว่าค่าเริ่มต้นของฟังก์ชัน (ซึ่งตั้งไว้สำหรับรูปการ์ดอะไหล่เล็ก ๆ)
       // กันรูปแตกตอนลูกค้าเซฟไปดูจริง — เก็บรูปย่อเล็กจริง ๆ คู่กันไปด้วย (thumb) ให้
       // GET /jobs ใช้โชว์บนการ์ดรายการงานวันนี้แทนรูปเต็ม 1280px (เดิมโหลดหนักทั้งวัน)
       const { photos: resized, failed } = await resizePhotos(files);
-      if (resized.length > 0) setPhotos((prev) => [...prev, ...resized]);
+      if (resized.length > 0) onChange({ photos: [...car.photos, ...resized] });
       if (failed.length > 0) setError(describePhotoFailures(failed));
     } catch {
       setError('เพิ่มรูปไม่สำเร็จ ลองใหม่อีกครั้ง');
     } finally {
-      setPhotosBusy(false);
+      onChange({ photosBusy: false });
     }
   }
 
   function removePhoto(idx) {
-    setPhotos((prev) => prev.filter((_, i) => i !== idx));
+    onChange({ photos: car.photos.filter((_, i) => i !== idx) });
   }
 
   // สลับตำแหน่งรูป — เลขที่โชว์บนรูปคือลำดับ (รูปที่ 1 คือรูปปกที่จะโชว์บนการ์ด
   // หน้ารายการงานวันนี้ ดู photo_thumb ที่ GET /jobs)
   function movePhoto(idx, dir) {
-    setPhotos((prev) => {
-      const target = idx + dir;
-      if (target < 0 || target >= prev.length) return prev;
-      const next = [...prev];
-      [next[idx], next[target]] = [next[target], next[idx]];
-      return next;
+    const target = idx + dir;
+    if (target < 0 || target >= car.photos.length) return;
+    const next = [...car.photos];
+    [next[idx], next[target]] = [next[target], next[idx]];
+    onChange({ photos: next });
+  }
+
+  const idp = `ajm-${car.key}`;
+  return (
+    <section className="ajm-car">
+      {total > 1 && (
+        <div className="ajm-car-head">
+          <strong>คันที่ {index + 1}</strong>
+          {onRemove && (
+            <button type="button" className="ajm-car-remove" onClick={onRemove}>✕ เอาคันนี้ออก</button>
+          )}
+        </div>
+      )}
+
+      {index === 0 && prefill && (
+        <p style={{ margin: '0 0 12px', color: '#15803d', fontSize: 13 }}>
+          ✅ เติมข้อมูลจากใบเสนอราคา {prefill.quotation_no} ให้แล้ว แก้ไขได้ตามจริง
+        </p>
+      )}
+
+      {!prefill && car.openQuotation && (
+        <div style={{ margin: '0 0 12px', padding: 10, borderRadius: 8, background: '#fffbeb', border: '1px solid #fde68a' }}>
+          <p style={{ margin: 0, fontSize: 13 }}>
+            📋 รถคันนี้มีใบเสนอราคาเดิมค้างอยู่ <strong>{car.openQuotation.quotation_no}</strong> วันที่{' '}
+            {formatDateTh(car.openQuotation.quotation_date)} — ฿{Number(car.openQuotation.total_amount).toLocaleString('th-TH')}
+            {car.openQuotation.deposit_amount > 0 && ` (มัดจำแล้ว ฿${Number(car.openQuotation.deposit_amount).toLocaleString('th-TH')})`}
+          </p>
+          <label style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 6, fontSize: 13 }}>
+            <input
+              type="checkbox" checked={car.pullIn}
+              onChange={(e) => {
+                onChange({
+                  pullIn: e.target.checked,
+                  ...(e.target.checked && !car.symptom.trim() && car.openQuotation.symptom ? { symptom: car.openQuotation.symptom } : {}),
+                });
+              }}
+            />
+            ดึงใบเสนอราคานี้เข้ามาใช้กับคิวนี้เลย (รายการเดิมจะติดมาด้วย ไม่ต้องพิมพ์ใหม่)
+          </label>
+        </div>
+      )}
+
+      <label>ทะเบียนรถ</label>
+      <input
+        type="text" placeholder="เช่น กข1234" value={car.plate}
+        onChange={(e) => onChange({ plate: e.target.value })} autoFocus={index === 0}
+      />
+      {matchedVehicle && (
+        <p style={{ margin: '4px 0 8px', color: '#15803d', fontSize: 13 }}>✅ พบรถเดิม — เติมข้อมูลให้แล้ว แก้ไขได้ตามจริง</p>
+      )}
+
+      <label>ชื่อลูกค้า</label>
+      <input type="text" value={car.customerName} onChange={(e) => onChange({ customerName: e.target.value })} />
+
+      <label>เบอร์โทรศัพท์</label>
+      <input type="text" value={car.phone} onChange={(e) => onChange({ phone: e.target.value })} />
+
+      <label>ยี่ห้อรถ</label>
+      <input
+        type="text" list={`${idp}-brands`} value={car.brand}
+        onChange={(e) => onChange({ brand: e.target.value, model: '' })}
+      />
+      <datalist id={`${idp}-brands`}>
+        {brands.map((b) => <option key={b} value={b} />)}
+      </datalist>
+
+      <label>รุ่นรถ</label>
+      <input type="text" list={`${idp}-models`} value={car.model} onChange={(e) => onChange({ model: e.target.value })} />
+      <datalist id={`${idp}-models`}>
+        {models.map((m) => <option key={m.model} value={m.model} />)}
+      </datalist>
+
+      <label>สีรถ</label>
+      <input type="text" value={car.color} onChange={(e) => onChange({ color: e.target.value })} />
+
+      <label>ปีรถ (ไม่บังคับ — ใส่ไว้ช่วยจับคู่อะไหล่ตามรุ่นให้แม่นขึ้น)</label>
+      <input type="number" min="1990" max="2100" placeholder="เช่น 2015" value={car.year} onChange={(e) => onChange({ year: e.target.value })} />
+
+      <label>เลขไมล์</label>
+      <input type="number" min="0" value={car.mileage} onChange={(e) => onChange({ mileage: e.target.value })} />
+
+      {index === 0 ? (
+        <>
+          <label>เลขคิว</label>
+          <input type="text" value={queueNo} onChange={(e) => onQueueNoChange(e.target.value)} />
+        </>
+      ) : (
+        <p className="ajm-queue-auto">เลขคิวของคันนี้ระบบจะรันต่อจากคันก่อนหน้าให้อัตโนมัติ</p>
+      )}
+
+      <label>อาการ</label>
+      <textarea rows={3} value={car.symptom} onChange={(e) => onChange({ symptom: e.target.value })} />
+
+      <label>รูปรถ</label>
+      <div className="job-photo-picker">
+        {car.photos.map((photo, idx) => (
+          <div className="job-photo-thumb" key={idx}>
+            <span className="job-photo-num">{idx + 1}</span>
+            <img src={photo.full} alt="" />
+            <div className="job-photo-thumb-actions">
+              <button type="button" onClick={() => movePhoto(idx, -1)} disabled={idx === 0}>◀</button>
+              <button type="button" onClick={() => removePhoto(idx)}>✕</button>
+              <button type="button" onClick={() => movePhoto(idx, 1)} disabled={idx === car.photos.length - 1}>▶</button>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="job-photo-add-row">
+        <label className="btn job-photo-add-btn">
+          📷 ถ่ายรูป
+          <input type="file" accept={IMAGE_ACCEPT} capture="environment" multiple hidden onChange={handleFilesSelected} />
+        </label>
+        <label className="btn job-photo-add-btn">
+          🖼️ เลือกรูป
+          <input type="file" accept={IMAGE_ACCEPT} multiple hidden onChange={handleFilesSelected} />
+        </label>
+        {car.photosBusy && <span style={{ fontSize: 13, color: '#6b7280' }}>กำลังย่อรูป...</span>}
+      </div>
+    </section>
+  );
+}
+
+export default function AddJobModal({ onClose, onCreated, prefill = null }) {
+  const [vehicles, setVehicles] = useState([]);
+  const [brands, setBrands] = useState([]);
+  const [loadingVehicles, setLoadingVehicles] = useState(true);
+  const [queueNo, setQueueNo] = useState('');
+  const [cars, setCars] = useState(() => [newCar({
+    plate: prefill?.license_plate || '',
+    customerName: prefill?.customer_name || '',
+    phone: prefill?.phone || '',
+    brand: prefill?.brand || '',
+    model: prefill?.model || '',
+    color: prefill?.color || '',
+    year: prefill?.year ? String(prefill.year) : '',
+    mileage: prefill?.mileage ? String(prefill.mileage) : '',
+    symptom: prefill?.symptom || '',
+  })]);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+  // id งานแรกที่สร้างสำเร็จแล้วในรอบที่บางคันผิดพลาด — ปิดฟอร์มแล้วต้องรีเฟรชรายการด้วย
+  const [partialJobId, setPartialJobId] = useState(null);
+
+  useEffect(() => {
+    client.get('/vehicles').then((res) => setVehicles(res.data.data || [])).finally(() => setLoadingVehicles(false));
+    client.get('/vehicle-models/brands').then((res) => setBrands(res.data.data || []));
+    client.get('/jobs/next-queue-no').then((res) => setQueueNo(res.data.queue_no || ''));
+  }, []);
+
+  const updateCar = (key, patch) => {
+    setCars((prev) => prev.map((c) => (c.key === key ? { ...c, ...patch } : c)));
+  };
+
+  // คันถัดไปเติมชื่อ/เบอร์ลูกค้าจากคันก่อนหน้าให้ (เจ้าของมักพามาหลายคัน) แก้ได้ทุกช่อง
+  const addCar = () => {
+    setCars((prev) => {
+      const last = prev[prev.length - 1];
+      return [...prev, newCar({ customerName: last.customerName, phone: last.phone })];
     });
+  };
+
+  const removeCar = (key) => setCars((prev) => prev.filter((c) => c.key !== key));
+
+  // สร้างลูกค้า/รถ (ถ้ายังไม่มี) แล้วสร้างคิวของรถหนึ่งคัน — คืน id ของงานที่สร้าง
+  // customerCache: ลูกค้าที่สร้างไปแล้วในรอบเดียวกัน (ชื่อ+เบอร์ตรงกัน) ใช้ซ้ำ ไม่สร้างลูกค้าซ้ำ
+  async function createOneJob(car, isFirst, customerCache) {
+    const plateUpper = car.plate.trim().toUpperCase();
+    const matchedVehicle = findVehicle(vehicles, car.plate);
+    // ยังไม่มี matchedVehicle (เช่น /vehicles ยังโหลดไม่เสร็จตอนกดบันทึกเร็วมาก)
+    // แต่ทะเบียนยังตรงกับที่ prefill มา — ใช้ id จาก prefill ไปก่อนได้เลย เพราะเป็น
+    // รถ/ลูกค้าเดิมของใบเสนอราคานั้นอยู่แล้วแน่นอน
+    const prefillStillMatches = isFirst && prefill && plateUpper === (prefill.license_plate || '').trim().toUpperCase();
+    let vehicleId = matchedVehicle?.id || (prefillStillMatches ? prefill.vehicle_id : undefined);
+    let customerId = matchedVehicle?.customer_id || (prefillStillMatches ? prefill.customer_id : undefined);
+    const name = car.customerName.trim();
+    const phone = car.phone.trim();
+
+    if (!vehicleId) {
+      const cacheKey = `${name}|${phone}`;
+      if (customerCache.has(cacheKey)) {
+        customerId = customerCache.get(cacheKey);
+      } else {
+        const custRes = await client.post('/customers', { customer_name: name, phone });
+        customerId = custRes.data.data.id;
+        customerCache.set(cacheKey, customerId);
+      }
+
+      // ยี่ห้อ/รุ่นที่พิมพ์มาไม่มีในแคตตาล็อก — เพิ่มเข้าไปเลย (ไม่บล็อกถ้าพลาด
+      // ยังสร้างรถ/รับเข้าคิวต่อได้ปกติ แค่ครั้งหน้าจะไม่เด้งเป็นตัวเลือกให้)
+      const brand = car.brand.trim();
+      const model = car.model.trim();
+      const brandKnown = brands.includes(brand);
+      let modelKnown = false;
+      if (brandKnown) {
+        const res = await client.get('/vehicle-models/models', { params: { brand } }).catch(() => null);
+        modelKnown = !!res?.data?.data?.some((m) => m.model === model);
+      }
+      if (!brandKnown || !modelKnown) {
+        await client.post('/vehicle-models', { brand, model }).catch(() => {});
+      }
+
+      const vehRes = await client.post('/vehicles', {
+        customer_id: customerId, brand, model,
+        color: car.color.trim(), license_plate: plateUpper, mileage: Number(car.mileage) || 0,
+        year: Number(car.year) || null,
+      });
+      vehicleId = vehRes.data.data.id;
+    } else if (name !== (matchedVehicle?.customer_name ?? prefill?.customer_name)) {
+      // แก้ชื่อลูกค้าตรงนี้ก่อนบันทึก (พิมพ์ทับค่าที่เติมมาให้อัตโนมัติ) — อัปเดต
+      // ลูกค้าเดิมไปด้วยเลย กันข้อมูลไม่ตรงกันระหว่างตารางลูกค้ากับที่กรอกจริง
+      await client.put(`/customers/${customerId}`, { customer_name: name, phone }).catch(() => {});
+    }
+
+    const res = await client.post('/jobs', {
+      vehicle_id: vehicleId,
+      customer_id: customerId,
+      // คันแรกใช้เลขคิวที่เห็นในฟอร์ม คันถัดไปไม่ส่ง — เซิร์ฟเวอร์รันเลขถัดไปที่ว่างให้เอง
+      queue_no: isFirst ? queueNo : undefined,
+      mileage_in: Number(car.mileage) || null,
+      symptom: car.symptom.trim(),
+      photos: car.photos,
+      quotation_id: (car.pullIn && car.openQuotation) ? car.openQuotation.id : (isFirst ? prefill?.quotation_id || null : null),
+    });
+    return res.data.id;
   }
 
   async function handleSubmit(e) {
     e.preventDefault();
     setError('');
-    if (!customerName.trim()) return setError('กรุณากรอกชื่อลูกค้า');
-    if (!plateUpper) return setError('กรุณากรอกทะเบียนรถ');
-    if (!brand.trim() || !model.trim()) return setError('กรุณากรอกยี่ห้อและรุ่นรถ');
+
+    // ตรวจทุกคันก่อนสร้างจริง — ผิดคันไหนแจ้งเลขคันนั้นและยังไม่สร้างอะไรเลย
+    const seenPlates = new Set();
+    for (let i = 0; i < cars.length; i += 1) {
+      const c = cars[i];
+      const label = cars.length > 1 ? `คันที่ ${i + 1}: ` : '';
+      const plate = c.plate.trim().toUpperCase();
+      if (!c.customerName.trim()) return setError(`${label}กรุณากรอกชื่อลูกค้า`);
+      if (!plate) return setError(`${label}กรุณากรอกทะเบียนรถ`);
+      if (seenPlates.has(plate)) return setError(`${label}ทะเบียน ${plate} ซ้ำกับคันก่อนหน้าในรอบนี้`);
+      seenPlates.add(plate);
+      if (!c.brand.trim() || !c.model.trim()) return setError(`${label}กรุณากรอกยี่ห้อและรุ่นรถ`);
+    }
 
     setSubmitting(true);
+    const customerCache = new Map();
+    const createdKeys = [];
+    let firstJobId = null;
     try {
-      // ยังไม่มี matchedVehicle (เช่น /vehicles ยังโหลดไม่เสร็จตอนกดบันทึกเร็วมาก)
-      // แต่ทะเบียนยังตรงกับที่ prefill มา — ใช้ id จาก prefill ไปก่อนได้เลย เพราะเป็น
-      // รถ/ลูกค้าเดิมของใบเสนอราคานั้นอยู่แล้วแน่นอน
-      const prefillStillMatches = prefill && plateUpper === (prefill.license_plate || '').trim().toUpperCase();
-      let vehicleId = matchedVehicle?.id || (prefillStillMatches ? prefill.vehicle_id : undefined);
-      let customerId = matchedVehicle?.customer_id || (prefillStillMatches ? prefill.customer_id : undefined);
-
-      if (!vehicleId) {
-        const custRes = await client.post('/customers', { customer_name: customerName.trim(), phone: customerPhone.trim() });
-        customerId = custRes.data.data.id;
-
-        // ยี่ห้อ/รุ่นที่พิมพ์มาไม่มีในแคตตาล็อก — เพิ่มเข้าไปเลย (ไม่บล็อกถ้าพลาด
-        // ยังสร้างรถ/รับเข้าคิวต่อได้ปกติ แค่ครั้งหน้าจะไม่เด้งเป็นตัวเลือกให้)
-        const brandKnown = brands.includes(brand.trim());
-        const modelKnown = models.some((m) => m.model === model.trim());
-        if (!brandKnown || !modelKnown) {
-          await client.post('/vehicle-models', { brand: brand.trim(), model: model.trim() }).catch(() => {});
-        }
-
-        const vehRes = await client.post('/vehicles', {
-          customer_id: customerId, brand: brand.trim(), model: model.trim(),
-          color: color.trim(), license_plate: plateUpper, mileage: Number(mileage) || 0,
-        });
-        vehicleId = vehRes.data.data.id;
-      } else if (customerName.trim() !== (matchedVehicle?.customer_name ?? prefill?.customer_name)) {
-        // แก้ชื่อลูกค้าตรงนี้ก่อนบันทึก (พิมพ์ทับค่าที่เติมมาให้อัตโนมัติ) — อัปเดต
-        // ลูกค้าเดิมไปด้วยเลย กันข้อมูลไม่ตรงกันระหว่างตารางลูกค้ากับที่กรอกจริง
-        await client.put(`/customers/${customerId}`, { customer_name: customerName.trim(), phone: customerPhone.trim() }).catch(() => {});
+      for (let i = 0; i < cars.length; i += 1) {
+        const jobId = await createOneJob(cars[i], i === 0, customerCache);
+        if (firstJobId === null) firstJobId = jobId;
+        createdKeys.push(cars[i].key);
       }
-
-      const res = await client.post('/jobs', {
-        vehicle_id: vehicleId,
-        customer_id: customerId,
-        queue_no: queueNo,
-        mileage_in: Number(mileage) || null,
-        symptom: symptom.trim(),
-        photos,
-        quotation_id: (pullInQuotation && openQuotation) ? openQuotation.id : (prefill?.quotation_id || null),
-      });
-
-      onCreated(res.data.id);
+      onCreated(firstJobId);
     } catch (err) {
-      setError(err.response?.data?.error || 'เพิ่มคิวไม่สำเร็จ');
+      const msg = err.response?.data?.error || 'เพิ่มคิวไม่สำเร็จ';
+      if (createdKeys.length > 0) {
+        // เอาคันที่สร้างสำเร็จแล้วออกจากฟอร์ม กันกดบันทึกซ้ำแล้วได้คิวซ้ำ
+        setCars((prev) => prev.filter((c) => !createdKeys.includes(c.key)));
+        setError(`สร้างคิวสำเร็จแล้ว ${createdKeys.length} คัน แต่คันถัดไปผิดพลาด: ${msg} (คันที่สร้างแล้วถูกเอาออกจากฟอร์มแล้ว แก้แล้วกดบันทึกอีกครั้ง)`);
+        setPartialJobId(firstJobId);
+      } else {
+        setError(msg);
+      }
     } finally {
       setSubmitting(false);
     }
   }
 
+  const multi = cars.length > 1;
+  // ปิดฟอร์มหลังสร้างได้บางคันแล้ว → ใช้ onCreated เพื่อรีเฟรชรายการงาน (ซึ่งปิดฟอร์มให้ด้วย)
+  const handleClose = () => (partialJobId !== null ? onCreated(partialJobId) : onClose());
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal-card" style={{ maxWidth: 480 }} onClick={(e) => e.stopPropagation()}>
+    <div className="modal-backdrop" onClick={handleClose}>
+      <div className="modal-card" style={{ maxWidth: multi ? 560 : 480 }} onClick={(e) => e.stopPropagation()}>
         <h3 className="modal-title">{prefill ? '+ สร้างคิวจากใบเสนอราคาเดิม' : '+ เพิ่มคิวรับรถ'}</h3>
         <p style={{ marginBottom: 12, color: '#6b7280', fontSize: 14 }}>
-          คิว {queueNo || '-'} — {formatDateTh(todayStr())}
+          {multi ? `${cars.length} คัน — ` : ''}คิว {queueNo || '-'}{multi ? ' เป็นต้นไป' : ''} — {formatDateTh(todayStr())}
         </p>
-        {prefill && (
-          <p style={{ margin: '-4px 0 12px', color: '#15803d', fontSize: 13 }}>
-            ✅ เติมข้อมูลจากใบเสนอราคา {prefill.quotation_no} ให้แล้ว แก้ไขได้ตามจริง
-          </p>
-        )}
-
-        {!prefill && openQuotation && (
-          <div style={{ margin: '-4px 0 12px', padding: 10, borderRadius: 8, background: '#fffbeb', border: '1px solid #fde68a' }}>
-            <p style={{ margin: 0, fontSize: 13 }}>
-              📋 รถคันนี้มีใบเสนอราคาเดิมค้างอยู่ <strong>{openQuotation.quotation_no}</strong> วันที่{' '}
-              {formatDateTh(openQuotation.quotation_date)} — ฿{Number(openQuotation.total_amount).toLocaleString('th-TH')}
-              {openQuotation.deposit_amount > 0 && ` (มัดจำแล้ว ฿${Number(openQuotation.deposit_amount).toLocaleString('th-TH')})`}
-            </p>
-            <label style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 6, fontSize: 13 }}>
-              <input
-                type="checkbox" checked={pullInQuotation}
-                onChange={(e) => {
-                  setPullInQuotation(e.target.checked);
-                  if (e.target.checked && !symptom.trim() && openQuotation.symptom) setSymptom(openQuotation.symptom);
-                }}
-              />
-              ดึงใบเสนอราคานี้เข้ามาใช้กับคิวนี้เลย (รายการเดิมจะติดมาด้วย ไม่ต้องพิมพ์ใหม่)
-            </label>
-          </div>
-        )}
 
         <form onSubmit={handleSubmit} className="modal-form">
-          <label>ทะเบียนรถ</label>
-          <input type="text" placeholder="เช่น กข1234" value={plate} onChange={(e) => setPlate(e.target.value)} autoFocus />
-          {matchedVehicle && (
-            <p style={{ margin: '4px 0 8px', color: '#15803d', fontSize: 13 }}>✅ พบรถเดิม — เติมข้อมูลให้แล้ว แก้ไขได้ตามจริง</p>
+          {cars.map((car, idx) => (
+            <CarForm
+              key={car.key}
+              car={car}
+              index={idx}
+              total={cars.length}
+              vehicles={vehicles}
+              brands={brands}
+              prefill={prefill}
+              onChange={(patch) => updateCar(car.key, patch)}
+              onRemove={cars.length > 1 ? () => removeCar(car.key) : null}
+              queueNo={queueNo}
+              onQueueNoChange={setQueueNo}
+              setError={setError}
+            />
+          ))}
+
+          {!prefill && (
+            <button type="button" className="ajm-add-car" onClick={addCar} disabled={submitting}>
+              + เพิ่มอีกคัน
+            </button>
           )}
-
-          <label>ชื่อลูกค้า</label>
-          <input type="text" value={customerName} onChange={(e) => setCustomerName(e.target.value)} />
-
-          <label>เบอร์โทรศัพท์</label>
-          <input type="text" value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} />
-
-          <label>ยี่ห้อรถ</label>
-          <input
-            type="text" list="ajm-brand-options" value={brand}
-            onChange={(e) => { setBrand(e.target.value); setModel(''); }}
-          />
-          <datalist id="ajm-brand-options">
-            {brands.map((b) => <option key={b} value={b} />)}
-          </datalist>
-
-          <label>รุ่นรถ</label>
-          <input type="text" list="ajm-model-options" value={model} onChange={(e) => setModel(e.target.value)} />
-          <datalist id="ajm-model-options">
-            {models.map((m) => <option key={m.model} value={m.model} />)}
-          </datalist>
-
-          <label>สีรถ</label>
-          <input type="text" value={color} onChange={(e) => setColor(e.target.value)} />
-
-          <label>เลขไมล์</label>
-          <input type="number" min="0" value={mileage} onChange={(e) => setMileage(e.target.value)} />
-
-          <label>เลขคิว</label>
-          <input type="text" value={queueNo} onChange={(e) => setQueueNo(e.target.value)} />
-
-          <label>อาการ</label>
-          <textarea rows={3} value={symptom} onChange={(e) => setSymptom(e.target.value)} />
-
-          <label>รูปรถ</label>
-          <div className="job-photo-picker">
-            {photos.map((photo, idx) => (
-              <div className="job-photo-thumb" key={idx}>
-                <span className="job-photo-num">{idx + 1}</span>
-                <img src={photo.full} alt="" />
-                <div className="job-photo-thumb-actions">
-                  <button type="button" onClick={() => movePhoto(idx, -1)} disabled={idx === 0}>◀</button>
-                  <button type="button" onClick={() => removePhoto(idx)}>✕</button>
-                  <button type="button" onClick={() => movePhoto(idx, 1)} disabled={idx === photos.length - 1}>▶</button>
-                </div>
-              </div>
-            ))}
-          </div>
-          <div className="job-photo-add-row">
-            <label className="btn job-photo-add-btn">
-              📷 ถ่ายรูป
-              <input type="file" accept={IMAGE_ACCEPT} capture="environment" multiple hidden onChange={handleFilesSelected} />
-            </label>
-            <label className="btn job-photo-add-btn">
-              🖼️ เลือกรูป
-              <input type="file" accept={IMAGE_ACCEPT} multiple hidden onChange={handleFilesSelected} />
-            </label>
-            {photosBusy && <span style={{ fontSize: 13, color: '#6b7280' }}>กำลังย่อรูป...</span>}
-          </div>
 
           {error && <p className="error-text">{error}</p>}
 
           <div className="modal-actions">
             <button type="submit" className="btn-primary" disabled={submitting || loadingVehicles}>
-              {submitting ? 'กำลังบันทึก...' : 'เพิ่มคิว'}
+              {submitting ? 'กำลังบันทึก...' : (multi ? `เพิ่มคิว ${cars.length} คัน` : 'เพิ่มคิว')}
             </button>
-            <button type="button" onClick={onClose} disabled={submitting}>ยกเลิก</button>
+            <button type="button" onClick={handleClose} disabled={submitting}>{partialJobId !== null ? "ปิด" : "ยกเลิก"}</button>
           </div>
         </form>
       </div>

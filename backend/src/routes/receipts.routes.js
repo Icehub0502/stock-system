@@ -2,6 +2,7 @@ const express = require('express');
 const pool = require('../db/pool');
 const { authenticate, requireRole } = require('../middleware/auth');
 const { formatPhone } = require('../utils/parseLineQueueMessage');
+const { applyReceiptSplits } = require('../utils/paymentMethods');
 const { emitReceiptEvent, emitQuotationEvent } = require('../realtime');
 
 // ทำให้ตรงรูปแบบเดียวกับที่ customers.routes.js ใช้ กันเบอร์ที่พิมพ์ไม่มีขีดตรงนี้
@@ -235,6 +236,20 @@ router.get('/by-date', async (req, res) => {
        ORDER BY r.created_at DESC`,
       [date]
     );
+    // แนบรายการแบ่งช่องทางชำระของบิลที่จ่ายหลายช่องทาง (บิลช่องทางเดียวได้ payments = [])
+    if (rows.length > 0) {
+      const ids = rows.map((r) => Number(r.id));
+      const [splitRows] = await pool.query(
+        'SELECT receipt_id, method, amount FROM receipt_payments WHERE receipt_id IN (?) ORDER BY id',
+        [ids]
+      );
+      const byReceipt = new Map();
+      for (const s of splitRows) {
+        if (!byReceipt.has(s.receipt_id)) byReceipt.set(s.receipt_id, []);
+        byReceipt.get(s.receipt_id).push({ method: s.method, amount: Number(s.amount) });
+      }
+      for (const r of rows) r.payments = byReceipt.get(r.id) || [];
+    }
     res.json({ success: true, data: rows });
   } catch (err) {
     console.error('Error loading receipts by date:', err);
@@ -243,9 +258,10 @@ router.get('/by-date', async (req, res) => {
 });
 
 router.patch('/:id/meta', async (req, res) => {
+  let conn;
   try {
     const { id } = req.params;
-    const { payment_method, technician_name, remark, total_amount } = req.body || {};
+    const { payment_method, technician_name, remark, total_amount, payment_splits } = req.body || {};
 
     // total_amount is optional here — the daily summary page lets office
     // manually override it (e.g. a late discount), but most callers
@@ -259,15 +275,39 @@ router.patch('/:id/meta', async (req, res) => {
       ? [payment_method || null, technician_name || null, remark || null, Number(total_amount), id]
       : [payment_method || null, technician_name || null, remark || null, id];
 
-    const [result] = await pool.execute(sql, params);
+    conn = await pool.getConnection();
+    await conn.beginTransaction();
+    const [result] = await conn.execute(sql, params);
     if (result.affectedRows === 0) {
+      await conn.rollback();
       return res.status(404).json({ error: 'ไม่พบบิลนี้' });
     }
+    const [[row]] = await conn.execute('SELECT total_amount FROM receipts WHERE id = ?', [id]);
+    if (Array.isArray(payment_splits)) {
+      // แบ่งหลายช่องทาง (≥ 2) หรือส่ง [] / 1 ช่อง = กลับเป็นช่องทางเดียว (payment_method ข้างบน)
+      const splits = payment_splits.map((s) => ({
+        method: String(s?.method ?? ''),
+        amount: s?.amount === '' || s?.amount == null ? null : Number(s.amount),
+      }));
+      await applyReceiptSplits(conn, id, splits, Number(row.total_amount));
+    } else if (setTotal) {
+      // แก้ยอดบิลโดยไม่ได้ส่งการแบ่งช่องทางมา — บิลที่แบ่งไว้หลายช่องทางจะยอดไม่ตรงกัน ต้องแก้การแบ่งด้วย
+      const [[split]] = await conn.execute('SELECT COUNT(*) AS n, SUM(amount) AS total FROM receipt_payments WHERE receipt_id = ?', [id]);
+      if (split.n > 0 && Math.abs(Number(split.total) - Number(row.total_amount)) > 0.01) {
+        await conn.rollback();
+        return res.status(400).json({ error: 'บิลนี้แบ่งจ่ายหลายช่องทาง กรุณาแก้การแบ่งช่องทางให้ตรงกับยอดใหม่ด้วย' });
+      }
+    }
+    await conn.commit();
     emitReceiptEvent('receipt:updated', { receiptId: Number(id), actorId: req.user.id });
     res.json({ success: true });
   } catch (err) {
+    if (conn) await conn.rollback().catch(() => {});
+    if (err.status === 400) return res.status(400).json({ error: err.message });
     console.error('Error updating receipt meta:', err);
     res.status(500).json({ error: 'บันทึกข้อมูลไม่สำเร็จ' });
+  } finally {
+    if (conn) conn.release();
   }
 });
 
@@ -364,18 +404,30 @@ router.get('/top-customers', async (req, res) => {
 // รวมยอดแยกตามช่องทางชำระ → { [period]: { [method]: { bill_count, total } } }
 // period = สตริงวัน/เดือนจาก SQL; บิลที่ยังไม่ระบุช่องทางนับเป็น "ไม่ระบุ"
 async function loadMethodBreakdown(periodExpr) {
-  const [rows] = await pool.execute(
+  // บิลที่แบ่งหลายช่องทาง (receipt_payments) นับยอดตามที่แบ่งไว้ ส่วนบิลช่องทางเดียวใช้ยอดบิลตรง ๆ
+  // แยกเป็น 2 query แล้วรวมใน JS (ไม่ใช้ UNION เพราะคอลัมน์ method ของสองตารางอาจ collation
+  // ไม่ตรงกันในฐานข้อมูลเก่า → Illegal mix of collations)
+  const [singleRows] = await pool.execute(
     `SELECT ${periodExpr} AS period,
-            COALESCE(NULLIF(TRIM(payment_method), ''), 'ไม่ระบุ') AS method,
+            COALESCE(NULLIF(TRIM(r.payment_method), ''), 'ไม่ระบุ') AS method,
             COUNT(*) AS bill_count,
-            SUM(total_amount) AS total
-     FROM receipts
+            SUM(r.total_amount) AS total
+     FROM receipts r
+     WHERE NOT EXISTS (SELECT 1 FROM receipt_payments p WHERE p.receipt_id = r.id)
      GROUP BY period, method`
   );
+  const [splitRows] = await pool.execute(
+    `SELECT ${periodExpr} AS period, p.method AS method, COUNT(*) AS bill_count, SUM(p.amount) AS total
+     FROM receipt_payments p
+     JOIN receipts r ON r.id = p.receipt_id
+     GROUP BY period, p.method`
+  );
+  const rows = [...singleRows, ...splitRows];
   const out = {};
   for (const r of rows) {
     if (!out[r.period]) out[r.period] = {};
-    out[r.period][r.method] = { bill_count: Number(r.bill_count), total: Number(r.total || 0) };
+    const cur = out[r.period][r.method] || { bill_count: 0, total: 0 };
+    out[r.period][r.method] = { bill_count: cur.bill_count + Number(r.bill_count), total: cur.total + Number(r.total || 0) };
   }
   return out;
 }

@@ -507,6 +507,19 @@ async function initDatabase() {
     ALTER TABLE customers
     ADD INDEX idx_customers_phone (phone)
   `).catch(ignoreIfAlreadyApplied);
+  // บิลที่ลูกค้าจ่ายหลายช่องทาง (เช่น เงินสด + บัตรเครดิต) — เก็บเฉพาะบิลที่จ่าย ≥ 2 ช่องทาง
+  // บิลช่องทางเดียวใช้ receipts.payment_method ตามเดิม (ดู applyReceiptSplits)
+  await conn.query(`
+    CREATE TABLE IF NOT EXISTS receipt_payments (
+      id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+      receipt_id BIGINT UNSIGNED NOT NULL,
+      method VARCHAR(50) NOT NULL,
+      amount DECIMAL(10,2) NOT NULL,
+      UNIQUE KEY uq_receipt_payment_method (receipt_id, method),
+      CONSTRAINT fk_receipt_payment_receipt FOREIGN KEY (receipt_id) REFERENCES receipts(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
 
   // receipts.receipt_date: ใช้กับ WHERE r.receipt_date = ? (ดู receipts.routes.js)
   await conn.query(`

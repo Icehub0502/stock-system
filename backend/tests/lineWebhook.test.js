@@ -1226,6 +1226,28 @@ describe('POST /api/line/webhook', () => {
       expect(receipt.payment_method).toBe('JPM');
     });
 
+    test('จ่ายหลายช่องทาง "เงินสด 600 + บัตรเครดิต 400" → แบ่งยอดลง receipt_payments', async () => {
+      const uniq = Date.now().toString().slice(-7);
+      const phone = `064${uniq}`;
+      const queueNo = `4${uniq}`;
+      const text = templateText({
+        queueNo,
+        name: 'คุณคิวอาร์',
+        phone,
+        plate: `3กง${uniq.slice(0, 4)}`,
+        items: [{ name: 'ค่าแรง', price: 1000 }],
+        payment: { paidAmount: 1000, method: 'เงินสด 600 + บัตรเครดิต 400', confirm: true },
+      });
+
+      const res = await postWebhook(eventsBody([messageEvent(text, `msg-tmpl-split-${uniq}`)]));
+      expect(res.body.created).toHaveLength(1);
+
+      const [[quotation]] = await pool.query('SELECT converted_receipt_id, customer_id FROM quotations WHERE quotation_no = ?', [res.body.created[0]]);
+      createdCustomerIds.push(quotation.customer_id);
+      const [rows] = await pool.query('SELECT method, amount FROM receipt_payments WHERE receipt_id = ? ORDER BY id', [quotation.converted_receipt_id]);
+      expect(rows.map((r) => [r.method, Number(r.amount)])).toEqual([['เงินสด', 600], ['บัตรเครดิต', 400]]);
+    });
+
     test('วลีแจ้งจ่ายเงินแล้วมาแต่ไม่มีรายการสินค้าเลย → ไม่สร้างใบเสร็จ ไม่ปิดบิล (ไม่มี closed_at)', async () => {
       const uniq = Date.now().toString().slice(-7);
       const phone = `065${uniq}`;

@@ -253,11 +253,11 @@ export default function QuotationListPage() {
     }
   };
 
-  const handleCloseConfirm = async ({ payment_method, paid_amount }) => {
+  const handleCloseConfirm = async ({ payment_method, payment_splits, paid_amount }) => {
     if (!closingQuotation) return;
     setActioningId(closingQuotation.id);
     try {
-      await client.patch(`/quotations/${closingQuotation.id}/close`, { payment_method, paid_amount });
+      await client.patch(`/quotations/${closingQuotation.id}/close`, { payment_method, payment_splits, paid_amount });
       setClosingQuotation(null);
       fetchQuotations();
     } catch (err) {
