@@ -189,66 +189,91 @@ function CarForm({
         </div>
       )}
 
-      <label>ทะเบียนรถ</label>
-      <div className="ajm-plate-row">
+      <h4 className="ajm-section">ทะเบียนรถ</h4>
+      <div className="ajm-field">
+        <label>เลขทะเบียน</label>
         <input
           type="text" placeholder="เช่น กข1234" value={car.plate}
           onChange={(e) => onChange({ plate: e.target.value })} autoFocus={index === 0}
         />
+      </div>
+      <div className="ajm-field">
+        <label>จังหวัด</label>
         <ProvinceSelect value={car.province} onChange={(province) => onChange({ province })} />
       </div>
       {matchedVehicle && (
-        <p style={{ margin: '4px 0 8px', color: '#15803d', fontSize: 13 }}>✅ พบรถเดิม — เติมข้อมูลให้แล้ว แก้ไขได้ตามจริง</p>
+        <p className="ajm-note ajm-note-ok">✅ พบรถเดิม — เติมข้อมูลให้แล้ว แก้ไขได้ตามจริง</p>
       )}
       {plateAmbiguous && (
-        <p style={{ margin: '4px 0 8px', color: '#b45309', fontSize: 13 }}>
+        <p className="ajm-note ajm-note-warn">
           ⚠️ มีรถทะเบียนนี้หลายคัน (คนละจังหวัด) — เลือกจังหวัดเพื่อให้ระบบหารถเดิมให้
         </p>
       )}
 
-      <label>ชื่อลูกค้า</label>
-      <input type="text" value={car.customerName} onChange={(e) => onChange({ customerName: e.target.value })} />
+      <h4 className="ajm-section">ลูกค้า</h4>
+      <div className="ajm-grid-2">
+        <div className="ajm-field">
+          <label>ชื่อลูกค้า</label>
+          <input type="text" value={car.customerName} onChange={(e) => onChange({ customerName: e.target.value })} />
+        </div>
+        <div className="ajm-field">
+          <label>เบอร์โทรศัพท์</label>
+          <input type="text" inputMode="tel" value={car.phone} onChange={(e) => onChange({ phone: e.target.value })} />
+        </div>
+      </div>
 
-      <label>เบอร์โทรศัพท์</label>
-      <input type="text" value={car.phone} onChange={(e) => onChange({ phone: e.target.value })} />
+      <h4 className="ajm-section">ข้อมูลรถ</h4>
+      <div className="ajm-grid-2">
+        <div className="ajm-field">
+          <label>ยี่ห้อรถ</label>
+          <input
+            type="text" list={`${idp}-brands`} value={car.brand}
+            onChange={(e) => onChange({ brand: e.target.value, model: '' })}
+          />
+          <datalist id={`${idp}-brands`}>
+            {brands.map((b) => <option key={b} value={b} />)}
+          </datalist>
+        </div>
+        <div className="ajm-field">
+          <label>รุ่นรถ</label>
+          <input type="text" list={`${idp}-models`} value={car.model} onChange={(e) => onChange({ model: e.target.value })} />
+          <datalist id={`${idp}-models`}>
+            {models.map((m) => <option key={m.model} value={m.model} />)}
+          </datalist>
+        </div>
+        <div className="ajm-field">
+          <label>สีรถ</label>
+          <input type="text" value={car.color} onChange={(e) => onChange({ color: e.target.value })} />
+        </div>
+        <div className="ajm-field">
+          <label>ปีรถ <small>(ไม่บังคับ)</small></label>
+          <input type="number" min="1990" max="2100" placeholder="เช่น 2015" value={car.year} onChange={(e) => onChange({ year: e.target.value })} />
+        </div>
+        <div className="ajm-field">
+          <label>เลขไมล์</label>
+          <input type="number" min="0" value={car.mileage} onChange={(e) => onChange({ mileage: e.target.value })} />
+        </div>
+        {index === 0 ? (
+          <div className="ajm-field">
+            <label>เลขคิว</label>
+            <input type="text" value={queueNo} onChange={(e) => onQueueNoChange(e.target.value)} />
+          </div>
+        ) : (
+          <div className="ajm-field">
+            <label>เลขคิว</label>
+            <p className="ajm-queue-auto">รันต่อจากคันก่อนหน้าอัตโนมัติ</p>
+          </div>
+        )}
+      </div>
+      <p className="ajm-hint">ปีรถช่วยให้ระบบจับคู่อะไหล่ตามรุ่นได้แม่นขึ้น</p>
 
-      <label>ยี่ห้อรถ</label>
-      <input
-        type="text" list={`${idp}-brands`} value={car.brand}
-        onChange={(e) => onChange({ brand: e.target.value, model: '' })}
-      />
-      <datalist id={`${idp}-brands`}>
-        {brands.map((b) => <option key={b} value={b} />)}
-      </datalist>
+      <h4 className="ajm-section">อาการและรูป</h4>
+      <div className="ajm-field">
+        <label>อาการ</label>
+        <textarea rows={3} value={car.symptom} onChange={(e) => onChange({ symptom: e.target.value })} />
+      </div>
 
-      <label>รุ่นรถ</label>
-      <input type="text" list={`${idp}-models`} value={car.model} onChange={(e) => onChange({ model: e.target.value })} />
-      <datalist id={`${idp}-models`}>
-        {models.map((m) => <option key={m.model} value={m.model} />)}
-      </datalist>
-
-      <label>สีรถ</label>
-      <input type="text" value={car.color} onChange={(e) => onChange({ color: e.target.value })} />
-
-      <label>ปีรถ (ไม่บังคับ — ใส่ไว้ช่วยจับคู่อะไหล่ตามรุ่นให้แม่นขึ้น)</label>
-      <input type="number" min="1990" max="2100" placeholder="เช่น 2015" value={car.year} onChange={(e) => onChange({ year: e.target.value })} />
-
-      <label>เลขไมล์</label>
-      <input type="number" min="0" value={car.mileage} onChange={(e) => onChange({ mileage: e.target.value })} />
-
-      {index === 0 ? (
-        <>
-          <label>เลขคิว</label>
-          <input type="text" value={queueNo} onChange={(e) => onQueueNoChange(e.target.value)} />
-        </>
-      ) : (
-        <p className="ajm-queue-auto">เลขคิวของคันนี้ระบบจะรันต่อจากคันก่อนหน้าให้อัตโนมัติ</p>
-      )}
-
-      <label>อาการ</label>
-      <textarea rows={3} value={car.symptom} onChange={(e) => onChange({ symptom: e.target.value })} />
-
-      <label>รูปรถ</label>
+      <div className="ajm-field"><label>รูปรถ</label></div>
       <div className="job-photo-picker">
         {car.photos.map((photo, idx) => (
           <div className="job-photo-thumb" key={idx}>

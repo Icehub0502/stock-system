@@ -6463,3 +6463,17 @@ td.stock-all-actions button { padding: 8px 14px; font-size: 0.85em; min-height: 
 .province-select-option.is-selected { background: #eef2ff; color: #4338ca; font-weight: 700; }
 .province-select-option.is-clear { color: #9ca3af; font-size: 0.85rem; }
 .province-select-empty { padding: 10px; color: #9ca3af; font-size: 0.9rem; text-align: center; }
+
+/* ── AddJobModal: จัดกลุ่มฟิลด์เป็นหัวข้อ + ทะเบียนกับจังหวัดเรียงลงมา ── */
+.ajm-section { margin: 18px 0 4px; padding-bottom: 6px; border-bottom: 1px solid #e5e7eb; font-size: 0.9rem; font-weight: 700; color: #111827; }
+.ajm-car > .ajm-section:first-of-type { margin-top: 4px; }
+.ajm-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.ajm-field + .ajm-field { margin-top: 10px; }
+.ajm-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.ajm-grid-2 .ajm-field + .ajm-field { margin-top: 0; }
+.ajm-field label small { font-weight: 400; color: #9ca3af; }
+.ajm-note { margin: 6px 0 0; font-size: 13px; }
+.ajm-note-ok { color: #15803d; }
+.ajm-note-warn { color: #b45309; }
+.ajm-hint { margin: 2px 0 0; font-size: 0.78rem; color: #9ca3af; }
+@media (max-width: 480px) { .ajm-grid-2 { grid-template-columns: 1fr; } }
