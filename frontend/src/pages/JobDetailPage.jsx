@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import client from '../api/client';
+import { plateWithProvince, THAI_PROVINCES } from '../utils/thaiProvinces';
 import { jobStatusDef, MAIN_PATH } from '../utils/jobStatus';
 import { formatDbDateTime, todayStr } from '../utils/format';
 import { resizePhotos, resizeFullPhotos, describePhotoFailures, IMAGE_ACCEPT } from '../utils/resizeImage';
@@ -223,6 +224,7 @@ export default function JobDetailPage() {
       model: job.model || '',
       color: job.color || '',
       license_plate: job.license_plate || '',
+      province: job.province || '',
       mileage_in: job.mileage_in ?? '',
       queue_no: job.queue_no || '',
       symptom: job.symptom || '',
@@ -248,7 +250,7 @@ export default function JobDetailPage() {
       await client.put(`/customers/${job.customer_id}`, { customer_name: form.customer_name.trim(), phone: form.phone.trim() });
       await client.put(`/vehicles/${job.vehicle_id}`, {
         brand: form.brand.trim(), model: form.model.trim(), color: form.color.trim(),
-        license_plate: form.license_plate.trim().toUpperCase(), mileage: Number(form.mileage_in) || 0,
+        license_plate: form.license_plate.trim().toUpperCase(), province: form.province.trim(), mileage: Number(form.mileage_in) || 0,
       });
       await client.patch(`/jobs/${id}`, {
         queue_no: form.queue_no, mileage_in: Number(form.mileage_in) || null, symptom: form.symptom,
@@ -812,6 +814,16 @@ export default function JobDetailPage() {
             <label>ทะเบียนรถ</label>
             <input type="text" value={form.license_plate} onChange={(e) => setForm({ ...form, license_plate: e.target.value })} />
 
+            <label>จังหวัด (ของทะเบียน)</label>
+            <input
+              type="text" list="province-options" placeholder="เช่น เชียงใหม่"
+              value={form.province || ''}
+              onChange={(e) => setForm({ ...form, province: e.target.value })}
+            />
+            <datalist id="province-options">
+              {THAI_PROVINCES.map((p) => <option key={p} value={p} />)}
+            </datalist>
+
             <label>ชื่อลูกค้า</label>
             <input type="text" value={form.customer_name} onChange={(e) => setForm({ ...form, customer_name: e.target.value })} />
 
@@ -854,7 +866,7 @@ export default function JobDetailPage() {
             <p><strong>ชื่อลูกค้า:</strong> {job.customer_name || '-'} {job.phone && `(${job.phone})`}</p>
             <p><strong>ยี่ห้อรถ:</strong> {job.brand || '-'}</p>
             <p><strong>รุ่นรถ:</strong> {job.model || '-'} {job.color && `· ${job.color}`}</p>
-            <p><strong>ทะเบียนรถ:</strong> {job.license_plate || '-'}</p>
+            <p><strong>ทะเบียนรถ:</strong> {plateWithProvince(job.license_plate, job.province) || '-'}</p>
             <p><strong>เลขไมล์:</strong> {job.mileage_in ?? '-'}</p>
             <p><strong>อาการที่แจ้ง:</strong> {job.symptom || '-'}</p>
             {job.note && <p><strong>หมายเหตุ:</strong> {job.note}</p>}

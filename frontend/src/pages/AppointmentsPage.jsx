@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import client from "../api/client";
+import { plateWithProvince } from '../utils/thaiProvinces';
 import QuotationFormModal from "../components/QuotationFormModal";
 import QuotationPrintModal from "../components/QuotationPrintModal";
 import ScheduleDateDialog from "../components/ScheduleDateDialog";
@@ -145,6 +146,7 @@ export default function AppointmentsPage() {
     model: q.model || q.car_model,
     color: q.color || q.car_color,
     license_plate: q.license_plate,
+    province: q.province,
     mileage: q.mileage,
     symptom: q.symptom,
   });
@@ -200,7 +202,7 @@ export default function AppointmentsPage() {
               <td data-label="เลขที่"><strong>{q.quotation_no}</strong></td>
               <td className="col-customer-name" data-label="ชื่อลูกค้า">{q.customer_name}</td>
               <td className="car-info" data-label="รุ่น/สี/ทะเบียน">
-                {q.brand || q.car_brand} {q.model || q.car_model} / {q.color || q.car_color} / {q.license_plate}
+                {q.brand || q.car_brand} {q.model || q.car_model} / {q.color || q.car_color} / {plateWithProvince(q.license_plate, q.province)}
               </td>
               <td className="amount" data-label="จำนวนรวม">฿{parseFloat(q.total_amount).toFixed(2)}</td>
               <td data-label="มัดจำ">

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import client from '../api/client';
+import { plateWithProvince, THAI_PROVINCES } from '../utils/thaiProvinces';
 import { getNameInitials } from '../utils/format';
 
 export default function VehicleManagementPage() {
@@ -11,7 +12,7 @@ export default function VehicleManagementPage() {
   const [error, setError] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState(null);
-  const [form, setForm] = useState({ customer_id: '', brand: '', model: '', color: '', license_plate: '', mileage: 0 });
+  const [form, setForm] = useState({ customer_id: '', brand: '', model: '', color: '', license_plate: '', province: '', mileage: 0 });
   const [saving, setSaving] = useState(false);
 
   const fetchCustomers = async () => {
@@ -43,7 +44,7 @@ export default function VehicleManagementPage() {
 
   const openAdd = () => {
     setEditing(null);
-    setForm({ customer_id: '', brand: '', model: '', color: '', license_plate: '', mileage: 0 });
+    setForm({ customer_id: '', brand: '', model: '', color: '', license_plate: '', province: '', mileage: 0 });
     setShowModal(true);
     setError('');
   };
@@ -56,6 +57,7 @@ export default function VehicleManagementPage() {
       model: vehicle.model || '',
       color: vehicle.color || '',
       license_plate: vehicle.license_plate || '',
+      province: vehicle.province || '',
       mileage: vehicle.mileage || 0,
     });
     setShowModal(true);
@@ -65,7 +67,7 @@ export default function VehicleManagementPage() {
   const closeModal = () => {
     setShowModal(false);
     setEditing(null);
-    setForm({ customer_id: '', brand: '', model: '', color: '', license_plate: '', mileage: 0 });
+    setForm({ customer_id: '', brand: '', model: '', color: '', license_plate: '', province: '', mileage: 0 });
     setError('');
   };
 
@@ -170,7 +172,7 @@ export default function VehicleManagementPage() {
                     </span>
                   </td>
                   <td data-label="ยี่ห้อ/รุ่น">{vehicle.brand} {vehicle.model}</td>
-                  <td data-label="ทะเบียน">{vehicle.license_plate || '-'}</td>
+                  <td data-label="ทะเบียน">{plateWithProvince(vehicle.license_plate, vehicle.province) || '-'}</td>
                   <td data-label="ไมล์">{vehicle.mileage ?? 0}</td>
                   <td className="actions" data-label="จัดการ">
                     <Link to={`/vehicles/${vehicle.id}/history`} className="btn-icon-small">ดูประวัติ</Link>
@@ -243,6 +245,19 @@ export default function VehicleManagementPage() {
                   value={form.license_plate}
                   onChange={(e) => setForm({ ...form, license_plate: e.target.value })}
                 />
+              </div>
+              <div className="form-group">
+                <label>จังหวัด (ของทะเบียน)</label>
+                <input
+                  type="text"
+                  list="province-options"
+                  placeholder="เช่น เชียงใหม่"
+                  value={form.province || ''}
+                  onChange={(e) => setForm({ ...form, province: e.target.value })}
+                />
+                <datalist id="province-options">
+                  {THAI_PROVINCES.map((p) => <option key={p} value={p} />)}
+                </datalist>
               </div>
               <div className="form-group">
                 <label>เลขไมล์</label>

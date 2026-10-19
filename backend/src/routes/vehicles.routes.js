@@ -7,6 +7,12 @@ const { CLOSED_STATUSES } = require('../utils/jobStatusFlow');
 const router = express.Router();
 router.use(authenticate);
 
+// จังหวัดของทะเบียน: ตัดช่องว่าง ว่าง = ไม่ระบุ (NULL) ยาวเกิน 50 ตัดทิ้ง
+function cleanProvince(value) {
+  const v = String(value ?? '').trim().slice(0, 50);
+  return v || null;
+}
+
 router.get('/', requireRole('office'), async (req, res) => {
   try {
     const [rows] = await pool.execute(
@@ -84,16 +90,41 @@ router.get('/:id/open-quotation', requireRole('office'), async (req, res) => {
   }
 });
 
+// ── ใบเสนอราคาเดิมที่ยังเปิดอยู่ "ทุกใบ" ของรถคันนี้ (ใหม่สุดก่อน) — ใช้ให้พนักงานเลือกเองว่า
+// จะดึงใบไหนเข้าคิว (รวมใบที่กด "ลูกค้าไม่ได้ทำ" ไว้ ซึ่งเก็บไว้ไม่หาย) เกณฑ์เดียวกับ
+// /:id/open-quotation: ยังไม่ปิดบิล และไม่มีงานที่ยังดำเนินอยู่ผูกใบนี้ (งาน rejected จากการ
+// กด "ไม่ได้ทำ" ไม่นับ เพราะรถกลับมาทำจริงแล้ว)
+router.get('/:id/open-quotations', requireRole('office'), async (req, res) => {
+  try {
+    const [rows] = await pool.query(
+      `SELECT id, quotation_no, quotation_date, status, total_amount, deposit_amount, deposit_date,
+              symptom, decline_reason, product_summary
+       FROM quotations
+       WHERE vehicle_id = ? AND closed_at IS NULL
+         AND id NOT IN (
+           SELECT quotation_id FROM jobs
+           WHERE quotation_id IS NOT NULL AND status NOT IN (${[...CLOSED_STATUSES, 'rejected'].map(() => '?').join(',')})
+         )
+       ORDER BY created_at DESC LIMIT 10`,
+      [req.params.id, ...CLOSED_STATUSES, 'rejected']
+    );
+    res.json({ success: true, data: rows });
+  } catch (err) {
+    console.error('Error fetching open quotations:', err);
+    res.status(500).json({ error: 'ค้นหาใบเสนอราคาเดิมไม่สำเร็จ' });
+  }
+});
+
 router.post('/', requireRole('office'), async (req, res) => {
-  const { customer_id, brand, model, color, license_plate, mileage } = req.body;
+  const { customer_id, brand, model, color, license_plate, mileage, year, province } = req.body;
   if (!customer_id || !brand || !model) {
     return res.status(400).json({ error: 'กรุณากรอกข้อมูลรถให้ครบถ้วน' });
   }
   try {
     const [vehicleResult] = await pool.execute(
-      `INSERT INTO vehicles (customer_id, brand, model, color, license_plate, mileage)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [customer_id, brand, model, color || null, license_plate || null, Number(mileage) || 0]
+      `INSERT INTO vehicles (customer_id, brand, model, color, license_plate, province, mileage, year)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [customer_id, brand, model, color || null, license_plate || null, cleanProvince(province), Number(mileage) || 0, Number(year) || null]
     );
     res.status(201).json({ success: true, data: { id: vehicleResult.insertId } });
   } catch (err) {
@@ -103,14 +134,14 @@ router.post('/', requireRole('office'), async (req, res) => {
 });
 
 router.put('/:id', requireRole('office'), async (req, res) => {
-  const { brand, model, color, license_plate, mileage } = req.body;
+  const { brand, model, color, license_plate, mileage, year, province } = req.body;
   if (!brand || !model) {
     return res.status(400).json({ error: 'กรุณากรอกข้อมูลรถให้ครบถ้วน' });
   }
   try {
     const [result] = await pool.execute(
-      `UPDATE vehicles SET brand = ?, model = ?, color = ?, license_plate = ?, mileage = ? WHERE id = ?`,
-      [brand, model, color || null, license_plate || null, Number(mileage) || 0, req.params.id]
+      `UPDATE vehicles SET brand = ?, model = ?, color = ?, license_plate = ?, province = ?, mileage = ?, year = ? WHERE id = ?`,
+      [brand, model, color || null, license_plate || null, cleanProvince(province), Number(mileage) || 0, Number(year) || null, req.params.id]
     );
     if (result.affectedRows === 0) {
       return res.status(404).json({ error: 'ไม่พบรถ' });

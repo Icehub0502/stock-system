@@ -63,7 +63,7 @@ router.get('/', async (req, res) => {
              j.est_minutes, j.mileage_in, j.symptom, j.note, j.received_at, j.closed_at,
              j.customer_id, j.vehicle_id, j.quotation_id, j.repair_notice_printed_at,
              c.customer_name, c.phone,
-             v.license_plate, v.brand, v.model, v.color,
+             v.license_plate, v.province, v.brand, v.model, v.color,
              q.quotation_no, q.status AS quotation_status, q.total_amount,
              q.deposit_amount, q.deposit_date,
              (SELECT COALESCE(p.photo_thumb_data, p.photo_data) FROM job_photos p WHERE p.job_id = j.id AND p.photo_type = 'intake' ORDER BY p.sort_order LIMIT 1) AS photo_thumb
@@ -94,7 +94,7 @@ router.get('/pending-delivery', async (req, res) => {
       SELECT j.id, j.job_no, j.queue_no, j.job_date, j.status, j.received_at, j.note,
              j.expected_pickup_date, j.customer_id, j.vehicle_id, j.quotation_id,
              c.customer_name, c.phone,
-             v.license_plate, v.brand, v.model, v.color,
+             v.license_plate, v.province, v.brand, v.model, v.color,
              q.quotation_no, q.status AS quotation_status, q.total_amount, q.product_summary,
              q.deposit_amount, q.deposit_date
       FROM jobs j
@@ -131,7 +131,7 @@ router.get('/bays', async (req, res) => {
   try {
     const [rows] = await pool.execute(`
       SELECT j.id, j.job_no, j.queue_no, j.bay, j.status, j.technician,
-             v.license_plate, v.brand, v.model
+             v.license_plate, v.province, v.brand, v.model
       FROM jobs j
       LEFT JOIN vehicles v ON v.id = j.vehicle_id
       WHERE j.bay IS NOT NULL AND j.status NOT IN (${CLOSED_STATUSES.map(() => '?').join(',')})
@@ -148,7 +148,7 @@ router.get('/:id', async (req, res) => {
   try {
     const [rows] = await pool.execute(`
       SELECT j.*, c.customer_name, c.phone, c.customer_code,
-             v.license_plate, v.brand, v.model, v.color,
+             v.license_plate, v.province, v.brand, v.model, v.color, v.year,
              q.quotation_no, q.status AS quotation_status, q.total_amount,
              q.deposit_amount, q.deposit_date,
              (q.customer_signature IS NOT NULL) AS customer_signature
@@ -292,9 +292,9 @@ router.post('/', async (req, res) => {
       // ขับรถกลับไปก่อน (งานเดิมจบเป็น carout) ต้องรับรถกลับเข้าคิวใหม่ได้เมื่อถึงวันนัด
       const [[existingLink]] = await conn.query(
         `SELECT id FROM jobs
-         WHERE quotation_id = ? AND status NOT IN (${CLOSED_STATUSES.map(() => '?').join(',')})
+         WHERE quotation_id = ? AND status NOT IN (${[...CLOSED_STATUSES, 'rejected'].map(() => '?').join(',')})
          LIMIT 1`,
-        [quotation_id, ...CLOSED_STATUSES]
+        [quotation_id, ...CLOSED_STATUSES, 'rejected']
       );
       if (existingLink) {
         await conn.rollback();
@@ -306,9 +306,12 @@ router.post('/', async (req, res) => {
       // ที่ใช้ลงรายการอะไหล่ต่อ หาใบนี้ไม่เจอ กลายเป็นเปิดใบใหม่ซ้อน/รายการที่มัดจำไว้
       // หายไปตามที่เจ้าของร้านแจ้ง) พร้อมเคลียร์สถานะ "รอทำ" (scheduled/no_date) ออก
       // ถ้ามี เพราะลูกค้ามาถึงแล้วจริง ไม่ใช่แค่รอนัดอีกต่อไป
-      const clearWaitingStatus = quote.status === 'scheduled' || quote.status === 'no_date';
+      // "ลูกค้าไม่ได้ทำ" (declined) ก็เหมือนกัน — ใบเก็บไว้ไม่หาย พอรถกลับมาทำจริงต้องกลับเป็น
+      // "รอดำเนินการ" และล้างเหตุผลที่ไม่ทำ (เหมือน PATCH /quotations/:id/undecline)
+      const clearWaitingStatus = quote.status === 'scheduled' || quote.status === 'no_date' || quote.status === 'declined';
+      const clearDecline = quote.status === 'declined' ? ', decline_reason = NULL, decline_note = NULL' : '';
       await conn.execute(
-        `UPDATE quotations SET quotation_date = ?${clearWaitingStatus ? ", status = 'pending', scheduled_date = NULL" : ''} WHERE id = ?`,
+        `UPDATE quotations SET quotation_date = ?${clearWaitingStatus ? ", status = 'pending', scheduled_date = NULL" : ''}${clearDecline} WHERE id = ?`,
         [jobDate, quotation_id]
       );
     }

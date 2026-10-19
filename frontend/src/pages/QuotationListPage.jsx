@@ -6,6 +6,9 @@ import QuotationPrintModal from "../components/QuotationPrintModal";
 import ScheduleDateDialog from "../components/ScheduleDateDialog";
 import ClosePaymentDialog from "../components/ClosePaymentDialog";
 import DeclineReasonModal from "../components/DeclineReasonModal";
+import AddJobModal from "../components/AddJobModal";
+import { useNavigate } from "react-router-dom";
+import { plateWithProvince } from "../utils/thaiProvinces";
 import StatusBadge from "../components/StatusBadge";
 import { todayStr } from "../utils/format";
 import { buildArchiveGroups, formatDateTh, formatMonthTh, formatYearTh } from "../utils/dateGroups";
@@ -13,6 +16,7 @@ import useRealtimeEvent from "../hooks/useRealtimeEvent";
 
 export default function QuotationListPage() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [quotations, setQuotations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -31,6 +35,8 @@ export default function QuotationListPage() {
   const [schedulingQuotation, setSchedulingQuotation] = useState(null);
   const [closingQuotation, setClosingQuotation] = useState(null);
   const [decliningQuotation, setDecliningQuotation] = useState(null);
+  // ใบที่กด "สร้างคิว" — เปิดฟอร์มรับรถพร้อมข้อมูล/รายการจากใบนี้ (วันที่คิว = วันที่กด)
+  const [creatingJobFor, setCreatingJobFor] = useState(null);
 
   // Fetch quotations
   const fetchQuotations = async ({ silent } = {}) => {
@@ -392,7 +398,7 @@ export default function QuotationListPage() {
                       <td className="col-customer-name" data-label="ชื่อลูกค้า">{q.customer_name}</td>
                       <td className="car-info" data-label="รุ่น/สี/ทะเบียน">
                         {q.brand || q.car_brand} {q.model || q.car_model} / {q.color || q.car_color} /{" "}
-                        {q.license_plate}
+                        {plateWithProvince(q.license_plate, q.province)}
                       </td>
                       <td className="amount" data-label="จำนวนรวม">
                         ฿{parseFloat(q.total_amount).toFixed(2)}
@@ -463,6 +469,16 @@ export default function QuotationListPage() {
                               ลูกค้าไม่ได้ทำ
                             </button>
                           </>
+                        )}
+                        {!q.closed_at && q.status !== 'approved' && !q.linked_job_id && (
+                          <button
+                            className="btn-icon-small btn-primary"
+                            onClick={() => setCreatingJobFor(q)}
+                            disabled={actioningId === q.id}
+                            title="รถเข้ามาแล้ว — เปิดคิวรับรถจากใบนี้ (รายการเดิมติดมาด้วย)"
+                          >
+                            สร้างคิว
+                          </button>
                         )}
                         {q.status === 'approved' && !q.closed_at && (
                           <button
@@ -546,6 +562,28 @@ export default function QuotationListPage() {
           loading={actioningId === decliningQuotation.id}
           onConfirm={handleDeclineConfirm}
           onCancel={() => setDecliningQuotation(null)}
+        />
+      )}
+
+      {creatingJobFor && (
+        <AddJobModal
+          prefill={{
+            quotation_id: creatingJobFor.id,
+            quotation_no: creatingJobFor.quotation_no,
+            customer_id: creatingJobFor.customer_id,
+            vehicle_id: creatingJobFor.vehicle_id,
+            customer_name: creatingJobFor.customer_name,
+            phone: creatingJobFor.phone,
+            brand: creatingJobFor.brand || creatingJobFor.car_brand,
+            model: creatingJobFor.model || creatingJobFor.car_model,
+            color: creatingJobFor.color || creatingJobFor.car_color,
+            license_plate: creatingJobFor.license_plate,
+            province: creatingJobFor.province,
+            mileage: creatingJobFor.mileage,
+            symptom: creatingJobFor.symptom,
+          }}
+          onClose={() => setCreatingJobFor(null)}
+          onCreated={(jobId) => { setCreatingJobFor(null); navigate(`/jobs/${jobId}`); }}
         />
       )}
 

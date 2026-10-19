@@ -293,6 +293,21 @@ async function initDatabase() {
       CONSTRAINT fk_receipt_customer FOREIGN KEY (customer_id) REFERENCES customers(id) ON DELETE RESTRICT,
       CONSTRAINT fk_receipt_vehicle FOREIGN KEY (vehicle_id) REFERENCES vehicles(id) ON DELETE RESTRICT
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  // จังหวัดของทะเบียน — เลขทะเบียนซ้ำกันได้ถ้าคนละจังหวัด (ไม่บังคับกรอก; รถเดิมที่ยังไม่มี
+  // จังหวัดถือว่าตรงกับทุกจังหวัดจนกว่าจะกรอก — ดู findVehicle ใน AddJobModal.jsx)
+  await conn.query(`
+    ALTER TABLE vehicles
+    ADD COLUMN province VARCHAR(50) DEFAULT NULL
+  `).catch(ignoreIfAlreadyApplied);
+
+  // ปีรถ — เสริม ไม่บังคับกรอก (ระบบจับคู่อะไหล่ตามรุ่นจะข้ามการกรองปีถ้าไม่มีค่านี้
+  // แทนที่จะบล็อก) เพิ่มเพื่อรองรับระบบจับคู่แร็ค/ปีกนกตามรุ่น+ช่วงปีที่ทำตอนอนุมัติ
+  // ใบเสนอราคา (ดู rack_fitments/wing_arm_fitments ด้านล่าง)
+  await conn.query(`
+    ALTER TABLE vehicles
+    ADD COLUMN year INT DEFAULT NULL
+  `).catch(ignoreIfAlreadyApplied);
+
   `);
 
   await conn.query(`
