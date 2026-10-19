@@ -8,7 +8,6 @@ import { buildLineQuoteText, copyTextToClipboard } from '../utils/lineQuoteText'
 import AddJobModal from '../components/AddJobModal';
 import ClaimFormModal from '../components/ClaimFormModal';
 import DeclineReasonModal from '../components/DeclineReasonModal';
-import { plateWithProvince } from '../utils/thaiProvinces';
 import CarIcon from '../components/CarIcon';
 import StatusTrack from '../components/StatusTrack';
 import useRealtimeEvent from '../hooks/useRealtimeEvent';
@@ -298,7 +297,8 @@ export default function JobBoardPage() {
                     <CarIcon className="job-card-car-icon" />
                   )}
                   <div className="plate-badge">
-                    <span className="plate-badge-no">{plateWithProvince(j.license_plate, j.province) || '-'}</span>
+                    <span className="plate-badge-no">{j.license_plate || '-'}</span>
+                    {j.province && <span className="plate-badge-province">{j.province}</span>}
                   </div>
                 </div>
 

@@ -5141,6 +5141,16 @@ body:has(.modal-backdrop) .page-fade-in {
   overflow: hidden;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
 }
+.plate-badge-province {
+  display: block;
+  padding: 3px 14px 5px;
+  border-top: 1px solid #d1d5db;
+  text-align: center;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #4b5563;
+  white-space: nowrap;
+}
 .plate-badge-no {
   display: block;
   padding: 6px 14px;
