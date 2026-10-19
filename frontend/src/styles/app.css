@@ -6448,3 +6448,18 @@ td.stock-all-actions button { padding: 8px 14px; font-size: 0.85em; min-height: 
 .ajm-quote-option input { margin-top: 3px; }
 .ajm-quote-option small { display: block; color: #6b7280; margin-top: 2px; font-weight: 400; }
 .ajm-quote-tag { font-style: normal; color: #b45309; font-weight: 700; }
+
+/* ── ProvinceSelect: dropdown จังหวัดแบบมีช่องค้นหา ── */
+.province-select { position: relative; width: 100%; }
+.province-select-trigger { display: flex; justify-content: space-between; align-items: center; width: 100%; min-height: 40px; padding: 8px 12px; background: #fff; border: 1px solid #d1d5db; border-radius: 8px; font-size: 1rem; color: #111827; text-align: left; cursor: pointer; }
+.province-select-trigger.is-empty { color: #9ca3af; }
+.province-select-trigger:disabled { background: #f3f4f6; cursor: not-allowed; }
+.province-select-caret { color: #6b7280; font-size: 0.8rem; }
+.province-select-panel { position: absolute; z-index: 1200; top: calc(100% + 4px); left: 0; right: 0; min-width: 220px; background: #fff; border: 1px solid #d1d5db; border-radius: 10px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.16); padding: 8px; }
+.province-select-search { width: 100%; padding: 8px 10px; border: 1px solid #d1d5db; border-radius: 8px; font-size: 0.95rem; margin-bottom: 6px; min-height: unset; }
+.province-select-list { list-style: none; margin: 0; padding: 0; max-height: 240px; overflow-y: auto; }
+.province-select-option { display: block; width: 100%; padding: 9px 10px; background: none; border: none; border-radius: 6px; text-align: left; font-size: 0.95rem; color: #374151; cursor: pointer; }
+.province-select-option:hover { background: #f3f4f6; }
+.province-select-option.is-selected { background: #eef2ff; color: #4338ca; font-weight: 700; }
+.province-select-option.is-clear { color: #9ca3af; font-size: 0.85rem; }
+.province-select-empty { padding: 10px; color: #9ca3af; font-size: 0.9rem; text-align: center; }

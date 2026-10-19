@@ -3,7 +3,7 @@ import client from '../api/client';
 import { todayStr } from '../utils/format';
 import { formatDateTh } from '../utils/dateGroups';
 import { resizePhotos, describePhotoFailures, IMAGE_ACCEPT } from '../utils/resizeImage';
-import { THAI_PROVINCES } from '../utils/thaiProvinces';
+import ProvinceSelect from './ProvinceSelect';
 
 // ยี่ห้อ/รุ่นรถ: พิมพ์แล้วมีตัวเลือกจากฐานข้อมูลเด้งขึ้นมาให้กด (เช่นพิมพ์ "To" แล้ว
 // เห็น "Toyota") แต่ยังพิมพ์ค่าที่ไม่มีในระบบได้อยู่ (รถรุ่นใหม่) — ใช้ <datalist>
@@ -195,14 +195,8 @@ function CarForm({
           type="text" placeholder="เช่น กข1234" value={car.plate}
           onChange={(e) => onChange({ plate: e.target.value })} autoFocus={index === 0}
         />
-        <input
-          type="text" placeholder="จังหวัด" list={`${idp}-provinces`} value={car.province}
-          onChange={(e) => onChange({ province: e.target.value })}
-        />
+        <ProvinceSelect value={car.province} onChange={(province) => onChange({ province })} />
       </div>
-      <datalist id={`${idp}-provinces`}>
-        {THAI_PROVINCES.map((p) => <option key={p} value={p} />)}
-      </datalist>
       {matchedVehicle && (
         <p style={{ margin: '4px 0 8px', color: '#15803d', fontSize: 13 }}>✅ พบรถเดิม — เติมข้อมูลให้แล้ว แก้ไขได้ตามจริง</p>
       )}

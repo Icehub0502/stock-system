@@ -3,15 +3,19 @@ const pool = require('../db/pool');
 const { authenticate, requireRole } = require('../middleware/auth');
 const { buildVisitHistory } = require('../utils/visitHistory');
 const { CLOSED_STATUSES } = require('../utils/jobStatusFlow');
+const { THAI_PROVINCES } = require('../utils/thaiProvinces');
 
 const router = express.Router();
 router.use(authenticate);
 
-// จังหวัดของทะเบียน: ตัดช่องว่าง ว่าง = ไม่ระบุ (NULL) ยาวเกิน 50 ตัดทิ้ง
+// จังหวัดของทะเบียน: ตัดช่องว่าง ว่าง = ไม่ระบุ (NULL) ต้องเป็นหนึ่งใน 77 จังหวัดเท่านั้น
+// (หน้าเว็บเป็น dropdown อยู่แล้ว — กันค่าสะกดผิดที่หลุดมาทาง API) คืน undefined = ไม่ถูกต้อง
 function cleanProvince(value) {
-  const v = String(value ?? '').trim().slice(0, 50);
-  return v || null;
+  const v = String(value ?? '').trim();
+  if (!v) return null;
+  return THAI_PROVINCES.includes(v) ? v : undefined;
 }
+const INVALID_PROVINCE = { error: 'จังหวัดไม่ถูกต้อง กรุณาเลือกจากรายการ' };
 
 router.get('/', requireRole('office'), async (req, res) => {
   try {
@@ -120,6 +124,7 @@ router.post('/', requireRole('office'), async (req, res) => {
   if (!customer_id || !brand || !model) {
     return res.status(400).json({ error: 'กรุณากรอกข้อมูลรถให้ครบถ้วน' });
   }
+  if (cleanProvince(province) === undefined) return res.status(400).json(INVALID_PROVINCE);
   try {
     const [vehicleResult] = await pool.execute(
       `INSERT INTO vehicles (customer_id, brand, model, color, license_plate, province, mileage, year)
@@ -138,6 +143,7 @@ router.put('/:id', requireRole('office'), async (req, res) => {
   if (!brand || !model) {
     return res.status(400).json({ error: 'กรุณากรอกข้อมูลรถให้ครบถ้วน' });
   }
+  if (cleanProvince(province) === undefined) return res.status(400).json(INVALID_PROVINCE);
   try {
     const [result] = await pool.execute(
       `UPDATE vehicles SET brand = ?, model = ?, color = ?, license_plate = ?, province = ?, mileage = ?, year = ? WHERE id = ?`,

@@ -103,7 +103,7 @@ describe('สร้างคิวจากใบเสนอราคาที�
   test('จังหวัด: บันทึกตอนสร้าง/แก้รถ และตัดช่องว่าง (ว่าง = null)', async () => {
     const create = await request(app)
       .post('/api/vehicles').set(auth())
-      .send({ customer_id: fixture.customerId, brand: 'Toyota', model: 'Vios', license_plate: 'กข1234', province: '  เชียงใหม่ ' });
+      .send({ customer_id: fixture.customerId, brand: 'Toyota', model: 'Vios', license_plate: 'กข1234', province: ' เชียงใหม่ ' });
     expect(create.status).toBe(201);
     const id = create.body.data.id;
     const get = await request(app).get(`/api/vehicles/${id}`).set(auth());
@@ -115,5 +115,24 @@ describe('สร้างคิวจากใบเสนอราคาที�
     expect(put.status).toBe(200);
     const get2 = await request(app).get(`/api/vehicles/${id}`).set(auth());
     expect(get2.body.data.province).toBeNull();
+  });
+});
+
+describe('จังหวัดต้องเป็นหนึ่งใน 77 จังหวัดเท่านั้น', () => {
+  let token;
+  let fixture;
+  beforeAll(async () => { token = await getOfficeToken(); });
+  beforeEach(async () => { fixture = await createCustomerWithVehicle({ namePrefix: 'Province Validate' }); });
+  afterEach(async () => { await cleanupCustomer(fixture.customerId); });
+
+  test('สะกดผิด/ไม่มีในรายการ → 400 ทั้งสร้างและแก้ไขรถ', async () => {
+    const bad = await request(app)
+      .post('/api/vehicles').set({ Authorization: `Bearer ${token}` })
+      .send({ customer_id: fixture.customerId, brand: 'Toyota', model: 'Vios', license_plate: 'กข1', province: 'เชียงใหม' });
+    expect(bad.status).toBe(400);
+    const put = await request(app)
+      .put(`/api/vehicles/${fixture.vehicleId}`).set({ Authorization: `Bearer ${token}` })
+      .send({ brand: 'Toyota', model: 'Vios', license_plate: 'กข1', province: 'Chiang Mai' });
+    expect(put.status).toBe(400);
   });
 });

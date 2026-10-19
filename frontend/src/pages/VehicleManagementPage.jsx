@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import client from '../api/client';
-import { plateWithProvince, THAI_PROVINCES } from '../utils/thaiProvinces';
+import { plateWithProvince } from '../utils/thaiProvinces';
+import ProvinceSelect from '../components/ProvinceSelect';
 import { getNameInitials } from '../utils/format';
 
 export default function VehicleManagementPage() {
@@ -248,16 +249,7 @@ export default function VehicleManagementPage() {
               </div>
               <div className="form-group">
                 <label>จังหวัด (ของทะเบียน)</label>
-                <input
-                  type="text"
-                  list="province-options"
-                  placeholder="เช่น เชียงใหม่"
-                  value={form.province || ''}
-                  onChange={(e) => setForm({ ...form, province: e.target.value })}
-                />
-                <datalist id="province-options">
-                  {THAI_PROVINCES.map((p) => <option key={p} value={p} />)}
-                </datalist>
+                <ProvinceSelect value={form.province || ''} onChange={(province) => setForm({ ...form, province })} />
               </div>
               <div className="form-group">
                 <label>เลขไมล์</label>

@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import client from '../api/client';
-import { plateWithProvince, THAI_PROVINCES } from '../utils/thaiProvinces';
+import { plateWithProvince } from '../utils/thaiProvinces';
+import ProvinceSelect from '../components/ProvinceSelect';
 import { jobStatusDef, MAIN_PATH } from '../utils/jobStatus';
 import { formatDbDateTime, todayStr } from '../utils/format';
 import { resizePhotos, resizeFullPhotos, describePhotoFailures, IMAGE_ACCEPT } from '../utils/resizeImage';
@@ -815,14 +816,7 @@ export default function JobDetailPage() {
             <input type="text" value={form.license_plate} onChange={(e) => setForm({ ...form, license_plate: e.target.value })} />
 
             <label>จังหวัด (ของทะเบียน)</label>
-            <input
-              type="text" list="province-options" placeholder="เช่น เชียงใหม่"
-              value={form.province || ''}
-              onChange={(e) => setForm({ ...form, province: e.target.value })}
-            />
-            <datalist id="province-options">
-              {THAI_PROVINCES.map((p) => <option key={p} value={p} />)}
-            </datalist>
+            <ProvinceSelect value={form.province || ''} onChange={(province) => setForm({ ...form, province })} />
 
             <label>ชื่อลูกค้า</label>
             <input type="text" value={form.customer_name} onChange={(e) => setForm({ ...form, customer_name: e.target.value })} />
