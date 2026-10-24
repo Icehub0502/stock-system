@@ -3,7 +3,8 @@
 #   - MySQL dump of the shop database (single transaction → consistent without locking tables)
 #   - uploads/ folder (photos) as a tar.gz
 # Both land in ~/db-backups on the server (outside the git checkout) and are verified after writing.
-# Old backups beyond the newest 14 of each kind are pruned.
+# Old backups are pruned: newest 14 database dumps, but only the newest 2 uploads archives (uploads is
+# several GB, 14 copies would fill the disk).
 #
 # Usage on the server:   bash /var/www/stock-system/backend/scripts/backup-db.sh [label]
 #   label (optional) shows up in the file name, e.g. "pre-saas-phase1"
@@ -35,9 +36,9 @@ if [ -d "$APP_DIR/backend/uploads" ]; then
   tar -tzf "$UPLOADS" > /dev/null
 fi
 
-# keep the newest 14 of each kind
+# keep the newest 14 dumps, and only the newest 2 uploads archives (they are large)
 ls -1t "$OUT_DIR"/"${DB_NAME}".*.sql.gz 2>/dev/null | tail -n +15 | xargs -r rm -f
-ls -1t "$OUT_DIR"/uploads.*.tar.gz 2>/dev/null | tail -n +15 | xargs -r rm -f
+ls -1t "$OUT_DIR"/uploads.*.tar.gz 2>/dev/null | tail -n +3 | xargs -r rm -f
 
 echo "OK"
 ls -lh "$DUMP" ${UPLOADS:+"$UPLOADS"}
