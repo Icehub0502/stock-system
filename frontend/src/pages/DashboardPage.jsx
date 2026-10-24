@@ -50,8 +50,7 @@ function buildTrendDays(dailyRows, days = 14) {
 const QUICK_LINKS = [
   { to: "/receipt-list", label: "+ สร้างบิลใหม่" },
   { to: "/quotations", label: "+ สร้างใบเสนอราคา" },
-  { to: "/stock-rack", label: "จัดการสต็อกแร็ค (StockRack)" },
-  { to: "/wing-arms", label: "จัดการสต็อกปีกนก" },
+  { to: "/stock-all", label: "สต๊อกรวม" },
   { to: "/daily-summary", label: "สรุปยอดขายรายวัน" },
 ];
 
@@ -75,14 +74,13 @@ export default function DashboardPage() {
 
     Promise.all([
       client.get('/receipts/daily-summary').catch(() => ({ data: { data: [] } })),
-      client.get('/racks').catch(() => ({ data: [] })),
-      client.get('/wing-arms').catch(() => ({ data: [] })),
+      client.get('/stock-items').catch(() => ({ data: [] })),
       client.get('/receipts').catch(() => ({ data: { data: [] } })),
       client.get('/receipts/top-products', { params: { days: 30, limit: 5 } }).catch(() => ({ data: { data: [] } })),
       client.get('/receipts/top-vehicle-models', { params: { limit: 10 } }).catch(() => ({ data: { data: [] } })),
       client.get('/receipts/top-customers', { params: { limit: 10 } }).catch(() => ({ data: { data: [] } })),
       client.get('/quotations').catch(() => ({ data: { data: [] } })),
-    ]).then(([summaryRes, racksRes, wingArmsRes, receiptsRes, topProductsRes, topVehicleModelsRes, topCustomersRes, quotationsRes]) => {
+    ]).then(([summaryRes, stockRes, receiptsRes, topProductsRes, topVehicleModelsRes, topCustomersRes, quotationsRes]) => {
       if (cancelled) return;
 
       const dailyRows = summaryRes.data.data || [];
@@ -101,9 +99,10 @@ export default function DashboardPage() {
 
       setRevenueTrend(buildTrendDays(dailyRows, 14));
 
-      const lowRacks = (racksRes.data || []).filter((r) => r.stock_qty <= r.min_stock).map((r) => ({ ...r, kind: 'แร็ค OEM' }));
-      const lowWingArms = (wingArmsRes.data || []).filter((r) => r.stock_qty <= r.min_stock).map((r) => ({ ...r, kind: 'ปีกนก' }));
-      const lowItems = [...lowRacks, ...lowWingArms];
+      // สต๊อกรวม: ใกล้หมด/หมด = ยอดรวม ≤ ยอดขั้นต่ำของรายการนั้น
+      const lowItems = (stockRes.data || [])
+        .filter((r) => Number(r.stock_qty) <= Number(r.min_stock))
+        .map((r) => ({ ...r, kind: r.category_name, name: r.description || r.oem_code }));
       setLowStockCount(lowItems.length);
       setLowStockItems(lowItems);
 

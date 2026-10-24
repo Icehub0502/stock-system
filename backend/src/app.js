@@ -22,14 +22,12 @@ const corsOptions = {
 };
 
 const authRoutes = require('./routes/auth.routes');
-const rackRoutes = require('./routes/racks.routes');
 const stockItemsRoutes = require('./routes/stockItems.routes');
 const stockReceiveRoutes = require('./routes/stockReceive.routes');
 const stockDeductionsRoutes = require('./routes/stockDeductions.routes');
 const transactionRoutes = require('./routes/backend_transactions.routes');
 const userRoutes = require('./routes/users.routes');
 const productCostRoutes = require('./routes/productCostRoutes');
-const wingArms = require('./routes/wingArms');
 const quotationCustomerRoutes = require('./routes/quotation-customers.routes');
 const quotationRoutes = require('./routes/quotations.routes');
 const receiptsRoutes = require('./routes/receipts.routes');
@@ -129,14 +127,12 @@ function createApp() {
   app.use(compression());
 
   app.use('/api/auth', authRoutes);
-  app.use('/api/racks', rackRoutes);
   app.use('/api/stock-items', stockItemsRoutes);
   app.use('/api/stock-receive', stockReceiveRoutes);
   app.use('/api/stock-deductions', stockDeductionsRoutes);
   app.use('/api/transactions', transactionRoutes);
   app.use('/api/users', userRoutes);
   app.use('/api/product-costs', productCostRoutes);
-  app.use('/api/wing-arms', wingArms);
   app.use('/api/quotation-customers', quotationCustomerRoutes);
   app.use('/api/customers', customersRoutes);
   app.use('/api/quotations', quotationRoutes);

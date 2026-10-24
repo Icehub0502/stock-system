@@ -44,7 +44,7 @@ const ICONS = {
 
 const OFFICE_ITEMS = [
   { to: '/dashboard', label: 'หน้าหลัก', icon: 'home' },
-  { to: '/stock-rack', label: 'สต๊อก', icon: 'stock' },
+  { to: '/stock-all', label: 'สต๊อก', icon: 'stock' },
   { to: '/receipt-list', label: 'ใบเสร็จ', icon: 'receipt' },
   { to: '/scan', label: 'สแกน', icon: 'scan' },
 ];

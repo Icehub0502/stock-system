@@ -15,7 +15,6 @@ import LoginPage from "./pages/LoginPage";
 // downloaded when a user actually navigates to it — e.g. technician-only
 // accounts never pull in the office-only pages below.
 const DashboardPage = lazy(() => import("./pages/DashboardPage"));
-const StockRackPage = lazy(() => import("./pages/StockRackPage"));
 const StockAllPage = lazy(() => import("./pages/StockAllPage"));
 const TechnicianScanPage = lazy(() => import("./pages/TechnicianScanPage"));
 const TransactionHistoryPage = lazy(() => import("./pages/TransactionHistoryPage"));
@@ -33,7 +32,6 @@ const WarrantyManagementPage = lazy(() => import("./pages/WarrantyManagementPage
 const ClaimManagementPage = lazy(() => import("./pages/ClaimManagementPage"));
 const ProductCostPage = lazy(() => import("./pages/ProductCostPage"));
 const QuotePartPriceManagementPage = lazy(() => import("./pages/QuotePartPriceManagementPage"));
-const WingArmDashboard = lazy(() => import("./pages/WingArmDashboard"));
 const DailySalesSummaryPage = lazy(() => import("./pages/DailySalesSummaryPage"));
 const RepairNoticeListPage = lazy(() => import("./pages/RepairNoticeListPage"));
 const RepairNoticePage = lazy(() => import("./pages/RepairNoticePage"));
@@ -103,14 +101,7 @@ function AppRoutes() {
               </ProtectedRoute>
             }
           />
-          <Route
-            path="/stock-rack"
-            element={
-              <ProtectedRoute roles={["office"]}>
-                <StockRackPage />
-              </ProtectedRoute>
-            }
-          />
+          <Route path="/stock-rack" element={<Navigate to="/stock-all" replace />} />
           <Route
             path="/history"
             element={
@@ -143,14 +134,7 @@ function AppRoutes() {
               </ProtectedRoute>
             }
           />
-          <Route
-            path="/wing-arms"
-            element={
-              <ProtectedRoute roles={["office"]}> {/* ✅ ใส่ guard ด้วย */}
-                <WingArmDashboard />
-              </ProtectedRoute>
-            }
-          />
+          <Route path="/wing-arms" element={<Navigate to="/stock-all" replace />} />
           <Route
             path="/customers"
             element={
