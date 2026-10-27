@@ -10,6 +10,7 @@ const { Server } = require('socket.io');
 // undefined ตลอดแม้เรียกตอน runtime) corsOrigins.js ไม่พึ่ง app.js เลยจึงตัดวงจรนี้
 const { isAllowedOrigin } = require('./corsOrigins');
 const { verifyToken } = require('./middleware/auth');
+const pool = require('./db/pool');
 
 let io = null;
 
@@ -48,55 +49,78 @@ function initRealtime(httpServers) {
   // (office-only) don't fan out to every /rt client (e.g. job-board kiosks).
   // Registered as its own connection listener (not inside the auth
   // middleware above) so it re-runs correctly on every reconnect.
+  // ทุกห้องมีรหัสร้านต่อท้าย (shop:1, office:1 ...) เพื่อไม่ให้ event ของร้านหนึ่งไปถึงอีกร้าน
   io.of('/rt').on('connection', (socket) => {
-    if (socket.data.user?.role === 'office') socket.join('office');
+    const shopId = Number(socket.data.user?.shop_id) || 1;
+    socket.join(`shop:${shopId}`);
+    if (socket.data.user?.role === 'office') socket.join(`office:${shopId}`);
+  });
+
+  // จอบอร์ดสาธารณะ: เลือกร้านด้วย ?shop=<รหัสร้าน> ตอนเชื่อมต่อ (ไม่ใส่ = ร้านที่ 1)
+  io.of('/board').on('connection', async (socket) => {
+    try {
+      const code = String(socket.handshake.query?.shop ?? '').trim().toLowerCase();
+      let shopId = 1;
+      if (code) {
+        const [rows] = await pool.query("SELECT id FROM shops WHERE code = ? AND status = 'active'", [code]);
+        shopId = rows[0]?.id;
+      }
+      if (shopId) socket.join(`shop:${shopId}`);
+    } catch (err) {
+      console.error(err);
+    }
   });
 
   return io;
 }
 
-function emitStaffEvent(event, payload, { room } = {}) {
+// shopId บังคับ: ไม่มีรหัสร้านจะไม่ส่งให้ใครเลย (ดีกว่าปล่อยให้หลุดไปทุกร้าน)
+function emitStaffEvent(event, payload, { room, shopId } = {}) {
   if (!io) return;
+  if (!shopId) {
+    console.error(`realtime: event ${event} dropped — no shopId`);
+    return;
+  }
   try {
-    const target = room ? io.of('/rt').to(room) : io.of('/rt');
-    target.emit(event, payload);
+    io.of('/rt').to(room ? `${room}:${shopId}` : `shop:${shopId}`).emit(event, payload);
   } catch (err) {
     console.error(err);
   }
 }
 
-function emitJobEvent(event, { jobId, jobDate, status, actorId }) {
+function emitJobEvent(event, { shopId, jobId, jobDate, status, actorId }) {
   if (!io) return;
-  emitStaffEvent(event, { jobId, jobDate, status, actorId });
+  emitStaffEvent(event, { jobId, jobDate, status, actorId }, { shopId });
+  if (!shopId) return;
   try {
-    io.of('/board').emit('board:changed', { jobDate });
+    io.of('/board').to(`shop:${shopId}`).emit('board:changed', { jobDate });
   } catch (err) {
     console.error(err);
   }
 }
 
-function emitQuotationEvent(event, { quotationId, status, actorId }) {
-  emitStaffEvent(event, { quotationId, status, actorId }, { room: 'office' });
+function emitQuotationEvent(event, { shopId, quotationId, status, actorId }) {
+  emitStaffEvent(event, { quotationId, status, actorId }, { room: 'office', shopId });
 }
 
-function emitReceiptEvent(event, { receiptId, actorId }) {
-  emitStaffEvent(event, { receiptId, actorId }, { room: 'office' });
+function emitReceiptEvent(event, { shopId, receiptId, actorId }) {
+  emitStaffEvent(event, { receiptId, actorId }, { room: 'office', shopId });
 }
 
-function emitStockEvent(event, { entityType, entityId, actorId }) {
-  emitStaffEvent(event, { entityType, entityId, actorId }, { room: 'office' });
+function emitStockEvent(event, { shopId, entityType, entityId, actorId }) {
+  emitStaffEvent(event, { entityType, entityId, actorId }, { room: 'office', shopId });
 }
 
-function emitStockTxEvent(event, { txType, entityType, entityId, actorId }) {
-  emitStaffEvent(event, { txType, entityType, entityId, actorId }, { room: 'office' });
+function emitStockTxEvent(event, { shopId, txType, entityType, entityId, actorId }) {
+  emitStaffEvent(event, { txType, entityType, entityId, actorId }, { room: 'office', shopId });
 }
 
-function emitProductCostEvent(event, { productId, actorId }) {
-  emitStaffEvent(event, { productId, actorId }, { room: 'office' });
+function emitProductCostEvent(event, { shopId, productId, actorId }) {
+  emitStaffEvent(event, { productId, actorId }, { room: 'office', shopId });
 }
 
-function emitReceiptSessionEvent(event, { sessionId, actorId }) {
-  emitStaffEvent(event, { sessionId, actorId }, { room: 'office' });
+function emitReceiptSessionEvent(event, { shopId, sessionId, actorId }) {
+  emitStaffEvent(event, { sessionId, actorId }, { room: 'office', shopId });
 }
 
 module.exports = {

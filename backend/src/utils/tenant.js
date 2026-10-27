@@ -23,4 +23,14 @@ async function ownsAll(conn, table, ids, shopId) {
   return Number(rows[0].n) === wanted.length;
 }
 
-module.exports = { ownsRow, ownsAll };
+// Public pages (track / board) have no login. The shop is named by ?shop=<shop code>; without it they
+// serve shop 1 (the links printed before the platform had several shops). Returns the shop id or null
+// when the code does not match an active shop.
+async function resolvePublicShopId(req) {
+  const code = String(req.query?.shop ?? '').trim().toLowerCase();
+  if (!code) return 1;
+  const [rows] = await pool.query("SELECT id FROM shops WHERE code = ? AND status = 'active'", [code]);
+  return rows[0]?.id ?? null;
+}
+
+module.exports = { ownsRow, ownsAll, resolvePublicShopId };

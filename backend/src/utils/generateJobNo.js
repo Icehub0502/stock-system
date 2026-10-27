@@ -7,12 +7,12 @@
 // -> lineWebhook.routes.js เป็น require chain ที่มีอยู่แล้ว — ถ้า lineWebhook.routes.js
 // require jobs.routes.js ตรง ๆ จะเกิด circular require กลับมาที่ quotations.routes.js
 // จนโมดูลนั้นโหลดไม่ครบ (generateQuotationNo ฯลฯ จะเป็น undefined)
-async function generateJobNo(conn, jobDate) {
+async function generateJobNo(conn, jobDate, shopId) {
   const [y, m, d] = jobDate.split('-');
   const prefix = `JB-${y.slice(-2)}${m}${d}-`;
   const [rows] = await conn.execute(
-    'SELECT MAX(CAST(SUBSTRING(job_no, -3) AS UNSIGNED)) AS maxNo FROM jobs WHERE job_no LIKE ? FOR UPDATE',
-    [`${prefix}%`]
+    'SELECT MAX(CAST(SUBSTRING(job_no, -3) AS UNSIGNED)) AS maxNo FROM jobs WHERE shop_id = ? AND job_no LIKE ? FOR UPDATE',
+    [shopId, `${prefix}%`]
   );
   const next = (rows[0]?.maxNo || 0) + 1;
   return `${prefix}${String(next).padStart(3, '0')}`;

@@ -11,7 +11,8 @@ router.use(requireRole('office'));
 router.get('/brands', async (req, res) => {
   try {
     const [rows] = await pool.query(
-      'SELECT DISTINCT brand FROM quote_part_prices WHERE is_active = 1 ORDER BY brand ASC'
+      'SELECT DISTINCT brand FROM quote_part_prices WHERE shop_id = ? AND is_active = 1 ORDER BY brand ASC',
+      [req.shopId]
     );
     res.json({ success: true, data: rows.map((r) => r.brand) });
   } catch (err) {
@@ -26,8 +27,8 @@ router.get('/models', async (req, res) => {
   if (!brand) return res.status(400).json({ error: 'กรุณาระบุยี่ห้อ' });
   try {
     const [rows] = await pool.execute(
-      'SELECT DISTINCT model FROM quote_part_prices WHERE is_active = 1 AND brand = ? ORDER BY model ASC',
-      [brand]
+      'SELECT DISTINCT model FROM quote_part_prices WHERE shop_id = ? AND is_active = 1 AND brand = ? ORDER BY model ASC',
+      [req.shopId, brand]
     );
     res.json({ success: true, data: rows.map((r) => r.model) });
   } catch (err) {
@@ -45,9 +46,9 @@ router.get('/parts', async (req, res) => {
     const [rows] = await pool.execute(
       `SELECT id, brand, model, part_name, description, price, image_data, needs_price, category
        FROM quote_part_prices
-       WHERE is_active = 1 AND brand = ? AND model = ?
+       WHERE shop_id = ? AND is_active = 1 AND brand = ? AND model = ?
        ORDER BY part_name ASC`,
-      [brand, model]
+      [req.shopId, brand, model]
     );
     res.json({ success: true, data: rows });
   } catch (err) {
@@ -60,8 +61,8 @@ router.get('/parts', async (req, res) => {
 router.get('/', async (req, res) => {
   const { search = '', brand = '', model = '' } = req.query;
   try {
-    let sql = 'SELECT * FROM quote_part_prices WHERE 1=1';
-    const params = [];
+    let sql = 'SELECT * FROM quote_part_prices WHERE shop_id = ?';
+    const params = [req.shopId];
     if (search) {
       sql += ' AND (part_name LIKE ? OR description LIKE ? OR brand LIKE ? OR model LIKE ?)';
       const like = `%${search}%`;
@@ -93,9 +94,9 @@ router.post('/', async (req, res) => {
   try {
     const imageUrl = saveDataUrlToFile(image_data, 'quote-parts');
     const [result] = await pool.execute(
-      `INSERT INTO quote_part_prices (brand, model, part_name, description, price, image_data, category)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [brand.trim(), model.trim(), part_name.trim(), description?.trim() || null, Number(price) || 0, imageUrl || null, category?.trim() || null]
+      `INSERT INTO quote_part_prices (shop_id, brand, model, part_name, description, price, image_data, category)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [req.shopId, brand.trim(), model.trim(), part_name.trim(), description?.trim() || null, Number(price) || 0, imageUrl || null, category?.trim() || null]
     );
     res.status(201).json({ success: true, data: { id: result.insertId } });
   } catch (err) {
@@ -111,7 +112,8 @@ router.put('/:id', async (req, res) => {
     return res.status(400).json({ error: 'กรุณากรอกยี่ห้อ รุ่นรถ และชื่ออะไหล่ให้ครบถ้วน' });
   }
   try {
-    const [[existing]] = await pool.query('SELECT image_data FROM quote_part_prices WHERE id = ?', [req.params.id]);
+    const [[existing]] = await pool.query('SELECT image_data FROM quote_part_prices WHERE id = ? AND shop_id = ?', [req.params.id, req.shopId]);
+    if (!existing) return res.status(404).json({ error: 'ไม่พบรายการ' });
     const imageUrl = saveDataUrlToFile(image_data, 'quote-parts');
     // แก้ไข/บันทึกผ่านหน้านี้ = ออฟฟิศตั้งใจยืนยันราคาแล้ว (ไม่ว่าจะเป็นแถวที่พิมพ์
     // เองแต่แรก หรือแถวที่ import_quote_parts_for_all_models.js สร้างราคา 0 ให้ไว้
@@ -119,7 +121,7 @@ router.put('/:id', async (req, res) => {
     const [result] = await pool.execute(
       `UPDATE quote_part_prices
        SET brand = ?, model = ?, part_name = ?, description = ?, price = ?, image_data = ?, is_active = ?, needs_price = 0
-       WHERE id = ?`,
+       WHERE id = ? AND shop_id = ?`,
       [
         brand.trim(),
         model.trim(),
@@ -129,6 +131,7 @@ router.put('/:id', async (req, res) => {
         imageUrl || null,
         is_active === undefined ? 1 : (is_active ? 1 : 0),
         req.params.id,
+        req.shopId,
       ]
     );
     if (result.affectedRows === 0) {
@@ -148,8 +151,8 @@ router.put('/:id', async (req, res) => {
 // DELETE /:id
 router.delete('/:id', async (req, res) => {
   try {
-    const [[existing]] = await pool.query('SELECT image_data FROM quote_part_prices WHERE id = ?', [req.params.id]);
-    const [result] = await pool.execute('DELETE FROM quote_part_prices WHERE id = ?', [req.params.id]);
+    const [[existing]] = await pool.query('SELECT image_data FROM quote_part_prices WHERE id = ? AND shop_id = ?', [req.params.id, req.shopId]);
+    const [result] = await pool.execute('DELETE FROM quote_part_prices WHERE id = ? AND shop_id = ?', [req.params.id, req.shopId]);
     if (result.affectedRows === 0) {
       return res.status(404).json({ error: 'ไม่พบรายการ' });
     }

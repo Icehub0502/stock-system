@@ -22,6 +22,11 @@ const { LINE_MESSAGE_DEFAULTS } = require('../utils/lineMessageDefaults');
 const { applyReceiptSplits, parseSplitsFromText } = require('../utils/paymentMethods');
 const { DEFAULT_SHOP_ID } = require('../middleware/auth');
 
+// บอทไลน์ยังผูกกับร้านที่ 1 ร้านเดียว (token ของบอทอยู่ใน .env ไม่ใช่ต่อร้าน) — ทุก query ในไฟล์นี้
+// กรองด้วยค่านี้เพื่อไม่ให้บอทไปอ่าน/แก้ข้อมูลของร้านอื่น เฟส 4 (บอทต่อร้าน) จะเปลี่ยนเป็นร้านที่
+// หาได้จากช่องไลน์ที่ข้อความเข้ามา
+const LINE_SHOP_ID = DEFAULT_SHOP_ID;
+
 const router = express.Router();
 
 // LINE ส่ง webhook ซ้ำได้ (retry เมื่อคิดว่า timeout) — จำ message id ที่ประมวลผล
@@ -239,7 +244,7 @@ async function captureGroupId(groupId) {
 
 // ── ตัวสร้างเลขเอกสาร: mirror จาก quotations.routes.js (ตามแบบแผนเดิมของ
 // โปรเจกต์ที่ generateReceiptNo/generateRepairNoticeCode ก็ mirror ข้ามไฟล์กัน) ──
-async function generateQuotationNo(conn) {
+async function generateQuotationNo(conn, shopId = LINE_SHOP_ID) {
   const today = new Date();
   const dateStr = String(today.getDate()).padStart(2, '0')
                 + String(today.getMonth() + 1).padStart(2, '0')
@@ -248,17 +253,18 @@ async function generateQuotationNo(conn) {
   // ไลน์ที่มาถึงพร้อมกันอ่าน MAX เดิมแล้วได้เลขใบเสนอราคาซ้ำกัน (แบบเดียวกับที่
   // ล็อก queue_no ไว้ด้านบนใน createQuotationFromQueue)
   const [rows] = await conn.execute(
-    'SELECT MAX(CAST(SUBSTRING(quotation_no, -3) AS UNSIGNED)) as maxNo FROM quotations WHERE quotation_no LIKE ? FOR UPDATE',
-    [`IV${dateStr}%`]
+    'SELECT MAX(CAST(SUBSTRING(quotation_no, -3) AS UNSIGNED)) as maxNo FROM quotations WHERE shop_id = ? AND quotation_no LIKE ? FOR UPDATE',
+    [shopId, `IV${dateStr}%`]
   );
   const nextNumber = (rows[0]?.maxNo || 0) + 1;
   return `IV${dateStr}${String(nextNumber).padStart(3, '0')}`;
 }
 
-async function generateCustomerCode(conn) {
+async function generateCustomerCode(conn, shopId = LINE_SHOP_ID) {
   // เหตุผลเดียวกับ generateQuotationNo ด้านบน
   const [rows] = await conn.execute(
-    "SELECT MAX(CAST(SUBSTRING(customer_code, 5) AS UNSIGNED)) AS maxCode FROM customers WHERE customer_code LIKE 'CMM-%' FOR UPDATE"
+    "SELECT MAX(CAST(SUBSTRING(customer_code, 5) AS UNSIGNED)) AS maxCode FROM customers WHERE shop_id = ? AND customer_code LIKE 'CMM-%' FOR UPDATE",
+    [shopId]
   );
   const nextNumber = (rows[0]?.maxCode || 0) + 1;
   return `CMM-${String(nextNumber).padStart(4, '0')}`;
@@ -274,12 +280,12 @@ function formatReceiptDate(date) {
   return `${yy}${mm}${dd}`;
 }
 
-async function generateReceiptNo(conn) {
+async function generateReceiptNo(conn, shopId = LINE_SHOP_ID) {
   const dateStr = formatReceiptDate(new Date());
   // FOR UPDATE เหตุผลเดียวกับตัวสร้างเลขเอกสารด้านบน
   const [rows] = await conn.execute(
-    'SELECT MAX(CAST(SUBSTRING(receipt_no, -3) AS UNSIGNED)) AS maxNo FROM receipts WHERE receipt_no LIKE ? FOR UPDATE',
-    [`RC${dateStr}%`]
+    'SELECT MAX(CAST(SUBSTRING(receipt_no, -3) AS UNSIGNED)) AS maxNo FROM receipts WHERE shop_id = ? AND receipt_no LIKE ? FOR UPDATE',
+    [shopId, `RC${dateStr}%`]
   );
   const nextNumber = (rows[0]?.maxNo || 0) + 1;
   return `RC${dateStr}${String(nextNumber).padStart(3, '0')}`;
@@ -287,17 +293,18 @@ async function generateReceiptNo(conn) {
 
 // Mirrors quotations.routes.js's generateCarSequenceNo() — เหตุผลเดียวกับ
 // generateReceiptNo ด้านบน
-async function generateCarSequenceNo(conn) {
-  const [rows] = await conn.execute('SELECT MAX(car_sequence_no) AS maxNo FROM receipts FOR UPDATE');
+async function generateCarSequenceNo(conn, shopId = LINE_SHOP_ID) {
+  const [rows] = await conn.execute('SELECT MAX(car_sequence_no) AS maxNo FROM receipts WHERE shop_id = ? FOR UPDATE', [shopId]);
   const nextNumber = (rows[0]?.maxNo || 0) + 1;
-  return nextNumber < 1396 ? 1396 : nextNumber;
+  return shopId === 1 && nextNumber < 1396 ? 1396 : nextNumber;
 }
 
 // Mirrors quotations.routes.js's generateRepairNoticeCode() — ใบเสนอราคาที่บอท
 // อนุมัติเองต้องได้ใบแจ้งซ่อมคู่กันเหมือนอนุมัติผ่านหน้าเว็บทุกประการ
-async function generateRepairNoticeCode(conn) {
+async function generateRepairNoticeCode(conn, shopId = LINE_SHOP_ID) {
   const [rows] = await conn.execute(
-    "SELECT MAX(CAST(SUBSTRING(code, 4) AS UNSIGNED)) AS maxNo FROM repair_notices WHERE code LIKE 'RN-%' FOR UPDATE"
+    "SELECT MAX(CAST(SUBSTRING(code, 4) AS UNSIGNED)) AS maxNo FROM repair_notices WHERE shop_id = ? AND code LIKE 'RN-%' FOR UPDATE",
+    [shopId]
   );
   const nextNumber = (rows[0]?.maxNo || 0) + 1;
   return `RN-${String(nextNumber).padStart(4, '0')}`;
@@ -317,8 +324,8 @@ function todayStr() {
 // (createQuotationFromQueue ด้านล่าง) จะจัดการให้เอง ไม่ต้องสร้างระบบจองคิวใหม่
 async function getNextQueueNoPreview() {
   const [rows] = await pool.execute(
-    `SELECT MAX(CAST(queue_no AS UNSIGNED)) AS maxQueue FROM quotations WHERE quotation_date = ? AND queue_no REGEXP '^[0-9]+$'`,
-    [todayStr()]
+    `SELECT MAX(CAST(queue_no AS UNSIGNED)) AS maxQueue FROM quotations WHERE shop_id = ? AND quotation_date = ? AND queue_no REGEXP '^[0-9]+$'`,
+    [LINE_SHOP_ID, todayStr()]
   );
   const maxQueue = rows[0]?.maxQueue || 0;
   return String(maxQueue + 1);
@@ -405,9 +412,9 @@ async function matchServiceItem(conn, name) {
             w.warranty_name, w.warranty_year, w.warranty_month, w.warranty_km
      FROM service_items si
      LEFT JOIN warranties w ON si.warranty_id = w.id
-     WHERE si.is_active = 1 AND REPLACE(si.product_name, ' ', '') = ?
+     WHERE si.shop_id = ? AND si.is_active = 1 AND REPLACE(si.product_name, ' ', '') = ?
      LIMIT 2`,
-    [normalized]
+    [LINE_SHOP_ID, normalized]
   );
   return rows.length === 1 ? rows[0] : null;
 }
@@ -495,16 +502,16 @@ async function createQuotationFromQueue(parsed) {
     let wasNewCustomer = false;
     if (parsed.phone) {
       const [rows] = await conn.execute(
-        'SELECT id FROM customers WHERE phone = ? LIMIT 1',
-        [parsed.phone]
+        'SELECT id FROM customers WHERE shop_id = ? AND phone = ? LIMIT 1',
+        [LINE_SHOP_ID, parsed.phone]
       );
       if (rows.length > 0) customerId = rows[0].id;
     }
     if (!customerId) {
       const customerCode = await generateCustomerCode(conn);
       const [result] = await conn.execute(
-        'INSERT INTO customers (customer_code, customer_name, phone) VALUES (?, ?, ?)',
-        [customerCode, parsed.customer_name, parsed.phone || null]
+        'INSERT INTO customers (shop_id, customer_code, customer_name, phone) VALUES (?, ?, ?, ?)',
+        [LINE_SHOP_ID, customerCode, parsed.customer_name, parsed.phone || null]
       );
       customerId = result.insertId;
       wasNewCustomer = true;
@@ -523,10 +530,10 @@ async function createQuotationFromQueue(parsed) {
     if (parsed.queue_no) {
       const [closedRows] = await conn.execute(
         `SELECT id, quotation_no, queue_no FROM quotations
-         WHERE customer_id = ? AND quotation_date >= DATE_SUB(?, INTERVAL 14 DAY) AND closed_at IS NOT NULL
+         WHERE shop_id = ? AND customer_id = ? AND quotation_date >= DATE_SUB(?, INTERVAL 14 DAY) AND closed_at IS NOT NULL
          AND (queue_no = ? OR requested_queue_no = ?)
          ORDER BY id DESC LIMIT 1`,
-        [customerId, quotationDate, parsed.queue_no, parsed.queue_no]
+        [LINE_SHOP_ID, customerId, quotationDate, parsed.queue_no, parsed.queue_no]
       );
       if (closedRows.length > 0) {
         await conn.commit(); // ยังไม่ได้แก้อะไรเลยตอนนี้ (ลูกค้าอาจเพิ่งถูกสร้างใหม่ถ้าเป็นเบอร์ใหม่จริง ๆ) — commit เก็บไว้เฉย ๆ
@@ -550,11 +557,11 @@ async function createQuotationFromQueue(parsed) {
       // เหมือน pending ปกติ ไม่งั้นข้อความถัดไปจะหาใบเดิมไม่เจอแล้วเปิดใบใหม่ซ้อน
       const [rows] = await conn.execute(
         `SELECT id, quotation_no, status, converted_receipt_id, vehicle_id, deposit_amount FROM quotations
-         WHERE customer_id = ? AND quotation_date >= DATE_SUB(?, INTERVAL 14 DAY) AND status IN ('pending', 'approved', 'no_date')
+         WHERE shop_id = ? AND customer_id = ? AND quotation_date >= DATE_SUB(?, INTERVAL 14 DAY) AND status IN ('pending', 'approved', 'no_date')
          AND closed_at IS NULL
          AND (queue_no = ? OR requested_queue_no = ?)
          ORDER BY id DESC LIMIT 1`,
-        [customerId, quotationDate, parsed.queue_no, parsed.queue_no]
+        [LINE_SHOP_ID, customerId, quotationDate, parsed.queue_no, parsed.queue_no]
       );
       if (rows.length > 0) existing = rows[0];
     }
@@ -573,9 +580,9 @@ async function createQuotationFromQueue(parsed) {
     if (!existing) {
       const [scheduledRows] = await conn.execute(
         `SELECT id, quotation_no, status, converted_receipt_id, vehicle_id, deposit_amount FROM quotations
-         WHERE customer_id = ? AND status IN ('scheduled', 'no_date') AND closed_at IS NULL
+         WHERE shop_id = ? AND customer_id = ? AND status IN ('scheduled', 'no_date') AND closed_at IS NULL
          ORDER BY (scheduled_date IS NULL) ASC, scheduled_date ASC, id DESC LIMIT 1`,
-        [customerId]
+        [LINE_SHOP_ID, customerId]
       );
       if (scheduledRows.length > 0) {
         existing = scheduledRows[0];
@@ -597,14 +604,14 @@ async function createQuotationFromQueue(parsed) {
       vehicleId = existing.vehicle_id;
     } else if (parsed.license_plate) {
       const [rows] = await conn.execute(
-        'SELECT id FROM vehicles WHERE customer_id = ? AND license_plate = ? LIMIT 1',
-        [customerId, parsed.license_plate]
+        'SELECT id FROM vehicles WHERE shop_id = ? AND customer_id = ? AND license_plate = ? LIMIT 1',
+        [LINE_SHOP_ID, customerId, parsed.license_plate]
       );
       if (rows.length > 0) vehicleId = rows[0].id;
     } else if (parsed.brand) {
       const [rows] = await conn.execute(
-        'SELECT id FROM vehicles WHERE customer_id = ? AND brand = ? AND model = ? ORDER BY id DESC LIMIT 1',
-        [customerId, parsed.brand, parsed.model || '-']
+        'SELECT id FROM vehicles WHERE shop_id = ? AND customer_id = ? AND brand = ? AND model = ? ORDER BY id DESC LIMIT 1',
+        [LINE_SHOP_ID, customerId, parsed.brand, parsed.model || '-']
       );
       if (rows.length > 0) vehicleId = rows[0].id;
     }
@@ -612,8 +619,8 @@ async function createQuotationFromQueue(parsed) {
       // เลขไมล์เปลี่ยนทุกครั้งที่รถเข้า (ข้อมูลการเข้าใช้บริการ ไม่ใช่ข้อมูลประจำตัวรถ)
       // จึงยังอัปเดตได้ปกติทุกครั้งที่ข้อความบอกมา ไม่ว่าจะเป็นข้อความแรกหรือ resend
       await conn.execute(
-        'UPDATE vehicles SET mileage = ? WHERE id = ?',
-        [parsed.mileage, vehicleId]
+        'UPDATE vehicles SET mileage = ? WHERE id = ? AND shop_id = ?',
+        [parsed.mileage, vehicleId, LINE_SHOP_ID]
       );
     }
     if (vehicleId && !isUpdate && parsed.color) {
@@ -622,16 +629,16 @@ async function createQuotationFromQueue(parsed) {
       // เช่นพนักงานก๊อปเทมเพลตเดิมส่งซ้ำเพื่อเพิ่มรายการ) ห้ามทับค่าที่อาจเคยแก้ไขถูก
       // ต้องแล้วในหน้าเว็บ — เจ้าของร้านสั่งให้แก้ข้อมูลประจำตัวได้ทางเว็บเท่านั้น
       await conn.execute(
-        'UPDATE vehicles SET color = ? WHERE id = ?',
-        [parsed.color, vehicleId]
+        'UPDATE vehicles SET color = ? WHERE id = ? AND shop_id = ?',
+        [parsed.color, vehicleId, LINE_SHOP_ID]
       );
     }
     if (!vehicleId && (parsed.brand || parsed.license_plate)) {
       // brand/model เป็น NOT NULL ใน schema — ข้อความไลน์อาจไม่บอกยี่ห้อ ใช้ '-' คั่นไว้
       const [result] = await conn.execute(
-        `INSERT INTO vehicles (customer_id, brand, model, color, license_plate, mileage)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-        [customerId, parsed.brand || '-', parsed.model || '-', parsed.color || null, parsed.license_plate || null, parsed.mileage ?? 0]
+        `INSERT INTO vehicles (shop_id, customer_id, brand, model, color, license_plate, mileage)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [LINE_SHOP_ID, customerId, parsed.brand || '-', parsed.model || '-', parsed.color || null, parsed.license_plate || null, parsed.mileage ?? 0]
       );
       vehicleId = result.insertId;
       wasNewVehicle = true;
@@ -723,14 +730,14 @@ async function createQuotationFromQueue(parsed) {
       // อ่าน MAX เดียวกันแล้วเลื่อนไปชนเลขเดียวกันซ้ำ ต้องรอให้อีกฝั่ง insert เสร็จ
       // ก่อนถึงจะอ่านเห็นเลขล่าสุดจริง ๆ
       const [todayQueueRows] = await conn.execute(
-        `SELECT queue_no FROM quotations WHERE quotation_date = ? AND queue_no REGEXP '^[0-9]+$' FOR UPDATE`,
-        [quotationDate]
+        `SELECT queue_no FROM quotations WHERE shop_id = ? AND quotation_date = ? AND queue_no REGEXP '^[0-9]+$' FOR UPDATE`,
+        [LINE_SHOP_ID, quotationDate]
       );
       // AND closed_at IS NULL: บิลที่ปิดแล้วปล่อยเลขคิวของมันคืนให้ลูกค้าคนใหม่ใช้ได้
       // เลย ไม่ถือว่า "ชน" อีกต่อไป (งานจบแล้วจริง ๆ)
       const [takenByOther] = await conn.execute(
-        `SELECT id FROM quotations WHERE quotation_date = ? AND queue_no = ? AND customer_id != ? AND status IN ('pending', 'approved', 'no_date') AND closed_at IS NULL LIMIT 1`,
-        [quotationDate, parsed.queue_no, customerId]
+        `SELECT id FROM quotations WHERE shop_id = ? AND quotation_date = ? AND queue_no = ? AND customer_id != ? AND status IN ('pending', 'approved', 'no_date') AND closed_at IS NULL LIMIT 1`,
+        [LINE_SHOP_ID, quotationDate, parsed.queue_no, customerId]
       );
       if (takenByOther.length > 0) {
         const maxQueue = todayQueueRows.reduce((max, r) => Math.max(max, Number(r.queue_no)), 0);
@@ -767,8 +774,8 @@ async function createQuotationFromQueue(parsed) {
         // แจ้ง (deposit_date ยังคงเดิมแยกต่างหากอยู่แล้ว จึงยังสืบได้ว่ามัดจำวันไหนจริง)
         await conn.execute(
           `UPDATE quotations SET vehicle_id = ?, mileage = COALESCE(?, mileage), remark = ?, product_summary = ?, total_amount = ?, symptom = ?, deposit_amount = COALESCE(?, deposit_amount), deposit_date = COALESCE(?, deposit_date), queue_no = ?, status = ?, scheduled_date = ?, quotation_date = ?
-           WHERE id = ?`,
-          [vehicleId, parsed.mileage ?? null, parsed.remark || null, product_summary, total_amount, parsed.symptom || null, parsed.deposit_amount ?? null, parsed.deposit_date || null, actualQueueNo || null, hasAppointment ? 'scheduled' : 'pending', hasAppointment ? parsed.appointment_date : null, quotationDate, quotationId]
+           WHERE id = ? AND shop_id = ?`,
+          [vehicleId, parsed.mileage ?? null, parsed.remark || null, product_summary, total_amount, parsed.symptom || null, parsed.deposit_amount ?? null, parsed.deposit_date || null, actualQueueNo || null, hasAppointment ? 'scheduled' : 'pending', hasAppointment ? parsed.appointment_date : null, quotationDate, quotationId, LINE_SHOP_ID]
         );
       } else {
         // ดันไป no_date เฉพาะตอนใบยังเป็น pending เฉยๆ เท่านั้น (กันทับใบที่อนุมัติ
@@ -777,10 +784,10 @@ async function createQuotationFromQueue(parsed) {
         const shouldBumpToNoDate = !hasAppointment && willHaveDeposit && existing.status === 'pending';
         await conn.execute(
           `UPDATE quotations SET vehicle_id = ?, mileage = COALESCE(?, mileage), remark = ?, product_summary = ?, total_amount = ?, symptom = ?, deposit_amount = COALESCE(?, deposit_amount), deposit_date = COALESCE(?, deposit_date)${hasAppointment ? ", status = 'scheduled', scheduled_date = ?" : (shouldBumpToNoDate ? ", status = 'no_date'" : '')}
-           WHERE id = ?`,
+           WHERE id = ? AND shop_id = ?`,
           hasAppointment
-            ? [vehicleId, parsed.mileage ?? null, parsed.remark || null, product_summary, total_amount, parsed.symptom || null, parsed.deposit_amount ?? null, parsed.deposit_date || null, parsed.appointment_date, quotationId]
-            : [vehicleId, parsed.mileage ?? null, parsed.remark || null, product_summary, total_amount, parsed.symptom || null, parsed.deposit_amount ?? null, parsed.deposit_date || null, quotationId]
+            ? [vehicleId, parsed.mileage ?? null, parsed.remark || null, product_summary, total_amount, parsed.symptom || null, parsed.deposit_amount ?? null, parsed.deposit_date || null, parsed.appointment_date, quotationId, LINE_SHOP_ID]
+            : [vehicleId, parsed.mileage ?? null, parsed.remark || null, product_summary, total_amount, parsed.symptom || null, parsed.deposit_amount ?? null, parsed.deposit_date || null, quotationId, LINE_SHOP_ID]
         );
       }
       await conn.execute('DELETE FROM quotation_items WHERE quotation_id = ?', [quotationId]);
@@ -788,11 +795,11 @@ async function createQuotationFromQueue(parsed) {
       quotation_no = await generateQuotationNo(conn);
       const initialStatus = hasAppointment ? 'scheduled' : (hasDeposit ? 'no_date' : 'pending');
       const [quotationResult] = await conn.execute(
-        `INSERT INTO quotations (quotation_no, quotation_date, customer_id, vehicle_id, mileage, remark, product_summary, total_amount, queue_no, requested_queue_no, symptom, deposit_amount, deposit_date, status${hasAppointment ? ', scheduled_date' : ''})
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?${hasAppointment ? ', ?' : ''})`,
+        `INSERT INTO quotations (shop_id, quotation_no, quotation_date, customer_id, vehicle_id, mileage, remark, product_summary, total_amount, queue_no, requested_queue_no, symptom, deposit_amount, deposit_date, status${hasAppointment ? ', scheduled_date' : ''})
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?${hasAppointment ? ', ?' : ''})`,
         hasAppointment
-          ? [quotation_no, quotationDate, customerId, vehicleId, parsed.mileage ?? 0, parsed.remark || null, product_summary, total_amount, actualQueueNo || null, requestedQueueNo, parsed.symptom || null, parsed.deposit_amount ?? null, parsed.deposit_date || null, initialStatus, parsed.appointment_date]
-          : [quotation_no, quotationDate, customerId, vehicleId, parsed.mileage ?? 0, parsed.remark || null, product_summary, total_amount, actualQueueNo || null, requestedQueueNo, parsed.symptom || null, parsed.deposit_amount ?? null, parsed.deposit_date || null, initialStatus]
+          ? [LINE_SHOP_ID, quotation_no, quotationDate, customerId, vehicleId, parsed.mileage ?? 0, parsed.remark || null, product_summary, total_amount, actualQueueNo || null, requestedQueueNo, parsed.symptom || null, parsed.deposit_amount ?? null, parsed.deposit_date || null, initialStatus, parsed.appointment_date]
+          : [LINE_SHOP_ID, quotation_no, quotationDate, customerId, vehicleId, parsed.mileage ?? 0, parsed.remark || null, product_summary, total_amount, actualQueueNo || null, requestedQueueNo, parsed.symptom || null, parsed.deposit_amount ?? null, parsed.deposit_date || null, initialStatus]
       );
       quotationId = quotationResult.insertId;
     }
@@ -827,8 +834,8 @@ async function createQuotationFromQueue(parsed) {
       // ร้านแจ้ง) จับคู่ด้วยลูกค้า+รถ+วันเดียวกัน ที่ยังไม่มีใบเสนอราคาผูกอยู่เลย
       // (quotation_id IS NULL) เท่านั้น กันทับงานที่มีใบอื่นอยู่แล้วโดยไม่ตั้งใจ
       const [[byVisit]] = await conn.query(
-        `SELECT id FROM jobs WHERE customer_id = ? AND vehicle_id = ? AND job_date = ? AND quotation_id IS NULL ORDER BY id DESC LIMIT 1`,
-        [customerId, vehicleId, quotationDate]
+        `SELECT id FROM jobs WHERE shop_id = ? AND customer_id = ? AND vehicle_id = ? AND job_date = ? AND quotation_id IS NULL ORDER BY id DESC LIMIT 1`,
+        [LINE_SHOP_ID, customerId, vehicleId, quotationDate]
       );
       existingJob = byVisit;
       // ไม่มีงานวันนี้ที่ยังไม่ผูกไว้เลย — ค่อยเช็คว่าใบนี้เคยผูกงานไว้อยู่ก่อนหรือไม่
@@ -836,27 +843,27 @@ async function createQuotationFromQueue(parsed) {
       // เท่านั้น ไม่งั้นจะไปสวมทับงานเก่าคนละวันแทนที่จะสร้างงานใหม่ให้วันนี้
       if (!existingJob) {
         const [[byQuotation]] = await conn.query(
-          `SELECT id FROM jobs WHERE quotation_id = ? AND job_date = ? LIMIT 1`,
-          [quotationId, quotationDate]
+          `SELECT id FROM jobs WHERE shop_id = ? AND quotation_id = ? AND job_date = ? LIMIT 1`,
+          [LINE_SHOP_ID, quotationId, quotationDate]
         );
         existingJob = byQuotation;
       }
       if (existingJob) {
         jobId = existingJob.id;
         await conn.execute(
-          `UPDATE jobs SET vehicle_id = ?, quotation_id = ?, queue_no = COALESCE(?, queue_no), mileage_in = COALESCE(?, mileage_in), symptom = COALESCE(?, symptom) WHERE id = ?`,
-          [vehicleId, quotationId, actualQueueNo || null, parsed.mileage ?? null, parsed.symptom || null, jobId]
+          `UPDATE jobs SET vehicle_id = ?, quotation_id = ?, queue_no = COALESCE(?, queue_no), mileage_in = COALESCE(?, mileage_in), symptom = COALESCE(?, symptom) WHERE id = ? AND shop_id = ?`,
+          [vehicleId, quotationId, actualQueueNo || null, parsed.mileage ?? null, parsed.symptom || null, jobId, LINE_SHOP_ID]
         );
-        emitJobEvent('job:updated', { jobId, jobDate: quotationDate, status: null, actorId: null });
+        emitJobEvent('job:updated', { shopId: LINE_SHOP_ID, jobId, jobDate: quotationDate, status: null, actorId: null });
       } else {
-        const jobNo = await generateJobNo(conn, quotationDate);
+        const jobNo = await generateJobNo(conn, quotationDate, LINE_SHOP_ID);
         const [jobResult] = await conn.execute(
-          `INSERT INTO jobs (job_no, queue_no, job_date, customer_id, vehicle_id, quotation_id, mileage_in, symptom, status)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'received')`,
-          [jobNo, actualQueueNo || null, quotationDate, customerId, vehicleId, quotationId, parsed.mileage ?? null, parsed.symptom || null]
+          `INSERT INTO jobs (shop_id, job_no, queue_no, job_date, customer_id, vehicle_id, quotation_id, mileage_in, symptom, status)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'received')`,
+          [LINE_SHOP_ID, jobNo, actualQueueNo || null, quotationDate, customerId, vehicleId, quotationId, parsed.mileage ?? null, parsed.symptom || null]
         );
         jobId = jobResult.insertId;
-        emitJobEvent('job:created', { jobId, jobDate: quotationDate, status: 'received', actorId: null });
+        emitJobEvent('job:created', { shopId: LINE_SHOP_ID, jobId, jobDate: quotationDate, status: 'received', actorId: null });
       }
     }
 
@@ -869,8 +876,8 @@ async function createQuotationFromQueue(parsed) {
       // มาแค่ครั้งเดียวตอนต้น ข้อความแก้ไข/เพิ่มรายการทีหลังไม่จำเป็นต้องพิมพ์ซ้ำ —
       // ไม่งั้นจะหายไปทุกครั้งที่ resend แบบเดียวกับบั๊กรถที่แก้ไปแล้วด้านบน)
       await conn.execute(
-        `UPDATE receipts SET customer_id = ?, vehicle_id = ?, mileage = COALESCE(?, mileage), remark = ?, total_amount = ?, deposit_amount = COALESCE(?, deposit_amount), deposit_date = COALESCE(?, deposit_date) WHERE id = ?`,
-        [customerId, vehicleId, parsed.mileage ?? null, parsed.remark || null, total_amount, parsed.deposit_amount ?? null, parsed.deposit_date || null, receiptId]
+        `UPDATE receipts SET customer_id = ?, vehicle_id = ?, mileage = COALESCE(?, mileage), remark = ?, total_amount = ?, deposit_amount = COALESCE(?, deposit_amount), deposit_date = COALESCE(?, deposit_date) WHERE id = ? AND shop_id = ?`,
+        [customerId, vehicleId, parsed.mileage ?? null, parsed.remark || null, total_amount, parsed.deposit_amount ?? null, parsed.deposit_date || null, receiptId, LINE_SHOP_ID]
       );
       await conn.execute('DELETE FROM receipt_items WHERE receipt_id = ?', [receiptId]);
       for (const item of resolvedItems) {
@@ -928,13 +935,13 @@ async function createQuotationFromQueue(parsed) {
           // เช่นกรณีมัดจำ) แล้วปิดบิล
           const receiptId = existing.converted_receipt_id;
           await conn.execute(
-            'UPDATE receipts SET payment_method = ?, total_amount = ? WHERE id = ?',
-            [parsed.payment_method || null, paymentAmount, receiptId]
+            'UPDATE receipts SET payment_method = ?, total_amount = ? WHERE id = ? AND shop_id = ?',
+            [parsed.payment_method || null, paymentAmount, receiptId, LINE_SHOP_ID]
           );
           await applyReceiptSplits(conn, receiptId, parseSplitsFromText(parsed.payment_method), paymentAmount, { strict: false });
-          const [[receiptRow]] = await conn.query('SELECT receipt_no FROM receipts WHERE id = ?', [receiptId]);
+          const [[receiptRow]] = await conn.query('SELECT receipt_no FROM receipts WHERE id = ? AND shop_id = ?', [receiptId, LINE_SHOP_ID]);
           paymentReceiptNo = receiptRow ? receiptRow.receipt_no : null;
-          await conn.execute('UPDATE quotations SET closed_at = NOW() WHERE id = ?', [quotationId]);
+          await conn.execute('UPDATE quotations SET closed_at = NOW() WHERE id = ? AND shop_id = ?', [quotationId, LINE_SHOP_ID]);
           paymentClosed = true;
           closedReceiptId = receiptId;
           closedReceiptIsNew = false;
@@ -949,9 +956,9 @@ async function createQuotationFromQueue(parsed) {
           const receipt_no = await generateReceiptNo(conn);
           const car_sequence_no = await generateCarSequenceNo(conn);
           const [receiptResult] = await conn.execute(
-            `INSERT INTO receipts (receipt_no, receipt_date, customer_id, vehicle_id, mileage, remark, payment_method, total_amount, customer_signature, deposit_amount, deposit_date, car_sequence_no)
-             VALUES (?, CURDATE(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [receipt_no, customerId, vehicleId, parsed.mileage ?? 0, parsed.remark || null, parsed.payment_method || null, paymentAmount, null, parsed.deposit_amount ?? null, parsed.deposit_date || null, car_sequence_no]
+            `INSERT INTO receipts (shop_id, receipt_no, receipt_date, customer_id, vehicle_id, mileage, remark, payment_method, total_amount, customer_signature, deposit_amount, deposit_date, car_sequence_no)
+             VALUES (?, ?, CURDATE(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [LINE_SHOP_ID, receipt_no, customerId, vehicleId, parsed.mileage ?? 0, parsed.remark || null, parsed.payment_method || null, paymentAmount, null, parsed.deposit_amount ?? null, parsed.deposit_date || null, car_sequence_no]
           );
           const receiptId = receiptResult.insertId;
           await applyReceiptSplits(conn, receiptId, parseSplitsFromText(parsed.payment_method), paymentAmount, { strict: false });
@@ -963,25 +970,25 @@ async function createQuotationFromQueue(parsed) {
             );
           }
           await conn.execute(
-            "UPDATE quotations SET status = 'approved', converted_receipt_id = ?, closed_at = NOW() WHERE id = ?",
-            [receiptId, quotationId]
+            "UPDATE quotations SET status = 'approved', converted_receipt_id = ?, closed_at = NOW() WHERE id = ? AND shop_id = ?",
+            [receiptId, quotationId, LINE_SHOP_ID]
           );
           // ถ้าใบนี้ผูกกับงานในหน้าคิวที่ยังไม่ถูกตัดสินใจไปทางไหน — ดันสถานะงานตามด้วย
           // (บั๊กเดียวกับที่เจอตอนอนุมัติผ่านหน้าเว็บ — ดู syncJobOnQuotationStatusChange)
-          syncedJob = await syncJobOnQuotationStatusChange(conn, quotationId, 'approved', null);
+          syncedJob = await syncJobOnQuotationStatusChange(conn, LINE_SHOP_ID, quotationId, 'approved', null);
           // ใบเสนอราคาปกติที่สร้างจากหน้าเว็บมีใบแจ้งซ่อมคู่กันมาตั้งแต่ตอนสร้างแล้ว
           // แต่ใบที่บอทไลน์สร้างไม่มี (รอถึงตอนอนุมัติ) — อนุมัติเองตรงนี้ก็ต้องสร้าง
           // ใบแจ้งซ่อมให้ครบเหมือนอนุมัติผ่านเว็บทุกประการ
           const [existingNotice] = await conn.execute(
-            'SELECT id FROM repair_notices WHERE quotation_id = ? LIMIT 1',
-            [quotationId]
+            'SELECT id FROM repair_notices WHERE quotation_id = ? AND shop_id = ? LIMIT 1',
+            [quotationId, LINE_SHOP_ID]
           );
           if (existingNotice.length === 0) {
             const rnCode = await generateRepairNoticeCode(conn);
             await conn.execute(
-              `INSERT INTO repair_notices (code, customer_id, vehicle_id, quotation_id, notice_date, checklist)
-               VALUES (?, ?, ?, ?, ?, ?)`,
-              [rnCode, customerId, vehicleId, quotationId, quotationDate, '{}']
+              `INSERT INTO repair_notices (shop_id, code, customer_id, vehicle_id, quotation_id, notice_date, checklist)
+               VALUES (?, ?, ?, ?, ?, ?, ?)`,
+              [LINE_SHOP_ID, rnCode, customerId, vehicleId, quotationId, quotationDate, '{}']
             );
           }
           paymentReceiptNo = receipt_no;
@@ -994,16 +1001,16 @@ async function createQuotationFromQueue(parsed) {
 
     await conn.commit();
 
-    emitQuotationEvent(isUpdate ? 'quotation:updated' : 'quotation:created', { quotationId, status: null, actorId: null });
+    emitQuotationEvent(isUpdate ? 'quotation:updated' : 'quotation:created', { shopId: LINE_SHOP_ID, quotationId, status: null, actorId: null });
     if (syncedJob) {
-      emitJobEvent('job:status-changed', { jobId: syncedJob.jobId, jobDate: syncedJob.jobDate, status: syncedJob.status, actorId: null });
+      emitJobEvent('job:status-changed', { shopId: LINE_SHOP_ID, jobId: syncedJob.jobId, jobDate: syncedJob.jobDate, status: syncedJob.status, actorId: null });
     }
     if (paymentClosed) {
-      emitReceiptEvent(closedReceiptIsNew ? 'receipt:created' : 'receipt:updated', { receiptId: closedReceiptId, actorId: null });
+      emitReceiptEvent(closedReceiptIsNew ? 'receipt:created' : 'receipt:updated', { shopId: LINE_SHOP_ID, receiptId: closedReceiptId, actorId: null });
     } else if (syncedReceipt) {
       // sync รายการ/ยอดลงใบเสร็จเดิม (ไม่ได้ปิดบิล) — แจ้งฝั่งใบเสร็จให้รีเฟรชด้วย
       // เหมือนจุดเดียวกันใน PUT /quotations/:id ฝั่งเว็บ (quotations.routes.js)
-      emitReceiptEvent('receipt:updated', { receiptId: existing.converted_receipt_id, actorId: null });
+      emitReceiptEvent('receipt:updated', { shopId: LINE_SHOP_ID, receiptId: existing.converted_receipt_id, actorId: null });
     }
     return {
       quotation_no,
@@ -1047,15 +1054,15 @@ async function deleteQuotationForMessage(info) {
   const conn = await pool.getConnection();
   try {
     await conn.beginTransaction();
-    const [[quotation]] = await conn.query('SELECT status FROM quotations WHERE id = ?', [info.quotationId]);
+    const [[quotation]] = await conn.query('SELECT status FROM quotations WHERE id = ? AND shop_id = ?', [info.quotationId, LINE_SHOP_ID]);
     if (!quotation || quotation.status !== 'pending') {
       await conn.commit();
       return;
     }
-    await conn.execute('DELETE FROM quotations WHERE id = ?', [info.quotationId]);
+    await conn.execute('DELETE FROM quotations WHERE id = ? AND shop_id = ?', [info.quotationId, LINE_SHOP_ID]);
     await conn.commit();
 
-    emitQuotationEvent('quotation:deleted', { quotationId: info.quotationId, status: null, actorId: null });
+    emitQuotationEvent('quotation:deleted', { shopId: LINE_SHOP_ID, quotationId: info.quotationId, status: null, actorId: null });
   } catch (err) {
     await conn.rollback();
     throw err;
@@ -1065,14 +1072,14 @@ async function deleteQuotationForMessage(info) {
 
   if (info.wasNewVehicle) {
     try {
-      await pool.execute('DELETE FROM vehicles WHERE id = ?', [info.vehicleId]);
+      await pool.execute('DELETE FROM vehicles WHERE id = ? AND shop_id = ?', [info.vehicleId, LINE_SHOP_ID]);
     } catch (err) {
       console.log('Vehicle still referenced elsewhere, keeping it:', info.vehicleId);
     }
   }
   if (info.wasNewCustomer) {
     try {
-      await pool.execute('DELETE FROM customers WHERE id = ?', [info.customerId]);
+      await pool.execute('DELETE FROM customers WHERE id = ? AND shop_id = ?', [info.customerId, LINE_SHOP_ID]);
     } catch (err) {
       console.log('Customer still referenced elsewhere, keeping it:', info.customerId);
     }
@@ -1106,16 +1113,16 @@ async function closeQuotationByQueue(parsed) {
               q.deposit_amount, q.deposit_date, q.vehicle_id, c.customer_name, c.phone
        FROM quotations q
        LEFT JOIN customers c ON q.customer_id = c.id
-       WHERE (q.queue_no = ? OR q.requested_queue_no = ?) AND q.closed_at IS NULL
+       WHERE q.shop_id = ? AND (q.queue_no = ? OR q.requested_queue_no = ?) AND q.closed_at IS NULL
          AND q.status IN ('pending', 'approved', 'no_date')`;
     let [rows] = await conn.execute(
       `${baseSelect} AND q.quotation_date = ? ORDER BY q.id DESC`,
-      [parsed.queue_no, parsed.queue_no, quotationDate]
+      [LINE_SHOP_ID, parsed.queue_no, parsed.queue_no, quotationDate]
     );
     if (rows.length === 0) {
       [rows] = await conn.execute(
         `${baseSelect} AND q.quotation_date >= DATE_SUB(?, INTERVAL 14 DAY) ORDER BY q.id DESC`,
-        [parsed.queue_no, parsed.queue_no, quotationDate]
+        [LINE_SHOP_ID, parsed.queue_no, parsed.queue_no, quotationDate]
       );
     }
 
@@ -1176,11 +1183,11 @@ async function closeQuotationByQueue(parsed) {
       // จุด paid_confirmed ของ createQuotationFromQueue ที่ใบเสร็จมีอยู่แล้ว)
       receiptId = quotation.converted_receipt_id;
       await conn.execute(
-        'UPDATE receipts SET payment_method = ?, total_amount = ?, deposit_amount = ?, deposit_date = ? WHERE id = ?',
-        [parsed.payment_method || null, receiptAmount, quotation.deposit_amount, quotation.deposit_date, receiptId]
+        'UPDATE receipts SET payment_method = ?, total_amount = ?, deposit_amount = ?, deposit_date = ? WHERE id = ? AND shop_id = ?',
+        [parsed.payment_method || null, receiptAmount, quotation.deposit_amount, quotation.deposit_date, receiptId, LINE_SHOP_ID]
       );
       await applyReceiptSplits(conn, receiptId, parseSplitsFromText(parsed.payment_method), receiptAmount, { strict: false });
-      const [[receiptRow]] = await conn.query('SELECT receipt_no FROM receipts WHERE id = ?', [receiptId]);
+      const [[receiptRow]] = await conn.query('SELECT receipt_no FROM receipts WHERE id = ? AND shop_id = ?', [receiptId, LINE_SHOP_ID]);
       receipt_no = receiptRow ? receiptRow.receipt_no : null;
     } else {
       // ยัง pending → อนุมัติ+สร้างใบเสร็จเองในทรานแซกชันนี้เลย (mirror ของ
@@ -1188,9 +1195,9 @@ async function closeQuotationByQueue(parsed) {
       receipt_no = await generateReceiptNo(conn);
       const car_sequence_no = await generateCarSequenceNo(conn);
       const [receiptResult] = await conn.execute(
-        `INSERT INTO receipts (receipt_no, receipt_date, customer_id, vehicle_id, mileage, remark, payment_method, total_amount, customer_signature, deposit_amount, deposit_date, car_sequence_no)
-         VALUES (?, CURDATE(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [receipt_no, quotation.customer_id, quotation.vehicle_id, 0, null, parsed.payment_method || null, receiptAmount, null, quotation.deposit_amount, quotation.deposit_date, car_sequence_no]
+        `INSERT INTO receipts (shop_id, receipt_no, receipt_date, customer_id, vehicle_id, mileage, remark, payment_method, total_amount, customer_signature, deposit_amount, deposit_date, car_sequence_no)
+         VALUES (?, ?, CURDATE(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [LINE_SHOP_ID, receipt_no, quotation.customer_id, quotation.vehicle_id, 0, null, parsed.payment_method || null, receiptAmount, null, quotation.deposit_amount, quotation.deposit_date, car_sequence_no]
       );
       receiptId = receiptResult.insertId;
       await applyReceiptSplits(conn, receiptId, parseSplitsFromText(parsed.payment_method), receiptAmount, { strict: false });
@@ -1202,34 +1209,34 @@ async function closeQuotationByQueue(parsed) {
         );
       }
       await conn.execute(
-        "UPDATE quotations SET status = 'approved', converted_receipt_id = ? WHERE id = ?",
-        [receiptId, quotation.id]
+        "UPDATE quotations SET status = 'approved', converted_receipt_id = ? WHERE id = ? AND shop_id = ?",
+        [receiptId, quotation.id, LINE_SHOP_ID]
       );
       // ถ้าใบนี้ผูกกับงานในหน้าคิวที่ยังไม่ถูกตัดสินใจไปทางไหน — ดันสถานะงานตามด้วย
       // (บั๊กเดียวกับที่เจอตอนอนุมัติผ่านหน้าเว็บ — ดู syncJobOnQuotationStatusChange)
-      syncedJob = await syncJobOnQuotationStatusChange(conn, quotation.id, 'approved', null);
+      syncedJob = await syncJobOnQuotationStatusChange(conn, LINE_SHOP_ID, quotation.id, 'approved', null);
       // ใบแจ้งซ่อมคู่กัน เหมือนอนุมัติผ่านเว็บ/ผ่าน createQuotationFromQueue ทุกประการ
       const [existingNotice] = await conn.execute(
-        'SELECT id FROM repair_notices WHERE quotation_id = ? LIMIT 1',
-        [quotation.id]
+        'SELECT id FROM repair_notices WHERE quotation_id = ? AND shop_id = ? LIMIT 1',
+        [quotation.id, LINE_SHOP_ID]
       );
       if (existingNotice.length === 0) {
         const rnCode = await generateRepairNoticeCode(conn);
         await conn.execute(
-          `INSERT INTO repair_notices (code, customer_id, vehicle_id, quotation_id, notice_date, checklist)
-           VALUES (?, ?, ?, ?, ?, ?)`,
-          [rnCode, quotation.customer_id, quotation.vehicle_id, quotation.id, quotationDate, '{}']
+          `INSERT INTO repair_notices (shop_id, code, customer_id, vehicle_id, quotation_id, notice_date, checklist)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          [LINE_SHOP_ID, rnCode, quotation.customer_id, quotation.vehicle_id, quotation.id, quotationDate, '{}']
         );
       }
     }
 
-    await conn.execute('UPDATE quotations SET closed_at = NOW() WHERE id = ?', [quotation.id]);
+    await conn.execute('UPDATE quotations SET closed_at = NOW() WHERE id = ? AND shop_id = ?', [quotation.id, LINE_SHOP_ID]);
     await conn.commit();
 
-    emitQuotationEvent('quotation:updated', { quotationId: quotation.id, status: 'approved', actorId: null });
-    emitReceiptEvent('receipt:updated', { receiptId, actorId: null });
+    emitQuotationEvent('quotation:updated', { shopId: LINE_SHOP_ID, quotationId: quotation.id, status: 'approved', actorId: null });
+    emitReceiptEvent('receipt:updated', { shopId: LINE_SHOP_ID, receiptId, actorId: null });
     if (syncedJob) {
-      emitJobEvent('job:status-changed', { jobId: syncedJob.jobId, jobDate: syncedJob.jobDate, status: syncedJob.status, actorId: null });
+      emitJobEvent('job:status-changed', { shopId: LINE_SHOP_ID, jobId: syncedJob.jobId, jobDate: syncedJob.jobDate, status: syncedJob.status, actorId: null });
     }
 
     return {
@@ -1279,25 +1286,25 @@ async function updateQuotationItemsByQueue(queueNo, itemLines, explicitDate) {
        FROM quotations q
        LEFT JOIN customers c ON q.customer_id = c.id
        LEFT JOIN vehicles v ON q.vehicle_id = v.id
-       WHERE (q.queue_no = ? OR q.requested_queue_no = ?) AND q.closed_at IS NULL
+       WHERE q.shop_id = ? AND (q.queue_no = ? OR q.requested_queue_no = ?) AND q.closed_at IS NULL
          AND q.status IN ('pending', 'approved', 'no_date')`;
 
     let rows;
     if (explicitDate) {
       [rows] = await conn.execute(
         `${baseSelect} AND q.quotation_date = ? ORDER BY q.id DESC LIMIT 1`,
-        [queueNo, queueNo, explicitDate]
+        [LINE_SHOP_ID, queueNo, queueNo, explicitDate]
       );
     } else {
       const quotationDate = todayStr();
       [rows] = await conn.execute(
         `${baseSelect} AND q.quotation_date = ? ORDER BY q.id DESC LIMIT 1`,
-        [queueNo, queueNo, quotationDate]
+        [LINE_SHOP_ID, queueNo, queueNo, quotationDate]
       );
       if (rows.length === 0) {
         [rows] = await conn.execute(
           `${baseSelect} AND q.quotation_date >= DATE_SUB(?, INTERVAL 14 DAY) ORDER BY q.id DESC LIMIT 1`,
-          [queueNo, queueNo, quotationDate]
+          [LINE_SHOP_ID, queueNo, queueNo, quotationDate]
         );
       }
     }
@@ -1341,19 +1348,19 @@ async function updateQuotationItemsByQueue(queueNo, itemLines, explicitDate) {
         [quotation.id, item.product_name, item.quantity, item.unit_price, item.warranty_name, item.warranty_year, item.warranty_month, item.warranty_km]
       );
     }
-    await conn.execute('UPDATE quotations SET total_amount = ?, product_summary = ? WHERE id = ?', [total_amount, product_summary, quotation.id]);
+    await conn.execute('UPDATE quotations SET total_amount = ?, product_summary = ? WHERE id = ? AND shop_id = ?', [total_amount, product_summary, quotation.id, LINE_SHOP_ID]);
 
     // แก้ไขใบที่อนุมัติไปแล้ว (มีใบเสร็จผูกอยู่) → sync ใบเสร็จให้ตรงกันด้วยเลย เหตุผล
     // เดียวกับจุด syncedReceipt ใน createQuotationFromQueue (กันบอท 1 อนุมัติไปก่อน
     // บอท 2 มาลงรายการทีหลัง ทำให้ใบเสร็จเก่าไม่ตรงกับรายการจริง)
     const [[full]] = await conn.query(
-      'SELECT status, converted_receipt_id FROM quotations WHERE id = ?',
-      [quotation.id]
+      'SELECT status, converted_receipt_id FROM quotations WHERE id = ? AND shop_id = ?',
+      [quotation.id, LINE_SHOP_ID]
     );
     let syncedReceipt = false;
     if (full && full.status === 'approved' && full.converted_receipt_id) {
       const receiptId = full.converted_receipt_id;
-      await conn.execute('UPDATE receipts SET total_amount = ? WHERE id = ?', [total_amount, receiptId]);
+      await conn.execute('UPDATE receipts SET total_amount = ? WHERE id = ? AND shop_id = ?', [total_amount, receiptId, LINE_SHOP_ID]);
       await conn.execute('DELETE FROM receipt_items WHERE receipt_id = ?', [receiptId]);
       for (const item of resolvedItems) {
         await conn.execute(
@@ -1367,11 +1374,11 @@ async function updateQuotationItemsByQueue(queueNo, itemLines, explicitDate) {
 
     await conn.commit();
 
-    emitQuotationEvent('quotation:updated', { quotationId: quotation.id, status: null, actorId: null });
+    emitQuotationEvent('quotation:updated', { shopId: LINE_SHOP_ID, quotationId: quotation.id, status: null, actorId: null });
     if (syncedReceipt) {
       // sync รายการ/ยอดลงใบเสร็จเดิม — แจ้งฝั่งใบเสร็จให้รีเฟรชด้วยเหมือนจุดเดียวกัน
       // ใน createQuotationFromQueue/PUT /quotations/:id ฝั่งเว็บ
-      emitReceiptEvent('receipt:updated', { receiptId: full.converted_receipt_id, actorId: null });
+      emitReceiptEvent('receipt:updated', { shopId: LINE_SHOP_ID, receiptId: full.converted_receipt_id, actorId: null });
     }
 
     return {
@@ -1413,7 +1420,7 @@ async function buildSuccessReplyText(parsed, info) {
   ] = await Promise.all([
     'bot1_success_base', 'bot1_success_note', 'bot1_success_mismatch', 'bot1_success_reassigned', 'bot1_success_synced_receipt',
     'bot1_success_payment_closed', 'bot1_success_payment_no_items', 'bot1_success_payment_no_vehicle', 'bot1_success_deposit_mismatch', 'bot1_success_remaining', 'bot1_success_appointment',
-  ].map(getMessageTemplate));
+  ].map((key) => getMessageTemplate(key)));
 
   // บอท 1 เป็นแค่ขั้นตอนรับคิว/ข้อมูลลูกค้าเท่านั้น (ไม่ส่งต่อข้ามกลุ่มอัตโนมัติแล้ว —
   // เจ้าของร้านสั่งตัดออก) รายการอะไหล่ไปลงที่กลุ่มบอท 2 ต่อ พนักงานคัดลอกข้อความนี้

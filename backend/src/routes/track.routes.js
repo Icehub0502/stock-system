@@ -2,6 +2,7 @@ const express = require('express');
 const rateLimit = require('express-rate-limit');
 const pool = require('../db/pool');
 const { jobStatusLabel } = require('../utils/jobStatusFlow');
+const { resolvePublicShopId } = require('../utils/tenant');
 
 const router = express.Router();
 
@@ -38,13 +39,15 @@ router.get('/', trackLimiter, async (req, res) => {
   if (!/^\d{4}$/.test(phoneLast4)) return res.status(400).json({ error: 'กรุณากรอกเบอร์โทร 4 ตัวท้ายให้ถูกต้อง' });
 
   try {
+    const shopId = await resolvePublicShopId(req);
+    if (!shopId) return res.status(404).json({ error: 'ไม่พบข้อมูล กรุณาตรวจสอบทะเบียนรถและเบอร์โทรอีกครั้ง' });
     const [vehicleRows] = await pool.execute(
       `SELECT v.id AS vehicle_id, v.license_plate, v.brand, v.model, v.color, c.customer_name
        FROM vehicles v
        JOIN customers c ON c.id = v.customer_id
-       WHERE UPPER(REPLACE(v.license_plate, ' ', '')) = ? AND c.phone LIKE CONCAT('%', ?)
+       WHERE v.shop_id = ? AND UPPER(REPLACE(v.license_plate, ' ', '')) = ? AND c.phone LIKE CONCAT('%', ?)
        LIMIT 1`,
-      [plate, phoneLast4]
+      [shopId, plate, phoneLast4]
     );
     const vehicle = vehicleRows[0];
     if (!vehicle) {
@@ -60,10 +63,10 @@ router.get('/', trackLimiter, async (req, res) => {
               q.deposit_amount, q.deposit_date
        FROM jobs j
        LEFT JOIN quotations q ON q.id = j.quotation_id
-       WHERE j.vehicle_id = ?
+       WHERE j.shop_id = ? AND j.vehicle_id = ?
        ORDER BY (j.status NOT IN ('delivered','carout')) DESC, j.job_date DESC, j.id DESC
        LIMIT 1`,
-      [vehicle.vehicle_id]
+      [shopId, vehicle.vehicle_id]
     );
     const job = jobRows[0];
     if (!job) {

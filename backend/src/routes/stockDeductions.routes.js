@@ -77,8 +77,8 @@ router.post('/', async (req, res) => {
 
     const [[item]] = await conn.execute(
       `SELECT id, description, has_sides, has_axles, has_levels, stock_qty
-       FROM stock_items WHERE id = ? AND is_active = 1 FOR UPDATE`,
-      [itemId]
+       FROM stock_items WHERE id = ? AND shop_id = ? AND is_active = 1 FOR UPDATE`,
+      [itemId, req.shopId]
     );
     if (!item) {
       await conn.rollback();
@@ -134,11 +134,11 @@ router.post('/', async (req, res) => {
       );
       total = Number(sum.total);
     }
-    await conn.execute('UPDATE stock_items SET stock_qty = ? WHERE id = ?', [total, itemId]);
+    await conn.execute('UPDATE stock_items SET stock_qty = ? WHERE id = ? AND shop_id = ?', [total, itemId, req.shopId]);
     await conn.commit();
 
-    emitStockEvent('stock:item-updated', { entityType: 'stock_item', entityId: itemId, actorId: req.user.id });
-    emitStockTxEvent('stock:tx-created', { txType: 'OUT', entityType: 'stock_item', entityId: itemId, actorId: req.user.id });
+    emitStockEvent('stock:item-updated', { shopId: req.shopId, entityType: 'stock_item', entityId: itemId, actorId: req.user.id });
+    emitStockTxEvent('stock:tx-created', { shopId: req.shopId, txType: 'OUT', entityType: 'stock_item', entityId: itemId, actorId: req.user.id });
     res.status(201).json({ success: true, movement_ids: movementIds, items: results, stock_qty: total });
   } catch (err) {
     if (conn) await conn.rollback().catch(() => {});
@@ -159,15 +159,16 @@ router.delete('/movements/:id', requireRole('office'), async (req, res) => {
     conn = await pool.getConnection();
     await conn.beginTransaction();
     const [[mv]] = await conn.execute(
-      `SELECT id, item_id, position, qty_before, qty_after
-       FROM stock_item_movements WHERE id = ? AND reason = 'deduct' AND voided_at IS NULL FOR UPDATE`,
-      [id]
+      `SELECT m.id, m.item_id, m.position, m.qty_before, m.qty_after
+       FROM stock_item_movements m JOIN stock_items i ON i.id = m.item_id
+       WHERE m.id = ? AND i.shop_id = ? AND m.reason = 'deduct' AND m.voided_at IS NULL FOR UPDATE`,
+      [id, req.shopId]
     );
     if (!mv) {
       await conn.rollback();
       return res.status(404).json({ error: 'ไม่พบรายการนี้ (อาจถูกยกเลิกไปแล้ว)' });
     }
-    const [[item]] = await conn.execute('SELECT id, description, stock_qty FROM stock_items WHERE id = ? FOR UPDATE', [mv.item_id]);
+    const [[item]] = await conn.execute('SELECT id, description, stock_qty FROM stock_items WHERE id = ? AND shop_id = ? FOR UPDATE', [mv.item_id, req.shopId]);
     if (!item) {
       await conn.rollback();
       return res.status(404).json({ error: 'ไม่พบรายการในสต๊อกรวม' });
@@ -199,7 +200,7 @@ router.delete('/movements/:id', requireRole('office'), async (req, res) => {
       );
       total = Number(sum.total);
     }
-    await conn.execute('UPDATE stock_items SET stock_qty = ? WHERE id = ?', [total, mv.item_id]);
+    await conn.execute('UPDATE stock_items SET stock_qty = ? WHERE id = ? AND shop_id = ?', [total, mv.item_id, req.shopId]);
     await conn.execute('UPDATE stock_item_movements SET voided_at = NOW() WHERE id = ?', [id]);
     await conn.execute(
       `INSERT INTO stock_item_movements (item_id, qty_before, qty_after, reason, position, note, user_id)
@@ -207,8 +208,8 @@ router.delete('/movements/:id', requireRole('office'), async (req, res) => {
       [mv.item_id, current, next, mv.position, req.user.id]
     );
     await conn.commit();
-    emitStockEvent('stock:item-updated', { entityType: 'stock_item', entityId: mv.item_id, actorId: req.user.id });
-    emitStockTxEvent('stock:tx-deleted', { txType: 'OUT', entityType: 'stock_item', entityId: mv.item_id, actorId: req.user.id });
+    emitStockEvent('stock:item-updated', { shopId: req.shopId, entityType: 'stock_item', entityId: mv.item_id, actorId: req.user.id });
+    emitStockTxEvent('stock:tx-deleted', { shopId: req.shopId, txType: 'OUT', entityType: 'stock_item', entityId: mv.item_id, actorId: req.user.id });
     res.json({ success: true, stock_qty: total });
   } catch (err) {
     if (conn) await conn.rollback().catch(() => {});

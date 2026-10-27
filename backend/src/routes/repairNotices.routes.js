@@ -1,6 +1,7 @@
 const express = require('express');
 const pool = require('../db/pool');
 const { authenticate, requireRole } = require('../middleware/auth');
+const { ownsRow } = require('../utils/tenant');
 
 const router = express.Router();
 router.use(authenticate);
@@ -15,12 +16,13 @@ router.use(requireRole('office', 'technician'));
 // เดิมแล้วได้เลขซ้ำกัน (เหมือน generateQuotationNo/generateReceiptNo) — ไม่มี conn
 // ส่งมา (เช่น route /next-code ที่แค่พรีวิวเลขไว้ดู ไม่ได้ insert จริง) ใช้ pool เฉย ๆ
 // ไม่ต้องล็อกอะไร
-async function generateCode(conn = pool) {
+async function generateCode(conn, shopId) {
   // Document number prefix is "RN-" (repair notice). "SPK" is reserved for the
   // rack code the office writes on the printed form, so it must NOT be reused
   // as the document number. SUBSTRING(code, 4) strips the 3-char "RN-" prefix.
   const [rows] = await conn.execute(
-    "SELECT MAX(CAST(SUBSTRING(code, 4) AS UNSIGNED)) AS maxNo FROM repair_notices WHERE code LIKE 'RN-%' FOR UPDATE"
+    "SELECT MAX(CAST(SUBSTRING(code, 4) AS UNSIGNED)) AS maxNo FROM repair_notices WHERE shop_id = ? AND code LIKE 'RN-%' FOR UPDATE",
+    [shopId]
   );
   const nextNumber = (rows[0]?.maxNo || 0) + 1;
   return `RN-${String(nextNumber).padStart(4, '0')}`;
@@ -41,13 +43,13 @@ router.get('/vehicle-search', async (req, res) => {
     const words = search.trim().split(/\s+/).filter(Boolean);
     const perWordClause = 'v.license_plate LIKE ? OR v.brand LIKE ? OR v.model LIKE ? OR c.customer_name LIKE ? OR c.phone LIKE ? OR c.customer_code LIKE ?';
     const whereClause = words.map(() => `(${perWordClause})`).join(' AND ');
-    const params = words.flatMap((w) => Array(6).fill(`%${w}%`));
+    const params = [req.shopId, ...words.flatMap((w) => Array(6).fill(`%${w}%`))];
     const [rows] = await pool.execute(
       `SELECT v.id AS vehicle_id, v.brand, v.model, v.color, v.license_plate, v.mileage,
               c.id AS customer_id, c.customer_name, c.customer_code, c.phone
        FROM vehicles v
        JOIN customers c ON v.customer_id = c.id
-       WHERE ${whereClause}
+       WHERE v.shop_id = ? AND ${whereClause}
        ORDER BY v.created_at DESC
        LIMIT 20`,
       params
@@ -61,7 +63,7 @@ router.get('/vehicle-search', async (req, res) => {
 
 router.get('/next-code', async (req, res) => {
   try {
-    const code = await generateCode();
+    const code = await generateCode(pool, req.shopId);
     res.json({ success: true, code });
   } catch (err) {
     console.error('Error generating repair notice code:', err);
@@ -80,8 +82,10 @@ router.get('/', async (req, res) => {
        LEFT JOIN customers c ON rn.customer_id = c.id
        LEFT JOIN vehicles v ON rn.vehicle_id = v.id
        LEFT JOIN quotations q ON rn.quotation_id = q.id
+       WHERE rn.shop_id = ?
        ORDER BY rn.created_at DESC
-       LIMIT 300`
+       LIMIT 300`,
+      [req.shopId]
     );
     res.json({ success: true, data: rows });
   } catch (err) {
@@ -100,8 +104,8 @@ router.get('/:id', async (req, res) => {
        LEFT JOIN customers c ON rn.customer_id = c.id
        LEFT JOIN vehicles v ON rn.vehicle_id = v.id
        LEFT JOIN quotations q ON rn.quotation_id = q.id
-       WHERE rn.id = ?`,
-      [req.params.id]
+       WHERE rn.id = ? AND rn.shop_id = ?`,
+      [req.params.id, req.shopId]
     );
     if (!row) return res.status(404).json({ error: 'ไม่พบใบแจ้งซ่อม' });
     res.json({ success: true, data: row });
@@ -125,11 +129,18 @@ router.post('/', async (req, res) => {
   try {
     conn = await pool.getConnection();
     await conn.beginTransaction();
-    const code = await generateCode(conn);
+    if (!(await ownsRow(conn, 'vehicles', vehicle_id, req.shopId))
+      || (customer_id && !(await ownsRow(conn, 'customers', customer_id, req.shopId)))
+      || (quotation_id && !(await ownsRow(conn, 'quotations', quotation_id, req.shopId)))) {
+      await conn.rollback();
+      return res.status(404).json({ error: 'ไม่พบรถ/ลูกค้า/ใบเสนอราคาที่เลือก' });
+    }
+    const code = await generateCode(conn, req.shopId);
     const [result] = await conn.execute(
-      `INSERT INTO repair_notices (code, customer_id, vehicle_id, quotation_id, notice_date, checklist, checked_by, repaired_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO repair_notices (shop_id, code, customer_id, vehicle_id, quotation_id, notice_date, checklist, checked_by, repaired_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
+        req.shopId,
         code,
         customer_id || null,
         vehicle_id,
@@ -164,10 +175,14 @@ router.put('/:id', async (req, res) => {
   }
 
   try {
+    if (!(await ownsRow(pool, 'vehicles', vehicle_id, req.shopId))
+      || (customer_id && !(await ownsRow(pool, 'customers', customer_id, req.shopId)))) {
+      return res.status(404).json({ error: 'ไม่พบรถ/ลูกค้าที่เลือก' });
+    }
     const [result] = await pool.execute(
       `UPDATE repair_notices
        SET customer_id = ?, vehicle_id = ?, notice_date = ?, checklist = ?, checked_by = ?, repaired_by = ?
-       WHERE id = ?`,
+       WHERE id = ? AND shop_id = ?`,
       [
         customer_id || null,
         vehicle_id,
@@ -176,6 +191,7 @@ router.put('/:id', async (req, res) => {
         checked_by || null,
         repaired_by || null,
         req.params.id,
+        req.shopId,
       ]
     );
     if (result.affectedRows === 0) return res.status(404).json({ error: 'ไม่พบใบแจ้งซ่อม' });
@@ -188,7 +204,7 @@ router.put('/:id', async (req, res) => {
 
 router.delete('/:id', requireRole('office'), async (req, res) => {
   try {
-    const [result] = await pool.execute('DELETE FROM repair_notices WHERE id = ?', [req.params.id]);
+    const [result] = await pool.execute('DELETE FROM repair_notices WHERE id = ? AND shop_id = ?', [req.params.id, req.shopId]);
     if (result.affectedRows === 0) return res.status(404).json({ error: 'ไม่พบใบแจ้งซ่อม' });
     res.json({ success: true });
   } catch (err) {

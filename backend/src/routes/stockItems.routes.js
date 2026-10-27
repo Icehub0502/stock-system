@@ -107,9 +107,10 @@ router.get('/categories', async (req, res) => {
               COUNT(i.id) AS item_count
        FROM stock_categories c
        LEFT JOIN stock_items i ON i.category_id = c.id AND i.is_active = 1
-       WHERE c.is_active = 1
+       WHERE c.shop_id = ? AND c.is_active = 1
        GROUP BY c.id, c.name, c.sort_order
-       ORDER BY c.sort_order, c.id`
+       ORDER BY c.sort_order, c.id`,
+      [req.shopId]
     );
     res.json(rows);
   } catch (err) {
@@ -123,13 +124,14 @@ router.post('/categories', async (req, res) => {
   if (!name) return res.status(400).json({ error: 'กรุณากรอกชื่อหมวดหมู่' });
   try {
     const [[{ nextOrder }]] = await pool.execute(
-      'SELECT COALESCE(MAX(sort_order), 0) + 1 AS nextOrder FROM stock_categories'
+      'SELECT COALESCE(MAX(sort_order), 0) + 1 AS nextOrder FROM stock_categories WHERE shop_id = ?',
+      [req.shopId]
     );
     const [result] = await pool.execute(
-      'INSERT INTO stock_categories (name, sort_order) VALUES (?, ?)',
-      [name, nextOrder]
+      'INSERT INTO stock_categories (shop_id, name, sort_order) VALUES (?, ?, ?)',
+      [req.shopId, name, nextOrder]
     );
-    emitStockEvent('stock:item-created', { entityType: 'stock_category', entityId: result.insertId, actorId: req.user.id });
+    emitStockEvent('stock:item-created', { shopId: req.shopId, entityType: 'stock_category', entityId: result.insertId, actorId: req.user.id });
     res.status(201).json({ id: result.insertId, name, sort_order: nextOrder, item_count: 0 });
   } catch (err) {
     if (err.code === 'ER_DUP_ENTRY') {
@@ -146,11 +148,11 @@ router.put('/categories/:id', async (req, res) => {
   if (!id || !name) return res.status(400).json({ error: 'ข้อมูลไม่ถูกต้อง' });
   try {
     const [result] = await pool.execute(
-      'UPDATE stock_categories SET name = ? WHERE id = ? AND is_active = 1',
-      [name, id]
+      'UPDATE stock_categories SET name = ? WHERE id = ? AND shop_id = ? AND is_active = 1',
+      [name, id, req.shopId]
     );
     if (result.affectedRows === 0) return res.status(404).json({ error: 'ไม่พบหมวดหมู่' });
-    emitStockEvent('stock:item-updated', { entityType: 'stock_category', entityId: id, actorId: req.user.id });
+    emitStockEvent('stock:item-updated', { shopId: req.shopId, entityType: 'stock_category', entityId: id, actorId: req.user.id });
     res.json({ success: true });
   } catch (err) {
     if (err.code === 'ER_DUP_ENTRY') {
@@ -165,8 +167,8 @@ router.put('/categories/:id', async (req, res) => {
 // ?category_id=  กรองหมวด, ?q= ค้นรหัส OEM/รายละเอียด/ยี่ห้อ-รุ่นรถ (ข้ามหมวดถ้าไม่ส่ง category_id)
 router.get('/', async (req, res) => {
   try {
-    const where = ['i.is_active = 1'];
-    const params = [];
+    const where = ['i.shop_id = ?', 'i.is_active = 1'];
+    const params = [req.shopId];
     const categoryId = parseId(req.query.category_id);
     if (categoryId) {
       where.push('i.category_id = ?');
@@ -181,6 +183,7 @@ router.get('/', async (req, res) => {
                    AND CONCAT(f.brand, ' ', f.model) LIKE ?))`);
       params.push(like, like, like, like);
     }
+    // tenant-ok: where[0] is "i.shop_id = ?"
     const [rows] = await pool.execute(
       `SELECT ${ITEM_COLUMNS}
        FROM stock_items i
@@ -258,8 +261,8 @@ router.post('/', async (req, res) => {
     conn = await pool.getConnection();
     await conn.beginTransaction();
     const [[cat]] = await conn.execute(
-      'SELECT id FROM stock_categories WHERE id = ? AND is_active = 1',
-      [categoryId]
+      'SELECT id FROM stock_categories WHERE id = ? AND shop_id = ? AND is_active = 1',
+      [categoryId, req.shopId]
     );
     if (!cat) {
       await conn.rollback();
@@ -267,24 +270,24 @@ router.post('/', async (req, res) => {
     }
     // รหัสเดิมที่เคยถูกซ่อน (is_active=0) → นำกลับมาใช้แทนการสร้างซ้ำ ไม่ชน UNIQUE
     const [[hidden]] = await conn.execute(
-      'SELECT id FROM stock_items WHERE category_id = ? AND oem_code = ? AND is_active = 0 FOR UPDATE',
-      [categoryId, oemCode]
+      'SELECT id FROM stock_items WHERE shop_id = ? AND category_id = ? AND oem_code = ? AND is_active = 0 FOR UPDATE',
+      [req.shopId, categoryId, oemCode]
     );
     let itemId;
     if (hidden) {
       itemId = hidden.id;
       await conn.execute(
         `UPDATE stock_items SET description = ?, has_sides = ?, has_axles = ?, has_levels = ?, oem_code_right = NULL,
-                stock_qty = ?, min_stock = ?, is_active = 1 WHERE id = ?`,
-        [description, hasSides ? 1 : 0, hasAxles ? 1 : 0, hasLevels ? 1 : 0, stockQty, minStock, itemId]
+                stock_qty = ?, min_stock = ?, is_active = 1 WHERE id = ? AND shop_id = ?`,
+        [description, hasSides ? 1 : 0, hasAxles ? 1 : 0, hasLevels ? 1 : 0, stockQty, minStock, itemId, req.shopId]
       );
       await conn.execute('DELETE FROM stock_item_positions WHERE item_id = ?', [itemId]);
     } else {
       const [result] = await conn.execute(
-        `INSERT INTO stock_items (category_id, oem_code, description, has_sides, has_axles, has_levels,
+        `INSERT INTO stock_items (shop_id, category_id, oem_code, description, has_sides, has_axles, has_levels,
                                   stock_qty, min_stock)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [categoryId, oemCode, description, hasSides ? 1 : 0, hasAxles ? 1 : 0, hasLevels ? 1 : 0, stockQty, minStock]
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [req.shopId, categoryId, oemCode, description, hasSides ? 1 : 0, hasAxles ? 1 : 0, hasLevels ? 1 : 0, stockQty, minStock]
       );
       itemId = result.insertId;
     }
@@ -308,7 +311,7 @@ router.post('/', async (req, res) => {
       }
     }
     await conn.commit();
-    emitStockEvent('stock:item-created', { entityType: 'stock_item', entityId: itemId, actorId: req.user.id });
+    emitStockEvent('stock:item-created', { shopId: req.shopId, entityType: 'stock_item', entityId: itemId, actorId: req.user.id });
     res.status(201).json({ success: true, id: itemId });
   } catch (err) {
     if (conn) await conn.rollback().catch(() => {});
@@ -342,16 +345,16 @@ router.put('/:id', async (req, res) => {
     conn = await pool.getConnection();
     await conn.beginTransaction();
     const [[cat]] = await conn.execute(
-      'SELECT id FROM stock_categories WHERE id = ? AND is_active = 1',
-      [categoryId]
+      'SELECT id FROM stock_categories WHERE id = ? AND shop_id = ? AND is_active = 1',
+      [categoryId, req.shopId]
     );
     if (!cat) {
       await conn.rollback();
       return res.status(404).json({ error: 'ไม่พบหมวดหมู่' });
     }
     const [[item]] = await conn.execute(
-      'SELECT id, has_sides, has_axles, has_levels FROM stock_items WHERE id = ? AND is_active = 1 FOR UPDATE',
-      [id]
+      'SELECT id, has_sides, has_axles, has_levels FROM stock_items WHERE id = ? AND shop_id = ? AND is_active = 1 FOR UPDATE',
+      [id, req.shopId]
     );
     if (!item) {
       await conn.rollback();
@@ -368,8 +371,8 @@ router.put('/:id', async (req, res) => {
     }
     await conn.execute(
       `UPDATE stock_items SET category_id = ?, oem_code = ?, oem_code_right = NULL, description = ?, min_stock = ?
-       WHERE id = ?`,
-      [categoryId, oemCode, description, minStock, id]
+       WHERE id = ? AND shop_id = ?`,
+      [categoryId, oemCode, description, minStock, id, req.shopId]
     );
     for (const position of itemPositions) {
       await conn.execute(
@@ -380,7 +383,7 @@ router.put('/:id', async (req, res) => {
     }
     if (replaceFit) await replaceFitments(conn, id, parsedFit.fitments);
     await conn.commit();
-    emitStockEvent('stock:item-updated', { entityType: 'stock_item', entityId: id, actorId: req.user.id });
+    emitStockEvent('stock:item-updated', { shopId: req.shopId, entityType: 'stock_item', entityId: id, actorId: req.user.id });
     res.json({ success: true });
   } catch (err) {
     if (conn) await conn.rollback().catch(() => {});
@@ -421,8 +424,8 @@ router.patch('/:id/qty', async (req, res) => {
     await conn.beginTransaction();
     const [[item]] = await conn.execute(
       `SELECT id, has_sides, has_axles, has_levels, stock_qty
-       FROM stock_items WHERE id = ? AND is_active = 1 FOR UPDATE`,
-      [id]
+       FROM stock_items WHERE id = ? AND shop_id = ? AND is_active = 1 FOR UPDATE`,
+      [id, req.shopId]
     );
     if (!item) {
       await conn.rollback();
@@ -461,10 +464,10 @@ router.patch('/:id/qty', async (req, res) => {
           [id]
         );
         total = Number(sum.total);
-        await conn.execute('UPDATE stock_items SET stock_qty = ? WHERE id = ?', [total, id]);
+        await conn.execute('UPDATE stock_items SET stock_qty = ? WHERE id = ? AND shop_id = ?', [total, id, req.shopId]);
       } else {
         total = after;
-        await conn.execute('UPDATE stock_items SET stock_qty = ? WHERE id = ?', [after, id]);
+        await conn.execute('UPDATE stock_items SET stock_qty = ? WHERE id = ? AND shop_id = ?', [after, id, req.shopId]);
       }
       await conn.execute(
         `INSERT INTO stock_item_movements (item_id, qty_before, qty_after, reason, position, note, user_id)
@@ -473,7 +476,7 @@ router.patch('/:id/qty', async (req, res) => {
       );
     }
     await conn.commit();
-    emitStockEvent('stock:item-updated', { entityType: 'stock_item', entityId: id, actorId: req.user.id });
+    emitStockEvent('stock:item-updated', { shopId: req.shopId, entityType: 'stock_item', entityId: id, actorId: req.user.id });
     res.json({ success: true, stock_qty: total, position, qty: after });
   } catch (err) {
     if (conn) await conn.rollback().catch(() => {});
@@ -493,10 +496,11 @@ router.get('/:id/movements', async (req, res) => {
               u.full_name AS user_name
        FROM stock_item_movements m
        JOIN users u ON u.id = m.user_id
-       WHERE m.item_id = ?
+       JOIN stock_items si ON si.id = m.item_id
+       WHERE m.item_id = ? AND si.shop_id = ?
        ORDER BY m.id DESC
        LIMIT 100`,
-      [id]
+      [id, req.shopId]
     );
     res.json(rows);
   } catch (err) {
@@ -511,11 +515,11 @@ router.delete('/:id', async (req, res) => {
   if (!id) return res.status(400).json({ error: 'ข้อมูลไม่ถูกต้อง' });
   try {
     const [result] = await pool.execute(
-      'UPDATE stock_items SET is_active = 0 WHERE id = ? AND is_active = 1',
-      [id]
+      'UPDATE stock_items SET is_active = 0 WHERE id = ? AND shop_id = ? AND is_active = 1',
+      [id, req.shopId]
     );
     if (result.affectedRows === 0) return res.status(404).json({ error: 'ไม่พบรายการ' });
-    emitStockEvent('stock:item-deleted', { entityType: 'stock_item', entityId: id, actorId: req.user.id });
+    emitStockEvent('stock:item-deleted', { shopId: req.shopId, entityType: 'stock_item', entityId: id, actorId: req.user.id });
     res.json({ success: true });
   } catch (err) {
     console.error('Error hiding stock item:', err);

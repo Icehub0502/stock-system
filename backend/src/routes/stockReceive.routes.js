@@ -25,6 +25,7 @@ function parseId(value) {
 
 // หนึ่งแถวผลลัพธ์ = หนึ่งตำแหน่งที่สแกน/ค้นเจอ (ของธรรมดา position = null)
 // ใช้ได้ทั้งตอนสแกน (ตรงรหัส) และค้นเอง (ตรงข้อความ)
+// tenant-ok: every caller appends "WHERE i.shop_id = ? ..."
 const MATCH_SELECT = `
   SELECT i.id AS item_id, c.name AS category_name, i.description, i.min_stock,
          i.has_sides, i.has_axles, i.has_levels,
@@ -76,11 +77,11 @@ router.get('/lookup', async (req, res) => {
   try {
     const [rows] = await pool.execute(
       `${MATCH_SELECT}
-       WHERE i.is_active = 1
+       WHERE i.shop_id = ? AND i.is_active = 1
          AND ((p.item_id IS NOT NULL AND p.oem_code = ?) OR (p.item_id IS NULL AND i.oem_code = ?))
        ORDER BY i.id, p.position
        LIMIT 20`,
-      [code, code]
+      [req.shopId, code, code]
     );
     res.json({ matches: rows.map(shapeMatch) });
   } catch (err) {
@@ -97,13 +98,13 @@ router.get('/search', async (req, res) => {
   try {
     const [rows] = await pool.execute(
       `${MATCH_SELECT}
-       WHERE i.is_active = 1
+       WHERE i.shop_id = ? AND i.is_active = 1
          AND (i.oem_code LIKE ? OR i.description LIKE ? OR p.oem_code LIKE ?
               OR EXISTS (SELECT 1 FROM stock_item_fitments f WHERE f.item_id = i.id
                          AND CONCAT(f.brand, ' ', f.model) LIKE ?))
        ORDER BY c.sort_order, i.oem_code, p.position
        LIMIT 40`,
-      [like, like, like, like]
+      [req.shopId, like, like, like, like]
     );
     res.json({ matches: rows.map(shapeMatch) });
   } catch (err) {
@@ -113,10 +114,10 @@ router.get('/search', async (req, res) => {
 });
 
 // บิลต้องเป็นของผู้ใช้คนนี้ (หรือผู้ใช้เป็น office) — คืนแถวบิล หรือ null
-async function loadOwnedSession(conn, sessionId, user, { lock = false } = {}) {
+async function loadOwnedSession(conn, sessionId, user, shopId, { lock = false } = {}) {
   const [[session]] = await conn.execute(
-    `SELECT id, user_id, invoice_no FROM receipt_sessions WHERE id = ?${lock ? ' FOR UPDATE' : ''}`,
-    [sessionId]
+    `SELECT id, user_id, invoice_no FROM receipt_sessions WHERE id = ? AND shop_id = ?${lock ? ' FOR UPDATE' : ''}`,
+    [sessionId, shopId]
   );
   if (!session) return { status: 404, error: 'ไม่พบบิลนี้' };
   if (user.role !== 'office' && session.user_id !== user.id) return { status: 403, error: 'บิลนี้ไม่ใช่ของคุณ' };
@@ -132,7 +133,7 @@ function lineSelect(where) {
           JOIN stock_items i ON i.id = l.item_id
           JOIN stock_categories c ON c.id = i.category_id
           LEFT JOIN stock_item_positions p ON p.item_id = l.item_id AND p.position = l.position
-          WHERE ${where}`;
+          WHERE i.shop_id = ? AND ${where}`;
 }
 
 function shapeLine(row) {
@@ -167,15 +168,15 @@ router.post('/lines', async (req, res) => {
     conn = await pool.getConnection();
     await conn.beginTransaction();
 
-    const owned = await loadOwnedSession(conn, sessionId, req.user, { lock: true });
+    const owned = await loadOwnedSession(conn, sessionId, req.user, req.shopId, { lock: true });
     if (owned.error) {
       await conn.rollback();
       return res.status(owned.status).json({ error: owned.error });
     }
 
     const [[item]] = await conn.execute(
-      'SELECT id, has_sides, has_axles, has_levels FROM stock_items WHERE id = ? AND is_active = 1',
-      [itemId]
+      'SELECT id, has_sides, has_axles, has_levels FROM stock_items WHERE id = ? AND shop_id = ? AND is_active = 1',
+      [itemId, req.shopId]
     );
     if (!item) {
       await conn.rollback();
@@ -214,7 +215,7 @@ router.post('/lines', async (req, res) => {
       lineId = ins.insertId;
       lineQty = qty;
     }
-    const [[line]] = await conn.execute(lineSelect('l.id = ?'), [lineId]);
+    const [[line]] = await conn.execute(lineSelect('l.id = ?'), [req.shopId, lineId]);
     await conn.commit();
     res.status(merged ? 200 : 201).json({ success: true, merged, line: shapeLine(line), qty: lineQty });
   } catch (err) {
@@ -231,11 +232,11 @@ router.get('/sessions/:id/lines', async (req, res) => {
   const sessionId = parseId(req.params.id);
   if (!sessionId) return res.status(400).json({ error: 'ข้อมูลไม่ถูกต้อง' });
   try {
-    const owned = await loadOwnedSession(pool, sessionId, req.user);
+    const owned = await loadOwnedSession(pool, sessionId, req.user, req.shopId);
     if (owned.error) return res.status(owned.status).json({ error: owned.error });
     const [rows] = await pool.execute(
       `${lineSelect('l.receipt_session_id = ? AND l.applied_at IS NULL')} ORDER BY l.id`,
-      [sessionId]
+      [req.shopId, sessionId]
     );
     res.json({ lines: rows.map(shapeLine) });
   } catch (err) {
@@ -244,12 +245,12 @@ router.get('/sessions/:id/lines', async (req, res) => {
   }
 });
 
-async function loadOwnedPendingLine(conn, lineId, user) {
+async function loadOwnedPendingLine(conn, lineId, user, shopId) {
   const [[line]] = await conn.execute(
     `SELECT l.id, l.receipt_session_id, l.item_id, l.position, l.qty, s.user_id AS session_user_id
      FROM stock_receive_lines l JOIN receipt_sessions s ON s.id = l.receipt_session_id
-     WHERE l.id = ? AND l.applied_at IS NULL FOR UPDATE`,
-    [lineId]
+     WHERE l.id = ? AND s.shop_id = ? AND l.applied_at IS NULL FOR UPDATE`,
+    [lineId, shopId]
   );
   if (!line) return { status: 404, error: 'ไม่พบรายการนี้ (อาจถูกยืนยันหรือลบไปแล้ว)' };
   if (user.role !== 'office' && line.session_user_id !== user.id) return { status: 403, error: 'บิลนี้ไม่ใช่ของคุณ' };
@@ -267,7 +268,7 @@ router.patch('/lines/:id', async (req, res) => {
   try {
     conn = await pool.getConnection();
     await conn.beginTransaction();
-    const found = await loadOwnedPendingLine(conn, lineId, req.user);
+    const found = await loadOwnedPendingLine(conn, lineId, req.user, req.shopId);
     if (found.error) {
       await conn.rollback();
       return res.status(found.status).json({ error: found.error });
@@ -292,7 +293,7 @@ router.delete('/lines/:id', async (req, res) => {
   try {
     conn = await pool.getConnection();
     await conn.beginTransaction();
-    const found = await loadOwnedPendingLine(conn, lineId, req.user);
+    const found = await loadOwnedPendingLine(conn, lineId, req.user, req.shopId);
     if (found.error) {
       await conn.rollback();
       return res.status(found.status).json({ error: found.error });
@@ -310,11 +311,11 @@ router.delete('/lines/:id', async (req, res) => {
 });
 
 // บวกสต๊อกจริงของรายการรอยืนยันหนึ่งแถว (อยู่ในทรานแซกชันของผู้เรียก) — คืน { itemId } หรือ { status, error }
-async function applyLine(conn, line, userId) {
+async function applyLine(conn, line, userId, shopId) {
   const [[item]] = await conn.execute(
     `SELECT id, description, has_sides, has_axles, has_levels, stock_qty
-     FROM stock_items WHERE id = ? AND is_active = 1 FOR UPDATE`,
-    [line.item_id]
+     FROM stock_items WHERE id = ? AND shop_id = ? AND is_active = 1 FOR UPDATE`,
+    [line.item_id, shopId]
   );
   if (!item) return { status: 400, error: 'มีรายการที่ถูกซ่อนหรือลบออกจากสต๊อกรวมไปแล้ว — ลบรายการนั้นออกจากบิลก่อนยืนยัน' };
 
@@ -344,7 +345,7 @@ async function applyLine(conn, line, userId) {
   }
   if (after > MAX_QTY) return { status: 400, error: `จำนวนรวมของ "${item.description}" สูงเกินไป` };
 
-  await conn.execute('UPDATE stock_items SET stock_qty = ? WHERE id = ?', [total, line.item_id]);
+  await conn.execute('UPDATE stock_items SET stock_qty = ? WHERE id = ? AND shop_id = ?', [total, line.item_id, shopId]);
   await conn.execute(
     `INSERT INTO stock_item_movements (item_id, qty_before, qty_after, reason, position, receipt_session_id, user_id)
      VALUES (?, ?, ?, 'receive', ?, ?, ?)`,
@@ -362,7 +363,7 @@ router.post('/sessions/:id/commit', async (req, res) => {
   try {
     conn = await pool.getConnection();
     await conn.beginTransaction();
-    const owned = await loadOwnedSession(conn, sessionId, req.user, { lock: true });
+    const owned = await loadOwnedSession(conn, sessionId, req.user, req.shopId, { lock: true });
     if (owned.error) {
       await conn.rollback();
       return res.status(owned.status).json({ error: owned.error });
@@ -378,7 +379,7 @@ router.post('/sessions/:id/commit', async (req, res) => {
     const itemIds = new Set();
     let totalQty = 0;
     for (const line of lines) {
-      const result = await applyLine(conn, line, req.user.id);
+      const result = await applyLine(conn, line, req.user.id, req.shopId);
       if (result.error) {
         await conn.rollback();
         return res.status(result.status).json({ error: result.error });
@@ -389,9 +390,9 @@ router.post('/sessions/:id/commit', async (req, res) => {
     await conn.commit();
 
     itemIds.forEach((itemId) => {
-      emitStockEvent('stock:item-updated', { entityType: 'stock_item', entityId: itemId, actorId: req.user.id });
+      emitStockEvent('stock:item-updated', { shopId: req.shopId, entityType: 'stock_item', entityId: itemId, actorId: req.user.id });
     });
-    emitStockTxEvent('stock:tx-created', { txType: 'IN', entityType: 'stock_item', entityId: null, actorId: req.user.id });
+    emitStockTxEvent('stock:tx-created', { shopId: req.shopId, txType: 'IN', entityType: 'stock_item', entityId: null, actorId: req.user.id });
     res.json({ success: true, applied: lines.length, total_qty: totalQty });
   } catch (err) {
     if (conn) await conn.rollback().catch(() => {});
@@ -411,14 +412,14 @@ router.delete('/movements/:id', requireRole('office'), async (req, res) => {
   try {
     conn = await pool.getConnection();
     await conn.beginTransaction();
-    const result = await voidReceiveMovement(conn, id, req.user.id);
+    const result = await voidReceiveMovement(conn, id, req.user.id, req.shopId);
     if (result.error) {
       await conn.rollback();
       return res.status(result.status).json({ error: result.error });
     }
     await conn.commit();
-    emitStockEvent('stock:item-updated', { entityType: 'stock_item', entityId: result.itemId, actorId: req.user.id });
-    emitStockTxEvent('stock:tx-deleted', { txType: 'IN', entityType: 'stock_item', entityId: result.itemId, actorId: req.user.id });
+    emitStockEvent('stock:item-updated', { shopId: req.shopId, entityType: 'stock_item', entityId: result.itemId, actorId: req.user.id });
+    emitStockTxEvent('stock:tx-deleted', { shopId: req.shopId, txType: 'IN', entityType: 'stock_item', entityId: result.itemId, actorId: req.user.id });
     res.json({ success: true });
   } catch (err) {
     if (conn) await conn.rollback().catch(() => {});
@@ -431,18 +432,19 @@ router.delete('/movements/:id', requireRole('office'), async (req, res) => {
 
 // ใช้ร่วมกับการลบบิลทั้งใบ (backend_transactions.routes.js) — ต้องอยู่ในทรานแซกชันของผู้เรียก
 // คืน { itemId } เมื่อสำเร็จ หรือ { status, error }
-async function voidReceiveMovement(conn, movementId, userId) {
+async function voidReceiveMovement(conn, movementId, userId, shopId) {
   const [[mv]] = await conn.execute(
-    `SELECT id, item_id, position, qty_before, qty_after, receipt_session_id
-     FROM stock_item_movements WHERE id = ? AND reason = 'receive' AND voided_at IS NULL FOR UPDATE`,
-    [movementId]
+    `SELECT m.id, m.item_id, m.position, m.qty_before, m.qty_after, m.receipt_session_id
+     FROM stock_item_movements m JOIN stock_items i ON i.id = m.item_id
+     WHERE m.id = ? AND i.shop_id = ? AND m.reason = 'receive' AND m.voided_at IS NULL FOR UPDATE`,
+    [movementId, shopId]
   );
   if (!mv) return { status: 404, error: 'ไม่พบรายการนี้' };
   const delta = mv.qty_after - mv.qty_before;
 
   const [[item]] = await conn.execute(
-    'SELECT id, description, stock_qty FROM stock_items WHERE id = ? FOR UPDATE',
-    [mv.item_id]
+    'SELECT id, description, stock_qty FROM stock_items WHERE id = ? AND shop_id = ? FOR UPDATE',
+    [mv.item_id, shopId]
   );
   if (!item) return { status: 404, error: 'ไม่พบรายการในสต๊อกรวม' };
 
@@ -471,7 +473,7 @@ async function voidReceiveMovement(conn, movementId, userId) {
     );
     total = Number(sum.total);
   }
-  await conn.execute('UPDATE stock_items SET stock_qty = ? WHERE id = ?', [total, mv.item_id]);
+  await conn.execute('UPDATE stock_items SET stock_qty = ? WHERE id = ? AND shop_id = ?', [total, mv.item_id, shopId]);
   await conn.execute('UPDATE stock_item_movements SET voided_at = NOW() WHERE id = ?', [movementId]);
   await conn.execute(
     `INSERT INTO stock_item_movements (item_id, qty_before, qty_after, reason, position, note, user_id)
@@ -488,8 +490,8 @@ router.get('/qrcodes', requireRole('office'), async (req, res) => {
   if (ids.length === 0) return res.status(400).json({ error: 'กรุณาเลือกรายการ' });
   try {
     const [rows] = await pool.query(
-      `${MATCH_SELECT} WHERE i.is_active = 1 AND i.id IN (?) ORDER BY i.id, p.position`,
-      [ids]
+      `${MATCH_SELECT} WHERE i.shop_id = ? AND i.is_active = 1 AND i.id IN (?) ORDER BY i.id, p.position`,
+      [req.shopId, ids]
     );
     const wanted = rows.map(shapeMatch).filter((m) => m.code);
     const labels = await Promise.all(wanted.map(async (m) => ({

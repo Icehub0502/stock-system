@@ -11,6 +11,7 @@ const { ALIGN_BAY, isValidBay } = require('../utils/workBays');
 const { generateJobNo } = require('../utils/generateJobNo');
 const { emitJobEvent, emitQuotationEvent, emitReceiptEvent } = require('../realtime');
 const { saveDataUrlToFile, deleteUploadedFile } = require('../utils/photoStorage');
+const { ownsRow } = require('../utils/tenant');
 // ใช้ตรรกะออกเลขที่/กรองรายการชุดเดียวกับ quotations.routes.js — กันไม่ให้เลขที่
 // เอกสาร/กติกากรองรายการแยกกันเป็น 2 ชุดที่อาจเพี้ยนไม่ตรงกันในอนาคต (ดู
 // promoteDraftToQuotation ด้านล่าง ที่ใช้ตอน "โปรโมท" quote_draft เป็นใบเสนอราคาจริง)
@@ -45,10 +46,10 @@ function todayStr() {
 
 // รถ 1 คันอยู่ได้ช่องเดียว และงานที่จบแล้ว (ส่งรถ/เอารถลง) ไม่ถือว่ากินช่อง แม้ค่า bay
 // จะยังค้างอยู่ในแถว — ผังช่องยกจะได้ไม่โกหกว่ามีรถจอดอยู่ทั้งที่ออกไปแล้ว
-async function bayOccupant(conn, bay, excludeJobId = null) {
-  const params = [bay, ...CLOSED_STATUSES];
+async function bayOccupant(conn, shopId, bay, excludeJobId = null) {
+  const params = [shopId, bay, ...CLOSED_STATUSES];
   let sql = `SELECT id, job_no, bay FROM jobs
-             WHERE bay = ? AND status NOT IN (${CLOSED_STATUSES.map(() => '?').join(',')})`;
+             WHERE shop_id = ? AND bay = ? AND status NOT IN (${CLOSED_STATUSES.map(() => '?').join(',')})`;
   if (excludeJobId) { sql += ' AND id <> ?'; params.push(excludeJobId); }
   const [rows] = await conn.execute(`${sql} LIMIT 1`, params);
   return rows[0] || null;
@@ -71,9 +72,9 @@ router.get('/', async (req, res) => {
       LEFT JOIN customers c ON c.id = j.customer_id
       LEFT JOIN vehicles v ON v.id = j.vehicle_id
       LEFT JOIN quotations q ON q.id = j.quotation_id
-      WHERE j.job_date = ?
+      WHERE j.shop_id = ? AND j.job_date = ?
       ORDER BY CAST(j.queue_no AS UNSIGNED), j.id
-    `, [jobDate]);
+    `, [req.shopId, jobDate]);
     res.json({ success: true, date: jobDate, data: rows });
   } catch (err) {
     console.error(err);
@@ -101,9 +102,9 @@ router.get('/pending-delivery', async (req, res) => {
       LEFT JOIN customers c ON c.id = j.customer_id
       LEFT JOIN vehicles v ON v.id = j.vehicle_id
       LEFT JOIN quotations q ON q.id = j.quotation_id
-      WHERE j.status IN (${PENDING_DELIVERY_STATUSES.map(() => '?').join(',')})
+      WHERE j.shop_id = ? AND j.status IN (${PENDING_DELIVERY_STATUSES.map(() => '?').join(',')})
       ORDER BY j.job_date ASC, j.received_at ASC
-    `, PENDING_DELIVERY_STATUSES);
+    `, [req.shopId, ...PENDING_DELIVERY_STATUSES]);
     res.json({ success: true, data: rows });
   } catch (err) {
     console.error(err);
@@ -116,8 +117,8 @@ router.get('/next-queue-no', async (req, res) => {
   const jobDate = DATE_ONLY_RE.test(req.query.date || '') ? req.query.date : todayStr();
   try {
     const [rows] = await pool.execute(
-      'SELECT MAX(CAST(queue_no AS UNSIGNED)) AS maxQ FROM jobs WHERE job_date = ?',
-      [jobDate]
+      'SELECT MAX(CAST(queue_no AS UNSIGNED)) AS maxQ FROM jobs WHERE shop_id = ? AND job_date = ?',
+      [req.shopId, jobDate]
     );
     res.json({ success: true, queue_no: String((rows[0]?.maxQ || 0) + 1) });
   } catch (err) {
@@ -134,8 +135,8 @@ router.get('/bays', async (req, res) => {
              v.license_plate, v.province, v.brand, v.model
       FROM jobs j
       LEFT JOIN vehicles v ON v.id = j.vehicle_id
-      WHERE j.bay IS NOT NULL AND j.status NOT IN (${CLOSED_STATUSES.map(() => '?').join(',')})
-    `, CLOSED_STATUSES);
+      WHERE j.shop_id = ? AND j.bay IS NOT NULL AND j.status NOT IN (${CLOSED_STATUSES.map(() => '?').join(',')})
+    `, [req.shopId, ...CLOSED_STATUSES]);
     res.json({ success: true, data: rows });
   } catch (err) {
     console.error(err);
@@ -156,17 +157,17 @@ router.get('/:id', async (req, res) => {
       LEFT JOIN customers c ON c.id = j.customer_id
       LEFT JOIN vehicles v ON v.id = j.vehicle_id
       LEFT JOIN quotations q ON q.id = j.quotation_id
-      WHERE j.id = ?
-    `, [req.params.id]);
+      WHERE j.id = ? AND j.shop_id = ?
+    `, [req.params.id, req.shopId]);
     if (!rows.length) return res.status(404).json({ error: 'ไม่พบงานนี้' });
 
     const [history] = await pool.execute(`
       SELECT h.status, h.changed_at, u.full_name, u.username
       FROM job_status_history h
-      LEFT JOIN users u ON u.id = h.changed_by
+      LEFT JOIN users u ON u.id = h.changed_by AND u.shop_id = ?
       WHERE h.job_id = ?
       ORDER BY h.changed_at, h.id
-    `, [req.params.id]);
+    `, [req.shopId, req.params.id]);
 
     const [photos] = await pool.execute(
       'SELECT id, photo_data, sort_order, photo_type FROM job_photos WHERE job_id = ? ORDER BY photo_type, sort_order',
@@ -205,8 +206,8 @@ router.get('/qr/track', async (req, res) => {
 router.get('/:id/quotations', async (req, res) => {
   try {
     const [[job]] = await pool.query(
-      'SELECT customer_id, vehicle_id, job_date, quotation_id FROM jobs WHERE id = ?',
-      [req.params.id]
+      'SELECT customer_id, vehicle_id, job_date, quotation_id FROM jobs WHERE id = ? AND shop_id = ?',
+      [req.params.id, req.shopId]
     );
     if (!job) return res.status(404).json({ error: 'ไม่พบงานนี้' });
     if (!job.customer_id || !job.vehicle_id) return res.json({ success: true, data: [] });
@@ -215,9 +216,9 @@ router.get('/:id/quotations', async (req, res) => {
       `SELECT id, quotation_no, status, total_amount, deposit_amount, deposit_date,
               scheduled_date, closed_at, converted_receipt_id
        FROM quotations
-       WHERE customer_id = ? AND vehicle_id = ? AND quotation_date = ?
+       WHERE shop_id = ? AND customer_id = ? AND vehicle_id = ? AND quotation_date = ?
        ORDER BY created_at ASC`,
-      [job.customer_id, job.vehicle_id, job.job_date]
+      [req.shopId, job.customer_id, job.vehicle_id, job.job_date]
     );
     const data = rows.map((r) => ({ ...r, is_primary: r.id === job.quotation_id }));
     res.json({ success: true, data });
@@ -249,8 +250,16 @@ router.post('/', async (req, res) => {
     conn = await pool.getConnection();
     await conn.beginTransaction();
 
+    // รถ/ลูกค้า/ใบเสนอราคาที่ส่งมาต้องเป็นของร้านนี้เท่านั้น
+    if (!(await ownsRow(conn, 'vehicles', vehicle_id, req.shopId))
+      || (customer_id && !(await ownsRow(conn, 'customers', customer_id, req.shopId)))
+      || (quotation_id && !(await ownsRow(conn, 'quotations', quotation_id, req.shopId)))) {
+      await conn.rollback();
+      return res.status(404).json({ error: 'ไม่พบรถ/ลูกค้า/ใบเสนอราคาที่เลือก' });
+    }
+
     if (bay) {
-      const occupant = await bayOccupant(conn, bay);
+      const occupant = await bayOccupant(conn, req.shopId, bay);
       if (occupant) {
         await conn.rollback();
         return res.status(400).json({ error: `ช่อง ${bay} มีรถอยู่แล้ว (${occupant.job_no})` });
@@ -270,10 +279,10 @@ router.post('/', async (req, res) => {
       // การมาครั้งนี้เลยขึ้นมาผูกผิด ๆ
       const [[pendingQuote]] = await conn.query(
         `SELECT id FROM quotations
-         WHERE customer_id = ? AND vehicle_id = ? AND status = 'pending' AND quotation_date = ?
-           AND id NOT IN (SELECT quotation_id FROM jobs WHERE quotation_id IS NOT NULL)
+         WHERE shop_id = ? AND customer_id = ? AND vehicle_id = ? AND status = 'pending' AND quotation_date = ?
+           AND id NOT IN (SELECT quotation_id FROM jobs WHERE quotation_id IS NOT NULL AND shop_id = ?)
          ORDER BY created_at DESC LIMIT 1`,
-        [customer_id, vehicle_id, jobDate]
+        [req.shopId, customer_id, vehicle_id, jobDate, req.shopId]
       );
       if (pendingQuote) quotation_id = pendingQuote.id;
     }
@@ -283,7 +292,7 @@ router.post('/', async (req, res) => {
     // เรียก PATCH /:id/quotation แยกอีกที เช็คว่ายังไม่เคยมีงานอื่นผูกใบนี้ไปแล้วก่อน
     // เสมอ กันกดซ้ำสองแท็บแล้วได้งานซ้อนกันสองใบจากใบเดียว
     if (quotation_id) {
-      const [[quote]] = await conn.query('SELECT id, status, quotation_date FROM quotations WHERE id = ? FOR UPDATE', [quotation_id]);
+      const [[quote]] = await conn.query('SELECT id, status, quotation_date FROM quotations WHERE id = ? AND shop_id = ? FOR UPDATE', [quotation_id, req.shopId]);
       if (!quote) {
         await conn.rollback();
         return res.status(400).json({ error: 'ไม่พบใบเสนอราคาที่จะผูก' });
@@ -292,9 +301,9 @@ router.post('/', async (req, res) => {
       // ขับรถกลับไปก่อน (งานเดิมจบเป็น carout) ต้องรับรถกลับเข้าคิวใหม่ได้เมื่อถึงวันนัด
       const [[existingLink]] = await conn.query(
         `SELECT id FROM jobs
-         WHERE quotation_id = ? AND status NOT IN (${[...CLOSED_STATUSES, 'rejected'].map(() => '?').join(',')})
+         WHERE shop_id = ? AND quotation_id = ? AND status NOT IN (${[...CLOSED_STATUSES, 'rejected'].map(() => '?').join(',')})
          LIMIT 1`,
-        [quotation_id, ...CLOSED_STATUSES, 'rejected']
+        [req.shopId, quotation_id, ...CLOSED_STATUSES, 'rejected']
       );
       if (existingLink) {
         await conn.rollback();
@@ -311,12 +320,12 @@ router.post('/', async (req, res) => {
       const clearWaitingStatus = quote.status === 'scheduled' || quote.status === 'no_date' || quote.status === 'declined';
       const clearDecline = quote.status === 'declined' ? ', decline_reason = NULL, decline_note = NULL' : '';
       await conn.execute(
-        `UPDATE quotations SET quotation_date = ?${clearWaitingStatus ? ", status = 'pending', scheduled_date = NULL" : ''}${clearDecline} WHERE id = ?`,
-        [jobDate, quotation_id]
+        `UPDATE quotations SET quotation_date = ?${clearWaitingStatus ? ", status = 'pending', scheduled_date = NULL" : ''}${clearDecline} WHERE id = ? AND shop_id = ?`,
+        [jobDate, quotation_id, req.shopId]
       );
     }
 
-    const jobNo = await generateJobNo(conn, jobDate);
+    const jobNo = await generateJobNo(conn, jobDate, req.shopId);
 
     // เลขคิวที่ client ส่งมา (เดาไว้ตอนเปิดฟอร์ม จาก GET /next-queue-no แบบไม่ล็อก)
     // อาจเก่าไปแล้วตอนกด submit จริง — ถ้าพนักงาน 2 คนเปิดฟอร์มพร้อมกันจะได้เลข
@@ -327,8 +336,8 @@ router.post('/', async (req, res) => {
     // เลื่อนไปเลขถัดไปที่ว่างให้อัตโนมัติ (mirror ตรรกะเดียวกับที่ lineWebhook.routes.js
     // ใช้กันคิวจากไลน์ชนกัน)
     const [todayQueueRows] = await conn.execute(
-      `SELECT queue_no FROM jobs WHERE job_date = ? AND queue_no REGEXP '^[0-9]+$' FOR UPDATE`,
-      [jobDate]
+      `SELECT queue_no FROM jobs WHERE shop_id = ? AND job_date = ? AND queue_no REGEXP '^[0-9]+$' FOR UPDATE`,
+      [req.shopId, jobDate]
     );
     const requestedQueueNo = String(queue_no || '').trim();
     let queueNo;
@@ -344,10 +353,10 @@ router.post('/', async (req, res) => {
 
     const [result] = await conn.execute(
       `INSERT INTO jobs
-         (job_no, queue_no, job_date, customer_id, vehicle_id, mileage_in, symptom,
+         (shop_id, job_no, queue_no, job_date, customer_id, vehicle_id, mileage_in, symptom,
           note, status, bay, technician, est_minutes, created_by, quotation_id)
-       VALUES (?,?,?,?,?,?,?,?, 'received', ?,?,?,?,?)`,
-      [jobNo, queueNo, jobDate, customer_id, vehicle_id, mileage_in || null,
+       VALUES (?,?,?,?,?,?,?,?,?, 'received', ?,?,?,?,?)`,
+      [req.shopId, jobNo, queueNo, jobDate, customer_id, vehicle_id, mileage_in || null,
        symptom || null, note || null, bay, technician, est_minutes || null, req.user.id, quotation_id || null]
     );
 
@@ -375,7 +384,7 @@ router.post('/', async (req, res) => {
     }
 
     await conn.commit();
-    emitJobEvent('job:created', { jobId: result.insertId, jobDate, status: 'received', actorId: req.user.id });
+    emitJobEvent('job:created', { shopId: req.shopId, jobId: result.insertId, jobDate, status: 'received', actorId: req.user.id });
     res.status(201).json({ success: true, id: result.insertId, job_no: jobNo, queue_no: queueNo });
   } catch (err) {
     if (conn) await conn.rollback();
@@ -401,7 +410,7 @@ router.patch('/:id', async (req, res) => {
     conn = await pool.getConnection();
     await conn.beginTransaction();
 
-    const [rows] = await conn.execute('SELECT * FROM jobs WHERE id = ? FOR UPDATE', [req.params.id]);
+    const [rows] = await conn.execute('SELECT * FROM jobs WHERE id = ? AND shop_id = ? FOR UPDATE', [req.params.id, req.shopId]);
     const job = rows[0];
     if (!job) {
       await conn.rollback();
@@ -410,7 +419,7 @@ router.patch('/:id', async (req, res) => {
 
     const nextBay = bay === undefined ? job.bay : (bay || null);
     if (nextBay && nextBay !== job.bay) {
-      const occupant = await bayOccupant(conn, nextBay, job.id);
+      const occupant = await bayOccupant(conn, req.shopId, nextBay, job.id);
       if (occupant) {
         await conn.rollback();
         return res.status(400).json({ error: `ช่อง ${nextBay} มีรถอยู่แล้ว (${occupant.job_no})` });
@@ -420,7 +429,7 @@ router.patch('/:id', async (req, res) => {
     await conn.execute(
       `UPDATE jobs SET technician = ?, bay = ?, est_minutes = ?, symptom = ?,
                        note = ?, queue_no = ?, mileage_in = ?, expected_pickup_date = ?
-       WHERE id = ?`,
+       WHERE id = ? AND shop_id = ?`,
       [
         technician === undefined ? job.technician : (technician || null),
         nextBay,
@@ -431,11 +440,12 @@ router.patch('/:id', async (req, res) => {
         mileage_in === undefined ? job.mileage_in : (mileage_in || null),
         expected_pickup_date === undefined ? job.expected_pickup_date : (expected_pickup_date || null),
         job.id,
+        req.shopId,
       ]
     );
 
     await conn.commit();
-    emitJobEvent('job:updated', { jobId: job.id, jobDate: job.job_date, status: job.status, actorId: req.user.id });
+    emitJobEvent('job:updated', { shopId: req.shopId, jobId: job.id, jobDate: job.job_date, status: job.status, actorId: req.user.id });
     res.json({ success: true });
   } catch (err) {
     if (conn) await conn.rollback();
@@ -453,11 +463,11 @@ router.patch('/:id', async (req, res) => {
 router.patch('/:id/mark-worksheet-printed', async (req, res) => {
   try {
     const [result] = await pool.execute(
-      'UPDATE jobs SET repair_notice_printed_at = NOW() WHERE id = ?',
-      [req.params.id]
+      'UPDATE jobs SET repair_notice_printed_at = NOW() WHERE id = ? AND shop_id = ?',
+      [req.params.id, req.shopId]
     );
     if (result.affectedRows === 0) return res.status(404).json({ error: 'ไม่พบงานนี้' });
-    const [[row]] = await pool.execute('SELECT repair_notice_printed_at FROM jobs WHERE id = ?', [req.params.id]);
+    const [[row]] = await pool.execute('SELECT repair_notice_printed_at FROM jobs WHERE id = ? AND shop_id = ?', [req.params.id, req.shopId]);
     res.json({ success: true, repair_notice_printed_at: row.repair_notice_printed_at });
   } catch (err) {
     console.error(err);
@@ -482,7 +492,7 @@ router.patch('/:id/status', async (req, res) => {
     conn = await pool.getConnection();
     await conn.beginTransaction();
 
-    const [rows] = await conn.execute('SELECT * FROM jobs WHERE id = ? FOR UPDATE', [req.params.id]);
+    const [rows] = await conn.execute('SELECT * FROM jobs WHERE id = ? AND shop_id = ? FOR UPDATE', [req.params.id, req.shopId]);
     const job = rows[0];
     if (!job) {
       await conn.rollback();
@@ -493,7 +503,7 @@ router.patch('/:id/status', async (req, res) => {
     // คาช่องเดิมไว้รอคิว ไม่ไล่คันที่อยู่ก่อนออก (ตามกติกา nextAlignBay ของ ChamppowerD)
     let nextBay = job.bay;
     if (status === 'aligning' && job.bay !== ALIGN_BAY) {
-      const occupant = await bayOccupant(conn, ALIGN_BAY, job.id);
+      const occupant = await bayOccupant(conn, req.shopId, ALIGN_BAY, job.id);
       if (!occupant) nextBay = ALIGN_BAY;
     }
     // งานจบแล้วต้องคายช่องยกออก ไม่งั้นผังจะโชว์ว่ามีรถจอดค้างทั้งที่ออกไปแล้ว
@@ -501,8 +511,8 @@ router.patch('/:id/status', async (req, res) => {
     if (isClosed) nextBay = null;
 
     await conn.execute(
-      'UPDATE jobs SET status = ?, bay = ?, closed_at = ? WHERE id = ?',
-      [status, nextBay, isClosed ? new Date() : null, job.id]
+      'UPDATE jobs SET status = ?, bay = ?, closed_at = ? WHERE id = ? AND shop_id = ?',
+      [status, nextBay, isClosed ? new Date() : null, job.id, req.shopId]
     );
     await conn.execute(
       'INSERT INTO job_status_history (job_id, status, changed_by) VALUES (?,?,?)',
@@ -510,7 +520,7 @@ router.patch('/:id/status', async (req, res) => {
     );
 
     await conn.commit();
-    emitJobEvent('job:status-changed', { jobId: job.id, jobDate: job.job_date, status, actorId: req.user.id });
+    emitJobEvent('job:status-changed', { shopId: req.shopId, jobId: job.id, jobDate: job.job_date, status, actorId: req.user.id });
     res.json({ success: true, status, bay: nextBay });
   } catch (err) {
     if (conn) await conn.rollback();
@@ -529,18 +539,18 @@ router.patch('/:id/quotation', async (req, res) => {
   if (!quotation_id) return res.status(400).json({ error: 'ไม่พบเลขที่ใบเสนอราคา' });
 
   try {
-    const [quotes] = await pool.execute('SELECT id FROM quotations WHERE id = ?', [quotation_id]);
+    const [quotes] = await pool.execute('SELECT id FROM quotations WHERE id = ? AND shop_id = ?', [quotation_id, req.shopId]);
     if (!quotes.length) return res.status(404).json({ error: 'ไม่พบใบเสนอราคานี้' });
 
     const [result] = await pool.execute(
-      'UPDATE jobs SET quotation_id = ? WHERE id = ?',
-      [quotation_id, req.params.id]
+      'UPDATE jobs SET quotation_id = ? WHERE id = ? AND shop_id = ?',
+      [quotation_id, req.params.id, req.shopId]
     );
     if (!result.affectedRows) return res.status(404).json({ error: 'ไม่พบงานนี้' });
 
-    const [jobRows] = await pool.execute('SELECT job_date, status FROM jobs WHERE id = ?', [req.params.id]);
+    const [jobRows] = await pool.execute('SELECT job_date, status FROM jobs WHERE id = ? AND shop_id = ?', [req.params.id, req.shopId]);
     const jobRow = jobRows[0] || {};
-    emitJobEvent('job:quotation-linked', { jobId: req.params.id, jobDate: jobRow.job_date, status: jobRow.status, actorId: req.user.id });
+    emitJobEvent('job:quotation-linked', { shopId: req.shopId, jobId: req.params.id, jobDate: jobRow.job_date, status: jobRow.status, actorId: req.user.id });
 
     res.json({ success: true });
   } catch (err) {
@@ -568,8 +578,8 @@ router.delete('/:id', async (req, res) => {
       `SELECT j.id, j.job_date, j.quotation_id, q.status AS quotation_status, q.converted_receipt_id
        FROM jobs j
        LEFT JOIN quotations q ON q.id = j.quotation_id
-       WHERE j.id = ? FOR UPDATE`,
-      [req.params.id]
+       WHERE j.id = ? AND j.shop_id = ? FOR UPDATE`,
+      [req.params.id, req.shopId]
     );
     if (!job) { await conn.rollback(); return res.status(404).json({ error: 'ไม่พบงานนี้' }); }
     if (job.quotation_status === 'approved' && job.converted_receipt_id) {
@@ -585,7 +595,7 @@ router.delete('/:id', async (req, res) => {
       [req.params.id]
     );
 
-    const [result] = await conn.execute('DELETE FROM jobs WHERE id = ?', [req.params.id]);
+    const [result] = await conn.execute('DELETE FROM jobs WHERE id = ? AND shop_id = ?', [req.params.id, req.shopId]);
     if (!result.affectedRows) { await conn.rollback(); return res.status(404).json({ error: 'ไม่พบงานนี้' }); }
 
     await conn.commit();
@@ -593,7 +603,7 @@ router.delete('/:id', async (req, res) => {
       deleteUploadedFile(row.photo_data);
       deleteUploadedFile(row.photo_thumb_data);
     }
-    emitJobEvent('job:deleted', { jobId: Number(req.params.id), jobDate: job.job_date, actorId: req.user.id });
+    emitJobEvent('job:deleted', { shopId: req.shopId, jobId: Number(req.params.id), jobDate: job.job_date, actorId: req.user.id });
     res.json({ success: true, message: 'ลบงานสำเร็จ' });
   } catch (err) {
     if (conn) await conn.rollback();
@@ -619,7 +629,7 @@ router.post('/:id/photos', async (req, res) => {
     conn = await pool.getConnection();
     await conn.beginTransaction();
 
-    const [[job]] = await conn.query('SELECT id, job_date, status FROM jobs WHERE id = ? FOR UPDATE', [req.params.id]);
+    const [[job]] = await conn.query('SELECT id, job_date, status FROM jobs WHERE id = ? AND shop_id = ? FOR UPDATE', [req.params.id, req.shopId]);
     if (!job) { await conn.rollback(); return res.status(404).json({ error: 'ไม่พบงานนี้' }); }
 
     const [[maxRow]] = await conn.query(
@@ -644,7 +654,7 @@ router.post('/:id/photos', async (req, res) => {
     }
 
     await conn.commit();
-    emitJobEvent('job:updated', { jobId: job.id, jobDate: job.job_date, status: job.status, actorId: req.user.id });
+    emitJobEvent('job:updated', { shopId: req.shopId, jobId: job.id, jobDate: job.job_date, status: job.status, actorId: req.user.id });
     res.status(201).json({ success: true, ids: insertedIds });
   } catch (err) {
     if (conn) await conn.rollback();
@@ -661,7 +671,7 @@ router.delete('/:id/photos/:photoId', async (req, res) => {
     conn = await pool.getConnection();
     await conn.beginTransaction();
 
-    const [[job]] = await conn.query('SELECT id, job_date, status FROM jobs WHERE id = ? FOR UPDATE', [req.params.id]);
+    const [[job]] = await conn.query('SELECT id, job_date, status FROM jobs WHERE id = ? AND shop_id = ? FOR UPDATE', [req.params.id, req.shopId]);
     if (!job) { await conn.rollback(); return res.status(404).json({ error: 'ไม่พบงานนี้' }); }
 
     const [[photoRow]] = await conn.query(
@@ -678,7 +688,7 @@ router.delete('/:id/photos/:photoId', async (req, res) => {
     // ลบไฟล์จริงบนดิสก์หลัง commit สำเร็จ — best-effort เท่านั้น (ดู deleteUploadedFile)
     deleteUploadedFile(photoRow?.photo_data);
     deleteUploadedFile(photoRow?.photo_thumb_data);
-    emitJobEvent('job:updated', { jobId: job.id, jobDate: job.job_date, status: job.status, actorId: req.user.id });
+    emitJobEvent('job:updated', { shopId: req.shopId, jobId: job.id, jobDate: job.job_date, status: job.status, actorId: req.user.id });
     res.json({ success: true });
   } catch (err) {
     if (conn) await conn.rollback();
@@ -699,7 +709,7 @@ router.patch('/:id/photos/:photoId/move', async (req, res) => {
     conn = await pool.getConnection();
     await conn.beginTransaction();
 
-    const [[job]] = await conn.query('SELECT id, job_date, status FROM jobs WHERE id = ? FOR UPDATE', [req.params.id]);
+    const [[job]] = await conn.query('SELECT id, job_date, status FROM jobs WHERE id = ? AND shop_id = ? FOR UPDATE', [req.params.id, req.shopId]);
     if (!job) { await conn.rollback(); return res.status(404).json({ error: 'ไม่พบงานนี้' }); }
 
     const [rows] = await conn.query(
@@ -719,7 +729,7 @@ router.patch('/:id/photos/:photoId/move', async (req, res) => {
     await conn.execute('UPDATE job_photos SET sort_order = ? WHERE id = ?', [current.sort_order, target.id]);
 
     await conn.commit();
-    emitJobEvent('job:updated', { jobId: job.id, jobDate: job.job_date, status: job.status, actorId: req.user.id });
+    emitJobEvent('job:updated', { shopId: req.shopId, jobId: job.id, jobDate: job.job_date, status: job.status, actorId: req.user.id });
     res.json({ success: true });
   } catch (err) {
     if (conn) await conn.rollback();
@@ -759,7 +769,7 @@ router.post('/:id/part-photos', async (req, res) => {
     // ล็อกแถวงานไว้ระหว่างคำนวณ sort_order ถัดไป+อินเสิร์ต กันสองคำขออัปโหลด
     // พร้อมกันคำนวณ MAX(sort_order) ตัวเดียวกันแล้วได้เลขซ้ำกัน และห่อทุกอินเสิร์ต
     // ในทรานแซกชันเดียวกันกันเหลือรูปค้างครึ่งๆ กลางๆ ถ้าพังกลางทาง
-    const [[job]] = await conn.query('SELECT id, job_date, status FROM jobs WHERE id = ? FOR UPDATE', [req.params.id]);
+    const [[job]] = await conn.query('SELECT id, job_date, status FROM jobs WHERE id = ? AND shop_id = ? FOR UPDATE', [req.params.id, req.shopId]);
     if (!job) { await conn.rollback(); return res.status(404).json({ error: 'ไม่พบงานนี้' }); }
     if (!assertPartPhotosAllowed(job, res)) { await conn.rollback(); return; }
 
@@ -782,7 +792,7 @@ router.post('/:id/part-photos', async (req, res) => {
     }
 
     await conn.commit();
-    emitJobEvent('job:updated', { jobId: job.id, jobDate: job.job_date, status: job.status, actorId: req.user.id });
+    emitJobEvent('job:updated', { shopId: req.shopId, jobId: job.id, jobDate: job.job_date, status: job.status, actorId: req.user.id });
     res.status(201).json({ success: true, ids: insertedIds });
   } catch (err) {
     if (conn) await conn.rollback();
@@ -799,7 +809,7 @@ router.delete('/:id/part-photos/:photoId', async (req, res) => {
     conn = await pool.getConnection();
     await conn.beginTransaction();
 
-    const [[job]] = await conn.query('SELECT id, job_date, status FROM jobs WHERE id = ? FOR UPDATE', [req.params.id]);
+    const [[job]] = await conn.query('SELECT id, job_date, status FROM jobs WHERE id = ? AND shop_id = ? FOR UPDATE', [req.params.id, req.shopId]);
     if (!job) { await conn.rollback(); return res.status(404).json({ error: 'ไม่พบงานนี้' }); }
     if (!assertPartPhotosAllowed(job, res)) { await conn.rollback(); return; }
 
@@ -815,7 +825,7 @@ router.delete('/:id/part-photos/:photoId', async (req, res) => {
 
     await conn.commit();
     deleteUploadedFile(photoRow?.photo_data);
-    emitJobEvent('job:updated', { jobId: job.id, jobDate: job.job_date, status: job.status, actorId: req.user.id });
+    emitJobEvent('job:updated', { shopId: req.shopId, jobId: job.id, jobDate: job.job_date, status: job.status, actorId: req.user.id });
     res.json({ success: true });
   } catch (err) {
     if (conn) await conn.rollback();
@@ -839,7 +849,7 @@ router.patch('/:id/part-photos/:photoId/move', async (req, res) => {
     conn = await pool.getConnection();
     await conn.beginTransaction();
 
-    const [[job]] = await conn.query('SELECT id, job_date, status FROM jobs WHERE id = ? FOR UPDATE', [req.params.id]);
+    const [[job]] = await conn.query('SELECT id, job_date, status FROM jobs WHERE id = ? AND shop_id = ? FOR UPDATE', [req.params.id, req.shopId]);
     if (!job) { await conn.rollback(); return res.status(404).json({ error: 'ไม่พบงานนี้' }); }
     if (!assertPartPhotosAllowed(job, res)) { await conn.rollback(); return; }
 
@@ -860,7 +870,7 @@ router.patch('/:id/part-photos/:photoId/move', async (req, res) => {
     await conn.execute('UPDATE job_photos SET sort_order = ? WHERE id = ?', [current.sort_order, target.id]);
 
     await conn.commit();
-    emitJobEvent('job:updated', { jobId: job.id, jobDate: job.job_date, status: job.status, actorId: req.user.id });
+    emitJobEvent('job:updated', { shopId: req.shopId, jobId: job.id, jobDate: job.job_date, status: job.status, actorId: req.user.id });
     res.json({ success: true });
   } catch (err) {
     if (conn) await conn.rollback();
@@ -895,7 +905,7 @@ router.patch('/:id/quote-draft', async (req, res) => {
     // ล็อกแถวไว้ระหว่างอ่าน-แก้-เขียน quote_draft กันพนักงานบันทึกรายการชนกับ
     // ลูกค้า/พนักงานเซ็นชื่อพร้อมกัน (endpoint ลายเซ็นด้านล่างก็ล็อกแบบเดียวกัน) —
     // ไม่งั้นใครเขียนทีหลังจะทับข้อมูลของอีกฝั่งหายไปเงียบ ๆ
-    const [[job]] = await conn.query('SELECT id, job_date, quote_draft FROM jobs WHERE id = ? FOR UPDATE', [req.params.id]);
+    const [[job]] = await conn.query('SELECT id, job_date, quote_draft FROM jobs WHERE id = ? AND shop_id = ? FOR UPDATE', [req.params.id, req.shopId]);
     if (!job) { await conn.rollback(); return res.status(404).json({ error: 'ไม่พบงานนี้' }); }
 
     const prevDraft = parseDraft(job.quote_draft);
@@ -913,9 +923,9 @@ router.patch('/:id/quote-draft', async (req, res) => {
       deposit_date: deposit_date === undefined ? (prevDraft.deposit_date || null) : (deposit_date || null),
     };
 
-    await conn.execute('UPDATE jobs SET quote_draft = ? WHERE id = ?', [JSON.stringify(nextDraft), job.id]);
+    await conn.execute('UPDATE jobs SET quote_draft = ? WHERE id = ? AND shop_id = ?', [JSON.stringify(nextDraft), job.id, req.shopId]);
     await conn.commit();
-    emitJobEvent('job:updated', { jobId: job.id, jobDate: job.job_date, status: null, actorId: req.user.id });
+    emitJobEvent('job:updated', { shopId: req.shopId, jobId: job.id, jobDate: job.job_date, status: null, actorId: req.user.id });
     res.json({ success: true, quote_draft: nextDraft });
   } catch (err) {
     if (conn) await conn.rollback();
@@ -939,12 +949,12 @@ router.patch('/:id/quote-draft/signature', async (req, res) => {
     conn = await pool.getConnection();
     await conn.beginTransaction();
 
-    const [[job]] = await conn.query('SELECT id, job_date, quote_draft FROM jobs WHERE id = ? FOR UPDATE', [req.params.id]);
+    const [[job]] = await conn.query('SELECT id, job_date, quote_draft FROM jobs WHERE id = ? AND shop_id = ? FOR UPDATE', [req.params.id, req.shopId]);
     if (!job) { await conn.rollback(); return res.status(404).json({ error: 'ไม่พบงานนี้' }); }
     const nextDraft = { ...parseDraft(job.quote_draft), customer_signature: signature };
-    await conn.execute('UPDATE jobs SET quote_draft = ? WHERE id = ?', [JSON.stringify(nextDraft), job.id]);
+    await conn.execute('UPDATE jobs SET quote_draft = ? WHERE id = ? AND shop_id = ?', [JSON.stringify(nextDraft), job.id, req.shopId]);
     await conn.commit();
-    emitJobEvent('job:updated', { jobId: job.id, jobDate: job.job_date, status: null, actorId: req.user.id });
+    emitJobEvent('job:updated', { shopId: req.shopId, jobId: job.id, jobDate: job.job_date, status: null, actorId: req.user.id });
     res.json({ success: true });
   } catch (err) {
     if (conn) await conn.rollback();
@@ -965,12 +975,12 @@ router.patch('/:id/quote-draft/staff-signature', async (req, res) => {
     conn = await pool.getConnection();
     await conn.beginTransaction();
 
-    const [[job]] = await conn.query('SELECT id, job_date, quote_draft FROM jobs WHERE id = ? FOR UPDATE', [req.params.id]);
+    const [[job]] = await conn.query('SELECT id, job_date, quote_draft FROM jobs WHERE id = ? AND shop_id = ? FOR UPDATE', [req.params.id, req.shopId]);
     if (!job) { await conn.rollback(); return res.status(404).json({ error: 'ไม่พบงานนี้' }); }
     const nextDraft = { ...parseDraft(job.quote_draft), staff_signature: signature, staff_name: staff_name?.trim() || null };
-    await conn.execute('UPDATE jobs SET quote_draft = ? WHERE id = ?', [JSON.stringify(nextDraft), job.id]);
+    await conn.execute('UPDATE jobs SET quote_draft = ? WHERE id = ? AND shop_id = ?', [JSON.stringify(nextDraft), job.id, req.shopId]);
     await conn.commit();
-    emitJobEvent('job:updated', { jobId: job.id, jobDate: job.job_date, status: null, actorId: req.user.id });
+    emitJobEvent('job:updated', { shopId: req.shopId, jobId: job.id, jobDate: job.job_date, status: null, actorId: req.user.id });
     res.json({ success: true });
   } catch (err) {
     if (conn) await conn.rollback();
@@ -990,7 +1000,7 @@ router.patch('/:id/quote-draft/staff-signature', async (req, res) => {
 // ไปแล้วก็ไม่มีทางย้อนกลับไปรู้ว่าจะพิมพ์รายการอะไรลงไป (รถกลับไปแล้ว) แต่ยังต้อง
 // บันทึกไว้ว่า "ลูกค้าไม่ทำ" เพื่อนับสถิติ/เหตุผลได้ถูกต้อง — อนุมัติ/นัดวันมาทำยังคง
 // บังคับต้องมีรายการเหมือนเดิม เพราะสร้างใบเสร็จ/ใบเสนอราคาจริงที่ต้องมีรายการอยู่แล้ว
-async function promoteDraftToQuotation(conn, job, { status, scheduledDate, declineReason, declineNote, depositAmount, depositDate, allowEmptyItems = false } = {}) {
+async function promoteDraftToQuotation(conn, shopId, job, { status, scheduledDate, declineReason, declineNote, depositAmount, depositDate, allowEmptyItems = false } = {}) {
   const draft = parseDraft(job.quote_draft);
   const validItems = buildValidItems(draft.items || []);
   if (validItems.length === 0 && !allowEmptyItems) {
@@ -999,17 +1009,17 @@ async function promoteDraftToQuotation(conn, job, { status, scheduledDate, decli
     throw err;
   }
 
-  const quotation_no = await generateQuotationNo(conn);
+  const quotation_no = await generateQuotationNo(conn, shopId);
   const total_amount = validItems.reduce((sum, item) => sum + Number(item.quantity || 1) * Number(item.unit_price || 0), 0);
 
   const [quotationResult] = await conn.execute(
     `INSERT INTO quotations
-       (quotation_no, quotation_date, customer_id, vehicle_id, mileage, remark, product_summary,
+       (shop_id, quotation_no, quotation_date, customer_id, vehicle_id, mileage, remark, product_summary,
         total_amount, queue_no, symptom, deposit_amount, deposit_date, customer_signature,
         staff_signature, staff_name, status, scheduled_date, decline_reason, decline_note)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
     [
-      quotation_no, todayStr(), job.customer_id, job.vehicle_id, job.mileage_in || 0,
+      shopId, quotation_no, todayStr(), job.customer_id, job.vehicle_id, job.mileage_in || 0,
       draft.remark || null, validItems.map((i) => i.product_name).join(', '), total_amount,
       job.queue_no || null, job.symptom || null,
       depositAmount !== undefined ? depositAmount : (draft.deposit_amount ?? null),
@@ -1031,11 +1041,11 @@ async function promoteDraftToQuotation(conn, job, { status, scheduledDate, decli
   // ใบแจ้งซ่อมคู่กัน เหมือน POST /quotations เดิม — สร้างตอนโปรโมทนี้เลย ไม่ต้องรอ
   // ขั้นอนุมัติ (รถขึ้นทะเบียนในหน้าใบแจ้งซ่อมได้ทันทีที่มีใบเสนอราคาจริงแล้ว)
   if (job.vehicle_id) {
-    const rnCode = await generateRepairNoticeCode(conn);
+    const rnCode = await generateRepairNoticeCode(conn, shopId);
     await conn.execute(
-      `INSERT INTO repair_notices (code, customer_id, vehicle_id, quotation_id, notice_date, checklist)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [rnCode, job.customer_id, job.vehicle_id, quotation_id, todayStr(), '{}']
+      `INSERT INTO repair_notices (shop_id, code, customer_id, vehicle_id, quotation_id, notice_date, checklist)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [shopId, rnCode, job.customer_id, job.vehicle_id, quotation_id, todayStr(), '{}']
     );
   }
 
@@ -1066,13 +1076,13 @@ router.post('/:id/quotation/approve', async (req, res) => {
     conn = await pool.getConnection();
     await conn.beginTransaction();
 
-    const [[job]] = await conn.query('SELECT * FROM jobs WHERE id = ? FOR UPDATE', [req.params.id]);
+    const [[job]] = await conn.query('SELECT * FROM jobs WHERE id = ? AND shop_id = ? FOR UPDATE', [req.params.id, req.shopId]);
     if (!job) { await conn.rollback(); return res.status(404).json({ error: 'ไม่พบงานนี้' }); }
     if (!assertPromotable(job, res)) { await conn.rollback(); return; }
 
     let promoted;
     try {
-      promoted = await promoteDraftToQuotation(conn, job, { status: 'approved' });
+      promoted = await promoteDraftToQuotation(conn, req.shopId, job, { status: 'approved' });
     } catch (err) {
       await conn.rollback();
       return res.status(err.statusCode || 500).json({ error: err.message });
@@ -1080,12 +1090,12 @@ router.post('/:id/quotation/approve', async (req, res) => {
     const { quotation_id, total_amount } = promoted;
     const draft = parseDraft(job.quote_draft);
 
-    const receipt_no = await generateReceiptNo(conn);
-    const car_sequence_no = await generateCarSequenceNo(conn);
+    const receipt_no = await generateReceiptNo(conn, req.shopId);
+    const car_sequence_no = await generateCarSequenceNo(conn, req.shopId);
     const [receiptResult] = await conn.execute(
-      `INSERT INTO receipts (receipt_no, receipt_date, customer_id, vehicle_id, mileage, remark, total_amount, customer_signature, deposit_amount, deposit_date, car_sequence_no)
-       VALUES (?, CURDATE(), ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [receipt_no, job.customer_id, job.vehicle_id, job.mileage_in || 0, draft.remark || null, total_amount, draft.customer_signature || null, draft.deposit_amount ?? null, draft.deposit_date || null, car_sequence_no]
+      `INSERT INTO receipts (shop_id, receipt_no, receipt_date, customer_id, vehicle_id, mileage, remark, total_amount, customer_signature, deposit_amount, deposit_date, car_sequence_no)
+       VALUES (?, ?, CURDATE(), ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [req.shopId, receipt_no, job.customer_id, job.vehicle_id, job.mileage_in || 0, draft.remark || null, total_amount, draft.customer_signature || null, draft.deposit_amount ?? null, draft.deposit_date || null, car_sequence_no]
     );
     const receiptId = receiptResult.insertId;
 
@@ -1100,15 +1110,15 @@ router.post('/:id/quotation/approve', async (req, res) => {
       );
     }
 
-    await conn.execute("UPDATE quotations SET status = 'approved', converted_receipt_id = ? WHERE id = ?", [receiptId, quotation_id]);
-    await conn.execute('UPDATE jobs SET quotation_id = ?, status = ?, quote_draft = NULL WHERE id = ?', [quotation_id, 'approved', job.id]);
+    await conn.execute("UPDATE quotations SET status = 'approved', converted_receipt_id = ? WHERE id = ? AND shop_id = ?", [receiptId, quotation_id, req.shopId]);
+    await conn.execute('UPDATE jobs SET quotation_id = ?, status = ?, quote_draft = NULL WHERE id = ? AND shop_id = ?', [quotation_id, 'approved', job.id, req.shopId]);
     await conn.execute('INSERT INTO job_status_history (job_id, status, changed_by) VALUES (?,?,?)', [job.id, 'approved', req.user.id]);
 
     await conn.commit();
 
-    emitQuotationEvent('quotation:updated', { quotationId: quotation_id, status: 'approved', actorId: req.user.id });
-    emitReceiptEvent('receipt:created', { receiptId, actorId: req.user.id });
-    emitJobEvent('job:status-changed', { jobId: job.id, jobDate: job.job_date, status: 'approved', actorId: req.user.id });
+    emitQuotationEvent('quotation:updated', { shopId: req.shopId, quotationId: quotation_id, status: 'approved', actorId: req.user.id });
+    emitReceiptEvent('receipt:created', { shopId: req.shopId, receiptId, actorId: req.user.id });
+    emitJobEvent('job:status-changed', { shopId: req.shopId, jobId: job.id, jobDate: job.job_date, status: 'approved', actorId: req.user.id });
 
     res.json({ success: true, quotation_id, receipt_id: receiptId });
   } catch (err) {
@@ -1130,25 +1140,25 @@ router.post('/:id/quotation/schedule', async (req, res) => {
     conn = await pool.getConnection();
     await conn.beginTransaction();
 
-    const [[job]] = await conn.query('SELECT * FROM jobs WHERE id = ? FOR UPDATE', [req.params.id]);
+    const [[job]] = await conn.query('SELECT * FROM jobs WHERE id = ? AND shop_id = ? FOR UPDATE', [req.params.id, req.shopId]);
     if (!job) { await conn.rollback(); return res.status(404).json({ error: 'ไม่พบงานนี้' }); }
     if (!assertPromotable(job, res)) { await conn.rollback(); return; }
 
     let promoted;
     try {
-      promoted = await promoteDraftToQuotation(conn, job, { status: 'scheduled', scheduledDate: scheduled_date });
+      promoted = await promoteDraftToQuotation(conn, req.shopId, job, { status: 'scheduled', scheduledDate: scheduled_date });
     } catch (err) {
       await conn.rollback();
       return res.status(err.statusCode || 500).json({ error: err.message });
     }
 
-    await conn.execute('UPDATE jobs SET quotation_id = ?, status = ?, quote_draft = NULL WHERE id = ?', [promoted.quotation_id, 'scheduled', job.id]);
+    await conn.execute('UPDATE jobs SET quotation_id = ?, status = ?, quote_draft = NULL WHERE id = ? AND shop_id = ?', [promoted.quotation_id, 'scheduled', job.id, req.shopId]);
     await conn.execute('INSERT INTO job_status_history (job_id, status, changed_by) VALUES (?,?,?)', [job.id, 'scheduled', req.user.id]);
 
     await conn.commit();
 
-    emitQuotationEvent('quotation:updated', { quotationId: promoted.quotation_id, status: 'scheduled', actorId: req.user.id });
-    emitJobEvent('job:status-changed', { jobId: job.id, jobDate: job.job_date, status: 'scheduled', actorId: req.user.id });
+    emitQuotationEvent('quotation:updated', { shopId: req.shopId, quotationId: promoted.quotation_id, status: 'scheduled', actorId: req.user.id });
+    emitJobEvent('job:status-changed', { shopId: req.shopId, jobId: job.id, jobDate: job.job_date, status: 'scheduled', actorId: req.user.id });
 
     res.json({ success: true, quotation_id: promoted.quotation_id });
   } catch (err) {
@@ -1175,13 +1185,13 @@ router.post('/:id/quotation/deposit', async (req, res) => {
     conn = await pool.getConnection();
     await conn.beginTransaction();
 
-    const [[job]] = await conn.query('SELECT * FROM jobs WHERE id = ? FOR UPDATE', [req.params.id]);
+    const [[job]] = await conn.query('SELECT * FROM jobs WHERE id = ? AND shop_id = ? FOR UPDATE', [req.params.id, req.shopId]);
     if (!job) { await conn.rollback(); return res.status(404).json({ error: 'ไม่พบงานนี้' }); }
     if (!assertPromotable(job, res)) { await conn.rollback(); return; }
 
     let promoted;
     try {
-      promoted = await promoteDraftToQuotation(conn, job, {
+      promoted = await promoteDraftToQuotation(conn, req.shopId, job, {
         status: 'no_date',
         depositAmount: amount,
         depositDate: deposit_date || todayStr(),
@@ -1191,13 +1201,13 @@ router.post('/:id/quotation/deposit', async (req, res) => {
       return res.status(err.statusCode || 500).json({ error: err.message });
     }
 
-    await conn.execute('UPDATE jobs SET quotation_id = ?, status = ?, bay = NULL, closed_at = NOW(), quote_draft = NULL WHERE id = ?', [promoted.quotation_id, 'carout', job.id]);
+    await conn.execute('UPDATE jobs SET quotation_id = ?, status = ?, bay = NULL, closed_at = NOW(), quote_draft = NULL WHERE id = ? AND shop_id = ?', [promoted.quotation_id, 'carout', job.id, req.shopId]);
     await conn.execute('INSERT INTO job_status_history (job_id, status, changed_by) VALUES (?,?,?)', [job.id, 'carout', req.user.id]);
 
     await conn.commit();
 
-    emitQuotationEvent('quotation:updated', { quotationId: promoted.quotation_id, status: 'no_date', actorId: req.user.id });
-    emitJobEvent('job:status-changed', { jobId: job.id, jobDate: job.job_date, status: 'carout', actorId: req.user.id });
+    emitQuotationEvent('quotation:updated', { shopId: req.shopId, quotationId: promoted.quotation_id, status: 'no_date', actorId: req.user.id });
+    emitJobEvent('job:status-changed', { shopId: req.shopId, jobId: job.id, jobDate: job.job_date, status: 'carout', actorId: req.user.id });
 
     res.json({ success: true, quotation_id: promoted.quotation_id });
   } catch (err) {
@@ -1218,7 +1228,7 @@ router.post('/:id/quotation/deposit', async (req, res) => {
 // เจอตอนเพิ่มปุ่มนี้ที่หน้าบอร์ด
 router.post('/:id/quotation/decline', async (req, res) => {
   const { reason, note } = req.body || {};
-  const [validReasonRows] = await pool.query('SELECT id FROM decline_reasons');
+  const [validReasonRows] = await pool.query('SELECT id FROM decline_reasons WHERE shop_id = ?', [req.shopId]);
   const validReasonIds = validReasonRows.map((r) => String(r.id));
   if (reason !== 'other' && !validReasonIds.includes(String(reason))) {
     return res.status(400).json({ error: 'กรุณาเลือกเหตุผลที่ลูกค้าไม่ได้ทำ' });
@@ -1232,13 +1242,13 @@ router.post('/:id/quotation/decline', async (req, res) => {
     conn = await pool.getConnection();
     await conn.beginTransaction();
 
-    const [[job]] = await conn.query('SELECT * FROM jobs WHERE id = ? FOR UPDATE', [req.params.id]);
+    const [[job]] = await conn.query('SELECT * FROM jobs WHERE id = ? AND shop_id = ? FOR UPDATE', [req.params.id, req.shopId]);
     if (!job) { await conn.rollback(); return res.status(404).json({ error: 'ไม่พบงานนี้' }); }
     if (!assertPromotable(job, res)) { await conn.rollback(); return; }
 
     let promoted;
     try {
-      promoted = await promoteDraftToQuotation(conn, job, {
+      promoted = await promoteDraftToQuotation(conn, req.shopId, job, {
         status: 'declined',
         declineReason: reason,
         declineNote: reason === 'other' ? note.trim() : null,
@@ -1249,13 +1259,13 @@ router.post('/:id/quotation/decline', async (req, res) => {
       return res.status(err.statusCode || 500).json({ error: err.message });
     }
 
-    await conn.execute('UPDATE jobs SET quotation_id = ?, status = ?, quote_draft = NULL WHERE id = ?', [promoted.quotation_id, 'rejected', job.id]);
+    await conn.execute('UPDATE jobs SET quotation_id = ?, status = ?, quote_draft = NULL WHERE id = ? AND shop_id = ?', [promoted.quotation_id, 'rejected', job.id, req.shopId]);
     await conn.execute('INSERT INTO job_status_history (job_id, status, changed_by) VALUES (?,?,?)', [job.id, 'rejected', req.user.id]);
 
     await conn.commit();
 
-    emitQuotationEvent('quotation:updated', { quotationId: promoted.quotation_id, status: 'declined', actorId: req.user.id });
-    emitJobEvent('job:status-changed', { jobId: job.id, jobDate: job.job_date, status: 'rejected', actorId: req.user.id });
+    emitQuotationEvent('quotation:updated', { shopId: req.shopId, quotationId: promoted.quotation_id, status: 'declined', actorId: req.user.id });
+    emitJobEvent('job:status-changed', { shopId: req.shopId, jobId: job.id, jobDate: job.job_date, status: 'rejected', actorId: req.user.id });
 
     res.json({ success: true, quotation_id: promoted.quotation_id });
   } catch (err) {

@@ -6,6 +6,7 @@ const { computeReceiptAmount } = require('./lineWebhook.routes');
 const { emitQuotationEvent, emitReceiptEvent, emitJobEvent } = require('../realtime');
 const { syncJobOnQuotationStatusChange } = require('../utils/jobQuotationSync');
 const { applyReceiptSplits } = require('../utils/paymentMethods');
+const { ownsAll } = require('../utils/tenant');
 
 // ทำให้ตรงรูปแบบเดียวกับที่ customers.routes.js ใช้ กันเบอร์ที่พิมพ์ไม่มีขีดตรงนี้
 // ไปหลุดจากการค้นหาของบอทไลน์ (lineWebhook.routes.js เทียบแบบ phone = ? ตรง ๆ)
@@ -55,15 +56,15 @@ function isRepairNoticeFilled(checklistRaw, checkedBy, repairedBy) {
 // generateCustomerCode/generateRepairNoticeCode ด้านล่าง และ generateQuotationNo
 // ใน lineWebhook.routes.js) ไม่มี conn ส่งมา (เช่น route /next-no ที่แค่พรีวิว
 // เลขไว้ดู ไม่ได้ insert จริง) ใช้ pool เฉย ๆ ไม่ต้องล็อกอะไร
-async function generateQuotationNo(conn = pool) {
+async function generateQuotationNo(conn, shopId) {
   const today = new Date();
   const dateStr = String(today.getDate()).padStart(2, '0')
                 + String(today.getMonth() + 1).padStart(2, '0')
                 + String(today.getFullYear()).slice(-2);
 
   const [rows] = await conn.execute(
-    'SELECT MAX(CAST(SUBSTRING(quotation_no, -3) AS UNSIGNED)) as maxNo FROM quotations WHERE quotation_no LIKE ? FOR UPDATE',
-    [`IV${dateStr}%`]
+    'SELECT MAX(CAST(SUBSTRING(quotation_no, -3) AS UNSIGNED)) as maxNo FROM quotations WHERE shop_id = ? AND quotation_no LIKE ? FOR UPDATE',
+    [shopId, `IV${dateStr}%`]
   );
 
   const nextNumber = (rows[0]?.maxNo || 0) + 1;
@@ -80,13 +81,13 @@ function formatReceiptDate(date) {
 
 // Mirrors receipts.routes.js's generateReceiptNo() — the quotation-approval
 // flow inserts directly into receipts and needs the same numbering scheme.
-async function generateReceiptNo(conn) {
+async function generateReceiptNo(conn, shopId) {
   const dateStr = formatReceiptDate(new Date());
   // FOR UPDATE ล็อกแถว receipt_no วันนี้ไว้จนกว่า transaction ผู้เรียกจะ commit —
   // กันคำขออนุมัติใบเสนอราคา 2 ใบพร้อมกันอ่าน MAX เดิมแล้วได้เลขบิลซ้ำกัน
   const [rows] = await conn.execute(
-    'SELECT MAX(CAST(SUBSTRING(receipt_no, -3) AS UNSIGNED)) AS maxNo FROM receipts WHERE receipt_no LIKE ? FOR UPDATE',
-    [`RC${dateStr}%`]
+    'SELECT MAX(CAST(SUBSTRING(receipt_no, -3) AS UNSIGNED)) AS maxNo FROM receipts WHERE shop_id = ? AND receipt_no LIKE ? FOR UPDATE',
+    [shopId, `RC${dateStr}%`]
   );
   const nextNumber = (rows[0]?.maxNo || 0) + 1;
   return `RC${dateStr}${String(nextNumber).padStart(3, '0')}`;
@@ -97,16 +98,18 @@ async function generateReceiptNo(conn) {
 // migration — ล็อกทั้งตาราง receipts ไว้จนกว่า transaction จะ commit (ไม่ได้กรองด้วย
 // WHERE เหมือน generateReceiptNo เพราะเลขนี้นับรวมข้ามวัน) แต่ร้านนี้มีบิลไม่มาก จึงยัง
 // ไม่กระทบ performance
-async function generateCarSequenceNo(conn) {
-  const [rows] = await conn.execute('SELECT MAX(car_sequence_no) AS maxNo FROM receipts FOR UPDATE');
+async function generateCarSequenceNo(conn, shopId) {
+  const [rows] = await conn.execute('SELECT MAX(car_sequence_no) AS maxNo FROM receipts WHERE shop_id = ? FOR UPDATE', [shopId]);
   const nextNumber = (rows[0]?.maxNo || 0) + 1;
-  return nextNumber < 1396 ? 1396 : nextNumber;
+  // 1396 คือเลขเริ่มของร้านแรก (แชมป์พาวเวอร์ — ตามประวัติที่มีมาก่อนระบบ) ร้านอื่นนับจาก 1
+  return shopId === 1 && nextNumber < 1396 ? 1396 : nextNumber;
 }
 
-async function generateCustomerCode(conn) {
+async function generateCustomerCode(conn, shopId) {
   // FOR UPDATE เหตุผลเดียวกับ generateReceiptNo/generateQuotationNo ด้านบน
   const [rows] = await conn.execute(
-    "SELECT MAX(CAST(SUBSTRING(customer_code, 5) AS UNSIGNED)) AS maxCode FROM customers WHERE customer_code LIKE 'CMM-%' FOR UPDATE"
+    "SELECT MAX(CAST(SUBSTRING(customer_code, 5) AS UNSIGNED)) AS maxCode FROM customers WHERE shop_id = ? AND customer_code LIKE 'CMM-%' FOR UPDATE",
+    [shopId]
   );
   const nextNumber = (rows[0]?.maxCode || 0) + 1;
   return `CMM-${String(nextNumber).padStart(4, '0')}`;
@@ -115,10 +118,11 @@ async function generateCustomerCode(conn) {
 // Mirrors generateCode() in repairNotices.routes.js — creating a quotation now
 // auto-creates its repair notice in the same transaction, so it needs the same
 // "RN-####" numbering scheme.
-async function generateRepairNoticeCode(conn) {
+async function generateRepairNoticeCode(conn, shopId) {
   // FOR UPDATE เหตุผลเดียวกับตัวสร้างเลขเอกสารด้านบน
   const [rows] = await conn.execute(
-    "SELECT MAX(CAST(SUBSTRING(code, 4) AS UNSIGNED)) AS maxNo FROM repair_notices WHERE code LIKE 'RN-%' FOR UPDATE"
+    "SELECT MAX(CAST(SUBSTRING(code, 4) AS UNSIGNED)) AS maxNo FROM repair_notices WHERE shop_id = ? AND code LIKE 'RN-%' FOR UPDATE",
+    [shopId]
   );
   const nextNumber = (rows[0]?.maxNo || 0) + 1;
   return `RN-${String(nextNumber).padStart(4, '0')}`;
@@ -126,7 +130,7 @@ async function generateRepairNoticeCode(conn) {
 
 router.get('/next-no', async (req, res) => {
   try {
-    const quotation_no = await generateQuotationNo();
+    const quotation_no = await generateQuotationNo(pool, req.shopId);
     res.json({ success: true, quotation_no });
   } catch (err) {
     console.error('Error generating quotation no:', err);
@@ -198,26 +202,32 @@ router.post('/', async (req, res) => {
     conn = await pool.getConnection();
     await conn.beginTransaction();
 
+    // รายการที่อ้าง product_id ต้องเป็นสินค้าของร้านนี้เท่านั้น
+    if (!(await ownsAll(conn, 'products', validItems.map((i) => i.product_id), req.shopId))) {
+      await conn.rollback();
+      return res.status(400).json({ error: 'พบสินค้าที่ไม่อยู่ในร้านนี้' });
+    }
+
     if (!selectedCustomerId) {
       const { customer_name, phone } = newCustomer;
       const normalizedNewPhone = normalizePhone(phone);
       // เช็คเบอร์ซ้ำก่อนสร้างลูกค้าใหม่ (เหมือนที่บอทไลน์ทำ) — กันสร้างลูกค้าซ้ำซ้อน
       // ถ้าเบอร์นี้เคยมีอยู่แล้วในระบบ (เช่น เคยสร้างผ่านไลน์มาก่อน) ใช้คนเดิมแทน
       const [existingByPhone] = normalizedNewPhone
-        ? await conn.execute('SELECT id FROM customers WHERE phone = ? LIMIT 1', [normalizedNewPhone])
+        ? await conn.execute('SELECT id FROM customers WHERE shop_id = ? AND phone = ? LIMIT 1', [req.shopId, normalizedNewPhone])
         : [[]];
       if (existingByPhone.length > 0) {
         selectedCustomerId = existingByPhone[0].id;
       } else {
-        const customerCode = await generateCustomerCode(conn);
+        const customerCode = await generateCustomerCode(conn, req.shopId);
         const [customerResult] = await conn.execute(
-          'INSERT INTO customers (customer_code, customer_name, phone) VALUES (?, ?, ?)',
-          [customerCode, customer_name, normalizedNewPhone]
+          'INSERT INTO customers (shop_id, customer_code, customer_name, phone) VALUES (?, ?, ?, ?)',
+          [req.shopId, customerCode, customer_name, normalizedNewPhone]
         );
         selectedCustomerId = customerResult.insertId;
       }
     } else {
-      const [customerRows] = await conn.execute('SELECT id FROM customers WHERE id = ?', [selectedCustomerId]);
+      const [customerRows] = await conn.execute('SELECT id FROM customers WHERE id = ? AND shop_id = ?', [selectedCustomerId, req.shopId]);
       if (customerRows.length === 0) {
         await conn.rollback();
         return res.status(400).json({ error: 'ไม่พบลูกค้าที่เลือก' });
@@ -226,15 +236,15 @@ router.post('/', async (req, res) => {
 
     if (!selectedVehicleId && newVehicle && newVehicle.brand && newVehicle.model) {
       const [vehicleResult] = await conn.execute(
-        `INSERT INTO vehicles (customer_id, brand, model, color, license_plate, mileage)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-        [selectedCustomerId, newVehicle.brand, newVehicle.model, newVehicle.color || null, newVehicle.license_plate || null, Number(mileage) || 0]
+        `INSERT INTO vehicles (shop_id, customer_id, brand, model, color, license_plate, mileage)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [req.shopId, selectedCustomerId, newVehicle.brand, newVehicle.model, newVehicle.color || null, newVehicle.license_plate || null, Number(mileage) || 0]
       );
       selectedVehicleId = vehicleResult.insertId;
     } else if (selectedVehicleId) {
       const [vehicleRows] = await conn.execute(
-        'SELECT id FROM vehicles WHERE id = ? AND customer_id = ?',
-        [selectedVehicleId, selectedCustomerId]
+        'SELECT id FROM vehicles WHERE id = ? AND customer_id = ? AND shop_id = ?',
+        [selectedVehicleId, selectedCustomerId, req.shopId]
       );
       if (vehicleRows.length === 0) {
         await conn.rollback();
@@ -242,13 +252,14 @@ router.post('/', async (req, res) => {
       }
     }
 
-    const quotation_no = await generateQuotationNo(conn);
+    const quotation_no = await generateQuotationNo(conn, req.shopId);
     const total_amount = validItems.reduce((sum, item) => sum + Number(item.quantity || 1) * Number(item.unit_price || 0), 0);
 
     const [quotationResult] = await conn.execute(
-      `INSERT INTO quotations (quotation_no, quotation_date, customer_id, vehicle_id, mileage, remark, product_summary, total_amount, queue_no, symptom, deposit_amount, deposit_date)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO quotations (shop_id, quotation_no, quotation_date, customer_id, vehicle_id, mileage, remark, product_summary, total_amount, queue_no, symptom, deposit_amount, deposit_date)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
+        req.shopId,
         quotation_no,
         quotation_date,
         selectedCustomerId,
@@ -291,17 +302,17 @@ router.post('/', async (req, res) => {
     // empty shape on read). repair_notice_filled in the list query flips once
     // it has real content, which is how the UI shows "already filled".
     if (selectedVehicleId) {
-      const rnCode = await generateRepairNoticeCode(conn);
+      const rnCode = await generateRepairNoticeCode(conn, req.shopId);
       await conn.execute(
-        `INSERT INTO repair_notices (code, customer_id, vehicle_id, quotation_id, notice_date, checklist)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-        [rnCode, selectedCustomerId, selectedVehicleId, quotation_id, quotation_date, '{}']
+        `INSERT INTO repair_notices (shop_id, code, customer_id, vehicle_id, quotation_id, notice_date, checklist)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [req.shopId, rnCode, selectedCustomerId, selectedVehicleId, quotation_id, quotation_date, '{}']
       );
     }
 
     await conn.commit();
 
-    emitQuotationEvent('quotation:created', { quotationId: quotation_id, status: 'pending', actorId: req.user.id });
+    emitQuotationEvent('quotation:created', { shopId: req.shopId, quotationId: quotation_id, status: 'pending', actorId: req.user.id });
 
     res.status(201).json({
       success: true,
@@ -359,8 +370,10 @@ router.get('/', async (req, res) => {
        LEFT JOIN customers c ON q.customer_id = c.id
        LEFT JOIN vehicles v ON q.vehicle_id = v.id
        LEFT JOIN repair_notices rn ON rn.quotation_id = q.id
+       WHERE q.shop_id = ?
        ORDER BY q.created_at DESC
-       LIMIT 5000`
+       LIMIT 5000`,
+      [req.shopId]
     );
 
     const data = rows.map((row) => {
@@ -396,8 +409,8 @@ router.get('/:id', async (req, res) => {
        FROM quotations q
        LEFT JOIN customers c ON q.customer_id = c.id
        LEFT JOIN vehicles v ON q.vehicle_id = v.id
-       WHERE q.id = ?`,
-      [id]
+       WHERE q.id = ? AND q.shop_id = ?`,
+      [id, req.shopId]
     );
 
     if (quotations.length === 0) {
@@ -427,14 +440,14 @@ router.patch('/:id/mark-printed', async (req, res) => {
   try {
     const { id } = req.params;
     const [result] = await pool.execute(
-      'UPDATE quotations SET printed_at = NOW() WHERE id = ?',
-      [id]
+      'UPDATE quotations SET printed_at = NOW() WHERE id = ? AND shop_id = ?',
+      [id, req.shopId]
     );
     if (result.affectedRows === 0) {
       return res.status(404).json({ error: 'ไม่พบใบเสนอราคานี้' });
     }
-    const [[row]] = await pool.execute('SELECT printed_at FROM quotations WHERE id = ?', [id]);
-    emitQuotationEvent('quotation:updated', { quotationId: Number(id), status: null, actorId: req.user.id });
+    const [[row]] = await pool.execute('SELECT printed_at FROM quotations WHERE id = ? AND shop_id = ?', [id, req.shopId]);
+    emitQuotationEvent('quotation:updated', { shopId: req.shopId, quotationId: Number(id), status: null, actorId: req.user.id });
     res.json({ success: true, printed_at: row.printed_at });
   } catch (err) {
     console.error('Error marking quotation as printed:', err);
@@ -470,12 +483,17 @@ router.put('/:id', async (req, res) => {
     conn = await pool.getConnection();
     await conn.beginTransaction();
 
-    const [existingRows] = await conn.execute('SELECT id, status, converted_receipt_id, deposit_amount, deposit_date FROM quotations WHERE id = ?', [id]);
+    const [existingRows] = await conn.execute('SELECT id, status, converted_receipt_id, deposit_amount, deposit_date FROM quotations WHERE id = ? AND shop_id = ?', [id, req.shopId]);
     if (existingRows.length === 0) {
       await conn.rollback();
       return res.status(404).json({ error: 'ไม่พบใบเสนอราคา' });
     }
     const existingQuotation = existingRows[0];
+
+    if (!(await ownsAll(conn, 'products', validItems.map((i) => i.product_id), req.shopId))) {
+      await conn.rollback();
+      return res.status(400).json({ error: 'พบสินค้าที่ไม่อยู่ในร้านนี้' });
+    }
 
     // มัดจำ: ไม่ส่ง field มาเลย (เช่นฟอร์มเก่าที่ยังไม่มีช่องมัดจำ) = คงค่าเดิมไว้
     // ไม่ทับด้วย null ทิ้ง — ส่งมาชัดเจน (แม้จะเป็นค่าว่าง/null) = ตั้งใจล้าง/แก้ไขจริง
@@ -498,20 +516,20 @@ router.put('/:id', async (req, res) => {
       // เช็คเบอร์ซ้ำก่อนสร้างลูกค้าใหม่ (เหมือนที่บอทไลน์ทำ) — กันสร้างลูกค้าซ้ำซ้อน
       // ถ้าเบอร์นี้เคยมีอยู่แล้วในระบบ (เช่น เคยสร้างผ่านไลน์มาก่อน) ใช้คนเดิมแทน
       const [existingByPhone] = normalizedNewPhone
-        ? await conn.execute('SELECT id FROM customers WHERE phone = ? LIMIT 1', [normalizedNewPhone])
+        ? await conn.execute('SELECT id FROM customers WHERE shop_id = ? AND phone = ? LIMIT 1', [req.shopId, normalizedNewPhone])
         : [[]];
       if (existingByPhone.length > 0) {
         selectedCustomerId = existingByPhone[0].id;
       } else {
-        const customerCode = await generateCustomerCode(conn);
+        const customerCode = await generateCustomerCode(conn, req.shopId);
         const [customerResult] = await conn.execute(
-          'INSERT INTO customers (customer_code, customer_name, phone) VALUES (?, ?, ?)',
-          [customerCode, customer_name, normalizedNewPhone]
+          'INSERT INTO customers (shop_id, customer_code, customer_name, phone) VALUES (?, ?, ?, ?)',
+          [req.shopId, customerCode, customer_name, normalizedNewPhone]
         );
         selectedCustomerId = customerResult.insertId;
       }
     } else {
-      const [customerRows] = await conn.execute('SELECT id FROM customers WHERE id = ?', [selectedCustomerId]);
+      const [customerRows] = await conn.execute('SELECT id FROM customers WHERE id = ? AND shop_id = ?', [selectedCustomerId, req.shopId]);
       if (customerRows.length === 0) {
         await conn.rollback();
         return res.status(400).json({ error: 'ไม่พบลูกค้าที่เลือก' });
@@ -520,15 +538,15 @@ router.put('/:id', async (req, res) => {
 
     if (!selectedVehicleId && newVehicle && newVehicle.brand && newVehicle.model) {
       const [vehicleResult] = await conn.execute(
-        `INSERT INTO vehicles (customer_id, brand, model, color, license_plate, mileage)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-        [selectedCustomerId, newVehicle.brand, newVehicle.model, newVehicle.color || null, newVehicle.license_plate || null, Number(mileage) || 0]
+        `INSERT INTO vehicles (shop_id, customer_id, brand, model, color, license_plate, mileage)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [req.shopId, selectedCustomerId, newVehicle.brand, newVehicle.model, newVehicle.color || null, newVehicle.license_plate || null, Number(mileage) || 0]
       );
       selectedVehicleId = vehicleResult.insertId;
     } else if (selectedVehicleId) {
       const [vehicleRows] = await conn.execute(
-        'SELECT id FROM vehicles WHERE id = ? AND customer_id = ?',
-        [selectedVehicleId, selectedCustomerId]
+        'SELECT id FROM vehicles WHERE id = ? AND customer_id = ? AND shop_id = ?',
+        [selectedVehicleId, selectedCustomerId, req.shopId]
       );
       if (vehicleRows.length === 0) {
         await conn.rollback();
@@ -541,7 +559,7 @@ router.put('/:id', async (req, res) => {
     await conn.execute(
       `UPDATE quotations
        SET customer_id = ?, vehicle_id = ?, quotation_date = ?, mileage = ?, remark = ?, product_summary = ?, total_amount = ?, queue_no = ?, symptom = ?, deposit_amount = ?, deposit_date = ?, status = ?
-       WHERE id = ?`,
+       WHERE id = ? AND shop_id = ?`,
       [
         selectedCustomerId,
         selectedVehicleId,
@@ -555,7 +573,8 @@ router.put('/:id', async (req, res) => {
         depositAmount,
         depositDate,
         nextStatus,
-        id
+        id,
+        req.shopId
       ]
     );
 
@@ -590,8 +609,8 @@ router.put('/:id', async (req, res) => {
       // ด้วยเหมือน remark/mileage ด้านบน — ถ้าออฟฟิศแก้มัดจำของใบที่อนุมัติไปแล้ว
       // ต้องสะท้อนไปที่ใบเสร็จทันที ไม่ใช่ค้างค่าเดิมก่อนแก้ไว้
       await conn.execute(
-        `UPDATE receipts SET customer_id = ?, vehicle_id = ?, mileage = ?, remark = ?, total_amount = ?, deposit_amount = ?, deposit_date = ? WHERE id = ?`,
-        [selectedCustomerId, selectedVehicleId, Number(mileage) || 0, remark || null, total_amount, depositAmount, depositDate, receiptId]
+        `UPDATE receipts SET customer_id = ?, vehicle_id = ?, mileage = ?, remark = ?, total_amount = ?, deposit_amount = ?, deposit_date = ? WHERE id = ? AND shop_id = ?`,
+        [selectedCustomerId, selectedVehicleId, Number(mileage) || 0, remark || null, total_amount, depositAmount, depositDate, receiptId, req.shopId]
       );
       await conn.execute('DELETE FROM receipt_items WHERE receipt_id = ?', [receiptId]);
       for (const item of validItems) {
@@ -608,9 +627,9 @@ router.put('/:id', async (req, res) => {
 
     await conn.commit();
 
-    emitQuotationEvent('quotation:updated', { quotationId: Number(id), status: existingQuotation.status, actorId: req.user.id });
+    emitQuotationEvent('quotation:updated', { shopId: req.shopId, quotationId: Number(id), status: existingQuotation.status, actorId: req.user.id });
     if (syncedReceipt) {
-      emitReceiptEvent('receipt:updated', { receiptId: existingQuotation.converted_receipt_id, actorId: req.user.id });
+      emitReceiptEvent('receipt:updated', { shopId: req.shopId, receiptId: existingQuotation.converted_receipt_id, actorId: req.user.id });
     }
 
     res.json({
@@ -640,7 +659,7 @@ router.patch('/:id/approve', async (req, res) => {
     conn = await pool.getConnection();
     await conn.beginTransaction();
 
-    const [quotationRows] = await conn.execute('SELECT * FROM quotations WHERE id = ?', [id]);
+    const [quotationRows] = await conn.execute('SELECT * FROM quotations WHERE id = ? AND shop_id = ?', [id, req.shopId]);
     if (quotationRows.length === 0) {
       await conn.rollback();
       return res.status(404).json({ error: 'ไม่พบใบเสนอราคา' });
@@ -663,16 +682,16 @@ router.patch('/:id/approve', async (req, res) => {
       return res.status(400).json({ error: 'ใบเสนอราคานี้ไม่มีรายการสินค้า' });
     }
 
-    const receipt_no = await generateReceiptNo(conn);
-    const car_sequence_no = await generateCarSequenceNo(conn);
+    const receipt_no = await generateReceiptNo(conn, req.shopId);
+    const car_sequence_no = await generateCarSequenceNo(conn, req.shopId);
     const total_amount = items.reduce((sum, item) => sum + Number(item.quantity) * Number(item.unit_price), 0);
 
     // deposit_amount/deposit_date: snapshot จากใบเสนอราคาลงใบเสร็จเหมือน remark/
     // mileage ด้านบน (ตั้งมาจากบอทไลน์ก่อนกดอนุมัติได้ — ดู createQuotationFromQueue)
     const [receiptResult] = await conn.execute(
-      `INSERT INTO receipts (receipt_no, receipt_date, customer_id, vehicle_id, mileage, remark, total_amount, customer_signature, deposit_amount, deposit_date, car_sequence_no)
-       VALUES (?, CURDATE(), ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [receipt_no, quotation.customer_id, quotation.vehicle_id, quotation.mileage || 0, quotation.remark || null, total_amount, quotation.customer_signature || null, quotation.deposit_amount, quotation.deposit_date, car_sequence_no]
+      `INSERT INTO receipts (shop_id, receipt_no, receipt_date, customer_id, vehicle_id, mileage, remark, total_amount, customer_signature, deposit_amount, deposit_date, car_sequence_no)
+       VALUES (?, ?, CURDATE(), ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [req.shopId, receipt_no, quotation.customer_id, quotation.vehicle_id, quotation.mileage || 0, quotation.remark || null, total_amount, quotation.customer_signature || null, quotation.deposit_amount, quotation.deposit_date, car_sequence_no]
     );
     const receiptId = receiptResult.insertId;
 
@@ -687,8 +706,8 @@ router.patch('/:id/approve', async (req, res) => {
     }
 
     await conn.execute(
-      "UPDATE quotations SET status = 'approved', converted_receipt_id = ? WHERE id = ?",
-      [receiptId, id]
+      "UPDATE quotations SET status = 'approved', converted_receipt_id = ? WHERE id = ? AND shop_id = ?",
+      [receiptId, id, req.shopId]
     );
 
     // ถ้าใบนี้ผูกกับงานในหน้าคิว (jobs.quotation_id) ที่ยังค้างสถานะเก่าอยู่ —
@@ -698,30 +717,30 @@ router.patch('/:id/approve', async (req, res) => {
     // ใบเสนอราคา/นัดหมายแทนปุ่มอนุมัติที่หน้างาน (ซึ่งจะ sync สถานะงานให้เองอยู่แล้ว)
     // งานเลยค้างเป็น carout ทั้งที่จริงอนุมัติ+ออกใบเสร็จไปแล้ว) — ดูรายละเอียดเงื่อนไข
     // ที่ syncJobOnQuotationStatusChange ด้านล่างไฟล์
-    const linkedJob = await syncJobOnQuotationStatusChange(conn, id, 'approved', req.user.id);
+    const linkedJob = await syncJobOnQuotationStatusChange(conn, req.shopId, id, 'approved', req.user.id);
 
     // ใบเสนอราคาปกติที่สร้างจากหน้าเว็บมีใบแจ้งซ่อมคู่กันมาตั้งแต่ตอนสร้างแล้ว
     // (ดู POST / ด้านบน) แต่ใบที่บอทไลน์สร้างตั้งใจไม่สร้างใบแจ้งซ่อมให้ทันที —
     // รอถึงตอนอนุมัติแบบนี้ค่อยสร้าง (หน้างานได้ตรวจสอบร่างจากไลน์ก่อนแล้ว)
     const [existingNotice] = await conn.execute(
-      'SELECT id FROM repair_notices WHERE quotation_id = ? LIMIT 1',
-      [id]
+      'SELECT id FROM repair_notices WHERE quotation_id = ? AND shop_id = ? LIMIT 1',
+      [id, req.shopId]
     );
     if (existingNotice.length === 0) {
-      const rnCode = await generateRepairNoticeCode(conn);
+      const rnCode = await generateRepairNoticeCode(conn, req.shopId);
       await conn.execute(
-        `INSERT INTO repair_notices (code, customer_id, vehicle_id, quotation_id, notice_date, checklist)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-        [rnCode, quotation.customer_id, quotation.vehicle_id, id, quotation.quotation_date, '{}']
+        `INSERT INTO repair_notices (shop_id, code, customer_id, vehicle_id, quotation_id, notice_date, checklist)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [req.shopId, rnCode, quotation.customer_id, quotation.vehicle_id, id, quotation.quotation_date, '{}']
       );
     }
 
     await conn.commit();
 
-    emitQuotationEvent('quotation:updated', { quotationId: Number(id), status: 'approved', actorId: req.user.id });
-    emitReceiptEvent('receipt:created', { receiptId, actorId: req.user.id });
+    emitQuotationEvent('quotation:updated', { shopId: req.shopId, quotationId: Number(id), status: 'approved', actorId: req.user.id });
+    emitReceiptEvent('receipt:created', { shopId: req.shopId, receiptId, actorId: req.user.id });
     if (linkedJob) {
-      emitJobEvent('job:status-changed', { jobId: linkedJob.jobId, jobDate: linkedJob.jobDate, status: linkedJob.status, actorId: req.user.id });
+      emitJobEvent('job:status-changed', { shopId: req.shopId, jobId: linkedJob.jobId, jobDate: linkedJob.jobDate, status: linkedJob.status, actorId: req.user.id });
     }
 
     res.json({
@@ -755,8 +774,8 @@ router.patch('/:id/close', async (req, res) => {
     await conn.beginTransaction();
 
     const [[quotation]] = await conn.query(
-      'SELECT id, status, converted_receipt_id, closed_at, deposit_amount, total_amount FROM quotations WHERE id = ?',
-      [id]
+      'SELECT id, status, converted_receipt_id, closed_at, deposit_amount, total_amount FROM quotations WHERE id = ? AND shop_id = ?',
+      [id, req.shopId]
     );
     if (!quotation) {
       await conn.rollback();
@@ -779,8 +798,8 @@ router.patch('/:id/close', async (req, res) => {
     const receiptAmount = computeReceiptAmount(quotation.deposit_amount, paidAmountNum, Number(quotation.total_amount));
 
     await conn.execute(
-      'UPDATE receipts SET payment_method = ?, total_amount = ? WHERE id = ?',
-      [payment_method || null, receiptAmount, quotation.converted_receipt_id]
+      'UPDATE receipts SET payment_method = ?, total_amount = ? WHERE id = ? AND shop_id = ?',
+      [payment_method || null, receiptAmount, quotation.converted_receipt_id, req.shopId]
     );
     // จ่ายหลายช่องทาง: [{ method, amount }] ≥ 2 ช่อง — ยอดรวมต้องเท่ายอดที่รับจริง ไม่งั้น 400
     if (Array.isArray(payment_splits)) {
@@ -792,12 +811,12 @@ router.patch('/:id/close', async (req, res) => {
     } else {
       await applyReceiptSplits(conn, quotation.converted_receipt_id, [], receiptAmount);
     }
-    await conn.execute('UPDATE quotations SET closed_at = NOW() WHERE id = ?', [id]);
+    await conn.execute('UPDATE quotations SET closed_at = NOW() WHERE id = ? AND shop_id = ?', [id, req.shopId]);
 
     await conn.commit();
 
-    emitQuotationEvent('quotation:updated', { quotationId: Number(id), status: 'approved', actorId: req.user.id });
-    emitReceiptEvent('receipt:updated', { receiptId: quotation.converted_receipt_id, actorId: req.user.id });
+    emitQuotationEvent('quotation:updated', { shopId: req.shopId, quotationId: Number(id), status: 'approved', actorId: req.user.id });
+    emitReceiptEvent('receipt:updated', { shopId: req.shopId, receiptId: quotation.converted_receipt_id, actorId: req.user.id });
 
     res.json({ success: true, message: 'ปิดบิลสำเร็จ', total_amount: receiptAmount });
   } catch (err) {
@@ -824,8 +843,8 @@ router.patch('/:id/reopen', async (req, res) => {
     await conn.beginTransaction();
 
     const [[quotation]] = await conn.query(
-      'SELECT id, status, closed_at, converted_receipt_id FROM quotations WHERE id = ? FOR UPDATE',
-      [id]
+      'SELECT id, status, closed_at, converted_receipt_id FROM quotations WHERE id = ? AND shop_id = ? FOR UPDATE',
+      [id, req.shopId]
     );
     if (!quotation) {
       await conn.rollback();
@@ -836,13 +855,13 @@ router.patch('/:id/reopen', async (req, res) => {
       return res.status(400).json({ error: 'ใบเสนอราคานี้ยังไม่ได้ปิดบิล' });
     }
 
-    await conn.execute('UPDATE quotations SET closed_at = NULL WHERE id = ?', [id]);
+    await conn.execute('UPDATE quotations SET closed_at = NULL WHERE id = ? AND shop_id = ?', [id, req.shopId]);
 
     await conn.commit();
 
-    emitQuotationEvent('quotation:updated', { quotationId: Number(id), status: quotation.status, actorId: req.user.id });
+    emitQuotationEvent('quotation:updated', { shopId: req.shopId, quotationId: Number(id), status: quotation.status, actorId: req.user.id });
     if (quotation.converted_receipt_id) {
-      emitReceiptEvent('receipt:updated', { receiptId: quotation.converted_receipt_id, actorId: req.user.id });
+      emitReceiptEvent('receipt:updated', { shopId: req.shopId, receiptId: quotation.converted_receipt_id, actorId: req.user.id });
     }
 
     res.json({ success: true, message: 'ยกเลิกสถานะชำระแล้วสำเร็จ' });
@@ -879,13 +898,13 @@ router.patch('/:id/schedule', async (req, res) => {
     const [result] = await pool.execute(
       `UPDATE quotations SET status = 'scheduled', scheduled_date = ?,
               deposit_amount = COALESCE(?, deposit_amount), deposit_date = COALESCE(?, deposit_date)
-       WHERE id = ?`,
-      [scheduled_date, depositAmount ?? null, deposit_date || null, id]
+       WHERE id = ? AND shop_id = ?`,
+      [scheduled_date, depositAmount ?? null, deposit_date || null, id, req.shopId]
     );
     if (result.affectedRows === 0) {
       return res.status(404).json({ error: 'ไม่พบใบเสนอราคา' });
     }
-    emitQuotationEvent('quotation:updated', { quotationId: Number(id), status: 'scheduled', actorId: req.user.id });
+    emitQuotationEvent('quotation:updated', { shopId: req.shopId, quotationId: Number(id), status: 'scheduled', actorId: req.user.id });
     res.json({ success: true, message: 'บันทึกวันนัดหมายสำเร็จ' });
   } catch (err) {
     console.error('Error scheduling quotation:', err);
@@ -901,13 +920,13 @@ router.patch('/:id/mark-called', async (req, res) => {
   const { id } = req.params;
   try {
     const [result] = await pool.execute(
-      "UPDATE quotations SET status = 'parts_ready' WHERE id = ?",
-      [id]
+      "UPDATE quotations SET status = 'parts_ready' WHERE id = ? AND shop_id = ?",
+      [id, req.shopId]
     );
     if (result.affectedRows === 0) {
       return res.status(404).json({ error: 'ไม่พบใบเสนอราคา' });
     }
-    emitQuotationEvent('quotation:updated', { quotationId: Number(id), status: 'parts_ready', actorId: req.user.id });
+    emitQuotationEvent('quotation:updated', { shopId: req.shopId, quotationId: Number(id), status: 'parts_ready', actorId: req.user.id });
     res.json({ success: true, message: 'บันทึกสถานะโทรแจ้งลูกค้าแล้วสำเร็จ' });
   } catch (err) {
     console.error('Error marking quotation as parts-ready:', err);
@@ -929,13 +948,13 @@ router.patch('/:id/no-date', async (req, res) => {
     const [result] = await pool.execute(
       `UPDATE quotations SET status = 'no_date', scheduled_date = NULL,
               deposit_amount = COALESCE(?, deposit_amount), deposit_date = COALESCE(?, deposit_date)
-       WHERE id = ?`,
-      [depositAmount ?? null, deposit_date || null, id]
+       WHERE id = ? AND shop_id = ?`,
+      [depositAmount ?? null, deposit_date || null, id, req.shopId]
     );
     if (result.affectedRows === 0) {
       return res.status(404).json({ error: 'ไม่พบใบเสนอราคา' });
     }
-    emitQuotationEvent('quotation:updated', { quotationId: Number(id), status: 'no_date', actorId: req.user.id });
+    emitQuotationEvent('quotation:updated', { shopId: req.shopId, quotationId: Number(id), status: 'no_date', actorId: req.user.id });
     res.json({ success: true, message: 'บันทึกสถานะไม่ระบุวันนัดหมายสำเร็จ' });
   } catch (err) {
     console.error('Error marking quotation as no-date:', err);
@@ -954,7 +973,7 @@ router.patch('/:id/decline', async (req, res) => {
   const { id } = req.params;
   const { reason, note } = req.body || {};
 
-  const [validReasonRows] = await pool.query('SELECT id FROM decline_reasons');
+  const [validReasonRows] = await pool.query('SELECT id FROM decline_reasons WHERE shop_id = ?', [req.shopId]);
   const validReasonIds = validReasonRows.map((r) => String(r.id));
   if (reason !== 'other' && !validReasonIds.includes(String(reason))) {
     return res.status(400).json({ error: 'กรุณาเลือกเหตุผลที่ลูกค้าไม่ได้ทำ' });
@@ -969,8 +988,8 @@ router.patch('/:id/decline', async (req, res) => {
     await conn.beginTransaction();
 
     const [result] = await conn.execute(
-      "UPDATE quotations SET status = 'declined', scheduled_date = NULL, decline_reason = ?, decline_note = ? WHERE id = ?",
-      [reason, reason === 'other' ? note.trim() : null, id]
+      "UPDATE quotations SET status = 'declined', scheduled_date = NULL, decline_reason = ?, decline_note = ? WHERE id = ? AND shop_id = ?",
+      [reason, reason === 'other' ? note.trim() : null, id, req.shopId]
     );
     if (result.affectedRows === 0) {
       await conn.rollback();
@@ -980,13 +999,13 @@ router.patch('/:id/decline', async (req, res) => {
     // ถ้าใบนี้ผูกกับงานในหน้าคิวที่ยังไม่ถูกตัดสินใจไปทางไหน — ดันเป็น "ไม่อนุมัติ" ให้
     // ตามด้วย ไม่งั้นงานจะค้างสถานะเดิมบนบอร์ดทั้งที่ลูกค้ายกเลิกไปแล้วจริง (บั๊กเดียวกับ
     // ที่เจอตอนอนุมัติ — ดู syncJobOnQuotationStatusChange)
-    const linkedJob = await syncJobOnQuotationStatusChange(conn, id, 'rejected', req.user.id);
+    const linkedJob = await syncJobOnQuotationStatusChange(conn, req.shopId, id, 'rejected', req.user.id);
 
     await conn.commit();
 
-    emitQuotationEvent('quotation:updated', { quotationId: Number(id), status: 'declined', actorId: req.user.id });
+    emitQuotationEvent('quotation:updated', { shopId: req.shopId, quotationId: Number(id), status: 'declined', actorId: req.user.id });
     if (linkedJob) {
-      emitJobEvent('job:status-changed', { jobId: linkedJob.jobId, jobDate: linkedJob.jobDate, status: linkedJob.status, actorId: req.user.id });
+      emitJobEvent('job:status-changed', { shopId: req.shopId, jobId: linkedJob.jobId, jobDate: linkedJob.jobDate, status: linkedJob.status, actorId: req.user.id });
     }
     res.json({ success: true, message: 'บันทึกสถานะลูกค้าไม่ได้ทำสำเร็จ' });
   } catch (err) {
@@ -1011,7 +1030,7 @@ router.patch('/:id/undo-decline', async (req, res) => {
     conn = await pool.getConnection();
     await conn.beginTransaction();
 
-    const [[quotation]] = await conn.query('SELECT id, status FROM quotations WHERE id = ? FOR UPDATE', [id]);
+    const [[quotation]] = await conn.query('SELECT id, status FROM quotations WHERE id = ? AND shop_id = ? FOR UPDATE', [id, req.shopId]);
     if (!quotation) {
       await conn.rollback();
       return res.status(404).json({ error: 'ไม่พบใบเสนอราคา' });
@@ -1022,13 +1041,13 @@ router.patch('/:id/undo-decline', async (req, res) => {
     }
 
     await conn.execute(
-      "UPDATE quotations SET status = 'pending', decline_reason = NULL, decline_note = NULL WHERE id = ?",
-      [id]
+      "UPDATE quotations SET status = 'pending', decline_reason = NULL, decline_note = NULL WHERE id = ? AND shop_id = ?",
+      [id, req.shopId]
     );
 
     const [[linkedJob]] = await conn.query(
-      "SELECT id, job_date, status FROM jobs WHERE quotation_id = ? AND status = 'rejected' LIMIT 1",
-      [id]
+      "SELECT id, job_date, status FROM jobs WHERE shop_id = ? AND quotation_id = ? AND status = 'rejected' LIMIT 1",
+      [req.shopId, id]
     );
 
     if (linkedJob) {
@@ -1038,8 +1057,8 @@ router.patch('/:id/undo-decline', async (req, res) => {
       );
       const restoredStatus = prevHistory?.status || 'quoted';
       await conn.execute(
-        'UPDATE jobs SET status = ?, closed_at = NULL WHERE id = ?',
-        [restoredStatus, linkedJob.id]
+        'UPDATE jobs SET status = ?, closed_at = NULL WHERE id = ? AND shop_id = ?',
+        [restoredStatus, linkedJob.id, req.shopId]
       );
       await conn.execute(
         'INSERT INTO job_status_history (job_id, status, changed_by) VALUES (?,?,?)',
@@ -1049,9 +1068,9 @@ router.patch('/:id/undo-decline', async (req, res) => {
 
     await conn.commit();
 
-    emitQuotationEvent('quotation:updated', { quotationId: Number(id), status: 'pending', actorId: req.user.id });
+    emitQuotationEvent('quotation:updated', { shopId: req.shopId, quotationId: Number(id), status: 'pending', actorId: req.user.id });
     if (linkedJob) {
-      emitJobEvent('job:status-changed', { jobId: linkedJob.id, jobDate: linkedJob.job_date, status: null, actorId: req.user.id });
+      emitJobEvent('job:status-changed', { shopId: req.shopId, jobId: linkedJob.id, jobDate: linkedJob.job_date, status: null, actorId: req.user.id });
     }
 
     res.json({ success: true, message: 'ดึงกลับเข้าคิวสำเร็จ' });
@@ -1075,13 +1094,13 @@ router.patch('/:id/signature', async (req, res) => {
 
   try {
     const [result] = await pool.execute(
-      'UPDATE quotations SET customer_signature = ? WHERE id = ?',
-      [signature, id]
+      'UPDATE quotations SET customer_signature = ? WHERE id = ? AND shop_id = ?',
+      [signature, id, req.shopId]
     );
     if (result.affectedRows === 0) {
       return res.status(404).json({ error: 'ไม่พบใบเสนอราคา' });
     }
-    emitQuotationEvent('quotation:updated', { quotationId: Number(id), status: null, actorId: req.user.id });
+    emitQuotationEvent('quotation:updated', { shopId: req.shopId, quotationId: Number(id), status: null, actorId: req.user.id });
     res.json({ success: true });
   } catch (err) {
     console.error('Error saving quotation signature:', err);
@@ -1102,13 +1121,13 @@ router.patch('/:id/staff-signature', async (req, res) => {
 
   try {
     const [result] = await pool.execute(
-      'UPDATE quotations SET staff_signature = ?, staff_name = ? WHERE id = ?',
-      [signature, staff_name?.trim() || null, id]
+      'UPDATE quotations SET staff_signature = ?, staff_name = ? WHERE id = ? AND shop_id = ?',
+      [signature, staff_name?.trim() || null, id, req.shopId]
     );
     if (result.affectedRows === 0) {
       return res.status(404).json({ error: 'ไม่พบใบเสนอราคา' });
     }
-    emitQuotationEvent('quotation:updated', { quotationId: Number(id), status: null, actorId: req.user.id });
+    emitQuotationEvent('quotation:updated', { shopId: req.shopId, quotationId: Number(id), status: null, actorId: req.user.id });
     res.json({ success: true });
   } catch (err) {
     console.error('Error saving staff signature:', err);
@@ -1126,8 +1145,8 @@ router.delete('/:id', async (req, res) => {
     // ใบเสร็จเองก็ไม่มีอะไรอ้างอิงกลับมาบอกว่าเคยมาจากใบเสนอราคาใบนี้อีกต่อไป ถ้าจะ
     // ลบจริงต้องลบใบเสร็จ/ยกเลิกอนุมัติก่อน (จัดการผ่านหน้าใบเสร็จแทน)
     const [[quotation]] = await pool.query(
-      'SELECT status, converted_receipt_id FROM quotations WHERE id = ?',
-      [id]
+      'SELECT status, converted_receipt_id FROM quotations WHERE id = ? AND shop_id = ?',
+      [id, req.shopId]
     );
     if (!quotation) {
       return res.status(404).json({ error: 'ไม่พบใบเสนอราคา' });
@@ -1137,15 +1156,15 @@ router.delete('/:id', async (req, res) => {
     }
 
     const [result] = await pool.execute(
-      'DELETE FROM quotations WHERE id = ?',
-      [id]
+      'DELETE FROM quotations WHERE id = ? AND shop_id = ?',
+      [id, req.shopId]
     );
 
     if (result.affectedRows === 0) {
       return res.status(404).json({ error: 'ไม่พบใบเสนอราคา' });
     }
 
-    emitQuotationEvent('quotation:deleted', { quotationId: Number(id), status: null, actorId: req.user.id });
+    emitQuotationEvent('quotation:deleted', { shopId: req.shopId, quotationId: Number(id), status: null, actorId: req.user.id });
 
     res.json({
       success: true,

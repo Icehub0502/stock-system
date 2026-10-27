@@ -4,6 +4,7 @@ const { authenticate, requireRole } = require('../middleware/auth');
 const { formatPhone } = require('../utils/parseLineQueueMessage');
 const { applyReceiptSplits } = require('../utils/paymentMethods');
 const { emitReceiptEvent, emitQuotationEvent } = require('../realtime');
+const { ownsAll } = require('../utils/tenant');
 
 // ทำให้ตรงรูปแบบเดียวกับที่ customers.routes.js ใช้ กันเบอร์ที่พิมพ์ไม่มีขีดตรงนี้
 // ไปหลุดจากการค้นหาของบอทไลน์ (lineWebhook.routes.js เทียบแบบ phone = ? ตรง ๆ)
@@ -44,12 +45,12 @@ function formatDate(date) {
 // FOR UPDATE ล็อกแถวที่อ่านไว้จนกว่า transaction นั้นจะ commit กัน 2 คำขอพร้อมกัน
 // อ่าน MAX เดิมแล้วได้เลขบิลซ้ำกัน ไม่มี conn ส่งมา (route /next-no ที่แค่พรีวิว
 // เลขไว้ดู ไม่ได้ insert จริง) ใช้ pool เฉย ๆ ไม่ต้องล็อกอะไร
-async function generateReceiptNo(conn = pool) {
+async function generateReceiptNo(conn, shopId) {
   const today = new Date();
   const dateStr = formatDate(today);
   const [rows] = await conn.execute(
-    'SELECT MAX(CAST(SUBSTRING(receipt_no, -3) AS UNSIGNED)) AS maxNo FROM receipts WHERE receipt_no LIKE ? FOR UPDATE',
-    [`RC${dateStr}%`]
+    'SELECT MAX(CAST(SUBSTRING(receipt_no, -3) AS UNSIGNED)) AS maxNo FROM receipts WHERE shop_id = ? AND receipt_no LIKE ? FOR UPDATE',
+    [shopId, `RC${dateStr}%`]
   );
   const nextNumber = (rows[0]?.maxNo || 0) + 1;
   return `RC${dateStr}${String(nextNumber).padStart(3, '0')}`;
@@ -57,16 +58,17 @@ async function generateReceiptNo(conn = pool) {
 
 // เลขคันสะสมทั้งชีวิตร้าน — มิเรอร์กับ quotations.routes.js's generateCarSequenceNo()
 // (ดูคอมเมนต์ที่นั่นสำหรับที่มาของเลขเริ่มต้น 1396 และ backfill migration ใน db/init.js)
-async function generateCarSequenceNo(conn = pool) {
-  const [rows] = await conn.execute('SELECT MAX(car_sequence_no) AS maxNo FROM receipts FOR UPDATE');
+async function generateCarSequenceNo(conn, shopId) {
+  const [rows] = await conn.execute('SELECT MAX(car_sequence_no) AS maxNo FROM receipts WHERE shop_id = ? FOR UPDATE', [shopId]);
   const nextNumber = (rows[0]?.maxNo || 0) + 1;
-  return nextNumber < 1396 ? 1396 : nextNumber;
+  return shopId === 1 && nextNumber < 1396 ? 1396 : nextNumber;
 }
 
 // เหตุผลเดียวกับ generateReceiptNo ด้านบน
-async function generateCustomerCode(conn = pool) {
+async function generateCustomerCode(conn, shopId) {
   const [rows] = await conn.execute(
-    "SELECT MAX(CAST(SUBSTRING(customer_code, 5) AS UNSIGNED)) AS maxCode FROM customers WHERE customer_code LIKE 'CMM-%' FOR UPDATE"
+    "SELECT MAX(CAST(SUBSTRING(customer_code, 5) AS UNSIGNED)) AS maxCode FROM customers WHERE shop_id = ? AND customer_code LIKE 'CMM-%' FOR UPDATE",
+    [shopId]
   );
   const nextNumber = (rows[0]?.maxCode || 0) + 1;
   return `CMM-${String(nextNumber).padStart(4, '0')}`;
@@ -74,7 +76,7 @@ async function generateCustomerCode(conn = pool) {
 
 router.get('/next-no', async (req, res) => {
   try {
-    const receipt_no = await generateReceiptNo();
+    const receipt_no = await generateReceiptNo(pool, req.shopId);
     res.json({ success: true, receipt_no });
   } catch (err) {
     console.error('Error generating receipt no:', err);
@@ -85,10 +87,10 @@ router.get('/next-no', async (req, res) => {
 router.get('/customers', async (req, res) => {
   try {
     const { search } = req.query;
-    let query = 'SELECT id, customer_code, customer_name, phone FROM customers ORDER BY created_at DESC LIMIT 50';
-    const params = [];
+    let query = 'SELECT id, customer_code, customer_name, phone FROM customers WHERE shop_id = ? ORDER BY created_at DESC LIMIT 50';
+    const params = [req.shopId];
     if (search) {
-      query = 'SELECT id, customer_code, customer_name, phone FROM customers WHERE customer_name LIKE ? OR phone LIKE ? OR customer_code LIKE ? ORDER BY created_at DESC LIMIT 50';
+      query = 'SELECT id, customer_code, customer_name, phone FROM customers WHERE shop_id = ? AND (customer_name LIKE ? OR phone LIKE ? OR customer_code LIKE ?) ORDER BY created_at DESC LIMIT 50';
       const term = `%${search}%`;
       params.push(term, term, term);
     }
@@ -104,8 +106,8 @@ router.get('/customers/:customerId/vehicles', async (req, res) => {
   try {
     const { customerId } = req.params;
     const [rows] = await pool.execute(
-      'SELECT id, brand, model, color, license_plate, mileage FROM vehicles WHERE customer_id = ? ORDER BY created_at DESC',
-      [customerId]
+      'SELECT id, brand, model, color, license_plate, mileage FROM vehicles WHERE customer_id = ? AND shop_id = ? ORDER BY created_at DESC',
+      [customerId, req.shopId]
     );
     res.json({ success: true, data: rows });
   } catch (err) {
@@ -120,8 +122,8 @@ router.get('/service-items', async (req, res) => {
     let query = `SELECT s.id, s.category, s.product_name, w.warranty_name, w.warranty_year, w.warranty_month, w.warranty_km
                  FROM service_items s
                  LEFT JOIN warranties w ON s.warranty_id = w.id
-                 WHERE s.is_active = 1`;
-    const params = [];
+                 WHERE s.shop_id = ? AND s.is_active = 1`;
+    const params = [req.shopId];
     if (search) {
       query += ' AND (s.product_name LIKE ? OR s.category LIKE ?)';
       const term = `%${search}%`;
@@ -145,8 +147,8 @@ router.get('/service-items', async (req, res) => {
 router.get('/', async (req, res) => {
   try {
     const { q, date } = req.query;
-    const where = [];
-    const params = [];
+    const where = ['r.shop_id = ?'];
+    const params = [req.shopId];
 
     if (date) {
       where.push('r.receipt_date = ?');
@@ -169,7 +171,7 @@ router.get('/', async (req, res) => {
       params.push(like, like, like, like, like, like, like);
     }
 
-    const hasFilter = where.length > 0;
+    const hasFilter = where.length > 1; // มีตัวกรองจริงนอกจาก shop_id
     const [rows] = await pool.execute(
       // ใบเสร็จที่เกิดจากปุ่ม "อนุมัติ" บนใบเสนอราคาจะถูกสร้างทันทีเพื่อพิมพ์เอกสาร
       // ให้ลูกค้า แต่ไม่ได้แปลว่าจ่ายเงินแล้ว — ต้องเช็ค quotations.closed_at (ตั้งค่า
@@ -200,14 +202,14 @@ router.patch('/:id/mark-printed', async (req, res) => {
   try {
     const { id } = req.params;
     const [result] = await pool.execute(
-      'UPDATE receipts SET printed_at = NOW() WHERE id = ?',
-      [id]
+      'UPDATE receipts SET printed_at = NOW() WHERE id = ? AND shop_id = ?',
+      [id, req.shopId]
     );
     if (result.affectedRows === 0) {
       return res.status(404).json({ error: 'ไม่พบบิลนี้' });
     }
-    const [[row]] = await pool.execute('SELECT printed_at FROM receipts WHERE id = ?', [id]);
-    emitReceiptEvent('receipt:updated', { receiptId: Number(id), actorId: req.user.id });
+    const [[row]] = await pool.execute('SELECT printed_at FROM receipts WHERE id = ? AND shop_id = ?', [id, req.shopId]);
+    emitReceiptEvent('receipt:updated', { shopId: req.shopId, receiptId: Number(id), actorId: req.user.id });
     res.json({ success: true, printed_at: row.printed_at });
   } catch (err) {
     console.error('Error marking receipt as printed:', err);
@@ -232,9 +234,9 @@ router.get('/by-date', async (req, res) => {
        FROM receipts r
        JOIN customers c ON r.customer_id = c.id
        LEFT JOIN vehicles v ON r.vehicle_id = v.id
-       WHERE r.receipt_date = ?
+       WHERE r.shop_id = ? AND r.receipt_date = ?
        ORDER BY r.created_at DESC`,
-      [date]
+      [req.shopId, date]
     );
     // แนบรายการแบ่งช่องทางชำระของบิลที่จ่ายหลายช่องทาง (บิลช่องทางเดียวได้ payments = [])
     if (rows.length > 0) {
@@ -269,11 +271,11 @@ router.patch('/:id/meta', async (req, res) => {
     // and must not accidentally reset it to 0.
     const setTotal = total_amount !== undefined && total_amount !== null && total_amount !== '';
     const sql = setTotal
-      ? 'UPDATE receipts SET payment_method = ?, technician_name = ?, remark = ?, total_amount = ? WHERE id = ?'
-      : 'UPDATE receipts SET payment_method = ?, technician_name = ?, remark = ? WHERE id = ?';
+      ? 'UPDATE receipts SET payment_method = ?, technician_name = ?, remark = ?, total_amount = ? WHERE id = ? AND shop_id = ?'
+      : 'UPDATE receipts SET payment_method = ?, technician_name = ?, remark = ? WHERE id = ? AND shop_id = ?';
     const params = setTotal
-      ? [payment_method || null, technician_name || null, remark || null, Number(total_amount), id]
-      : [payment_method || null, technician_name || null, remark || null, id];
+      ? [payment_method || null, technician_name || null, remark || null, Number(total_amount), id, req.shopId]
+      : [payment_method || null, technician_name || null, remark || null, id, req.shopId];
 
     conn = await pool.getConnection();
     await conn.beginTransaction();
@@ -282,7 +284,7 @@ router.patch('/:id/meta', async (req, res) => {
       await conn.rollback();
       return res.status(404).json({ error: 'ไม่พบบิลนี้' });
     }
-    const [[row]] = await conn.execute('SELECT total_amount FROM receipts WHERE id = ?', [id]);
+    const [[row]] = await conn.execute('SELECT total_amount FROM receipts WHERE id = ? AND shop_id = ?', [id, req.shopId]);
     if (Array.isArray(payment_splits)) {
       // แบ่งหลายช่องทาง (≥ 2) หรือส่ง [] / 1 ช่อง = กลับเป็นช่องทางเดียว (payment_method ข้างบน)
       const splits = payment_splits.map((s) => ({
@@ -299,7 +301,7 @@ router.patch('/:id/meta', async (req, res) => {
       }
     }
     await conn.commit();
-    emitReceiptEvent('receipt:updated', { receiptId: Number(id), actorId: req.user.id });
+    emitReceiptEvent('receipt:updated', { shopId: req.shopId, receiptId: Number(id), actorId: req.user.id });
     res.json({ success: true });
   } catch (err) {
     if (conn) await conn.rollback().catch(() => {});
@@ -319,13 +321,13 @@ router.patch('/:id/date', async (req, res) => {
       return res.status(400).json({ error: 'กรุณาระบุวันที่' });
     }
     const [result] = await pool.execute(
-      'UPDATE receipts SET receipt_date = ? WHERE id = ?',
-      [receipt_date, id]
+      'UPDATE receipts SET receipt_date = ? WHERE id = ? AND shop_id = ?',
+      [receipt_date, id, req.shopId]
     );
     if (result.affectedRows === 0) {
       return res.status(404).json({ error: 'ไม่พบบิลนี้' });
     }
-    emitReceiptEvent('receipt:updated', { receiptId: Number(id), actorId: req.user.id });
+    emitReceiptEvent('receipt:updated', { shopId: req.shopId, receiptId: Number(id), actorId: req.user.id });
     res.json({ success: true });
   } catch (err) {
     console.error('Error moving receipt date:', err);
@@ -347,12 +349,13 @@ router.get('/top-products', async (req, res) => {
               COUNT(DISTINCT ri.receipt_id) AS bill_count
        FROM receipt_items ri
        JOIN receipts r ON r.id = ri.receipt_id
-       WHERE r.receipt_date >= DATE_SUB(CURDATE(), INTERVAL ${days} DAY)
+       WHERE r.shop_id = ? AND r.receipt_date >= DATE_SUB(CURDATE(), INTERVAL ${days} DAY)
          AND ri.product_name_snapshot IS NOT NULL AND ri.product_name_snapshot != ''
          AND ri.product_name_snapshot NOT LIKE '%ค่าแรง%'
        GROUP BY ri.product_name_snapshot
        ORDER BY total_qty DESC
-       LIMIT ${limit}`
+       LIMIT ${limit}`,
+      [req.shopId]
     );
     res.json({ success: true, data: rows, days });
   } catch (err) {
@@ -370,9 +373,11 @@ router.get('/top-vehicle-models', async (req, res) => {
               COUNT(DISTINCT r.customer_id) AS customer_count
        FROM receipts r
        JOIN vehicles v ON v.id = r.vehicle_id
+       WHERE r.shop_id = ?
        GROUP BY v.brand, v.model
        ORDER BY visit_count DESC
-       LIMIT ${limit}`
+       LIMIT ${limit}`,
+      [req.shopId]
     );
     res.json({ success: true, data: rows });
   } catch (err) {
@@ -390,9 +395,11 @@ router.get('/top-customers', async (req, res) => {
               SUM(r.total_amount) AS total_spent
        FROM receipts r
        JOIN customers c ON c.id = r.customer_id
+       WHERE r.shop_id = ?
        GROUP BY c.id, c.customer_name, c.customer_code
        ORDER BY total_spent DESC
-       LIMIT ${limit}`
+       LIMIT ${limit}`,
+      [req.shopId]
     );
     res.json({ success: true, data: rows });
   } catch (err) {
@@ -403,7 +410,7 @@ router.get('/top-customers', async (req, res) => {
 
 // รวมยอดแยกตามช่องทางชำระ → { [period]: { [method]: { bill_count, total } } }
 // period = สตริงวัน/เดือนจาก SQL; บิลที่ยังไม่ระบุช่องทางนับเป็น "ไม่ระบุ"
-async function loadMethodBreakdown(periodExpr) {
+async function loadMethodBreakdown(periodExpr, shopId) {
   // บิลที่แบ่งหลายช่องทาง (receipt_payments) นับยอดตามที่แบ่งไว้ ส่วนบิลช่องทางเดียวใช้ยอดบิลตรง ๆ
   // แยกเป็น 2 query แล้วรวมใน JS (ไม่ใช้ UNION เพราะคอลัมน์ method ของสองตารางอาจ collation
   // ไม่ตรงกันในฐานข้อมูลเก่า → Illegal mix of collations)
@@ -413,14 +420,17 @@ async function loadMethodBreakdown(periodExpr) {
             COUNT(*) AS bill_count,
             SUM(r.total_amount) AS total
      FROM receipts r
-     WHERE NOT EXISTS (SELECT 1 FROM receipt_payments p WHERE p.receipt_id = r.id)
-     GROUP BY period, method`
+     WHERE r.shop_id = ? AND NOT EXISTS (SELECT 1 FROM receipt_payments p WHERE p.receipt_id = r.id)
+     GROUP BY period, method`,
+    [shopId]
   );
   const [splitRows] = await pool.execute(
     `SELECT ${periodExpr} AS period, p.method AS method, COUNT(*) AS bill_count, SUM(p.amount) AS total
      FROM receipt_payments p
      JOIN receipts r ON r.id = p.receipt_id
-     GROUP BY period, p.method`
+     WHERE r.shop_id = ?
+     GROUP BY period, p.method`,
+    [shopId]
   );
   const rows = [...singleRows, ...splitRows];
   const out = {};
@@ -442,10 +452,12 @@ router.get('/daily-summary', async (req, res) => {
               COUNT(DISTINCT customer_id) AS customer_count,
               SUM(total_amount) AS total_revenue
        FROM receipts
+       WHERE shop_id = ?
        GROUP BY DATE(receipt_date)
-       ORDER BY date DESC`
+       ORDER BY date DESC`,
+      [req.shopId]
     );
-    const breakdown = await loadMethodBreakdown("DATE_FORMAT(receipt_date, '%Y-%m-%d')");
+    const breakdown = await loadMethodBreakdown("DATE_FORMAT(r.receipt_date, '%Y-%m-%d')", req.shopId);
     const data = rows.map((r) => {
       const key = r.date instanceof Date
         ? `${r.date.getFullYear()}-${String(r.date.getMonth() + 1).padStart(2, '0')}-${String(r.date.getDate()).padStart(2, '0')}`
@@ -471,10 +483,12 @@ router.get('/monthly-summary', async (req, res) => {
               COUNT(DISTINCT customer_id) AS customer_count,
               SUM(total_amount) AS total_revenue
        FROM receipts
+       WHERE shop_id = ?
        GROUP BY DATE_FORMAT(receipt_date, '%Y-%m-01')
-       ORDER BY month DESC`
+       ORDER BY month DESC`,
+      [req.shopId]
     );
-    const breakdown = await loadMethodBreakdown("DATE_FORMAT(receipt_date, '%Y-%m-01')");
+    const breakdown = await loadMethodBreakdown("DATE_FORMAT(r.receipt_date, '%Y-%m-01')", req.shopId);
     const data = rows.map((r) => ({ ...r, by_method: breakdown[String(r.month).slice(0, 10)] || {} }));
     res.json({ success: true, data });
   } catch (err) {
@@ -492,8 +506,8 @@ router.get('/:id', async (req, res) => {
        FROM receipts r
        JOIN customers c ON r.customer_id = c.id
        LEFT JOIN vehicles v ON r.vehicle_id = v.id
-       WHERE r.id = ?`,
-      [id]
+       WHERE r.id = ? AND r.shop_id = ?`,
+      [id, req.shopId]
     );
 
     if (!receipt) {
@@ -503,10 +517,10 @@ router.get('/:id', async (req, res) => {
     const [items] = await pool.execute(
       `SELECT ri.*, s.product_name AS service_item_name
        FROM receipt_items ri
-       LEFT JOIN service_items s ON s.id = ri.service_item_id
+       LEFT JOIN service_items s ON s.id = ri.service_item_id AND s.shop_id = ?
        WHERE ri.receipt_id = ?
        ORDER BY ri.id ASC`,
-      [id]
+      [req.shopId, id]
     );
 
     res.json({ success: true, data: { ...receipt, items } });
@@ -575,26 +589,31 @@ router.post('/', async (req, res) => {
     conn = await pool.getConnection();
     await conn.beginTransaction();
 
+    if (!(await ownsAll(conn, 'service_items', normalizedItems.map((i) => i.service_item_id), req.shopId))) {
+      await conn.rollback();
+      return res.status(400).json(formatValidation([['items', 'พบรายการสินค้า/บริการที่ไม่อยู่ในร้านนี้']]));
+    }
+
     if (!selectedCustomerId) {
       const { customer_name, phone } = newCustomer;
       const normalizedNewPhone = normalizePhone(phone);
       // เช็คเบอร์ซ้ำก่อนสร้างลูกค้าใหม่ (เหมือนที่บอทไลน์ทำ) — กันสร้างลูกค้าซ้ำซ้อน
       // ถ้าเบอร์นี้เคยมีอยู่แล้วในระบบ (เช่น เคยสร้างผ่านไลน์มาก่อน) ใช้คนเดิมแทน
       const [existingByPhone] = normalizedNewPhone
-        ? await conn.execute('SELECT id FROM customers WHERE phone = ? LIMIT 1', [normalizedNewPhone])
+        ? await conn.execute('SELECT id FROM customers WHERE shop_id = ? AND phone = ? LIMIT 1', [req.shopId, normalizedNewPhone])
         : [[]];
       if (existingByPhone.length > 0) {
         selectedCustomerId = existingByPhone[0].id;
       } else {
-        const customerCode = await generateCustomerCode(conn);
+        const customerCode = await generateCustomerCode(conn, req.shopId);
         const [customerResult] = await conn.execute(
-          `INSERT INTO customers (customer_code, customer_name, phone) VALUES (?, ?, ?)`,
-          [customerCode, customer_name, normalizedNewPhone]
+          `INSERT INTO customers (shop_id, customer_code, customer_name, phone) VALUES (?, ?, ?, ?)`,
+          [req.shopId, customerCode, customer_name, normalizedNewPhone]
         );
         selectedCustomerId = customerResult.insertId;
       }
     } else {
-      const [customerRows] = await conn.execute('SELECT id FROM customers WHERE id = ?', [selectedCustomerId]);
+      const [customerRows] = await conn.execute('SELECT id FROM customers WHERE id = ? AND shop_id = ?', [selectedCustomerId, req.shopId]);
       if (customerRows.length === 0) {
         await conn.rollback();
         return res.status(400).json(formatValidation([['customer_id', 'ไม่พบลูกค้าที่เลือก']]));
@@ -607,16 +626,16 @@ router.post('/', async (req, res) => {
         return res.status(400).json({ error: 'กรุณาเลือกหรือกรอกข้อมูลรถ' });
       }
       const [vehicleResult] = await conn.execute(
-        `INSERT INTO vehicles (customer_id, brand, model, color, license_plate, mileage)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-        [selectedCustomerId, newVehicle.brand, newVehicle.model, newVehicle.color || null, newVehicle.license_plate || null, Number(mileage) || 0]
+        `INSERT INTO vehicles (shop_id, customer_id, brand, model, color, license_plate, mileage)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [req.shopId, selectedCustomerId, newVehicle.brand, newVehicle.model, newVehicle.color || null, newVehicle.license_plate || null, Number(mileage) || 0]
       );
       selectedVehicleId = vehicleResult.insertId;
     }
     else {
       const [vehicleRows] = await conn.execute(
-        'SELECT id FROM vehicles WHERE id = ? AND customer_id = ?',
-        [selectedVehicleId, selectedCustomerId]
+        'SELECT id FROM vehicles WHERE id = ? AND customer_id = ? AND shop_id = ?',
+        [selectedVehicleId, selectedCustomerId, req.shopId]
       );
       if (vehicleRows.length === 0) {
         await conn.rollback();
@@ -624,14 +643,14 @@ router.post('/', async (req, res) => {
       }
     }
 
-    const receipt_no = await generateReceiptNo(conn);
-    const car_sequence_no = await generateCarSequenceNo(conn);
+    const receipt_no = await generateReceiptNo(conn, req.shopId);
+    const car_sequence_no = await generateCarSequenceNo(conn, req.shopId);
     const total_amount = normalizedItems.reduce((sum, item) => sum + item.qty * item.price, 0);
 
     const [receiptResult] = await conn.execute(
-      `INSERT INTO receipts (receipt_no, receipt_date, customer_id, vehicle_id, mileage, remark, payment_method, technician_name, total_amount, car_sequence_no)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [receipt_no, receipt_date, selectedCustomerId, selectedVehicleId, Number(mileage) || 0, remark || null, payment_method || null, technician_name || null, total_amount, car_sequence_no]
+      `INSERT INTO receipts (shop_id, receipt_no, receipt_date, customer_id, vehicle_id, mileage, remark, payment_method, technician_name, total_amount, car_sequence_no)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [req.shopId, receipt_no, receipt_date, selectedCustomerId, selectedVehicleId, Number(mileage) || 0, remark || null, payment_method || null, technician_name || null, total_amount, car_sequence_no]
     );
 
     const receiptId = receiptResult.insertId;
@@ -656,7 +675,7 @@ router.post('/', async (req, res) => {
     }
 
     await conn.commit();
-    emitReceiptEvent('receipt:created', { receiptId, actorId: req.user.id });
+    emitReceiptEvent('receipt:created', { shopId: req.shopId, receiptId, actorId: req.user.id });
     res.status(201).json({ success: true, receipt_id: receiptId, receipt_no });
   } catch (err) {
     if (conn) {
@@ -732,10 +751,14 @@ router.put('/:id', async (req, res) => {
     conn = await pool.getConnection();
     await conn.beginTransaction();
 
-    const [receiptRows] = await conn.execute('SELECT id, deposit_amount, deposit_date FROM receipts WHERE id = ?', [receiptId]);
+    const [receiptRows] = await conn.execute('SELECT id, deposit_amount, deposit_date FROM receipts WHERE id = ? AND shop_id = ?', [receiptId, req.shopId]);
     if (receiptRows.length === 0) {
       await conn.rollback();
       return res.status(404).json({ error: 'ไม่พบบิลนี้' });
+    }
+    if (!(await ownsAll(conn, 'service_items', normalizedItems.map((i) => i.service_item_id), req.shopId))) {
+      await conn.rollback();
+      return res.status(400).json(formatValidation([['items', 'พบรายการสินค้า/บริการที่ไม่อยู่ในร้านนี้']]));
     }
     const existingReceipt = receiptRows[0];
 
@@ -753,20 +776,20 @@ router.put('/:id', async (req, res) => {
       // เช็คเบอร์ซ้ำก่อนสร้างลูกค้าใหม่ (เหมือนที่บอทไลน์ทำ) — กันสร้างลูกค้าซ้ำซ้อน
       // ถ้าเบอร์นี้เคยมีอยู่แล้วในระบบ (เช่น เคยสร้างผ่านไลน์มาก่อน) ใช้คนเดิมแทน
       const [existingByPhone] = normalizedNewPhone
-        ? await conn.execute('SELECT id FROM customers WHERE phone = ? LIMIT 1', [normalizedNewPhone])
+        ? await conn.execute('SELECT id FROM customers WHERE shop_id = ? AND phone = ? LIMIT 1', [req.shopId, normalizedNewPhone])
         : [[]];
       if (existingByPhone.length > 0) {
         selectedCustomerId = existingByPhone[0].id;
       } else {
-        const customerCode = await generateCustomerCode(conn);
+        const customerCode = await generateCustomerCode(conn, req.shopId);
         const [customerResult] = await conn.execute(
-          `INSERT INTO customers (customer_code, customer_name, phone) VALUES (?, ?, ?)`,
-          [customerCode, customer_name, normalizedNewPhone]
+          `INSERT INTO customers (shop_id, customer_code, customer_name, phone) VALUES (?, ?, ?, ?)`,
+          [req.shopId, customerCode, customer_name, normalizedNewPhone]
         );
         selectedCustomerId = customerResult.insertId;
       }
     } else {
-      const [customerRows] = await conn.execute('SELECT id FROM customers WHERE id = ?', [selectedCustomerId]);
+      const [customerRows] = await conn.execute('SELECT id FROM customers WHERE id = ? AND shop_id = ?', [selectedCustomerId, req.shopId]);
       if (customerRows.length === 0) {
         await conn.rollback();
         return res.status(400).json(formatValidation([['customer_id', 'ไม่พบลูกค้าที่เลือก']]));
@@ -779,15 +802,15 @@ router.put('/:id', async (req, res) => {
         return res.status(400).json({ error: 'กรุณาเลือกหรือกรอกข้อมูลรถ' });
       }
       const [vehicleResult] = await conn.execute(
-        `INSERT INTO vehicles (customer_id, brand, model, color, license_plate, mileage)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-        [selectedCustomerId, newVehicle.brand, newVehicle.model, newVehicle.color || null, newVehicle.license_plate || null, Number(mileage) || 0]
+        `INSERT INTO vehicles (shop_id, customer_id, brand, model, color, license_plate, mileage)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [req.shopId, selectedCustomerId, newVehicle.brand, newVehicle.model, newVehicle.color || null, newVehicle.license_plate || null, Number(mileage) || 0]
       );
       selectedVehicleId = vehicleResult.insertId;
     } else {
       const [vehicleRows] = await conn.execute(
-        'SELECT id FROM vehicles WHERE id = ? AND customer_id = ?',
-        [selectedVehicleId, selectedCustomerId]
+        'SELECT id FROM vehicles WHERE id = ? AND customer_id = ? AND shop_id = ?',
+        [selectedVehicleId, selectedCustomerId, req.shopId]
       );
       if (vehicleRows.length === 0) {
         await conn.rollback();
@@ -798,8 +821,8 @@ router.put('/:id', async (req, res) => {
     const total_amount = normalizedItems.reduce((sum, item) => sum + item.qty * item.price, 0);
 
     await conn.execute(
-      `UPDATE receipts SET receipt_date = ?, customer_id = ?, vehicle_id = ?, mileage = ?, remark = ?, payment_method = ?, technician_name = ?, total_amount = ?, deposit_amount = ?, deposit_date = ? WHERE id = ?`,
-      [receipt_date, selectedCustomerId, selectedVehicleId, Number(mileage) || 0, remark || null, payment_method || null, technician_name || null, total_amount, depositAmount, depositDate, receiptId]
+      `UPDATE receipts SET receipt_date = ?, customer_id = ?, vehicle_id = ?, mileage = ?, remark = ?, payment_method = ?, technician_name = ?, total_amount = ?, deposit_amount = ?, deposit_date = ? WHERE id = ? AND shop_id = ?`,
+      [receipt_date, selectedCustomerId, selectedVehicleId, Number(mileage) || 0, remark || null, payment_method || null, technician_name || null, total_amount, depositAmount, depositDate, receiptId, req.shopId]
     );
 
     await conn.execute('DELETE FROM receipt_items WHERE receipt_id = ?', [receiptId]);
@@ -824,7 +847,7 @@ router.put('/:id', async (req, res) => {
     }
 
     await conn.commit();
-    emitReceiptEvent('receipt:updated', { receiptId, actorId: req.user.id });
+    emitReceiptEvent('receipt:updated', { shopId: req.shopId, receiptId, actorId: req.user.id });
     res.json({ success: true });
   } catch (err) {
     if (conn) {
@@ -846,19 +869,19 @@ router.delete('/:id', async (req, res) => {
     // เก็บ id ของใบเสนอราคาที่ผูกกับใบเสร็จนี้ไว้ก่อน UPDATE ด้านล่างจะล้าง
     // converted_receipt_id ทิ้ง — ใช้ยิง event แจ้งฝั่งใบเสนอราคาหลัง commit
     const [[linked]] = await conn.query(
-      'SELECT id FROM quotations WHERE converted_receipt_id = ? LIMIT 1',
-      [req.params.id]
+      'SELECT id FROM quotations WHERE converted_receipt_id = ? AND shop_id = ? LIMIT 1',
+      [req.params.id, req.shopId]
     );
 
     // ถ้าใบเสร็จนี้ถูกแปลงมาจากใบเสนอราคา ต้องคืนสถานะใบเสนอราคากลับเป็น pending
     // ก่อนลบใบเสร็จ ไม่งั้น FK จะแค่ set converted_receipt_id เป็น NULL แต่ status
     // ยังเป็น 'approved' ค้างอยู่ ทำให้ดูเหมือนอนุมัติแล้วแต่ไม่มีใบเสร็จจริง
     await conn.execute(
-      "UPDATE quotations SET status = 'pending', converted_receipt_id = NULL WHERE converted_receipt_id = ?",
-      [req.params.id]
+      "UPDATE quotations SET status = 'pending', converted_receipt_id = NULL WHERE converted_receipt_id = ? AND shop_id = ?",
+      [req.params.id, req.shopId]
     );
 
-    const [result] = await conn.execute('DELETE FROM receipts WHERE id = ?', [req.params.id]);
+    const [result] = await conn.execute('DELETE FROM receipts WHERE id = ? AND shop_id = ?', [req.params.id, req.shopId]);
     if (result.affectedRows === 0) {
       await conn.rollback();
       return res.status(404).json({ error: 'ไม่พบใบเสร็จ' });
@@ -866,9 +889,9 @@ router.delete('/:id', async (req, res) => {
 
     await conn.commit();
 
-    emitReceiptEvent('receipt:deleted', { receiptId: Number(req.params.id), actorId: req.user.id });
+    emitReceiptEvent('receipt:deleted', { shopId: req.shopId, receiptId: Number(req.params.id), actorId: req.user.id });
     if (linked) {
-      emitQuotationEvent('quotation:updated', { quotationId: linked.id, status: 'pending', actorId: req.user.id });
+      emitQuotationEvent('quotation:updated', { shopId: req.shopId, quotationId: linked.id, status: 'pending', actorId: req.user.id });
     }
 
     res.json({ success: true, message: 'ลบใบเสร็จสำเร็จ' });

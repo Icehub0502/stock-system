@@ -78,10 +78,10 @@ router.get("/", async (req, res) => {
     let sql = `
       SELECT id, parts, description, brand, price
       FROM products
-      WHERE 1=1
+      WHERE shop_id = ?
     `;
 
-    const params = [];
+    const params = [req.shopId];
 
     if (search) {
       sql += " AND (parts LIKE ? OR description LIKE ? OR brand LIKE ?)";
@@ -132,7 +132,8 @@ router.get("/", async (req, res) => {
 router.get("/categories", async (req, res) => {
   try {
     const [rows] = await pool.query(
-      "SELECT description, price FROM products"
+      "SELECT description, price FROM products WHERE shop_id = ?",
+      [req.shopId]
     );
 
     const category_counts = {};
@@ -194,9 +195,10 @@ router.post("/", async (req, res) => {
 
       const [result] = await conn.query(
         `INSERT INTO products
-        (parts, description, brand, price)
-        VALUES (?, ?, ?, ?)`,
+        (shop_id, parts, description, brand, price)
+        VALUES (?, ?, ?, ?, ?)`,
         [
+          req.shopId,
           parts.trim(),
           description.trim(),
           brand?.trim() || null,
@@ -209,7 +211,7 @@ router.post("/", async (req, res) => {
 
     await conn.commit();
 
-    emitProductCostEvent('product-cost:created', { productId: inserted[0] ?? null, actorId: req.user.id });
+    emitProductCostEvent('product-cost:created', { shopId: req.shopId, productId: inserted[0] ?? null, actorId: req.user.id });
 
     res.json({
       success: true,
@@ -240,17 +242,18 @@ router.put("/:id", async (req, res) => {
     await pool.query(
       `UPDATE products
        SET parts=?, description=?, brand=?, price=?
-       WHERE id=?`,
+       WHERE id=? AND shop_id=?`,
       [
         parts?.trim(),
         description?.trim(),
         brand?.trim() || null,
         price || null,
-        id
+        id,
+        req.shopId
       ]
     );
 
-    emitProductCostEvent('product-cost:updated', { productId: Number(req.params.id), actorId: req.user.id });
+    emitProductCostEvent('product-cost:updated', { shopId: req.shopId, productId: Number(req.params.id), actorId: req.user.id });
 
     res.json({
       success: true,
@@ -272,11 +275,11 @@ router.put("/:id", async (req, res) => {
 router.delete("/:id", async (req, res) => {
   try {
     await pool.query(
-      "DELETE FROM products WHERE id=?",
-      [req.params.id]
+      "DELETE FROM products WHERE id=? AND shop_id=?",
+      [req.params.id, req.shopId]
     );
 
-    emitProductCostEvent('product-cost:deleted', { productId: Number(req.params.id), actorId: req.user.id });
+    emitProductCostEvent('product-cost:deleted', { shopId: req.shopId, productId: Number(req.params.id), actorId: req.user.id });
 
     res.json({
       success: true,
@@ -307,11 +310,11 @@ router.delete("/", async (req, res) => {
     }
 
     await pool.query(
-      "DELETE FROM products WHERE id IN (?)",
-      [ids]
+      "DELETE FROM products WHERE shop_id = ? AND id IN (?)",
+      [req.shopId, ids]
     );
 
-    emitProductCostEvent('product-cost:deleted', { productId: null, actorId: req.user.id });
+    emitProductCostEvent('product-cost:deleted', { shopId: req.shopId, productId: null, actorId: req.user.id });
 
     res.json({
       success: true,

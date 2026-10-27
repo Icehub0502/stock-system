@@ -1,6 +1,7 @@
 const express = require('express');
 const pool = require('../db/pool');
 const { authenticate, requireRole } = require('../middleware/auth');
+const { ownsRow } = require('../utils/tenant');
 
 const router = express.Router();
 router.use(authenticate);
@@ -11,8 +12,8 @@ router.get('/', requireRole('office'), async (req, res) => {
     let query = `SELECT si.*, w.warranty_name, w.warranty_year, w.warranty_month, w.warranty_km
                  FROM service_items si
                  LEFT JOIN warranties w ON si.warranty_id = w.id
-                 WHERE si.is_active = 1`;
-    const params = [];
+                 WHERE si.shop_id = ? AND si.is_active = 1`;
+    const params = [req.shopId];
     if (search) {
       query += ' AND (si.product_name LIKE ? OR si.category LIKE ?)';
       const term = `%${search}%`;
@@ -37,8 +38,10 @@ router.get('/', requireRole('office'), async (req, res) => {
 router.get('/:id/components', requireRole('office'), async (req, res) => {
   try {
     const [rows] = await pool.execute(
-      'SELECT * FROM service_item_components WHERE service_item_id = ? ORDER BY sort_order ASC, id ASC',
-      [req.params.id]
+      `SELECT c.* FROM service_item_components c
+       JOIN service_items s ON s.id = c.service_item_id
+       WHERE c.service_item_id = ? AND s.shop_id = ? ORDER BY c.sort_order ASC, c.id ASC`,
+      [req.params.id, req.shopId]
     );
     res.json({ success: true, data: rows });
   } catch (err) {
@@ -75,12 +78,17 @@ router.post('/', requireRole('office'), async (req, res) => {
     conn = await pool.getConnection();
     await conn.beginTransaction();
 
+    if (warranty_id && !(await ownsRow(conn, 'warranties', warranty_id, req.shopId))) {
+      await conn.rollback();
+      return res.status(404).json({ error: 'ไม่พบการรับประกันที่เลือก' });
+    }
+
     // A set carries a warranty for the whole group just like a regular
     // item — price is intentionally NOT stored here; staff fill it in per
     // line when the set is expanded on the receipt.
     const [result] = await conn.execute(
-      'INSERT INTO service_items (category, product_name, warranty_id, is_set) VALUES (?, ?, ?, ?)',
-      [category, product_name, warranty_id || null, is_set ? 1 : 0]
+      'INSERT INTO service_items (shop_id, category, product_name, warranty_id, is_set) VALUES (?, ?, ?, ?, ?)',
+      [req.shopId, category, product_name, warranty_id || null, is_set ? 1 : 0]
     );
 
     if (is_set) {
@@ -114,15 +122,21 @@ router.put('/:id', requireRole('office'), async (req, res) => {
     conn = await pool.getConnection();
     await conn.beginTransaction();
 
+    if (warranty_id && !(await ownsRow(conn, 'warranties', warranty_id, req.shopId))) {
+      await conn.rollback();
+      return res.status(404).json({ error: 'ไม่พบการรับประกันที่เลือก' });
+    }
+
     const [result] = await conn.execute(
-      'UPDATE service_items SET category = ?, product_name = ?, warranty_id = ?, is_active = ?, is_set = ? WHERE id = ?',
+      'UPDATE service_items SET category = ?, product_name = ?, warranty_id = ?, is_active = ?, is_set = ? WHERE id = ? AND shop_id = ?',
       [
         category,
         product_name,
         warranty_id || null,
         is_active ? 1 : 0,
         is_set ? 1 : 0,
-        req.params.id
+        req.params.id,
+        req.shopId
       ]
     );
 
@@ -152,7 +166,7 @@ router.put('/:id', requireRole('office'), async (req, res) => {
 
 router.delete('/:id', requireRole('office'), async (req, res) => {
   try {
-    const [result] = await pool.execute('DELETE FROM service_items WHERE id = ?', [req.params.id]);
+    const [result] = await pool.execute('DELETE FROM service_items WHERE id = ? AND shop_id = ?', [req.params.id, req.shopId]);
     if (result.affectedRows === 0) {
       return res.status(404).json({ error: 'ไม่พบรายการ' });
     }

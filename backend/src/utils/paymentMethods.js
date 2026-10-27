@@ -109,6 +109,7 @@ async function applyReceiptSplits(conn, receiptId, splits, total, { strict = tru
       [receiptId, s.method, s.amount]
     );
   }
+  // tenant-ok: receiptId was just loaded/created inside the caller's shop-scoped transaction
   await conn.execute('UPDATE receipts SET payment_method = ? WHERE id = ?', [summarizeSplits(result.splits), receiptId]);
   return result.splits;
 }

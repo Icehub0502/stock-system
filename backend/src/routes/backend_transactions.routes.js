@@ -25,17 +25,17 @@ router.post('/receipt-session', async (req, res) => {
   }
   try {
     const [result] = await pool.execute(
-      'INSERT INTO receipt_sessions (invoice_no, user_id, bill_date) VALUES (?, ?, COALESCE(?, CURDATE()))',
-      [invoice_no.trim(), req.user.id, bill_date]
+      'INSERT INTO receipt_sessions (shop_id, invoice_no, user_id, bill_date) VALUES (?, ?, ?, COALESCE(?, CURDATE()))',
+      [req.shopId, invoice_no.trim(), req.user.id, bill_date]
     );
     const [rows] = await pool.execute(
       `SELECT s.*, u.full_name FROM receipt_sessions s
        JOIN users u ON u.id = s.user_id
-       WHERE s.id = ?`,
-      [result.insertId]
+       WHERE s.id = ? AND s.shop_id = ?`,
+      [result.insertId, req.shopId]
     );
 
-    emitReceiptSessionEvent('stock:receipt-session-created', {
+    emitReceiptSessionEvent('stock:receipt-session-created', { shopId: req.shopId,
       sessionId: result.insertId,
       actorId: req.user.id,
     });
@@ -65,9 +65,10 @@ router.get('/receipt-sessions', requireRole('office'), async (req, res) => {
              WHERE m.receipt_session_id = s.id AND m.reason = 'receive' AND m.voided_at IS NULL) AS total_qty
       FROM receipt_sessions s
       JOIN users u ON u.id = s.user_id
+      WHERE s.shop_id = ?
       ORDER BY s.bill_date DESC, s.created_at DESC
       LIMIT 200
-    `);
+    `, [req.shopId]);
     res.json(rows);
   } catch (err) {
     console.error(err);
@@ -82,8 +83,8 @@ router.get('/receipt-sessions/:id', requireRole('office'), async (req, res) => {
   try {
     const [[session]] = await pool.execute(
       `SELECT s.*, u.full_name FROM receipt_sessions s
-       JOIN users u ON u.id = s.user_id WHERE s.id = ?`,
-      [req.params.id]
+       JOIN users u ON u.id = s.user_id WHERE s.id = ? AND s.shop_id = ?`,
+      [req.params.id, req.shopId]
     );
     if (!session) return res.status(404).json({ error: 'ไม่พบบิลนี้' });
 
@@ -109,9 +110,9 @@ router.get('/receipt-sessions/:id', requireRole('office'), async (req, res) => {
        JOIN stock_items i ON i.id = m.item_id
        JOIN stock_categories c ON c.id = i.category_id
        LEFT JOIN stock_item_positions p ON p.item_id = m.item_id AND p.position = m.position
-       WHERE m.receipt_session_id = ? AND m.reason = 'receive' AND m.voided_at IS NULL
+       WHERE i.shop_id = ? AND m.receipt_session_id = ? AND m.reason = 'receive' AND m.voided_at IS NULL
        ORDER BY m.created_at ASC`,
-      [req.params.id]
+      [req.shopId, req.params.id]
     );
 
     // รายการที่สแกนไว้แล้วแต่ยังไม่กดเสร็จสิ้น (ยังไม่บวกสต๊อก) — source='pending_line' ให้หน้าเว็บ
@@ -124,9 +125,9 @@ router.get('/receipt-sessions/:id', requireRole('office'), async (req, res) => {
        JOIN stock_items i ON i.id = l.item_id
        JOIN stock_categories c ON c.id = i.category_id
        LEFT JOIN stock_item_positions p ON p.item_id = l.item_id AND p.position = l.position
-       WHERE l.receipt_session_id = ? AND l.applied_at IS NULL
+       WHERE i.shop_id = ? AND l.receipt_session_id = ? AND l.applied_at IS NULL
        ORDER BY l.id ASC`,
-      [req.params.id]
+      [req.shopId, req.params.id]
     );
 
     res.json({
@@ -165,7 +166,7 @@ router.delete('/receipt-sessions/:id', requireRole('office'), async (req, res) =
     conn = await pool.getConnection();
     await conn.beginTransaction();
 
-    const [[session]] = await conn.query('SELECT * FROM receipt_sessions WHERE id = ? FOR UPDATE', [req.params.id]);
+    const [[session]] = await conn.query('SELECT * FROM receipt_sessions WHERE id = ? AND shop_id = ? FOR UPDATE', [req.params.id, req.shopId]);
     if (!session) {
       await conn.rollback();
       return res.status(404).json({ error: 'ไม่พบบิลนี้' });
@@ -195,12 +196,12 @@ router.delete('/receipt-sessions/:id', requireRole('office'), async (req, res) =
 
     // ของที่รับเข้าสต๊อกรวมในบิลนี้ — ยกเลิกทีละรายการ (หักยอดคืน) ถ้ารายการไหนทำให้ติดลบจะไม่ลบทั้งบิล
     const [stockMovements] = await conn.query(
-      `SELECT id FROM stock_item_movements
-       WHERE receipt_session_id = ? AND reason = 'receive' AND voided_at IS NULL`,
-      [req.params.id]
+      `SELECT m.id FROM stock_item_movements m JOIN stock_items i ON i.id = m.item_id
+       WHERE i.shop_id = ? AND m.receipt_session_id = ? AND m.reason = 'receive' AND m.voided_at IS NULL`,
+      [req.shopId, req.params.id]
     );
     for (const mv of stockMovements) {
-      const result = await voidReceiveMovement(conn, mv.id, req.user.id);
+      const result = await voidReceiveMovement(conn, mv.id, req.user.id, req.shopId);
       if (result.error) {
         await conn.rollback();
         return res.status(result.status).json({ error: result.error });
@@ -209,11 +210,11 @@ router.delete('/receipt-sessions/:id', requireRole('office'), async (req, res) =
     // แถวประวัติของบิลนี้ยังอยู่ (เก็บไว้ตรวจย้อนหลัง) แค่ตัดการผูกกับบิลที่กำลังจะถูกลบ
     await conn.query('UPDATE stock_item_movements SET receipt_session_id = NULL WHERE receipt_session_id = ?', [req.params.id]);
     await conn.query(`DELETE FROM transactions WHERE receipt_session_id = ? AND type = 'IN'`, [req.params.id]);
-    await conn.query('DELETE FROM receipt_sessions WHERE id = ?', [req.params.id]);
+    await conn.query('DELETE FROM receipt_sessions WHERE id = ? AND shop_id = ?', [req.params.id, req.shopId]);
     await conn.commit();
 
-    emitStockEvent('stock:item-updated', { entityType: null, entityId: null, actorId: req.user.id });
-    emitStockTxEvent('stock:tx-deleted', { txType: 'IN', entityType: null, entityId: null, actorId: req.user.id });
+    emitStockEvent('stock:item-updated', { shopId: req.shopId, entityType: null, entityId: null, actorId: req.user.id });
+    emitStockTxEvent('stock:tx-deleted', { shopId: req.shopId, txType: 'IN', entityType: null, entityId: null, actorId: req.user.id });
 
     res.json({ success: true });
   } catch (err) {
@@ -231,6 +232,8 @@ router.delete('/receipt-sessions/:id', requireRole('office'), async (req, res) =
 // เปลี่ยนเป็น LEFT JOIN ทั้งสองตารางแล้ว COALESCE ชื่อ/รหัสแทน ให้เห็นครบทั้งสอง
 // ระบบสต๊อกในตารางเดียว (ดู model_code/name ของ racks กับ sku/name ของ wing_arms)
 router.get('/', requireRole('office'), async (req, res) => {
+  // ประวัติรายการเก่าของสต๊อกแร็ค/ปีกนก (ตารางเลิกใช้แล้ว) เป็นของร้านที่ 1 เท่านั้น
+  if (req.shopId !== 1) return res.json([]);
   try {
     const [rows] = await pool.execute(`
       SELECT t.id, t.type, t.qty, t.note, t.created_at, t.vehicle_brand, t.vehicle_model,
@@ -243,10 +246,11 @@ router.get('/', requireRole('office'), async (req, res) => {
       LEFT JOIN racks r ON r.id = t.rack_id
       LEFT JOIN wing_arms w ON w.id = t.wing_arm_id
       JOIN users u ON u.id = t.user_id
-      LEFT JOIN receipt_sessions s ON s.id = t.receipt_session_id
+      LEFT JOIN receipt_sessions s ON s.id = t.receipt_session_id AND s.shop_id = ?
+      WHERE u.shop_id = ?
       ORDER BY t.created_at DESC
       LIMIT 500
-    `);
+    `, [req.shopId, req.shopId]);
     res.json(rows);
   } catch (err) {
     console.error(err);
@@ -261,6 +265,8 @@ router.get('/', requireRole('office'), async (req, res) => {
 // ถ้าหักแล้วสต็อกจะติดลบ (ของถูกเบิกไปใช้แล้วหลังรับเข้า) จะไม่ยอมลบและแจ้งเตือนแทน
 // การปล่อยให้ตัวเลขติดลบเงียบ ๆ
 router.delete('/:id', requireRole('office'), async (req, res) => {
+  // รายการเก่าของสต๊อกแร็ค/ปีกนก เป็นของร้านที่ 1 เท่านั้น
+  if (req.shopId !== 1) return res.status(404).json({ error: 'ไม่พบรายการนี้' });
   let conn;
   try {
     conn = await pool.getConnection();
@@ -301,12 +307,12 @@ router.delete('/:id', requireRole('office'), async (req, res) => {
     await conn.query('DELETE FROM transactions WHERE id = ?', [req.params.id]);
     await conn.commit();
 
-    emitStockEvent('stock:item-updated', {
+    emitStockEvent('stock:item-updated', { shopId: req.shopId,
       entityType: tx.rack_id ? 'rack' : 'wing_arm',
       entityId: tx.rack_id || tx.wing_arm_id,
       actorId: req.user.id,
     });
-    emitStockTxEvent('stock:tx-deleted', {
+    emitStockTxEvent('stock:tx-deleted', { shopId: req.shopId,
       txType: tx.type,
       entityType: tx.rack_id ? 'rack' : 'wing_arm',
       entityId: tx.rack_id || tx.wing_arm_id,
@@ -343,7 +349,8 @@ router.get('/deduction-history', requireRole('office'), async (req, res) => {
   if (to) { dateFilter += ' AND t.created_at <= ?'; params.push(`${to} 23:59:59`); }
 
   try {
-    const [rows] = await pool.execute(`
+    // รายการเก่าของสต๊อกแร็ค/ปีกนก (ตารางเลิกใช้แล้ว) เป็นของร้านที่ 1 เท่านั้น
+    const [rows] = req.shopId === 1 ? await pool.execute(`
       SELECT
         t.id,
         t.created_at,
@@ -358,11 +365,11 @@ router.get('/deduction-history', requireRole('office'), async (req, res) => {
       LEFT JOIN wing_arms w ON w.id = t.wing_arm_id
       WHERE t.type = 'OUT'${dateFilter}
       ORDER BY tx_date DESC, t.created_at DESC
-    `, params);
+    `, params) : [[]];
 
     // การตัดสต๊อกของสต๊อกรวม (หน้าตัดสต๊อกใหม่/จ่ายออกที่หน้าสแกน) — วันที่ใช้ moved_at (วันที่ของออกจริง
     // ตัดย้อนหลังได้) ถ้าไม่มีใช้ created_at; source ให้หน้าเว็บรู้ว่าลบผ่าน /stock-deductions
-    const moveParams = [];
+    const moveParams = [req.shopId];
     let moveFilter = '';
     if (from) { moveFilter += ' AND COALESCE(m.moved_at, m.created_at) >= ?'; moveParams.push(`${from} 00:00:00`); }
     if (to) { moveFilter += ' AND COALESCE(m.moved_at, m.created_at) <= ?'; moveParams.push(`${to} 23:59:59`); }
@@ -375,7 +382,7 @@ router.get('/deduction-history', requireRole('office'), async (req, res) => {
       JOIN stock_items i ON i.id = m.item_id
       JOIN stock_categories c ON c.id = i.category_id
       LEFT JOIN stock_item_positions p ON p.item_id = m.item_id AND p.position = m.position
-      WHERE m.reason = 'deduct' AND m.voided_at IS NULL${moveFilter}
+      WHERE i.shop_id = ? AND m.reason = 'deduct' AND m.voided_at IS NULL${moveFilter}
     `, moveParams);
 
     const data = [

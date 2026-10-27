@@ -2,6 +2,7 @@ const express = require('express');
 const pool = require('../db/pool');
 const { CLOSED_STATUSES, jobStatusLabel } = require('../utils/jobStatusFlow');
 const { WORK_BAYS } = require('../utils/workBays');
+const { resolvePublicShopId } = require('../utils/tenant');
 
 const router = express.Router();
 
@@ -18,15 +19,17 @@ const router = express.Router();
 // (หลักการเดียวกับ boardPayloadFor ของโปรเจกต์ ChamppowerD)
 router.get('/', async (req, res) => {
   try {
+    const shopId = await resolvePublicShopId(req);
+    if (!shopId) return res.status(404).json({ error: 'ไม่พบร้านนี้' });
     const [rows] = await pool.execute(`
       SELECT j.id, j.queue_no, j.status, j.bay, j.est_minutes, j.received_at,
              v.license_plate, v.brand, v.model, v.color
       FROM jobs j
       LEFT JOIN vehicles v ON v.id = j.vehicle_id
-      WHERE j.job_date = CURDATE()
+      WHERE j.shop_id = ? AND j.job_date = CURDATE()
         AND j.status NOT IN (${CLOSED_STATUSES.map(() => '?').join(',')})
       ORDER BY CAST(j.queue_no AS UNSIGNED), j.id
-    `, CLOSED_STATUSES);
+    `, [shopId, ...CLOSED_STATUSES]);
 
     const data = rows.map((r) => ({
       id: r.id,

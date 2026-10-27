@@ -60,6 +60,7 @@ router.get('/', async (req, res) => {
     // รถ+ทะเบียนมาด้วยเหมือนกัน แยกคอลัมน์รถ/ทะเบียนออกจากกัน (ต่างจาก found_via=1
     // ที่รวมไว้ในสตริงเดียว) ให้หน้าตารางแสดงเป็นคอลัมน์แยกได้ตามที่ขอ
     if (req.query.channel_table) {
+      // tenant-ok: WHERE c.shop_id = ? is appended right below
       let sql = `
         SELECT c.id, c.customer_code, c.customer_name, c.phone, c.found_via, c.found_via_note, c.updated_at,
                GROUP_CONCAT(DISTINCT CONCAT(v.brand, ' ', v.model) SEPARATOR ', ') AS vehicles_summary,

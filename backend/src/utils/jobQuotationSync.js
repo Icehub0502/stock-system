@@ -16,18 +16,18 @@ const ELIGIBLE_JOB_STATUSES = ['received', 'inspecting', 'quoted', 'carout'];
 // targetJobStatus: สถานะงานที่จะตั้งให้ ('approved' | 'rejected')
 // actorUserId: ผู้ทำรายการ ใช้บันทึก job_status_history
 // คืนค่า { jobId, jobDate, status } ถ้ามีการอัปเดตจริง ไม่งั้นคืน null
-async function syncJobOnQuotationStatusChange(conn, quotationId, targetJobStatus, actorUserId) {
+async function syncJobOnQuotationStatusChange(conn, shopId, quotationId, targetJobStatus, actorUserId) {
   const [[linkedJob]] = await conn.query(
-    'SELECT id, job_date, status FROM jobs WHERE quotation_id = ? LIMIT 1',
-    [quotationId]
+    'SELECT id, job_date, status FROM jobs WHERE shop_id = ? AND quotation_id = ? LIMIT 1',
+    [shopId, quotationId]
   );
   if (!linkedJob || !ELIGIBLE_JOB_STATUSES.includes(linkedJob.status)) {
     return null;
   }
 
   await conn.execute(
-    'UPDATE jobs SET status = ?, bay = NULL, closed_at = NULL WHERE id = ?',
-    [targetJobStatus, linkedJob.id]
+    'UPDATE jobs SET status = ?, bay = NULL, closed_at = NULL WHERE id = ? AND shop_id = ?',
+    [targetJobStatus, linkedJob.id, shopId]
   );
   await conn.execute(
     'INSERT INTO job_status_history (job_id, status, changed_by) VALUES (?,?,?)',

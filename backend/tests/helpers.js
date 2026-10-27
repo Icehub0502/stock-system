@@ -91,6 +91,8 @@ async function dropShop(shopId) {
   // children of rows that tests may leave behind are removed by the FK cascades; rows with RESTRICT
   // FKs must already have been deleted by the test itself
   const { SHOP_TABLES } = require('../src/db/tenantSchema');
+  // stock items have children (movements / positions / fitments) that must go first
+  await pool.query('DELETE m FROM stock_item_movements m JOIN stock_items i ON i.id = m.item_id WHERE i.shop_id = ?', [shopId]);
   // several passes: a table may be blocked by a RESTRICT foreign key from a table deleted later in the list
   let pending = [...SHOP_TABLES];
   for (let pass = 0; pass < 4 && pending.length > 0; pass += 1) {

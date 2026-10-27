@@ -1,6 +1,7 @@
 const express = require('express');
 const pool = require('../db/pool');
 const { authenticate, requireRole } = require('../middleware/auth');
+const { ownsRow } = require('../utils/tenant');
 
 const router = express.Router();
 router.use(authenticate);
@@ -10,12 +11,12 @@ router.use(requireRole('office'));
 // repair_notices) เพราะ "วันนี้เคลมใบที่เท่าไหร่" เป็นข้อมูลที่มีความหมายกับหน้างาน
 // มากกว่าเลขวิ่งเปล่า ๆ — FOR UPDATE ล็อกกันคำขอพร้อมกันได้เลขซ้ำ (เหมือน
 // generateCode ใน repairNotices.routes.js)
-async function generateClaimNo(conn = pool) {
+async function generateClaimNo(conn, shopId) {
   const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '').slice(2); // YYMMDD
   const prefix = `CLM-${dateStr}-`;
   const [rows] = await conn.execute(
-    "SELECT MAX(CAST(SUBSTRING(claim_no, ?) AS UNSIGNED)) AS maxNo FROM claims WHERE claim_no LIKE ? FOR UPDATE",
-    [prefix.length + 1, `${prefix}%`]
+    "SELECT MAX(CAST(SUBSTRING(claim_no, ?) AS UNSIGNED)) AS maxNo FROM claims WHERE shop_id = ? AND claim_no LIKE ? FOR UPDATE",
+    [prefix.length + 1, shopId, `${prefix}%`]
   );
   const nextNumber = (rows[0]?.maxNo || 0) + 1;
   return `${prefix}${String(nextNumber).padStart(3, '0')}`;
@@ -23,7 +24,7 @@ async function generateClaimNo(conn = pool) {
 
 router.get('/next-code', async (req, res) => {
   try {
-    const claim_no = await generateClaimNo();
+    const claim_no = await generateClaimNo(pool, req.shopId);
     res.json({ success: true, claim_no });
   } catch (err) {
     console.error('Error generating claim no:', err);
@@ -34,12 +35,12 @@ router.get('/next-code', async (req, res) => {
 router.get('/', async (req, res) => {
   try {
     const { search } = req.query;
-    const params = [];
-    let whereClause = '';
+    const params = [req.shopId];
+    let whereClause = 'WHERE cl.shop_id = ?';
     if (search && search.trim()) {
       const words = search.trim().split(/\s+/).filter(Boolean);
       const perWordClause = 'v.license_plate LIKE ? OR c.customer_name LIKE ? OR c.phone LIKE ?';
-      whereClause = `WHERE ${words.map(() => `(${perWordClause})`).join(' AND ')}`;
+      whereClause += ` AND ${words.map(() => `(${perWordClause})`).join(' AND ')}`;
       words.forEach((w) => params.push(`%${w}%`, `%${w}%`, `%${w}%`));
     }
     const [rows] = await pool.execute(
@@ -70,8 +71,8 @@ router.get('/:id', async (req, res) => {
        FROM claims cl
        JOIN customers c ON cl.customer_id = c.id
        JOIN vehicles v ON cl.vehicle_id = v.id
-       WHERE cl.id = ?`,
-      [req.params.id]
+       WHERE cl.id = ? AND cl.shop_id = ?`,
+      [req.params.id, req.shopId]
     );
     if (!claim) return res.status(404).json({ error: 'ไม่พบเคลม' });
     const [items] = await pool.execute(
@@ -95,11 +96,16 @@ router.post('/', async (req, res) => {
   try {
     conn = await pool.getConnection();
     await conn.beginTransaction();
-    const claim_no = await generateClaimNo(conn);
+    if (!(await ownsRow(conn, 'customers', customer_id, req.shopId)) || !(await ownsRow(conn, 'vehicles', vehicle_id, req.shopId))) {
+      await conn.rollback();
+      return res.status(404).json({ error: 'ไม่พบลูกค้าหรือรถที่เลือก' });
+    }
+    const claim_no = await generateClaimNo(conn, req.shopId);
     const [result] = await conn.execute(
-      `INSERT INTO claims (claim_no, customer_id, vehicle_id, claim_date, symptom, remark, created_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO claims (shop_id, claim_no, customer_id, vehicle_id, claim_date, symptom, remark, created_by)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [
+        req.shopId,
         claim_no,
         customer_id,
         vehicle_id,
@@ -140,9 +146,13 @@ router.put('/:id', async (req, res) => {
   try {
     conn = await pool.getConnection();
     await conn.beginTransaction();
+    if (!(await ownsRow(conn, 'customers', customer_id, req.shopId)) || !(await ownsRow(conn, 'vehicles', vehicle_id, req.shopId))) {
+      await conn.rollback();
+      return res.status(404).json({ error: 'ไม่พบลูกค้าหรือรถที่เลือก' });
+    }
     const [result] = await conn.execute(
-      `UPDATE claims SET customer_id = ?, vehicle_id = ?, claim_date = ?, symptom = ?, remark = ? WHERE id = ?`,
-      [customer_id, vehicle_id, claim_date || new Date().toISOString().slice(0, 10), symptom || null, remark || null, req.params.id]
+      `UPDATE claims SET customer_id = ?, vehicle_id = ?, claim_date = ?, symptom = ?, remark = ? WHERE id = ? AND shop_id = ?`,
+      [customer_id, vehicle_id, claim_date || new Date().toISOString().slice(0, 10), symptom || null, remark || null, req.params.id, req.shopId]
     );
     if (result.affectedRows === 0) {
       await conn.rollback();
@@ -173,7 +183,7 @@ router.put('/:id', async (req, res) => {
 
 router.delete('/:id', async (req, res) => {
   try {
-    const [result] = await pool.execute('DELETE FROM claims WHERE id = ?', [req.params.id]);
+    const [result] = await pool.execute('DELETE FROM claims WHERE id = ? AND shop_id = ?', [req.params.id, req.shopId]);
     if (result.affectedRows === 0) return res.status(404).json({ error: 'ไม่พบเคลม' });
     res.json({ success: true });
   } catch (err) {

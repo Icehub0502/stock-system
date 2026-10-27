@@ -45,8 +45,8 @@ router.patch('/move-date', requireRole('office'), async (req, res) => {
     await conn.beginTransaction();
 
     const [jobs] = await conn.query(
-      'SELECT id, job_no, job_date, queue_no, status FROM jobs WHERE id IN (?) ORDER BY job_date, id FOR UPDATE',
-      [ids]
+      'SELECT id, job_no, job_date, queue_no, status FROM jobs WHERE shop_id = ? AND id IN (?) ORDER BY job_date, id FOR UPDATE',
+      [req.shopId, ids]
     );
     if (jobs.length !== ids.length) {
       await conn.rollback();
@@ -60,8 +60,8 @@ router.patch('/move-date', requireRole('office'), async (req, res) => {
 
     // เลขคิวที่ถูกใช้แล้วในวันปลายทาง (ล็อกแถวกันคนอื่นแทรกตอนกำลังจัดเลขคิว)
     const [targetRows] = await conn.query(
-      'SELECT id, queue_no FROM jobs WHERE job_date = ? FOR UPDATE',
-      [targetDate]
+      'SELECT id, queue_no FROM jobs WHERE shop_id = ? AND job_date = ? FOR UPDATE',
+      [req.shopId, targetDate]
     );
     const usedQueues = new Set(targetRows.map((r) => r.queue_no).filter((q) => q !== null && q !== ''));
     let maxNumeric = 0;
@@ -84,7 +84,7 @@ router.patch('/move-date', requireRole('office'), async (req, res) => {
       usedQueues.add(queueNo);
       if (/^\d+$/.test(queueNo)) maxNumeric = Math.max(maxNumeric, Number(queueNo));
 
-      await conn.execute('UPDATE jobs SET job_date = ?, queue_no = ? WHERE id = ?', [targetDate, queueNo, job.id]);
+      await conn.execute('UPDATE jobs SET job_date = ?, queue_no = ? WHERE id = ? AND shop_id = ?', [targetDate, queueNo, job.id, req.shopId]);
       moved.push({ id: job.id, fromDate: currentDate, status: job.status, queue_no: queueNo });
     }
 
@@ -92,8 +92,8 @@ router.patch('/move-date', requireRole('office'), async (req, res) => {
 
     // แจ้งทั้งวันต้นทางและปลายทาง ให้จอบอร์ด/รายการงานของทั้งสองวันรีเฟรช
     moved.forEach((m) => {
-      emitJobEvent('job:updated', { jobId: m.id, jobDate: m.fromDate, status: m.status, actorId: req.user.id });
-      emitJobEvent('job:updated', { jobId: m.id, jobDate: targetDate, status: m.status, actorId: req.user.id });
+      emitJobEvent('job:updated', { shopId: req.shopId, jobId: m.id, jobDate: m.fromDate, status: m.status, actorId: req.user.id });
+      emitJobEvent('job:updated', { shopId: req.shopId, jobId: m.id, jobDate: targetDate, status: m.status, actorId: req.user.id });
     });
 
     res.json({ success: true, moved: moved.map((m) => ({ id: m.id, queue_no: m.queue_no })), job_date: targetDate });
