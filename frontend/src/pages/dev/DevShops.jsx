@@ -77,6 +77,20 @@ export default function DevShops() {
     }
   };
 
+  const changeCode = async (shop) => {
+    const input = window.prompt(`รหัสร้านใหม่ของ "${shop.name}" (a-z 0-9 และ - ยาว 2-30 ตัว)\nพนักงานของร้านต้องใช้รหัสใหม่ตอนล็อกอิน`, shop.code);
+    if (!input) return;
+    const code = input.trim().toLowerCase();
+    if (code === shop.code) return;
+    if (!window.confirm(`เปลี่ยนรหัสร้านจาก "${shop.code}" เป็น "${code}"? ลิงก์หรือบุ๊กมาร์กที่ใช้รหัสเดิมจะใช้ไม่ได้`)) return;
+    try {
+      await client.patch(`/dev/shops/${shop.id}`, { code });
+      load();
+    } catch (err) {
+      alert(err.response?.data?.error || 'เปลี่ยนรหัสร้านไม่สำเร็จ');
+    }
+  };
+
   const enter = async (shop) => {
     try {
       await switchShop(shop.id);
@@ -113,6 +127,7 @@ export default function DevShops() {
                 <td className="actions" data-label="จัดการ">
                   {s.id !== user.shop_id && <button type="button" onClick={() => enter(s)}>เข้าดูร้านนี้</button>}
                   <button type="button" onClick={() => rename(s)}>แก้ชื่อ</button>
+                  <button type="button" onClick={() => changeCode(s)}>แก้รหัสร้าน</button>
                   <button
                     type="button"
                     className={s.status === 'active' ? 'btn-danger' : ''}
@@ -215,6 +230,17 @@ export function DevUsers() {
     }
   };
 
+  const changeRole = async (u, role) => {
+    if (role === u.role) return;
+    if (!window.confirm(`เปลี่ยนสิทธิ์ของ "${u.username}" จาก ${ROLE_LABEL[u.role] || u.role} เป็น ${ROLE_LABEL[role]}?\n(มีผลเมื่อเขาล็อกอินใหม่ ไม่เกิน 12 ชม.)`)) return;
+    try {
+      await client.patch(`/dev/users/${u.id}`, { role });
+      load();
+    } catch (err) {
+      alert(err.response?.data?.error || 'เปลี่ยนสิทธิ์ไม่สำเร็จ');
+    }
+  };
+
   const toggleActive = async (u) => {
     const next = !u.is_active;
     if (!window.confirm(next ? `เปิดบัญชี "${u.username}" อีกครั้ง?` : `ปิดบัญชี "${u.username}"? ล็อกอินใหม่ไม่ได้ (คนที่ล็อกอินค้างอยู่ใช้ได้จนหมดอายุ ไม่เกิน 12 ชม.)`)) return;
@@ -251,7 +277,11 @@ export function DevUsers() {
                 <td data-label="ร้าน">{u.shop_name}</td>
                 <td data-label="Username">{u.username}</td>
                 <td data-label="ชื่อ">{u.full_name || '-'}</td>
-                <td data-label="สิทธิ์">{ROLE_LABEL[u.role] || u.role}</td>
+                <td data-label="สิทธิ์">
+                  <select value={u.role} disabled={u.id === me.id} onChange={(e) => changeRole(u, e.target.value)}>
+                    {Object.keys(ROLE_LABEL).map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
+                  </select>
+                </td>
                 <td data-label="สถานะ">{u.is_active ? 'ใช้งาน' : 'ปิดอยู่'}</td>
                 <td className="actions" data-label="จัดการ">
                   <button type="button" onClick={() => resetPassword(u)}>รีเซ็ตรหัสผ่าน</button>

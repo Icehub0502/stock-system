@@ -118,10 +118,10 @@ router.post('/shops', async (req, res) => {
   }
 });
 
-// Rename, move to another group, suspend / re-open
+// Rename, change the login code, move to another group, suspend / re-open
 router.patch('/shops/:id', async (req, res) => {
   const id = Number(req.params.id);
-  const { name, status, group_id } = req.body || {};
+  const { name, code, status, group_id } = req.body || {};
   try {
     const [[shop]] = await pool.query('SELECT id FROM shops WHERE id = ?', [id]);
     if (!shop) return res.status(404).json({ error: 'ไม่พบร้าน' });
@@ -132,6 +132,14 @@ router.patch('/shops/:id', async (req, res) => {
       if (!String(name).trim()) return res.status(400).json({ error: 'กรุณากรอกชื่อร้าน' });
       sets.push('name = ?');
       params.push(String(name).trim());
+    }
+    if (code !== undefined) {
+      const shopCode = String(code).trim().toLowerCase();
+      if (!SHOP_CODE_PATTERN.test(shopCode)) {
+        return res.status(400).json({ error: 'รหัสร้านใช้ได้เฉพาะ a-z 0-9 และ - ยาว 2-30 ตัว' });
+      }
+      sets.push('code = ?');
+      params.push(shopCode);
     }
     if (status !== undefined) {
       if (!['active', 'suspended'].includes(status)) return res.status(400).json({ error: 'สถานะไม่ถูกต้อง' });
@@ -152,9 +160,10 @@ router.patch('/shops/:id', async (req, res) => {
 
     await pool.query(`UPDATE shops SET ${sets.join(', ')} WHERE id = ?`, [...params, id]);
     forgetShopStatus(id);
-    await logAudit(req, 'update_shop', { shopId: id, detail: { name, status, group_id } });
+    await logAudit(req, 'update_shop', { shopId: id, detail: { name, code, status, group_id } });
     res.json({ success: true });
   } catch (err) {
+    if (err.code === 'ER_DUP_ENTRY') return res.status(409).json({ error: 'รหัสร้านนี้มีอยู่แล้ว' });
     serverError(res, err, 'แก้ไขร้านไม่สำเร็จ');
   }
 });
@@ -204,21 +213,35 @@ router.post('/users/:id/reset-password', async (req, res) => {
   }
 });
 
-// Switch an account off / on. A switched-off account cannot log in; a token already issued stays valid
-// until it expires.
+const USER_ROLES = ['technician', 'office', 'manager', 'owner', 'dev'];
+
+// Switch an account off / on, or change its role. A switched-off account cannot log in; a token already
+// issued (with its old role) stays valid until it expires.
 router.patch('/users/:id', async (req, res) => {
-  const { is_active } = req.body || {};
-  if (typeof is_active !== 'boolean') return res.status(400).json({ error: 'ข้อมูลไม่ถูกต้อง' });
+  const { is_active, role } = req.body || {};
+  if (is_active !== undefined && typeof is_active !== 'boolean') return res.status(400).json({ error: 'ข้อมูลไม่ถูกต้อง' });
+  if (role !== undefined && !USER_ROLES.includes(role)) return res.status(400).json({ error: 'สิทธิ์ไม่ถูกต้อง' });
+  if (is_active === undefined && role === undefined) return res.status(400).json({ error: 'ไม่มีข้อมูลที่จะแก้' });
   try {
-    const [[user]] = await pool.query('SELECT id, shop_id, username FROM users WHERE id = ?', [req.params.id]);
+    const [[user]] = await pool.query('SELECT id, shop_id, username, role FROM users WHERE id = ?', [req.params.id]);
     if (!user) return res.status(404).json({ error: 'ไม่พบผู้ใช้' });
-    if (user.id === req.user.id) return res.status(400).json({ error: 'ปิดบัญชีของตัวเองไม่ได้' });
-    // tenant-ok: platform administrator (dev) works across all shops
-    await pool.query('UPDATE users SET is_active = ? WHERE id = ?', [is_active ? 1 : 0, user.id]);
-    await logAudit(req, is_active ? 'enable_user' : 'disable_user', {
-      shopId: user.shop_id,
-      detail: { user_id: user.id, username: user.username },
-    });
+    if (user.id === req.user.id) return res.status(400).json({ error: 'แก้บัญชีของตัวเองไม่ได้' });
+    if (is_active !== undefined) {
+      // tenant-ok: platform administrator (dev) works across all shops
+      await pool.query('UPDATE users SET is_active = ? WHERE id = ?', [is_active ? 1 : 0, user.id]);
+      await logAudit(req, is_active ? 'enable_user' : 'disable_user', {
+        shopId: user.shop_id,
+        detail: { user_id: user.id, username: user.username },
+      });
+    }
+    if (role !== undefined && role !== user.role) {
+      // tenant-ok: platform administrator (dev) works across all shops
+      await pool.query('UPDATE users SET role = ? WHERE id = ?', [role, user.id]);
+      await logAudit(req, 'change_role', {
+        shopId: user.shop_id,
+        detail: { user_id: user.id, username: user.username, from: user.role, to: role },
+      });
+    }
     res.json({ success: true });
   } catch (err) {
     serverError(res, err, 'แก้ไขผู้ใช้ไม่สำเร็จ');

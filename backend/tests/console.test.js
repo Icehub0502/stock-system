@@ -22,7 +22,7 @@ beforeAll(async () => {
 afterAll(async () => {
   for (const id of shopsToDrop) await dropShop(id);
   await pool.query("DELETE FROM shop_groups WHERE name LIKE 'Console test group%' AND NOT EXISTS (SELECT 1 FROM shops WHERE group_id = shop_groups.id)");
-  await pool.query("DELETE FROM dev_audit_log WHERE action IN ('create_shop','switch_shop','update_shop','reset_password','disable_user') AND created_at > DATE_SUB(NOW(), INTERVAL 1 HOUR)");
+  await pool.query("DELETE FROM dev_audit_log WHERE action IN ('create_shop','switch_shop','update_shop','reset_password','disable_user','change_role') AND created_at > DATE_SUB(NOW(), INTERVAL 1 HOUR)");
   await pool.end();
 });
 
@@ -119,6 +119,54 @@ describe('users of every shop', () => {
     expect((await login()).status).toBe(401);
     expect((await request(app).patch(`/api/dev/users/${office.id}`).set(as(devToken)).send({ is_active: true })).status).toBe(200);
     expect((await login()).status).toBe(200);
+  });
+});
+
+describe('editing a shop code and a user role', () => {
+  test('dev changes the shop code; the old code stops working, a clashing or malformed one is refused', async () => {
+    const shop = await createShop();
+    shopsToDrop.push(shop.shopId);
+    const other = await createShop();
+    shopsToDrop.push(other.shopId);
+    const [[row]] = await pool.query('SELECT code FROM shops WHERE id = ?', [shop.shopId]);
+    const [[otherRow]] = await pool.query('SELECT code FROM shops WHERE id = ?', [other.shopId]);
+    const newCode = `ren-${Date.now().toString(36)}`;
+    const patch = (body) => request(app).patch(`/api/dev/shops/${shop.shopId}`).set(as(devToken)).send(body);
+
+    expect((await patch({ code: 'A B' })).status).toBe(400);
+    expect((await patch({ code: otherRow.code })).status).toBe(409);
+    expect((await request(app).patch(`/api/dev/shops/${shop.shopId}`).set(as(managerToken)).send({ code: newCode })).status).toBe(403);
+
+    expect((await patch({ code: newCode.toUpperCase() })).status).toBe(200);
+    const [[after]] = await pool.query('SELECT code FROM shops WHERE id = ?', [shop.shopId]);
+    expect(after.code).toBe(newCode);
+    const [[owner]] = await pool.query("SELECT id FROM users WHERE shop_id = ? AND username = 'shopowner'", [shop.shopId]);
+    expect((await request(app).post(`/api/dev/users/${owner.id}/reset-password`).set(as(devToken)).send({ new_password: 'password123' })).status).toBe(200);
+    const login = (code) => request(app).post('/api/auth/login').send({ username: 'shopowner', password: 'password123', shop_code: code });
+    expect((await login(row.code)).status).toBe(401);
+    expect((await login(newCode)).status).toBe(200);
+  });
+
+  test('dev changes a role; invalid roles and the own account are refused; it is written to the audit log', async () => {
+    const shop = await createShop();
+    shopsToDrop.push(shop.shopId);
+    const [[office]] = await pool.query("SELECT id FROM users WHERE shop_id = ? AND username = 'office'", [shop.shopId]);
+    const patch = (id, body, token = devToken) => request(app).patch(`/api/dev/users/${id}`).set(as(token)).send(body);
+
+    expect((await patch(office.id, { role: 'superuser' })).status).toBe(400);
+    expect((await patch(office.id, {})).status).toBe(400);
+    expect((await patch(office.id, { role: 'manager' }, managerToken)).status).toBe(403);
+    expect((await patch(office.id, { role: 'manager' })).status).toBe(200);
+    const [[changed]] = await pool.query('SELECT role FROM users WHERE id = ?', [office.id]);
+    expect(changed.role).toBe('manager');
+
+    // the token belongs to 'devtest': the dev cannot change their own account
+    const [[me]] = await pool.query("SELECT id FROM users WHERE username = 'devtest'");
+    expect((await patch(me.id, { role: 'office' })).status).toBe(400);
+    expect((await patch(me.id, { is_active: false })).status).toBe(400);
+
+    const audit = await request(app).get('/api/dev/audit').set(as(devToken));
+    expect(audit.body.data.some((r) => r.action === 'change_role' && String(r.detail).includes('"to":"manager"'))).toBe(true);
   });
 });
 
