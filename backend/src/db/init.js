@@ -1174,6 +1174,9 @@ async function initDatabase() {
   // trash (deleted records, restorable by the administrator) + platform-wide settings — see trashSchema.js
   await require('./trashSchema').migrateTrash(conn);
 
+  // branch groups (one owner, several shops), audit log, users.is_active — see groupSchema.js
+  await require('./groupSchema').migrateGroups(conn);
+
   await conn.end();
 
   console.log(`[init-db] Database "${DB_NAME}" ready`);

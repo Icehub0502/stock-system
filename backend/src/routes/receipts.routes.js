@@ -917,3 +917,4 @@ router.delete('/:id', requireManager, async (req, res) => {
 });
 
 module.exports = router;
+module.exports.loadMethodBreakdown = loadMethodBreakdown; // owner overview sums it over several shops

@@ -1,7 +1,9 @@
-// Platform administration (role dev only): the trash of deleted records, and later shops / groups.
+// Platform administration (role dev only): the trash of deleted records (shops, users and the audit log
+// are in devShops.routes.js).
 const express = require('express');
 const pool = require('../db/pool');
 const { authenticate, requireDev } = require('../middleware/auth');
+const { logAudit } = require('../utils/audit');
 const { restoreFromTrash, purgeTrashPhotos, purgeTrashRecords, TrashError, ENTITIES } = require('../utils/trash');
 const { getTrashSettings, saveTrashSettings } = require('../utils/trashCleanup');
 const { deleteUploadedFile } = require('../utils/photoStorage');
@@ -89,6 +91,7 @@ router.put('/trash/settings', async (req, res) => {
   }
   try {
     await saveTrashSettings({ auto_cleanup, keep_days, photo_keep_days });
+    await logAudit(req, 'trash_settings', { detail: { auto_cleanup, keep_days, photo_keep_days } });
     res.json({ success: true, data: await getTrashSettings() });
   } catch (err) {
     sendError(res, err, 'บันทึกการตั้งค่าไม่สำเร็จ');
@@ -103,8 +106,14 @@ router.post('/trash/purge', async (req, res) => {
     return res.status(400).json({ error: 'กรุณาระบุจำนวนวัน (0-3650)' });
   }
   try {
-    if (photosOnly) return res.json({ success: true, photos: await purgeTrashPhotos(days) });
-    res.json({ success: true, records: await purgeTrashRecords(days) });
+    if (photosOnly) {
+      const photos = await purgeTrashPhotos(days);
+      await logAudit(req, 'trash_purge', { detail: { older_than_days: days, photos_only: true, photos } });
+      return res.json({ success: true, photos });
+    }
+    const records = await purgeTrashRecords(days);
+    await logAudit(req, 'trash_purge', { detail: { older_than_days: days, records } });
+    res.json({ success: true, records });
   } catch (err) {
     sendError(res, err, 'ลบไม่สำเร็จ');
   }
@@ -142,7 +151,9 @@ router.get('/trash/:id', async (req, res) => {
 
 router.post('/trash/:id/restore', async (req, res) => {
   try {
-    res.json({ success: true, data: await restoreFromTrash(Number(req.params.id), req.user) });
+    const restored = await restoreFromTrash(Number(req.params.id), req.user);
+    await logAudit(req, 'trash_restore', { shopId: restored.shop_id, detail: { entity: restored.entity, record_id: restored.record_id } });
+    res.json({ success: true, data: restored });
   } catch (err) {
     sendError(res, err, 'กู้คืนไม่สำเร็จ');
   }
@@ -160,6 +171,7 @@ router.delete('/trash/:id', async (req, res) => {
       for (const file of JSON.parse(row.photo_files)) deleteUploadedFile(file);
     }
     await pool.query('DELETE FROM deleted_records WHERE id = ?', [row.id]);
+    await logAudit(req, 'trash_delete_forever', { detail: { trash_id: row.id } });
     res.json({ success: true });
   } catch (err) {
     sendError(res, err, 'ลบไม่สำเร็จ');

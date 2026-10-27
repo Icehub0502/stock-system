@@ -80,9 +80,15 @@ async function cleanupCustomer(customerId) {
 // A second shop for cross-shop isolation tests: a shops row + one office user in it + a token for that
 // user. Everything the test creates in the shop must be removed by the test; dropShop then deletes the
 // leftovers of the shop itself (users, settings) and the shop row.
-async function createShop() {
+// opts.groupId: put the shop in an existing group (a sibling branch); default = a new group of its own
+async function createShop({ groupId } = {}) {
   const suffix = Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
-  const [shop] = await pool.query('INSERT INTO shops (code, name) VALUES (?, ?)', [`t${suffix}`, `Test shop ${suffix}`]);
+  let shopGroupId = groupId;
+  if (!shopGroupId) {
+    const [group] = await pool.query('INSERT INTO shop_groups (name) VALUES (?)', [`Test group ${suffix}`]);
+    shopGroupId = group.insertId;
+  }
+  const [shop] = await pool.query('INSERT INTO shops (code, name, group_id) VALUES (?, ?, ?)', [`t${suffix}`, `Test shop ${suffix}`, shopGroupId]);
   const shopId = shop.insertId;
   const [user] = await pool.query(
     "INSERT INTO users (shop_id, username, password_hash, full_name, role) VALUES (?, 'office', 'x', 'Shop B office', 'office')",
@@ -109,7 +115,7 @@ async function createShop() {
     process.env.JWT_SECRET,
     { expiresIn: '1h' }
   );
-  return { shopId, userId: user.insertId, token, managerToken, ownerToken, ownerUserId: owner.insertId };
+  return { shopId, groupId: shopGroupId, userId: user.insertId, token, managerToken, ownerToken, ownerUserId: owner.insertId };
 }
 
 async function dropShop(shopId) {
@@ -132,7 +138,16 @@ async function dropShop(shopId) {
     pending = failed;
   }
   await pool.query('DELETE FROM deleted_records WHERE shop_id = ?', [shopId]);
+  const [[shop]] = await pool.query('SELECT group_id FROM shops WHERE id = ?', [shopId]);
+  await pool.query('DELETE FROM dev_audit_log WHERE shop_id = ?', [shopId]);
   await pool.query('DELETE FROM shops WHERE id = ?', [shopId]);
+  // test groups disappear with their last shop
+  if (shop && shop.group_id) {
+    await pool.query(
+      "DELETE FROM shop_groups WHERE id = ? AND name LIKE 'Test group %' AND NOT EXISTS (SELECT 1 FROM shops WHERE group_id = shop_groups.id)",
+      [shop.group_id]
+    );
+  }
 }
 
 module.exports = { getOfficeToken, getManagerToken, getTechnicianToken, getOwnerToken, getDevToken, createCustomerWithVehicle, cleanupCustomer, createShop, dropShop };
