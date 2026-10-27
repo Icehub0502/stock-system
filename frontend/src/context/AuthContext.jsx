@@ -19,6 +19,15 @@ export function AuthProvider({ children }) {
     return res.data.user;
   };
 
+  // Work inside another branch (owner: own group, dev: any shop). A new token is issued for that shop;
+  // the page is reloaded afterwards so every screen, cache and live connection starts fresh in the new shop.
+  const switchShop = async (shopId) => {
+    const res = await client.post('/auth/switch-shop', { shop_id: shopId });
+    localStorage.setItem('token', res.data.token);
+    localStorage.setItem('user', JSON.stringify(res.data.user));
+    window.location.assign('/');
+  };
+
   const logout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
@@ -27,7 +36,7 @@ export function AuthProvider({ children }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, logout }}>
+    <AuthContext.Provider value={{ user, login, logout, switchShop }}>
       {children}
     </AuthContext.Provider>
   );

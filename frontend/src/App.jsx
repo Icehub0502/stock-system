@@ -7,6 +7,7 @@ import QueueNavBar from "./components/QueueNavBar";
 import BottomNav from "./components/BottomNav";
 import PageSkeleton from "./components/PageSkeleton";
 import { hasRole } from "./utils/roles";
+import { BranchBanner } from "./components/BranchSwitcher";
 import { isQueueHost } from "./utils/isQueueHost";
 // LoginPage stays a static import — every visitor needs it before we know
 // their role, so lazy-loading it would only add a network round trip.
@@ -29,6 +30,8 @@ const CustomerChannelPage = lazy(() => import("./pages/CustomerChannelPage"));
 const CustomerManagementPage = lazy(() => import("./pages/CustomerManagementPage"));
 const VehicleManagementPage = lazy(() => import("./pages/VehicleManagementPage"));
 const ServiceItemManagementPage = lazy(() => import("./pages/ServiceItemManagementPage"));
+const OwnerOverviewPage = lazy(() => import("./pages/OwnerOverviewPage"));
+const DevConsole = lazy(() => import("./pages/dev/DevConsole"));
 const WarrantyManagementPage = lazy(() => import("./pages/WarrantyManagementPage"));
 const ClaimManagementPage = lazy(() => import("./pages/ClaimManagementPage"));
 const ProductCostPage = lazy(() => import("./pages/ProductCostPage"));
@@ -76,7 +79,7 @@ function AppRoutes() {
   const queueHost = isQueueHost();
   return (
     <>
-      {!isKiosk && (queueHost ? <QueueNavBar /> : <NavBar />)}
+      {!isKiosk && (queueHost ? <QueueNavBar /> : <><NavBar /><BranchBanner /></>)}
       <div className={isKiosk ? "" : "container"}>
         {/* key={pathname} forces this subtree to remount on navigation, which
             both retriggers the fade-in animation and gives Suspense a fresh
@@ -189,6 +192,22 @@ function AppRoutes() {
             element={
               <ProtectedRoute roles={["office"]}>
                 <ClaimManagementPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/owner/overview"
+            element={
+              <ProtectedRoute minRole="owner">
+                <OwnerOverviewPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/dev/*"
+            element={
+              <ProtectedRoute minRole="dev">
+                <DevConsole />
               </ProtectedRoute>
             }
           />

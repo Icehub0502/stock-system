@@ -4,6 +4,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import ChangePasswordModal from "./ChangePasswordModal";
 import { hasRole, ROLE_LABEL } from "../utils/roles";
+import { BranchSwitcher } from "./BranchSwitcher";
 
 const NAV_CATEGORIES = [
   {
@@ -167,10 +168,18 @@ export default function NavBar() {
 
         <Link to="/repair-notices" className="navbar-standalone-link" onClick={close}>ใบแจ้งซ่อม</Link>
         <Link to="/scan" className="navbar-standalone-link" onClick={close}>สแกน QR</Link>
+        {hasRole(user, "owner") && (
+          <Link to="/owner/overview" className={`navbar-standalone-link ${location.pathname === "/owner/overview" ? "active" : ""}`} onClick={close}>ภาพรวมทุกสาขา</Link>
+        )}
+        {hasRole(user, "dev") && (
+          <Link to="/dev" className={`navbar-standalone-link ${location.pathname.startsWith("/dev") ? "active" : ""}`} onClick={close}>🛠️ จัดการระบบ</Link>
+        )}
         {/* ผู้จัดการขึ้นไป — backend บังคับสิทธิ์จริงอีกชั้น (requireManager) ปุ่มนี้แค่ซ่อนไม่ให้คนอื่นเห็น */}
         {hasRole(user, "manager") && (
           <Link to="/settings" className="navbar-standalone-link" onClick={close}>⚙️ ตั้งค่า</Link>
         )}
+
+        <BranchSwitcher />
 
         <div className="navbar-user-row">
           <span className="navbar-user">

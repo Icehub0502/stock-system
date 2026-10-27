@@ -53,7 +53,7 @@ const QUICK_LINKS = [
   { to: "/receipt-list", label: "+ สร้างบิลใหม่" },
   { to: "/quotations", label: "+ สร้างใบเสนอราคา" },
   { to: "/stock-all", label: "สต๊อกรวม" },
-  { to: "/daily-summary", label: "สรุปยอดขายรายวัน" },
+  { to: "/daily-summary", label: "สรุปยอดขายรายวัน", min: "manager" },
 ];
 
 export default function DashboardPage() {
@@ -356,7 +356,7 @@ export default function DashboardPage() {
           <div className="dash-panel">
             <div className="dash-panel-title">ทางลัด</div>
             <div className="dash-quicklinks">
-              {QUICK_LINKS.map((l) => (
+              {QUICK_LINKS.filter((l) => !l.min || hasRole(user, l.min)).map((l) => (
                 <Link key={l.to} to={l.to} className="dash-quicklink-btn">
                   {l.label}
                 </Link>

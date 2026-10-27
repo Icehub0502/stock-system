@@ -1222,6 +1222,69 @@ button:disabled { background: #f3f4f6; color: #9ca3af; cursor: not-allowed; }
   font-weight: 500;
 }
 
+/* ── branches + platform console ─────────────────────────────────── */
+.branch-switcher {
+  max-width: 220px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid #d1d5db;
+  background: #fff;
+  font-size: 14px;
+}
+.branch-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 16px;
+  background: #b91c1c;
+  color: #fff;
+  font-weight: 600;
+}
+.branch-banner button {
+  background: #fff;
+  color: #b91c1c;
+  border: 0;
+  border-radius: 6px;
+  padding: 4px 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.owner-range {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.owner-total-row td { background: #f3f4f6; }
+.dev-console { display: flex; gap: 0; min-height: calc(100vh - 60px); }
+.dev-side {
+  flex: 0 0 200px;
+  background: #111827;
+  padding: 16px 0;
+  display: flex;
+  flex-direction: column;
+}
+.dev-side-title { color: #9ca3af; font-size: 12px; letter-spacing: 1px; padding: 0 16px 8px; }
+.dev-side-link { color: #e5e7eb; padding: 10px 16px; text-decoration: none; border-left: 3px solid transparent; }
+.dev-side-link:hover { background: #1f2937; }
+.dev-side-link.active { background: #1f2937; border-left-color: #f59e0b; color: #fff; font-weight: 600; }
+.dev-main { flex: 1; min-width: 0; padding: 0 16px 24px; }
+.dev-detail { max-width: 360px; overflow-wrap: anywhere; font-size: 13px; }
+.dev-settings-form { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-end; margin: 12px 0; }
+.dev-settings-form label { display: flex; flex-direction: column; gap: 4px; font-size: 14px; }
+.dev-settings-form input[type="number"] { width: 110px; }
+.dev-settings-form label:first-child { flex-direction: row; align-items: center; gap: 8px; }
+.dev-settings-form input[type="checkbox"] { width: 20px; height: 20px; }
+.dev-purge-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+@media (max-width: 800px) {
+  .dev-console { flex-direction: column; }
+  .dev-side { flex: none; flex-direction: row; flex-wrap: wrap; padding: 8px; gap: 4px; }
+  .dev-side-title { display: none; }
+  .dev-side-link { border-left: 0; border-radius: 6px; padding: 8px 12px; }
+}
+
 .info-message {
   background: #eff6ff;
   border: 1px solid #bfdbfe;
