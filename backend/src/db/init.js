@@ -1150,6 +1150,9 @@ async function initDatabase() {
     );
   }
 
+  // SaaS phase 1: shops table + shop_id on every shop-owned table (see tenantSchema.js)
+  await require('./tenantSchema').migrateTenants(conn);
+
   await conn.end();
 
   console.log(`[init-db] Database "${DB_NAME}" ready`);
