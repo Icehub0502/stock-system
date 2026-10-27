@@ -29,6 +29,9 @@ export default function JobBoardPage() {
   const [showClaimModal, setShowClaimModal] = useState(false);
   const [declineJob, setDeclineJob] = useState(null);
   const [declineBusy, setDeclineBusy] = useState(false);
+  // งานที่เพิ่งกด "ลูกค้าไม่ทำ" — โชว์แถบ "ดึงกลับ" ชั่วคราวเผื่อกดผิด
+  const [lastDeclined, setLastDeclined] = useState(null);
+  const [undoBusy, setUndoBusy] = useState(false);
   const [copyingQueueId, setCopyingQueueId] = useState(null);
   const [copiedQueueId, setCopiedQueueId] = useState(null);
   const [technicians, setTechnicians] = useState([]);
@@ -65,6 +68,12 @@ export default function JobBoardPage() {
     }
   };
   useEffect(() => { loadTechnicians(); }, []);
+
+  useEffect(() => {
+    if (!lastDeclined) return undefined;
+    const timer = setTimeout(() => setLastDeclined(null), 60000);
+    return () => clearTimeout(timer);
+  }, [lastDeclined]);
 
   // Realtime: other tabs/devices changing today's jobs should refresh this
   // list without a manual reload. Guarded by `date` — staff browsing a past
@@ -126,17 +135,35 @@ export default function JobBoardPage() {
     setDeclineBusy(true);
     setError('');
     try {
-      if (declineJob.quotation_id) {
-        await client.patch(`/quotations/${declineJob.quotation_id}/decline`, { reason, note });
+      let quotationId = declineJob.quotation_id;
+      if (quotationId) {
+        await client.patch(`/quotations/${quotationId}/decline`, { reason, note });
       } else {
-        await client.post(`/jobs/${declineJob.id}/quotation/decline`, { reason, note });
+        const res = await client.post(`/jobs/${declineJob.id}/quotation/decline`, { reason, note });
+        quotationId = res.data.quotation_id;
       }
+      setLastDeclined({ quotationId, label: `คิว ${declineJob.queue_no || declineJob.job_no}` });
       setDeclineJob(null);
       await load({ silent: true });
     } catch (err) {
       setError(err.response?.data?.error || 'บันทึกไม่สำเร็จ');
     } finally {
       setDeclineBusy(false);
+    }
+  }
+
+  async function handleUndoDecline() {
+    if (!lastDeclined) return;
+    setUndoBusy(true);
+    setError('');
+    try {
+      await client.patch(`/quotations/${lastDeclined.quotationId}/undo-decline`);
+      setLastDeclined(null);
+      await load({ silent: true });
+    } catch (err) {
+      setError(err.response?.data?.error || 'ดึงกลับไม่สำเร็จ');
+    } finally {
+      setUndoBusy(false);
     }
   }
 
@@ -257,6 +284,15 @@ export default function JobBoardPage() {
       </div>
 
       {error && <div className="error-message">{error}</div>}
+      {lastDeclined && (
+        <div className="info-message" role="status">
+          {lastDeclined.label} ถูกตั้งเป็น "ลูกค้าไม่ทำ" แล้ว{' '}
+          <button type="button" className="btn-icon-small" disabled={undoBusy} onClick={handleUndoDecline}>
+            {undoBusy ? 'กำลังดึงกลับ...' : 'ดึงกลับเข้าคิว'}
+          </button>{' '}
+          <button type="button" className="btn-icon-small" disabled={undoBusy} onClick={() => setLastDeclined(null)}>ปิด</button>
+        </div>
+      )}
 
       {loading ? (
         <div className="loading">กำลังโหลด...</div>

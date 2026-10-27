@@ -1222,6 +1222,16 @@ button:disabled { background: #f3f4f6; color: #9ca3af; cursor: not-allowed; }
   font-weight: 500;
 }
 
+.info-message {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  color: #1e40af;
+  padding: 12px 16px;
+  border-radius: 6px;
+  margin-bottom: 16px;
+  font-weight: 500;
+}
+
 .today-appointment-banner {
   background: #fffbeb;
   border: 1px solid #fbbf24;
