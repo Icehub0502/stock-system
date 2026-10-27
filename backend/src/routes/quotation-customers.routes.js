@@ -20,9 +20,11 @@ router.use(requireRole('office'));
 // conn: รับ connection ของ transaction ที่กำลังสร้างลูกค้าอยู่ — ใช้ FOR UPDATE
 // ล็อกแถวที่อ่านไว้จนกว่า transaction นั้นจะ commit กัน 2 คำขอสร้างลูกค้าพร้อมกัน
 // อ่าน MAX เดิมแล้วได้รหัสลูกค้าซ้ำกัน ไม่มี conn ส่งมาใช้ pool เฉย ๆ ไม่ต้องล็อกอะไร
-async function generateCustomerCode(conn = pool) {
+async function generateCustomerCode(conn, shopId) {
   const [rows] = await conn.execute(
-    'SELECT MAX(CAST(SUBSTRING(customer_code, 4) AS UNSIGNED)) as maxCode FROM customers FOR UPDATE'
+    // LIKE 'CM-%': มีรหัสรูปแบบ CMM-xxxx ของหน้าลูกค้าปนอยู่ในตารางเดียวกัน ถ้านับรวมจะได้เลขเพี้ยน
+    "SELECT MAX(CAST(SUBSTRING(customer_code, 4) AS UNSIGNED)) as maxCode FROM customers WHERE shop_id = ? AND customer_code LIKE 'CM-%' FOR UPDATE",
+    [shopId]
   );
   const nextNumber = (rows[0]?.maxCode || 0) + 1;
   return `CM-${String(nextNumber).padStart(4, '0')}`;
@@ -44,11 +46,11 @@ router.post('/', authenticate, async (req, res) => {
     conn = await pool.getConnection();
     await conn.beginTransaction();
 
-    const customer_code = await generateCustomerCode(conn);
+    const customer_code = await generateCustomerCode(conn, req.shopId);
 
     await conn.execute(
-      'INSERT INTO customers (customer_code, customer_name, phone) VALUES (?, ?, ?)',
-      [customer_code, customer_name, normalizePhone(phone)]
+      'INSERT INTO customers (shop_id, customer_code, customer_name, phone) VALUES (?, ?, ?, ?)',
+      [req.shopId, customer_code, customer_name, normalizePhone(phone)]
     );
 
     await conn.commit();
@@ -73,11 +75,11 @@ router.post('/', authenticate, async (req, res) => {
 router.get('/', authenticate, async (req, res) => {
   try {
     const { search } = req.query;
-    let query = 'SELECT * FROM customers ORDER BY created_at DESC';
-    const params = [];
+    let query = 'SELECT * FROM customers WHERE shop_id = ? ORDER BY created_at DESC';
+    const params = [req.shopId];
 
     if (search) {
-      query = 'SELECT * FROM customers WHERE customer_name LIKE ? OR phone LIKE ? OR customer_code LIKE ? ORDER BY created_at DESC';
+      query = 'SELECT * FROM customers WHERE shop_id = ? AND (customer_name LIKE ? OR phone LIKE ? OR customer_code LIKE ?) ORDER BY created_at DESC';
       const searchTerm = `%${search}%`;
       params.push(searchTerm, searchTerm, searchTerm);
     }
@@ -100,8 +102,8 @@ router.get('/:id', authenticate, async (req, res) => {
 
   try {
     const [rows] = await pool.execute(
-      'SELECT * FROM customers WHERE id = ?',
-      [id]
+      'SELECT * FROM customers WHERE id = ? AND shop_id = ?',
+      [id, req.shopId]
     );
 
     if (rows.length === 0) {
@@ -129,8 +131,8 @@ router.put('/:id', authenticate, async (req, res) => {
 
   try {
     const [result] = await pool.execute(
-      'UPDATE customers SET customer_name = ?, phone = ? WHERE id = ?',
-      [customer_name, normalizePhone(phone), id]
+      'UPDATE customers SET customer_name = ?, phone = ? WHERE id = ? AND shop_id = ?',
+      [customer_name, normalizePhone(phone), id, req.shopId]
     );
 
     if (result.affectedRows === 0) {
@@ -153,8 +155,8 @@ router.delete('/:id', authenticate, async (req, res) => {
 
   try {
     const [result] = await pool.execute(
-      'DELETE FROM customers WHERE id = ?',
-      [id]
+      'DELETE FROM customers WHERE id = ? AND shop_id = ?',
+      [id, req.shopId]
     );
 
     if (result.affectedRows === 0) {

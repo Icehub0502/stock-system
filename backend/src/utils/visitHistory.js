@@ -12,7 +12,7 @@ const { jobStatusLabel } = require('./jobStatusFlow');
 // ใบเสนอราคาตรง ๆ) — กันไม่ให้ใบเสนอราคาที่ jobs.quotation_id ชี้ถึงไปแล้วถูกดึงมา
 // นับซ้ำอีกรอบในส่วน standalone (เห็นเป็น "ครั้งที่มาใช้บริการ" ซ้ำสองรายการทั้งที่
 // เป็นครั้งเดียวกัน)
-async function buildVisitHistory(filterColumn, filterId) {
+async function buildVisitHistory(filterColumn, filterId, shopId) {
   const [jobRows] = await pool.execute(
     `SELECT j.id AS job_id, j.job_no, j.queue_no, j.job_date, j.status, j.symptom, j.mileage_in,
             q.id AS quotation_id, q.quotation_no, q.status AS quotation_status, q.total_amount,
@@ -20,9 +20,9 @@ async function buildVisitHistory(filterColumn, filterId) {
      FROM jobs j
      LEFT JOIN quotations q ON q.id = j.quotation_id
      LEFT JOIN receipts r ON r.id = q.converted_receipt_id
-     WHERE j.${filterColumn} = ?
+     WHERE j.${filterColumn} = ? AND j.shop_id = ?
      ORDER BY j.job_date DESC, j.id DESC`,
-    [filterId]
+    [filterId, shopId]
   );
 
   // รูปรถตอนรับเข้า/รูปอะไหล่ที่เปลี่ยน — ให้พนักงานคนอื่น (หรือลูกค้าที่มาดูย้อนหลัง)
@@ -46,10 +46,10 @@ async function buildVisitHistory(filterColumn, filterId) {
             q.total_amount, q.deposit_amount, q.deposit_date, r.receipt_no
      FROM quotations q
      LEFT JOIN receipts r ON r.id = q.converted_receipt_id
-     WHERE q.${filterColumn} = ?
-       AND q.id NOT IN (SELECT quotation_id FROM jobs WHERE quotation_id IS NOT NULL)
+     WHERE q.${filterColumn} = ? AND q.shop_id = ?
+       AND q.id NOT IN (SELECT quotation_id FROM jobs WHERE quotation_id IS NOT NULL AND shop_id = ?)
      ORDER BY q.quotation_date DESC, q.id DESC`,
-    [filterId]
+    [filterId, shopId, shopId]
   );
 
   const quotationIds = [...jobRows, ...standaloneRows].map((r) => r.quotation_id).filter(Boolean);

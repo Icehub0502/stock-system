@@ -11,7 +11,8 @@ router.use(authenticate, requireOwner);
 router.get('/', async (req, res) => {
   try {
     const [rows] = await pool.execute(
-      'SELECT id, username, full_name, role, created_at FROM users ORDER BY id'
+      'SELECT id, username, full_name, role, created_at FROM users WHERE shop_id = ? ORDER BY id',
+      [req.shopId]
     );
     res.json(rows);
   } catch (err) {
@@ -30,12 +31,12 @@ router.post('/', async (req, res) => {
   }
   try {
     const [result] = await pool.execute(
-      'INSERT INTO users (username, password_hash, full_name, role) VALUES (?, ?, ?, ?)',
-      [String(username).trim(), bcrypt.hashSync(password, 10), String(full_name).trim(), role]
+      'INSERT INTO users (shop_id, username, password_hash, full_name, role) VALUES (?, ?, ?, ?, ?)',
+      [req.shopId, String(username).trim(), bcrypt.hashSync(password, 10), String(full_name).trim(), role]
     );
     const [rows] = await pool.execute(
-      'SELECT id, username, full_name, role FROM users WHERE id = ?',
-      [result.insertId]
+      'SELECT id, username, full_name, role FROM users WHERE id = ? AND shop_id = ?',
+      [result.insertId, req.shopId]
     );
     res.status(201).json(rows[0]);
   } catch (err) {
@@ -49,7 +50,7 @@ router.post('/', async (req, res) => {
 
 router.put('/:id', async (req, res) => {
   try {
-    const [existingRows] = await pool.execute('SELECT * FROM users WHERE id = ?', [req.params.id]);
+    const [existingRows] = await pool.execute('SELECT * FROM users WHERE id = ? AND shop_id = ?', [req.params.id, req.shopId]);
     const existing = existingRows[0];
     if (!existing) return res.status(404).json({ error: 'ไม่พบผู้ใช้' });
 
@@ -60,8 +61,8 @@ router.put('/:id', async (req, res) => {
     const password_hash = password ? bcrypt.hashSync(password, 10) : existing.password_hash;
 
     await pool.execute(
-      'UPDATE users SET full_name = ?, role = ?, password_hash = ? WHERE id = ?',
-      [full_name, role, password_hash, req.params.id]
+      'UPDATE users SET full_name = ?, role = ?, password_hash = ? WHERE id = ? AND shop_id = ?',
+      [full_name, role, password_hash, req.params.id, req.shopId]
     );
     res.json({ success: true });
   } catch (err) {
@@ -72,14 +73,14 @@ router.put('/:id', async (req, res) => {
 
 router.delete('/:id', async (req, res) => {
   try {
-    const [existingRows] = await pool.execute('SELECT * FROM users WHERE id = ?', [req.params.id]);
+    const [existingRows] = await pool.execute('SELECT * FROM users WHERE id = ? AND shop_id = ?', [req.params.id, req.shopId]);
     if (!existingRows[0]) return res.status(404).json({ error: 'ไม่พบผู้ใช้' });
     // กันลบบัญชีตัวเอง (ice) ทิ้งเผลอ — จะล็อกตัวเองออกจากหน้าตั้งค่าทันทีโดยไม่มีทาง
     // กู้คืนผ่านเว็บอีก (ต้องเข้า DB ตรง ๆ)
     if (Number(req.params.id) === req.user.id) {
       return res.status(400).json({ error: 'ลบบัญชีของตัวเองไม่ได้' });
     }
-    await pool.execute('DELETE FROM users WHERE id = ?', [req.params.id]);
+    await pool.execute('DELETE FROM users WHERE id = ? AND shop_id = ?', [req.params.id, req.shopId]);
     res.json({ success: true });
   } catch (err) {
     console.error(err);

@@ -4,6 +4,7 @@ const { authenticate, requireRole } = require('../middleware/auth');
 const { buildVisitHistory } = require('../utils/visitHistory');
 const { CLOSED_STATUSES } = require('../utils/jobStatusFlow');
 const { THAI_PROVINCES } = require('../utils/thaiProvinces');
+const { ownsRow } = require('../utils/tenant');
 
 const router = express.Router();
 router.use(authenticate);
@@ -23,7 +24,9 @@ router.get('/', requireRole('office'), async (req, res) => {
       `SELECT v.*, c.customer_name, c.customer_code
        FROM vehicles v
        JOIN customers c ON v.customer_id = c.id
-       ORDER BY v.created_at DESC`
+       WHERE v.shop_id = ?
+       ORDER BY v.created_at DESC`,
+      [req.shopId]
     );
     res.json({ success: true, data: rows });
   } catch (err) {
@@ -35,8 +38,8 @@ router.get('/', requireRole('office'), async (req, res) => {
 router.get('/:id', async (req, res) => {
   try {
     const [rows] = await pool.execute(
-      'SELECT * FROM vehicles WHERE id = ?',
-      [req.params.id]
+      'SELECT * FROM vehicles WHERE id = ? AND shop_id = ?',
+      [req.params.id, req.shopId]
     );
     if (rows.length === 0) {
       return res.status(404).json({ error: 'ไม่พบรถ' });
@@ -54,12 +57,12 @@ router.get('/:id/history', requireRole('office'), async (req, res) => {
     const [[vehicle]] = await pool.query(
       `SELECT v.*, c.customer_name, c.customer_code, c.phone
        FROM vehicles v JOIN customers c ON c.id = v.customer_id
-       WHERE v.id = ?`,
-      [req.params.id]
+       WHERE v.id = ? AND v.shop_id = ?`,
+      [req.params.id, req.shopId]
     );
     if (!vehicle) return res.status(404).json({ error: 'ไม่พบรถ' });
 
-    const visits = await buildVisitHistory('vehicle_id', req.params.id);
+    const visits = await buildVisitHistory('vehicle_id', req.params.id, req.shopId);
     res.json({ success: true, data: { vehicle, visits } });
   } catch (err) {
     console.error('Error fetching vehicle history:', err);
@@ -79,13 +82,13 @@ router.get('/:id/open-quotation', requireRole('office'), async (req, res) => {
     const [[quotation]] = await pool.query(
       `SELECT id, quotation_no, quotation_date, status, total_amount, deposit_amount, deposit_date, symptom
        FROM quotations
-       WHERE vehicle_id = ? AND closed_at IS NULL
+       WHERE vehicle_id = ? AND shop_id = ? AND closed_at IS NULL
          AND id NOT IN (
            SELECT quotation_id FROM jobs
-           WHERE quotation_id IS NOT NULL AND status NOT IN (${CLOSED_STATUSES.map(() => '?').join(',')})
+           WHERE quotation_id IS NOT NULL AND shop_id = ? AND status NOT IN (${CLOSED_STATUSES.map(() => '?').join(',')})
          )
        ORDER BY created_at DESC LIMIT 1`,
-      [req.params.id, ...CLOSED_STATUSES]
+      [req.params.id, req.shopId, req.shopId, ...CLOSED_STATUSES]
     );
     res.json({ success: true, data: quotation || null });
   } catch (err) {
@@ -104,13 +107,13 @@ router.get('/:id/open-quotations', requireRole('office'), async (req, res) => {
       `SELECT id, quotation_no, quotation_date, status, total_amount, deposit_amount, deposit_date,
               symptom, decline_reason, product_summary
        FROM quotations
-       WHERE vehicle_id = ? AND closed_at IS NULL
+       WHERE vehicle_id = ? AND shop_id = ? AND closed_at IS NULL
          AND id NOT IN (
            SELECT quotation_id FROM jobs
-           WHERE quotation_id IS NOT NULL AND status NOT IN (${[...CLOSED_STATUSES, 'rejected'].map(() => '?').join(',')})
+           WHERE quotation_id IS NOT NULL AND shop_id = ? AND status NOT IN (${[...CLOSED_STATUSES, 'rejected'].map(() => '?').join(',')})
          )
        ORDER BY created_at DESC LIMIT 10`,
-      [req.params.id, ...CLOSED_STATUSES, 'rejected']
+      [req.params.id, req.shopId, req.shopId, ...CLOSED_STATUSES, 'rejected']
     );
     res.json({ success: true, data: rows });
   } catch (err) {
@@ -126,10 +129,13 @@ router.post('/', requireRole('office'), async (req, res) => {
   }
   if (cleanProvince(province) === undefined) return res.status(400).json(INVALID_PROVINCE);
   try {
+    if (!(await ownsRow(pool, 'customers', customer_id, req.shopId))) {
+      return res.status(404).json({ error: 'ไม่พบลูกค้า' });
+    }
     const [vehicleResult] = await pool.execute(
-      `INSERT INTO vehicles (customer_id, brand, model, color, license_plate, province, mileage, year)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      [customer_id, brand, model, color || null, license_plate || null, cleanProvince(province), Number(mileage) || 0, Number(year) || null]
+      `INSERT INTO vehicles (shop_id, customer_id, brand, model, color, license_plate, province, mileage, year)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [req.shopId, customer_id, brand, model, color || null, license_plate || null, cleanProvince(province), Number(mileage) || 0, Number(year) || null]
     );
     res.status(201).json({ success: true, data: { id: vehicleResult.insertId } });
   } catch (err) {
@@ -146,8 +152,8 @@ router.put('/:id', requireRole('office'), async (req, res) => {
   if (cleanProvince(province) === undefined) return res.status(400).json(INVALID_PROVINCE);
   try {
     const [result] = await pool.execute(
-      `UPDATE vehicles SET brand = ?, model = ?, color = ?, license_plate = ?, province = ?, mileage = ?, year = ? WHERE id = ?`,
-      [brand, model, color || null, license_plate || null, cleanProvince(province), Number(mileage) || 0, Number(year) || null, req.params.id]
+      `UPDATE vehicles SET brand = ?, model = ?, color = ?, license_plate = ?, province = ?, mileage = ?, year = ? WHERE id = ? AND shop_id = ?`,
+      [brand, model, color || null, license_plate || null, cleanProvince(province), Number(mileage) || 0, Number(year) || null, req.params.id, req.shopId]
     );
     if (result.affectedRows === 0) {
       return res.status(404).json({ error: 'ไม่พบรถ' });
@@ -167,14 +173,14 @@ router.delete('/:id', requireRole('office'), async (req, res) => {
     // เป็น RESTRICT อยู่แล้วจึง error ชัดเจนถ้ามีใบเสร็จผูกอยู่ — จุดนี้เป็นแค่ช่องโหว่
     // ฝั่งใบเสนอราคาที่ยังไม่ปิดบิล)
     const [[{ quotationCount }]] = await pool.query(
-      `SELECT COUNT(*) AS quotationCount FROM quotations WHERE vehicle_id = ? AND closed_at IS NULL`,
-      [req.params.id]
+      `SELECT COUNT(*) AS quotationCount FROM quotations WHERE vehicle_id = ? AND shop_id = ? AND closed_at IS NULL`,
+      [req.params.id, req.shopId]
     );
     if (quotationCount > 0) {
       return res.status(409).json({ error: `รถคันนี้มีใบเสนอราคาที่ยังไม่ปิดบิลผูกอยู่ ${quotationCount} ใบ กรุณาจัดการใบเสนอราคาก่อน` });
     }
 
-    const [result] = await pool.execute('DELETE FROM vehicles WHERE id = ?', [req.params.id]);
+    const [result] = await pool.execute('DELETE FROM vehicles WHERE id = ? AND shop_id = ?', [req.params.id, req.shopId]);
     if (result.affectedRows === 0) {
       return res.status(404).json({ error: 'ไม่พบรถ' });
     }

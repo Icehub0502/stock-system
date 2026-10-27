@@ -20,6 +20,7 @@ const { generateJobNo } = require('../utils/generateJobNo');
 const { syncJobOnQuotationStatusChange } = require('../utils/jobQuotationSync');
 const { LINE_MESSAGE_DEFAULTS } = require('../utils/lineMessageDefaults');
 const { applyReceiptSplits, parseSplitsFromText } = require('../utils/paymentMethods');
+const { DEFAULT_SHOP_ID } = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -199,9 +200,10 @@ async function pushToLine(groupId, text) {
 // customers.routes.js (แก้ไขข้อมูลผ่านหน้าเว็บ) push ข้อความกลับเข้ากลุ่มได้เอง
 // โดยไม่ต้องตั้งค่าอะไรเพิ่ม (ดักจับอัตโนมัติจากข้อความแรกที่กลุ่มส่งเข้ามา — ดู
 // captureGroupId ด้านล่าง) ──
-async function getSetting(key) {
+// shopId: ไม่ส่ง = ร้านที่ 1 (บอทไลน์ยังผูกกับร้านที่ 1 ร้านเดียวจนกว่าจะแยกบอทต่อร้าน)
+async function getSetting(key, shopId = DEFAULT_SHOP_ID) {
   try {
-    const [[row]] = await pool.query('SELECT value FROM app_settings WHERE `key` = ?', [key]);
+    const [[row]] = await pool.query('SELECT value FROM app_settings WHERE shop_id = ? AND `key` = ?', [shopId, key]);
     return row ? row.value : null;
   } catch (err) {
     console.error('Error reading app_settings:', err);
@@ -209,11 +211,11 @@ async function getSetting(key) {
   }
 }
 
-async function setSetting(key, value) {
+async function setSetting(key, value, shopId = DEFAULT_SHOP_ID) {
   try {
     await pool.execute(
-      'INSERT INTO app_settings (`key`, value) VALUES (?, ?) ON DUPLICATE KEY UPDATE value = VALUES(value)',
-      [key, value]
+      'INSERT INTO app_settings (shop_id, `key`, value) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE value = VALUES(value)',
+      [shopId, key, value]
     );
   } catch (err) {
     console.error('Error writing app_settings:', err);
@@ -341,9 +343,9 @@ function renderTemplate(template, vars) {
 // ทุกข้อความที่บอทตอบกลับ (ทั้ง 3 ตัว) แก้ไขได้จากหน้าตั้งค่าแล้ว — เก็บอยู่ใน
 // app_settings ทีละ key (ดู utils/lineMessageDefaults.js สำหรับทะเบียน key/ข้อความ
 // เริ่มต้นทั้งหมด) ยังไม่มีใครตั้งค่าเอง (ปกติ) ก็ใช้ค่าเริ่มต้นจากทะเบียนนั้นแทน
-async function getMessageTemplate(key) {
+async function getMessageTemplate(key, shopId = DEFAULT_SHOP_ID) {
   const def = LINE_MESSAGE_DEFAULTS[key];
-  const stored = await getSetting(key);
+  const stored = await getSetting(key, shopId);
   return stored || (def ? def.default : '');
 }
 

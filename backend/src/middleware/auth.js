@@ -2,6 +2,8 @@ const jwt = require('jsonwebtoken');
 require('dotenv').config();
 const { JWT_SECRET } = require('../config');
 
+const DEFAULT_SHOP_ID = 1;
+
 function verifyToken(token) {
   return jwt.verify(token, JWT_SECRET);
 }
@@ -14,7 +16,10 @@ function authenticate(req, res, next) {
   }
   try {
     const payload = verifyToken(token);
-    req.user = payload; // { id, username, role, full_name }
+    req.user = payload; // { id, username, role, full_name, shop_id }
+    // ทุก query ของ route ต้องกรองด้วย req.shopId (ร้านของผู้ที่ล็อกอิน) — token ที่ออกก่อนเริ่มระบบ
+    // หลายร้านไม่มี shop_id แต่ตอนนั้นมีร้านเดียว (ร้านที่ 1) จึงถือเป็นร้านที่ 1
+    req.shopId = Number(payload.shop_id) || DEFAULT_SHOP_ID;
     next();
   } catch (err) {
     return res.status(401).json({ error: 'Token ไม่ถูกต้องหรือหมดอายุ กรุณาเข้าสู่ระบบใหม่' });
@@ -40,4 +45,4 @@ function requireOwner(req, res, next) {
   next();
 }
 
-module.exports = { authenticate, requireRole, requireOwner, verifyToken };
+module.exports = { authenticate, requireRole, requireOwner, verifyToken, DEFAULT_SHOP_ID };

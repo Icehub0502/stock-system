@@ -21,7 +21,7 @@ const MESSAGE_KEYS = Object.keys(LINE_MESSAGE_DEFAULTS);
 // ก็อปปี้แยกไว้เอง (ที่ผ่านมาสองจุดนี้เพี้ยนกันจนบอทอ่านไม่รู้จักบรรทัดที่เปลี่ยนไป)
 router.get('/line-template-blank', async (req, res) => {
   try {
-    const template = await getMessageTemplate('line_template_blank');
+    const template = await getMessageTemplate('line_template_blank', req.shopId);
     res.json({ template });
   } catch (err) {
     console.error('Error loading blank LINE template:', err);
@@ -32,8 +32,8 @@ router.get('/line-template-blank', async (req, res) => {
 router.get('/line', requireOwner, async (req, res) => {
   try {
     const [groupIdValues, messageValues] = await Promise.all([
-      Promise.all(GROUP_ID_KEYS.map((k) => getSetting(k))),
-      Promise.all(MESSAGE_KEYS.map((k) => getSetting(k))),
+      Promise.all(GROUP_ID_KEYS.map((k) => getSetting(k, req.shopId))),
+      Promise.all(MESSAGE_KEYS.map((k) => getSetting(k, req.shopId))),
     ]);
 
     const group_ids = {};
@@ -75,13 +75,13 @@ router.put('/line', requireOwner, async (req, res) => {
   try {
     const writes = [];
     GROUP_ID_KEYS.forEach((k) => {
-      if (typeof group_ids[k] === 'string') writes.push(setSetting(k, group_ids[k].trim()));
+      if (typeof group_ids[k] === 'string') writes.push(setSetting(k, group_ids[k].trim(), req.shopId));
     });
     // เขียนเฉพาะ key ที่รู้จักจริงในทะเบียน (กันเผลอส่ง key แปลกปลอมมาเขียนลง
     // app_settings) และต้องเป็นสตริงเท่านั้น
     Object.keys(messages).forEach((key) => {
       if (LINE_MESSAGE_DEFAULTS[key] && typeof messages[key] === 'string') {
-        writes.push(setSetting(key, messages[key]));
+        writes.push(setSetting(key, messages[key], req.shopId));
       }
     });
     await Promise.all(writes);
@@ -96,7 +96,7 @@ router.put('/line', requireOwner, async (req, res) => {
 // "ลูกค้าไม่ได้ทำ") แต่แก้ไข/เพิ่ม/ลบได้เฉพาะเจ้าของร้านจากหน้าตั้งค่านี้เท่านั้น
 router.get('/decline-reasons', async (req, res) => {
   try {
-    const [rows] = await pool.execute('SELECT id, label, sort_order FROM decline_reasons ORDER BY sort_order, id');
+    const [rows] = await pool.execute('SELECT id, label, sort_order FROM decline_reasons WHERE shop_id = ? ORDER BY sort_order, id', [req.shopId]);
     res.json({ success: true, data: rows });
   } catch (err) {
     console.error('Error loading decline reasons:', err);
@@ -110,10 +110,10 @@ router.post('/decline-reasons', requireOwner, async (req, res) => {
     return res.status(400).json({ error: 'กรุณากรอกเหตุผล' });
   }
   try {
-    const [[{ maxOrder }]] = await pool.query('SELECT COALESCE(MAX(sort_order), 0) AS maxOrder FROM decline_reasons');
+    const [[{ maxOrder }]] = await pool.query('SELECT COALESCE(MAX(sort_order), 0) AS maxOrder FROM decline_reasons WHERE shop_id = ?', [req.shopId]);
     const [result] = await pool.execute(
-      'INSERT INTO decline_reasons (label, sort_order) VALUES (?, ?)',
-      [label.trim(), maxOrder + 1]
+      'INSERT INTO decline_reasons (shop_id, label, sort_order) VALUES (?, ?, ?)',
+      [req.shopId, label.trim(), maxOrder + 1]
     );
     res.status(201).json({ success: true, data: { id: result.insertId } });
   } catch (err) {
@@ -128,7 +128,7 @@ router.put('/decline-reasons/:id', requireOwner, async (req, res) => {
     return res.status(400).json({ error: 'กรุณากรอกเหตุผล' });
   }
   try {
-    const [result] = await pool.execute('UPDATE decline_reasons SET label = ? WHERE id = ?', [label.trim(), req.params.id]);
+    const [result] = await pool.execute('UPDATE decline_reasons SET label = ? WHERE id = ? AND shop_id = ?', [label.trim(), req.params.id, req.shopId]);
     if (result.affectedRows === 0) return res.status(404).json({ error: 'ไม่พบเหตุผลนี้' });
     res.json({ success: true });
   } catch (err) {
@@ -139,7 +139,7 @@ router.put('/decline-reasons/:id', requireOwner, async (req, res) => {
 
 router.delete('/decline-reasons/:id', requireOwner, async (req, res) => {
   try {
-    const [result] = await pool.execute('DELETE FROM decline_reasons WHERE id = ?', [req.params.id]);
+    const [result] = await pool.execute('DELETE FROM decline_reasons WHERE id = ? AND shop_id = ?', [req.params.id, req.shopId]);
     if (result.affectedRows === 0) return res.status(404).json({ error: 'ไม่พบเหตุผลนี้' });
     res.json({ success: true });
   } catch (err) {

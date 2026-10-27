@@ -8,7 +8,7 @@ router.use(requireRole('office'));
 
 router.get('/', async (req, res) => {
   try {
-    const [rows] = await pool.execute('SELECT id, name FROM technicians ORDER BY name ASC');
+    const [rows] = await pool.execute('SELECT id, name FROM technicians WHERE shop_id = ? ORDER BY name ASC', [req.shopId]);
     res.json({ success: true, data: rows });
   } catch (err) {
     console.error('Error loading technicians:', err);
@@ -23,8 +23,8 @@ router.post('/', async (req, res) => {
   const name = String(req.body?.name || '').trim();
   if (!name) return res.status(400).json({ error: 'กรุณากรอกชื่อช่าง' });
   try {
-    await pool.execute('INSERT IGNORE INTO technicians (name) VALUES (?)', [name]);
-    const [[row]] = await pool.query('SELECT id, name FROM technicians WHERE name = ?', [name]);
+    await pool.execute('INSERT IGNORE INTO technicians (shop_id, name) VALUES (?, ?)', [req.shopId, name]);
+    const [[row]] = await pool.query('SELECT id, name FROM technicians WHERE shop_id = ? AND name = ?', [req.shopId, name]);
     res.status(201).json({ success: true, data: row });
   } catch (err) {
     console.error('Error creating technician:', err);
@@ -40,9 +40,9 @@ router.put('/:id', requireOwner, async (req, res) => {
   const name = String(req.body?.name || '').trim();
   if (!name) return res.status(400).json({ error: 'กรุณากรอกชื่อช่าง' });
   try {
-    const [[existing]] = await pool.query('SELECT id FROM technicians WHERE id = ?', [req.params.id]);
+    const [[existing]] = await pool.query('SELECT id FROM technicians WHERE id = ? AND shop_id = ?', [req.params.id, req.shopId]);
     if (!existing) return res.status(404).json({ error: 'ไม่พบช่างนี้' });
-    await pool.execute('UPDATE technicians SET name = ? WHERE id = ?', [name, req.params.id]);
+    await pool.execute('UPDATE technicians SET name = ? WHERE id = ? AND shop_id = ?', [name, req.params.id, req.shopId]);
     res.json({ success: true, data: { id: Number(req.params.id), name } });
   } catch (err) {
     if (err.code === 'ER_DUP_ENTRY') {
@@ -55,9 +55,9 @@ router.put('/:id', requireOwner, async (req, res) => {
 
 router.delete('/:id', requireOwner, async (req, res) => {
   try {
-    const [[existing]] = await pool.query('SELECT id FROM technicians WHERE id = ?', [req.params.id]);
+    const [[existing]] = await pool.query('SELECT id FROM technicians WHERE id = ? AND shop_id = ?', [req.params.id, req.shopId]);
     if (!existing) return res.status(404).json({ error: 'ไม่พบช่างนี้' });
-    await pool.execute('DELETE FROM technicians WHERE id = ?', [req.params.id]);
+    await pool.execute('DELETE FROM technicians WHERE id = ? AND shop_id = ?', [req.params.id, req.shopId]);
     res.json({ success: true });
   } catch (err) {
     console.error('Error deleting technician:', err);

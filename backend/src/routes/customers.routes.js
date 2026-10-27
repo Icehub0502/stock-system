@@ -21,9 +21,10 @@ router.use(requireRole('office'));
 // ล็อกแถวที่อ่านไว้จนกว่า transaction นั้นจะ commit กัน 2 คำขอสร้างลูกค้าพร้อมกัน
 // อ่าน MAX เดิมแล้วได้รหัสลูกค้าซ้ำกัน (ชนกับ UNIQUE ที่ customer_code แล้ว rollback
 // ทั้งฟอร์มทิ้งไปเฉย ๆ) ไม่มี conn ส่งมาใช้ pool เฉย ๆ ไม่ต้องล็อกอะไร
-async function generateCustomerCode(conn = pool) {
+async function generateCustomerCode(conn, shopId) {
   const [rows] = await conn.execute(
-    "SELECT MAX(CAST(SUBSTRING(customer_code, 5) AS UNSIGNED)) AS maxCode FROM customers WHERE customer_code LIKE 'CMM-%' FOR UPDATE"
+    "SELECT MAX(CAST(SUBSTRING(customer_code, 5) AS UNSIGNED)) AS maxCode FROM customers WHERE shop_id = ? AND customer_code LIKE 'CMM-%' FOR UPDATE",
+    [shopId]
   );
   const nextNumber = (rows[0]?.maxCode || 0) + 1;
   return `CMM-${String(nextNumber).padStart(4, '0')}`;
@@ -44,10 +45,11 @@ router.get('/', async (req, res) => {
                 GROUP_CONCAT(DISTINCT CONCAT(v.brand, ' ', v.model, ' (', v.license_plate, ')') SEPARATOR ', ') AS vehicles_summary
          FROM customers c
          LEFT JOIN vehicles v ON v.customer_id = c.id
-         WHERE c.found_via IS NOT NULL
+         WHERE c.shop_id = ? AND c.found_via IS NOT NULL
          GROUP BY c.id
          ORDER BY c.updated_at DESC
-         LIMIT 2000`
+         LIMIT 2000`,
+        [req.shopId]
       );
       return res.json({ success: true, data: rows });
     }
@@ -65,9 +67,10 @@ router.get('/', async (req, res) => {
         FROM customers c
         LEFT JOIN vehicles v ON v.customer_id = c.id
       `;
-      const params = [];
+      const params = [req.shopId];
+      sql += ' WHERE c.shop_id = ?';
       if (search) {
-        sql += ' WHERE c.customer_name LIKE ? OR c.phone LIKE ? OR v.license_plate LIKE ?';
+        sql += ' AND (c.customer_name LIKE ? OR c.phone LIKE ? OR v.license_plate LIKE ?)';
         const term = `%${search}%`;
         params.push(term, term, term);
       }
@@ -79,11 +82,11 @@ router.get('/', async (req, res) => {
     // LIMIT กันดึงทั้งตารางเวลาลูกค้าเยอะขึ้นเรื่อย ๆ — หน้า CustomerManagementPage
     // ค้นหาผ่าน search (server-side LIKE) เสมออยู่แล้ว ไม่ได้กรอง/รวมข้อมูลฝั่ง
     // client จากทั้งชุด จึงตัดด้วย LIMIT ตรงนี้ได้อย่างปลอดภัย (เหมือน receipts.routes.js)
-    let query = 'SELECT id, customer_code, customer_name, phone, created_at, updated_at FROM customers ORDER BY created_at DESC LIMIT 200';
-    const params = [];
+    let query = 'SELECT id, customer_code, customer_name, phone, created_at, updated_at FROM customers WHERE shop_id = ? ORDER BY created_at DESC LIMIT 200';
+    const params = [req.shopId];
 
     if (search) {
-      query = 'SELECT id, customer_code, customer_name, phone, created_at, updated_at FROM customers WHERE customer_name LIKE ? OR phone LIKE ? OR customer_code LIKE ? ORDER BY created_at DESC LIMIT 200';
+      query = 'SELECT id, customer_code, customer_name, phone, created_at, updated_at FROM customers WHERE shop_id = ? AND (customer_name LIKE ? OR phone LIKE ? OR customer_code LIKE ?) ORDER BY created_at DESC LIMIT 200';
       const term = `%${search}%`;
       params.push(term, term, term);
     }
@@ -99,8 +102,8 @@ router.get('/', async (req, res) => {
 router.get('/:id', async (req, res) => {
   try {
     const [rows] = await pool.execute(
-      'SELECT id, customer_code, customer_name, phone, created_at, updated_at FROM customers WHERE id = ?',
-      [req.params.id]
+      'SELECT id, customer_code, customer_name, phone, created_at, updated_at FROM customers WHERE id = ? AND shop_id = ?',
+      [req.params.id, req.shopId]
     );
 
     if (rows.length === 0) {
@@ -117,14 +120,14 @@ router.get('/:id', async (req, res) => {
 // ── ประวัติการเข้ารับบริการของลูกค้าคนนี้ (ทุกรถ ทุกครั้ง) ──
 router.get('/:id/history', async (req, res) => {
   try {
-    const [[customer]] = await pool.query('SELECT * FROM customers WHERE id = ?', [req.params.id]);
+    const [[customer]] = await pool.query('SELECT * FROM customers WHERE id = ? AND shop_id = ?', [req.params.id, req.shopId]);
     if (!customer) return res.status(404).json({ error: 'ไม่พบลูกค้า' });
 
     const [vehicles] = await pool.query(
-      'SELECT id, brand, model, color, license_plate, mileage FROM vehicles WHERE customer_id = ? ORDER BY created_at',
-      [req.params.id]
+      'SELECT id, brand, model, color, license_plate, mileage FROM vehicles WHERE customer_id = ? AND shop_id = ? ORDER BY created_at',
+      [req.params.id, req.shopId]
     );
-    const visits = await buildVisitHistory('customer_id', req.params.id);
+    const visits = await buildVisitHistory('customer_id', req.params.id, req.shopId);
     res.json({ success: true, data: { customer, vehicles, visits } });
   } catch (err) {
     console.error('Error fetching customer history:', err);
@@ -149,10 +152,10 @@ router.post('/', async (req, res) => {
     conn = await pool.getConnection();
     await conn.beginTransaction();
 
-    const customer_code = await generateCustomerCode(conn);
+    const customer_code = await generateCustomerCode(conn, req.shopId);
     const [result] = await conn.execute(
-      'INSERT INTO customers (customer_code, customer_name, phone) VALUES (?, ?, ?)',
-      [customer_code, customer_name, normalizePhone(phone)]
+      'INSERT INTO customers (shop_id, customer_code, customer_name, phone) VALUES (?, ?, ?, ?)',
+      [req.shopId, customer_code, customer_name, normalizePhone(phone)]
     );
 
     await conn.commit();
@@ -183,8 +186,8 @@ router.put('/:id', async (req, res) => {
 
   try {
     const [result] = await pool.execute(
-      'UPDATE customers SET customer_name = ?, phone = ? WHERE id = ?',
-      [customer_name, normalizePhone(phone), req.params.id]
+      'UPDATE customers SET customer_name = ?, phone = ? WHERE id = ? AND shop_id = ?',
+      [customer_name, normalizePhone(phone), req.params.id, req.shopId]
     );
 
     if (result.affectedRows === 0) {
@@ -223,8 +226,8 @@ router.patch('/:id/found-via', async (req, res) => {
 
   try {
     const [result] = await pool.execute(
-      'UPDATE customers SET found_via = ?, found_via_note = ? WHERE id = ?',
-      [channel, channel === 'other' ? note.trim() : null, id]
+      'UPDATE customers SET found_via = ?, found_via_note = ? WHERE id = ? AND shop_id = ?',
+      [channel, channel === 'other' ? note.trim() : null, id, req.shopId]
     );
     if (result.affectedRows === 0) {
       return res.status(404).json({ error: 'ไม่พบลูกค้า' });
@@ -242,14 +245,14 @@ router.delete('/:id', async (req, res) => {
     // จะหายไปด้วยแบบเงียบ ๆ ไม่มีคำเตือนเลย (ต่างจากกรณีมีใบเสนอราคา/ใบเสร็จผูกอยู่ที่
     // อย่างน้อยยัง error ชัดเจนจาก FK constraint) กันไว้ก่อนให้ต้องลบรถออกเองก่อน
     const [[{ vehicleCount }]] = await pool.query(
-      'SELECT COUNT(*) AS vehicleCount FROM vehicles WHERE customer_id = ?',
-      [req.params.id]
+      'SELECT COUNT(*) AS vehicleCount FROM vehicles WHERE customer_id = ? AND shop_id = ?',
+      [req.params.id, req.shopId]
     );
     if (vehicleCount > 0) {
       return res.status(409).json({ error: `ลูกค้ารายนี้มีรถผูกอยู่ ${vehicleCount} คัน กรุณาลบข้อมูลรถออกก่อน` });
     }
 
-    const [result] = await pool.execute('DELETE FROM customers WHERE id = ?', [req.params.id]);
+    const [result] = await pool.execute('DELETE FROM customers WHERE id = ? AND shop_id = ?', [req.params.id, req.shopId]);
 
     if (result.affectedRows === 0) {
       return res.status(404).json({ error: 'ไม่พบลูกค้า' });

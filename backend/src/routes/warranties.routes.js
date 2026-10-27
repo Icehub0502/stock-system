@@ -8,7 +8,7 @@ router.use(requireRole('office'));
 
 router.get('/', async (req, res) => {
   try {
-    const [rows] = await pool.execute('SELECT * FROM warranties ORDER BY warranty_name ASC');
+    const [rows] = await pool.execute('SELECT * FROM warranties WHERE shop_id = ? ORDER BY warranty_name ASC', [req.shopId]);
     res.json({ success: true, data: rows });
   } catch (err) {
     console.error('Error loading warranties:', err);
@@ -23,8 +23,8 @@ router.post('/', async (req, res) => {
   }
   try {
     const [result] = await pool.execute(
-      'INSERT INTO warranties (warranty_name, warranty_year, warranty_month, warranty_km, is_active) VALUES (?, ?, ?, ?, ?)',
-      [warranty_name, Number(warranty_year) || 0, Number(warranty_month) || 0, Number(warranty_km) || 0, is_active ? 1 : 0]
+      'INSERT INTO warranties (shop_id, warranty_name, warranty_year, warranty_month, warranty_km, is_active) VALUES (?, ?, ?, ?, ?, ?)',
+      [req.shopId, warranty_name, Number(warranty_year) || 0, Number(warranty_month) || 0, Number(warranty_km) || 0, is_active ? 1 : 0]
     );
     res.status(201).json({ success: true, data: { id: result.insertId } });
   } catch (err) {
@@ -40,8 +40,8 @@ router.put('/:id', async (req, res) => {
   }
   try {
     const [result] = await pool.execute(
-      'UPDATE warranties SET warranty_name = ?, warranty_year = ?, warranty_month = ?, warranty_km = ?, is_active = ? WHERE id = ?',
-      [warranty_name, Number(warranty_year) || 0, Number(warranty_month) || 0, Number(warranty_km) || 0, is_active ? 1 : 0, req.params.id]
+      'UPDATE warranties SET warranty_name = ?, warranty_year = ?, warranty_month = ?, warranty_km = ?, is_active = ? WHERE id = ? AND shop_id = ?',
+      [warranty_name, Number(warranty_year) || 0, Number(warranty_month) || 0, Number(warranty_km) || 0, is_active ? 1 : 0, req.params.id, req.shopId]
     );
     if (result.affectedRows === 0) {
       return res.status(404).json({ error: 'ไม่พบการรับประกัน' });
@@ -55,7 +55,7 @@ router.put('/:id', async (req, res) => {
 
 router.delete('/:id', async (req, res) => {
   try {
-    const [result] = await pool.execute('DELETE FROM warranties WHERE id = ?', [req.params.id]);
+    const [result] = await pool.execute('DELETE FROM warranties WHERE id = ? AND shop_id = ?', [req.params.id, req.shopId]);
     if (result.affectedRows === 0) {
       return res.status(404).json({ error: 'ไม่พบการรับประกัน' });
     }
