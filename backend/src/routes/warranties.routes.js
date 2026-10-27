@@ -1,6 +1,7 @@
 const express = require('express');
 const pool = require('../db/pool');
 const { authenticate, requireRole } = require('../middleware/auth');
+const { trashDelete } = require('../utils/trash');
 
 const router = express.Router();
 router.use(authenticate);
@@ -55,8 +56,8 @@ router.put('/:id', async (req, res) => {
 
 router.delete('/:id', async (req, res) => {
   try {
-    const [result] = await pool.execute('DELETE FROM warranties WHERE id = ? AND shop_id = ?', [req.params.id, req.shopId]);
-    if (result.affectedRows === 0) {
+    const result = await trashDelete(pool, { table: 'warranties', id: req.params.id, shopId: req.shopId, user: req.user });
+    if (!result.deleted) {
       return res.status(404).json({ error: 'ไม่พบการรับประกัน' });
     }
     res.json({ success: true, message: 'ลบการรับประกันสำเร็จ' });

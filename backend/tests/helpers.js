@@ -131,6 +131,7 @@ async function dropShop(shopId) {
     }
     pending = failed;
   }
+  await pool.query('DELETE FROM deleted_records WHERE shop_id = ?', [shopId]);
   await pool.query('DELETE FROM shops WHERE id = ?', [shopId]);
 }
 

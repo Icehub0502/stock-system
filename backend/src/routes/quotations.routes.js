@@ -1,6 +1,7 @@
 const express = require('express');
 const pool = require('../db/pool');
 const { authenticate, requireRole, requireManager } = require('../middleware/auth');
+const { trashDelete } = require('../utils/trash');
 const { formatPhone } = require('../utils/parseLineQueueMessage');
 const { computeReceiptAmount } = require('./lineWebhook.routes');
 const { emitQuotationEvent, emitReceiptEvent, emitJobEvent } = require('../realtime');
@@ -1155,12 +1156,9 @@ router.delete('/:id', requireManager, async (req, res) => {
       return res.status(409).json({ error: 'ใบเสนอราคานี้อนุมัติและมีใบเสร็จผูกอยู่แล้ว กรุณาจัดการที่ใบเสร็จแทน' });
     }
 
-    const [result] = await pool.execute(
-      'DELETE FROM quotations WHERE id = ? AND shop_id = ?',
-      [id, req.shopId]
-    );
+    const result = await trashDelete(pool, { table: 'quotations', id, shopId: req.shopId, user: req.user });
 
-    if (result.affectedRows === 0) {
+    if (!result.deleted) {
       return res.status(404).json({ error: 'ไม่พบใบเสนอราคา' });
     }
 

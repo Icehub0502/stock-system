@@ -12,6 +12,9 @@ async function main() {
   // เชื่อมต่อ XAMPP MySQL, สร้าง database/ตารางอัตโนมัติถ้ายังไม่มี, และ seed ข้อมูลเริ่มต้น
   await initDatabase();
 
+  // trash clean-up (stays a no-op until the administrator turns it on)
+  require('./src/utils/trashCleanup').startTrashCleanupTimer();
+
   const app = createApp();
 
   const PORT_HTTP = process.env.PORT || process.env.PORT_HTTP || 4000;

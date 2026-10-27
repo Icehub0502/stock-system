@@ -2,6 +2,7 @@ const express = require('express');
 const QRCode = require('qrcode');
 const pool = require('../db/pool');
 const { authenticate, requireManager } = require('../middleware/auth');
+const { trashDelete } = require('../utils/trash');
 const {
   isValidJobStatus,
   CLOSED_STATUSES,
@@ -595,14 +596,13 @@ router.delete('/:id', requireManager, async (req, res) => {
       [req.params.id]
     );
 
-    const [result] = await conn.execute('DELETE FROM jobs WHERE id = ? AND shop_id = ?', [req.params.id, req.shopId]);
-    if (!result.affectedRows) { await conn.rollback(); return res.status(404).json({ error: 'ไม่พบงานนี้' }); }
+    // the photo files are NOT removed now: they stay on disk while the trash copy exists, so the job
+    // can be restored with its photos (the trash clean-up removes them later)
+    const photoFiles = photoRows.flatMap((row) => [row.photo_data, row.photo_thumb_data]).filter(Boolean);
+    const result = await trashDelete(conn, { table: 'jobs', id: req.params.id, shopId: req.shopId, user: req.user, photoFiles });
+    if (!result.deleted) { await conn.rollback(); return res.status(404).json({ error: 'ไม่พบงานนี้' }); }
 
     await conn.commit();
-    for (const row of photoRows) {
-      deleteUploadedFile(row.photo_data);
-      deleteUploadedFile(row.photo_thumb_data);
-    }
     emitJobEvent('job:deleted', { shopId: req.shopId, jobId: Number(req.params.id), jobDate: job.job_date, actorId: req.user.id });
     res.json({ success: true, message: 'ลบงานสำเร็จ' });
   } catch (err) {

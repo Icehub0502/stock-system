@@ -1,6 +1,7 @@
 const express = require('express');
 const pool = require('../db/pool');
 const { authenticate, requireRole, requireManager } = require('../middleware/auth');
+const { trashDelete } = require('../utils/trash');
 const { ownsRow } = require('../utils/tenant');
 
 const router = express.Router();
@@ -204,8 +205,8 @@ router.put('/:id', async (req, res) => {
 
 router.delete('/:id', requireManager, async (req, res) => {
   try {
-    const [result] = await pool.execute('DELETE FROM repair_notices WHERE id = ? AND shop_id = ?', [req.params.id, req.shopId]);
-    if (result.affectedRows === 0) return res.status(404).json({ error: 'ไม่พบใบแจ้งซ่อม' });
+    const result = await trashDelete(pool, { table: 'repair_notices', id: req.params.id, shopId: req.shopId, user: req.user });
+    if (!result.deleted) return res.status(404).json({ error: 'ไม่พบใบแจ้งซ่อม' });
     res.json({ success: true });
   } catch (err) {
     console.error('Error deleting repair notice:', err);

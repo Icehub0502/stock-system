@@ -1,6 +1,7 @@
 const express = require('express');
 const pool = require('../db/pool');
 const { authenticate, requireRole, requireManager } = require('../middleware/auth');
+const { trashDelete } = require('../utils/trash');
 const { formatPhone } = require('../utils/parseLineQueueMessage');
 const { applyReceiptSplits } = require('../utils/paymentMethods');
 const { emitReceiptEvent, emitQuotationEvent } = require('../realtime');
@@ -869,7 +870,7 @@ router.delete('/:id', requireManager, async (req, res) => {
     // เก็บ id ของใบเสนอราคาที่ผูกกับใบเสร็จนี้ไว้ก่อน UPDATE ด้านล่างจะล้าง
     // converted_receipt_id ทิ้ง — ใช้ยิง event แจ้งฝั่งใบเสนอราคาหลัง commit
     const [[linked]] = await conn.query(
-      'SELECT id FROM quotations WHERE converted_receipt_id = ? AND shop_id = ? LIMIT 1',
+      'SELECT id, status FROM quotations WHERE converted_receipt_id = ? AND shop_id = ? LIMIT 1',
       [req.params.id, req.shopId]
     );
 
@@ -881,8 +882,17 @@ router.delete('/:id', requireManager, async (req, res) => {
       [req.params.id, req.shopId]
     );
 
-    const [result] = await conn.execute('DELETE FROM receipts WHERE id = ? AND shop_id = ?', [req.params.id, req.shopId]);
-    if (result.affectedRows === 0) {
+    // the quotation's old state is kept with the copy, so restoring the receipt re-links it
+    const result = await trashDelete(conn, {
+      table: 'receipts',
+      id: req.params.id,
+      shopId: req.shopId,
+      user: req.user,
+      extraEffects: linked
+        ? [{ table: 'quotations', id: linked.id, set: { status: linked.status, converted_receipt_id: Number(req.params.id) }, expect: { status: 'pending', converted_receipt_id: null } }]
+        : [],
+    });
+    if (!result.deleted) {
       await conn.rollback();
       return res.status(404).json({ error: 'ไม่พบใบเสร็จ' });
     }

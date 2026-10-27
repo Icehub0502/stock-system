@@ -1,6 +1,7 @@
 const express = require('express');
 const pool = require('../db/pool');
 const { authenticate, requireRole } = require('../middleware/auth');
+const { trashDelete } = require('../utils/trash');
 const { formatPhone } = require('../utils/parseLineQueueMessage');
 const { buildVisitHistory } = require('../utils/visitHistory');
 
@@ -253,9 +254,9 @@ router.delete('/:id', async (req, res) => {
       return res.status(409).json({ error: `ลูกค้ารายนี้มีรถผูกอยู่ ${vehicleCount} คัน กรุณาลบข้อมูลรถออกก่อน` });
     }
 
-    const [result] = await pool.execute('DELETE FROM customers WHERE id = ? AND shop_id = ?', [req.params.id, req.shopId]);
+    const result = await trashDelete(pool, { table: 'customers', id: req.params.id, shopId: req.shopId, user: req.user });
 
-    if (result.affectedRows === 0) {
+    if (!result.deleted) {
       return res.status(404).json({ error: 'ไม่พบลูกค้า' });
     }
 

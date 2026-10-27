@@ -1,6 +1,7 @@
 const express = require('express');
 const pool = require('../db/pool');
 const { authenticate, requireRole, requireManager } = require('../middleware/auth');
+const { trashDelete } = require('../utils/trash');
 
 const router = express.Router();
 router.use(authenticate);
@@ -57,7 +58,7 @@ router.delete('/:id', requireManager, async (req, res) => {
   try {
     const [[existing]] = await pool.query('SELECT id FROM technicians WHERE id = ? AND shop_id = ?', [req.params.id, req.shopId]);
     if (!existing) return res.status(404).json({ error: 'ไม่พบช่างนี้' });
-    await pool.execute('DELETE FROM technicians WHERE id = ? AND shop_id = ?', [req.params.id, req.shopId]);
+    await trashDelete(pool, { table: 'technicians', id: req.params.id, shopId: req.shopId, user: req.user });
     res.json({ success: true });
   } catch (err) {
     console.error('Error deleting technician:', err);

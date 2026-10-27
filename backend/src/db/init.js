@@ -1171,6 +1171,9 @@ async function initDatabase() {
   // role levels (technician < office < manager < owner < dev) — see roleSchema.js
   await require('./roleSchema').migrateRoles(conn);
 
+  // trash (deleted records, restorable by the administrator) + platform-wide settings — see trashSchema.js
+  await require('./trashSchema').migrateTrash(conn);
+
   await conn.end();
 
   console.log(`[init-db] Database "${DB_NAME}" ready`);

@@ -1,6 +1,7 @@
 const express = require('express');
 const pool = require('../db/pool');
 const { authenticate, requireRole } = require('../middleware/auth');
+const { trashDelete } = require('../utils/trash');
 const { buildVisitHistory } = require('../utils/visitHistory');
 const { CLOSED_STATUSES } = require('../utils/jobStatusFlow');
 const { THAI_PROVINCES } = require('../utils/thaiProvinces');
@@ -180,8 +181,8 @@ router.delete('/:id', requireRole('office'), async (req, res) => {
       return res.status(409).json({ error: `รถคันนี้มีใบเสนอราคาที่ยังไม่ปิดบิลผูกอยู่ ${quotationCount} ใบ กรุณาจัดการใบเสนอราคาก่อน` });
     }
 
-    const [result] = await pool.execute('DELETE FROM vehicles WHERE id = ? AND shop_id = ?', [req.params.id, req.shopId]);
-    if (result.affectedRows === 0) {
+    const result = await trashDelete(pool, { table: 'vehicles', id: req.params.id, shopId: req.shopId, user: req.user });
+    if (!result.deleted) {
       return res.status(404).json({ error: 'ไม่พบรถ' });
     }
     res.json({ success: true, message: 'ลบรถสำเร็จ' });

@@ -1,6 +1,7 @@
 const express = require('express');
 const pool = require('../db/pool');
 const { authenticate, requireRole, requireManager } = require('../middleware/auth');
+const { trashDelete } = require('../utils/trash');
 const { ownsRow } = require('../utils/tenant');
 
 const router = express.Router();
@@ -183,8 +184,8 @@ router.put('/:id', async (req, res) => {
 
 router.delete('/:id', requireManager, async (req, res) => {
   try {
-    const [result] = await pool.execute('DELETE FROM claims WHERE id = ? AND shop_id = ?', [req.params.id, req.shopId]);
-    if (result.affectedRows === 0) return res.status(404).json({ error: 'ไม่พบเคลม' });
+    const result = await trashDelete(pool, { table: 'claims', id: req.params.id, shopId: req.shopId, user: req.user });
+    if (!result.deleted) return res.status(404).json({ error: 'ไม่พบเคลม' });
     res.json({ success: true });
   } catch (err) {
     console.error('Error deleting claim:', err);
