@@ -1,7 +1,7 @@
 const request = require('supertest');
 const { createApp } = require('../src/app');
 const pool = require('../src/db/pool');
-const { getOfficeToken, getTechnicianToken } = require('./helpers');
+const { getManagerToken, getTechnicianToken } = require('./helpers');
 
 const app = createApp();
 
@@ -12,7 +12,7 @@ describe('/api/stock-items — สต๊อกรวม', () => {
   const suffix = Date.now().toString(36);
 
   beforeAll(async () => {
-    token = await getOfficeToken();
+    token = await getManagerToken();
     const res = await request(app)
       .post('/api/stock-items/categories')
       .set('Authorization', `Bearer ${token}`)

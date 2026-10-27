@@ -115,8 +115,15 @@ async function migrateTenants(conn) {
     if (!(await tableExists(conn, table))) continue;
     const indexes = await uniqueIndexes(conn, table);
     const already = indexes.find((i) => i.cols[0] === 'shop_id' && i.cols.slice(1).join(',') === cols.join(','));
-    if (already) continue;
     const old = indexes.find((i) => i.cols.join(',') === cols.join(','));
+    if (already && !old) continue;
+    if (already && old) {
+      // init.js re-creates some of the old single-shop UNIQUE keys on every start (ADD UNIQUE ... ignoring
+      // "already exists"), because the per-shop key was created under another name — drop the old one again
+      await conn.query(`ALTER TABLE \`${table}\` DROP INDEX \`${old.name}\``);
+      log.push(`${table}.${cols.join('+')} old global UNIQUE dropped again`);
+      continue;
+    }
     if (!old) {
       console.warn(`[tenant] ${table}(${cols.join(',')}) has no UNIQUE index to convert — skipped`);
       continue;

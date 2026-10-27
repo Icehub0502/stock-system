@@ -1,6 +1,6 @@
 const express = require('express');
 const pool = require('../db/pool');
-const { authenticate, requireRole } = require('../middleware/auth');
+const { authenticate, requireRole, requireManager } = require('../middleware/auth');
 const { formatPhone } = require('../utils/parseLineQueueMessage');
 const { applyReceiptSplits } = require('../utils/paymentMethods');
 const { emitReceiptEvent, emitQuotationEvent } = require('../realtime');
@@ -313,7 +313,7 @@ router.patch('/:id/meta', async (req, res) => {
   }
 });
 
-router.patch('/:id/date', async (req, res) => {
+router.patch('/:id/date', requireManager, async (req, res) => {
   try {
     const { id } = req.params;
     const { receipt_date } = req.body || {};
@@ -335,7 +335,7 @@ router.patch('/:id/date', async (req, res) => {
   }
 });
 
-router.get('/top-products', async (req, res) => {
+router.get('/top-products', requireManager, async (req, res) => {
   try {
     // LIMIT/INTERVAL as bound placeholders (`?`) trip up some MySQL/MariaDB
     // versions (works on XAMPP's bundled MySQL, 500s on plain `apt install
@@ -364,7 +364,7 @@ router.get('/top-products', async (req, res) => {
   }
 });
 
-router.get('/top-vehicle-models', async (req, res) => {
+router.get('/top-vehicle-models', requireManager, async (req, res) => {
   try {
     const limit = Number(req.query.limit) > 0 ? Math.floor(Number(req.query.limit)) : 10;
     const [rows] = await pool.execute(
@@ -386,7 +386,7 @@ router.get('/top-vehicle-models', async (req, res) => {
   }
 });
 
-router.get('/top-customers', async (req, res) => {
+router.get('/top-customers', requireManager, async (req, res) => {
   try {
     const limit = Number(req.query.limit) > 0 ? Math.floor(Number(req.query.limit)) : 10;
     const [rows] = await pool.execute(
@@ -442,7 +442,7 @@ async function loadMethodBreakdown(periodExpr, shopId) {
   return out;
 }
 
-router.get('/daily-summary', async (req, res) => {
+router.get('/daily-summary', requireManager, async (req, res) => {
   try {
     // ไม่ใส่ LIMIT อีกต่อไป — หน้าสรุปยอดฝั่งเว็บเก็บเดือนเก่าไว้เป็น "แฟ้ม" ย้อนหลัง
     // ได้ไม่จำกัด (พับเก็บ ไม่ได้ลบทิ้ง) เดิม LIMIT 365 ตัดข้อมูลของปีก่อนหน้าออกไป
@@ -475,7 +475,7 @@ router.get('/daily-summary', async (req, res) => {
 // ลูกค้า/ยอดขายรวมของทั้งเดือน) ต้องคำนวณ customer_count ที่นี่แยกจาก daily-summary
 // เพราะเอาผลรวมของแต่ละวันมาบวกกันไม่ได้ (ลูกค้าคนเดียวมาหลายวันในเดือนเดียวกันจะถูก
 // นับซ้ำ) — COUNT(DISTINCT customer_id) ต้อง group ระดับเดือนตรง ๆ เท่านั้น
-router.get('/monthly-summary', async (req, res) => {
+router.get('/monthly-summary', requireManager, async (req, res) => {
   try {
     const [rows] = await pool.execute(
       `SELECT DATE_FORMAT(receipt_date, '%Y-%m-01') AS month,
@@ -688,7 +688,7 @@ router.post('/', async (req, res) => {
   }
 });
 
-router.put('/:id', async (req, res) => {
+router.put('/:id', requireManager, async (req, res) => {
   const receiptId = Number(req.params.id);
   const { customer_id, newCustomer, vehicle_id, receipt_date, mileage, remark, payment_method, technician_name, items, newVehicle, deposit_amount, deposit_date } = req.body;
   const toNumber = (value) => {
@@ -860,7 +860,7 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requireManager, async (req, res) => {
   let conn;
   try {
     conn = await pool.getConnection();

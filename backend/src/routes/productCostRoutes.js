@@ -1,11 +1,11 @@
 const express = require("express");
 const router = express.Router();
 const pool = require("../db/pool");
-const { authenticate, requireRole } = require("../middleware/auth");
+const { authenticate, requireManager } = require("../middleware/auth");
 const { emitProductCostEvent } = require("../realtime");
 
 router.use(authenticate);
-router.use(requireRole("office"));
+router.use(requireManager);
 
 // ============================================================
 // ฟังก์ชันแยกหมวดหมู่จาก description

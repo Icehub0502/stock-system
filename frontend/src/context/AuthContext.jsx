@@ -10,8 +10,9 @@ export function AuthProvider({ children }) {
     return saved ? JSON.parse(saved) : null;
   });
 
-  const login = async (username, password) => {
-    const res = await client.post('/auth/login', { username, password });
+  // shopCode empty = the main shop (shop 1)
+  const login = async (username, password, shopCode = '') => {
+    const res = await client.post('/auth/login', { username, password, shop_code: shopCode.trim() });
     localStorage.setItem('token', res.data.token);
     localStorage.setItem('user', JSON.stringify(res.data.user));
     setUser(res.data.user);

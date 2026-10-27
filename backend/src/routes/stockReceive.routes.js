@@ -1,7 +1,7 @@
 const express = require('express');
 const QRCode = require('qrcode');
 const pool = require('../db/pool');
-const { authenticate, requireRole } = require('../middleware/auth');
+const { authenticate, requireRole, requireManager } = require('../middleware/auth');
 const { emitStockEvent, emitStockTxEvent } = require('../realtime');
 const { positionsFor, positionLabel } = require('../utils/stockPositions');
 
@@ -405,7 +405,7 @@ router.post('/sessions/:id/commit', async (req, res) => {
 
 // ยกเลิกรายการรับเข้าที่ "บวกสต๊อกไปแล้ว" (สแกนผิดแล้วเพิ่งมารู้ทีหลัง) — หักยอดคืนถ้าไม่ทำให้ติดลบ
 // แถวเดิมไม่ลบ แค่ตีตรา voided_at และเพิ่มแถวปรับยอดเพื่อให้ประวัติของชิ้นนั้นเดินต่อเนื่อง
-router.delete('/movements/:id', requireRole('office'), async (req, res) => {
+router.delete('/movements/:id', requireManager, async (req, res) => {
   const id = parseId(req.params.id);
   if (!id) return res.status(400).json({ error: 'ข้อมูลไม่ถูกต้อง' });
   let conn;

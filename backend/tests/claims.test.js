@@ -1,7 +1,7 @@
 const request = require('supertest');
 const { createApp } = require('../src/app');
 const pool = require('../src/db/pool');
-const { getOfficeToken, getTechnicianToken, createCustomerWithVehicle, cleanupCustomer } = require('./helpers');
+const { getManagerToken, getTechnicianToken, createCustomerWithVehicle, cleanupCustomer } = require('./helpers');
 
 const app = createApp();
 
@@ -12,7 +12,7 @@ describe('/api/claims — บันทึกเคลมอิสระ ไม�
   let vehicleId;
 
   beforeAll(async () => {
-    officeToken = await getOfficeToken();
+    officeToken = await getManagerToken();
     techToken = await getTechnicianToken();
   });
 

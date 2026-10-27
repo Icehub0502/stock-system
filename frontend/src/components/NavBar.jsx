@@ -3,6 +3,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import ChangePasswordModal from "./ChangePasswordModal";
+import { hasRole, ROLE_LABEL } from "../utils/roles";
 
 const NAV_CATEGORIES = [
   {
@@ -13,7 +14,7 @@ const NAV_CATEGORIES = [
       { to: "/stock-deduction", label: "ตัดสต๊อก" },
       { to: "/service-items", label: "รายการสินค้า/บริการ" },
       { to: "/receipts", label: "บิลรับเข้า" },
-      { to: "/product-costs", label: "ต้นทุนสินค้า" },
+      { to: "/product-costs", label: "ต้นทุนสินค้า", min: "manager" },
     ],
   },
   {
@@ -44,8 +45,8 @@ const NAV_CATEGORIES = [
       { to: "/quotations", label: "ใบเสนอราคา" },
       { to: "/appointments", label: "ลูกค้าที่นัดหมาย" },
       { to: "/quotations/declined-summary", label: "สรุปลูกค้าไม่ได้ทำ" },
-      { to: "/quote-parts", label: "ราคาอะไหล่ตามรุ่นรถ" },
-      { to: "/daily-summary", label: "สรุปยอดขายรายวัน" },
+      { to: "/quote-parts", label: "ราคาอะไหล่ตามรุ่นรถ", min: "manager" },
+      { to: "/daily-summary", label: "สรุปยอดขายรายวัน", min: "manager" },
     ],
   },
   {
@@ -126,7 +127,7 @@ export default function NavBar() {
       {menuOpen && <div className="navbar-drawer-backdrop" onClick={close} />}
 
       <div className={`navbar-links ${menuOpen ? "open" : ""}`}>
-        {user.role === "office" && (
+        {hasRole(user, "office") && (
           <Link
             to="/dashboard"
             className={`navbar-standalone-link ${location.pathname === "/dashboard" ? "active" : ""}`}
@@ -135,7 +136,7 @@ export default function NavBar() {
             แดชบอร์ด
           </Link>
         )}
-        {user.role === "office" &&
+        {hasRole(user, "office") &&
           NAV_CATEGORIES.map((cat) => (
             <div
               className={`navbar-category ${openCategory === cat.key ? "open" : ""} ${isCategoryActive(cat.items) ? "active" : ""}`}
@@ -150,7 +151,7 @@ export default function NavBar() {
                 <span className="navbar-category-caret">▾</span>
               </button>
               <div className="navbar-category-menu">
-                {cat.items.map((it) => (
+                {cat.items.filter((it) => !it.min || hasRole(user, it.min)).map((it) => (
                   <Link
                     key={it.to}
                     to={it.to}
@@ -166,10 +167,8 @@ export default function NavBar() {
 
         <Link to="/repair-notices" className="navbar-standalone-link" onClick={close}>ใบแจ้งซ่อม</Link>
         <Link to="/scan" className="navbar-standalone-link" onClick={close}>สแกน QR</Link>
-        {/* เฉพาะเจ้าของร้าน (username 'ice') — ไม่ผูกกับ role เพราะระบบยังไม่มี role
-            แยกสำหรับเจ้าของร้านโดยเฉพาะ (มีแค่ office/technician) ดู requireOwner ฝั่ง
-            backend ที่บังคับสิทธิ์จริงอีกชั้นด้วย ปุ่มนี้แค่ซ่อนไม่ให้คนอื่นเห็นเฉย ๆ */}
-        {user.username === "ice" && (
+        {/* ผู้จัดการขึ้นไป — backend บังคับสิทธิ์จริงอีกชั้น (requireManager) ปุ่มนี้แค่ซ่อนไม่ให้คนอื่นเห็น */}
+        {hasRole(user, "manager") && (
           <Link to="/settings" className="navbar-standalone-link" onClick={close}>⚙️ ตั้งค่า</Link>
         )}
 
@@ -177,7 +176,7 @@ export default function NavBar() {
           <span className="navbar-user">
             {user.full_name}
             <span className="navbar-role">
-              ({user.role === "office" ? "ออฟฟิส" : "ช่าง"})
+              ({ROLE_LABEL[user.role] || user.role})
             </span>
           </span>
           <button className="btn-change-password" onClick={() => setShowChangePassword(true)}>

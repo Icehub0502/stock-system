@@ -1,6 +1,6 @@
 const express = require('express');
 const pool = require('../db/pool');
-const { authenticate, requireRole } = require('../middleware/auth');
+const { authenticate, requireRole, requireManager } = require('../middleware/auth');
 const { emitStockEvent, emitStockTxEvent } = require('../realtime');
 const { positionsFor, positionLabel } = require('../utils/stockPositions');
 const { resolveTransactionDate } = require('../utils/resolveTransactionDate');
@@ -151,7 +151,7 @@ router.post('/', async (req, res) => {
 
 // ยกเลิกรายการตัดสต๊อก (ตัดผิด) — คืนยอดให้ตำแหน่งนั้น แถวเดิมไม่ลบ แค่ตีตรา voided_at และเพิ่มแถว
 // ปรับยอดให้ประวัติของชิ้นนั้นเดินต่อเนื่อง ย้อนซ้ำไม่ได้
-router.delete('/movements/:id', requireRole('office'), async (req, res) => {
+router.delete('/movements/:id', requireManager, async (req, res) => {
   const id = parseId(req.params.id);
   if (!id) return res.status(400).json({ error: 'ข้อมูลไม่ถูกต้อง' });
   let conn;

@@ -1,6 +1,6 @@
 const express = require('express');
 const pool = require('../db/pool');
-const { authenticate, requireRole } = require('../middleware/auth');
+const { authenticate, requireRole, requireManager } = require('../middleware/auth');
 const { formatPhone } = require('../utils/parseLineQueueMessage');
 const { computeReceiptAmount } = require('./lineWebhook.routes');
 const { emitQuotationEvent, emitReceiptEvent, emitJobEvent } = require('../realtime');
@@ -835,7 +835,7 @@ router.patch('/:id/close', async (req, res) => {
 // ครบ แต่กดปิดบิล (ชำระแล้ว) พลาดไป ไม่แตะยอดในใบเสร็จ (receipts.total_amount) เลย
 // เพราะยอดที่ตั้งไว้ตอนปิดบิลอาจถูกต้องอยู่แล้ว มีแค่สถานะ "จ่ายครบหรือยัง" ที่ผิด —
 // ถ้ายอดในใบเสร็จผิดด้วย ออฟฟิศแก้เองแยกต่างหากที่หน้าใบเสร็จได้
-router.patch('/:id/reopen', async (req, res) => {
+router.patch('/:id/reopen', requireManager, async (req, res) => {
   const { id } = req.params;
   let conn;
   try {
@@ -1136,7 +1136,7 @@ router.patch('/:id/staff-signature', async (req, res) => {
 });
 
 // DELETE - Delete quotation
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requireManager, async (req, res) => {
   const { id } = req.params;
 
   try {

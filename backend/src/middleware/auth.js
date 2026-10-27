@@ -4,6 +4,18 @@ const { JWT_SECRET } = require('../config');
 
 const DEFAULT_SHOP_ID = 1;
 
+// Roles, lowest → highest. A higher role can do everything the lower ones can:
+//   technician < office < manager < owner < dev
+// office   = daily work (quotations, receipts, queue, stock, customers)
+// manager  = + sales/profit/cost figures, cancelling/deleting documents, technicians, part prices, shop settings
+// owner    = + user accounts of the shop (and all branches of the owner's group)
+// dev      = platform administrator (shops, groups, catalogue); can act inside any shop
+const ROLE_RANK = { technician: 1, office: 2, manager: 3, owner: 4, dev: 5 };
+
+function roleRank(role) {
+  return ROLE_RANK[role] || 0;
+}
+
 function verifyToken(token) {
   return jwt.verify(token, JWT_SECRET);
 }
@@ -26,23 +38,26 @@ function authenticate(req, res, next) {
   }
 }
 
+function deny(res) {
+  return res.status(403).json({ error: 'คุณไม่มีสิทธิ์ทำรายการนี้' });
+}
+
+// requireRole('office') means "office or any higher role": the lowest role listed is the minimum.
+// A role list that skips levels (e.g. 'technician' only) still lets higher roles through, because a
+// higher role never loses what a lower one can do.
 function requireRole(...roles) {
+  const minRank = Math.min(...roles.map(roleRank));
   return (req, res, next) => {
-    if (!req.user || !roles.includes(req.user.role)) {
-      return res.status(403).json({ error: 'คุณไม่มีสิทธิ์ทำรายการนี้' });
-    }
+    if (!req.user || roleRank(req.user.role) < minRank) return deny(res);
     next();
   };
 }
 
-// เจ้าของร้าน (username 'ice') เท่านั้น — ใช้กับหน้า "ตั้งค่า" และ endpoint ที่จัดการ
-// บัญชีผู้ใช้/ความลับของระบบ ซึ่งอ่อนไหวกว่าสิทธิ์ office ทั่วไป ไม่ผูกกับ role เพราะ
-// ระบบยังไม่มี role แยกสำหรับเจ้าของร้านโดยเฉพาะ (มีแค่ office/technician)
-function requireOwner(req, res, next) {
-  if (!req.user || req.user.username !== 'ice') {
-    return res.status(403).json({ error: 'คุณไม่มีสิทธิ์ทำรายการนี้' });
-  }
-  next();
-}
+const requireManager = requireRole('manager');
+const requireOwner = requireRole('owner');
+const requireDev = requireRole('dev');
 
-module.exports = { authenticate, requireRole, requireOwner, verifyToken, DEFAULT_SHOP_ID };
+module.exports = {
+  authenticate, requireRole, requireManager, requireOwner, requireDev,
+  roleRank, ROLE_RANK, verifyToken, DEFAULT_SHOP_ID,
+};

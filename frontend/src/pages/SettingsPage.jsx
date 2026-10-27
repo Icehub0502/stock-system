@@ -2,21 +2,23 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import client from '../api/client';
 import { useAuth } from '../context/AuthContext';
+import { hasRole, ROLE_LABEL } from '../utils/roles';
 
 // หน้า "ตั้งค่า" เฉพาะเจ้าของร้าน (username 'ice' — บังคับจริงฝั่ง backend ผ่าน
 // requireOwner, หน้านี้แค่เป็นทางเข้า ป้องกันซ้ำอีกชั้นที่ ProtectedRoute ownerOnly)
 // รวมส่วนที่กระจัดกระจาย/ไม่เคยมีมาก่อน: บัญชีผู้ใช้, ช่าง, เหตุผลที่ลูกค้าไม่ได้ทำ,
 // บอทไลน์, ลิงก์ด่วนไปหน้าตั้งค่าอื่นที่มีอยู่แล้ว
 export default function SettingsPage() {
+  const { user } = useAuth();
   return (
     <div className="quotation-page">
       <div className="quotation-header">
         <div>
           <h1>ตั้งค่าระบบ</h1>
-          <p className="subtitle">จัดการบัญชีผู้ใช้ ช่าง และบอทไลน์ — เห็นเฉพาะบัญชีเจ้าของร้าน</p>
+          <p className="subtitle">จัดการบัญชีผู้ใช้ (เจ้าของร้านขึ้นไป) ช่าง เหตุผลที่ลูกค้าไม่ทำ และบอทไลน์ — เห็นเฉพาะผู้จัดการขึ้นไป</p>
         </div>
       </div>
-      <UsersSection />
+      {hasRole(user, 'owner') && <UsersSection />}
       <TechniciansSection />
       <DeclineReasonsSection />
       <LineBotSection />
@@ -25,7 +27,6 @@ export default function SettingsPage() {
   );
 }
 
-const ROLE_LABEL = { office: 'ออฟฟิศ', technician: 'ช่าง' };
 
 function UsersSection() {
   const { user: me } = useAuth();
@@ -181,8 +182,10 @@ function UsersSection() {
               <div className="form-group">
                 <label>สิทธิ์</label>
                 <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
-                  <option value="office">ออฟฟิศ</option>
                   <option value="technician">ช่าง</option>
+                  <option value="office">ออฟฟิศ</option>
+                  <option value="manager">ผู้จัดการ</option>
+                  <option value="owner">เจ้าของร้าน</option>
                 </select>
               </div>
               <div className="form-group">

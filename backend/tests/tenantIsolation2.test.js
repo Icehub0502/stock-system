@@ -5,7 +5,7 @@
 const request = require('supertest');
 const pool = require('../src/db/pool');
 const { createApp } = require('../src/app');
-const { getOfficeToken, createShop, dropShop, createCustomerWithVehicle, cleanupCustomer } = require('./helpers');
+const { getManagerToken, createShop, dropShop, createCustomerWithVehicle, cleanupCustomer } = require('./helpers');
 
 const app = createApp();
 const as = (token) => ({ Authorization: `Bearer ${token}` });
@@ -18,8 +18,9 @@ let fxA; // shop 1 customer + vehicle
 const cleanupA = { jobs: [], quotations: [], receipts: [], stockItems: [], stockCategories: [] };
 
 beforeAll(async () => {
-  tokenA = await getOfficeToken();
+  tokenA = await getManagerToken();
   shopB = await createShop();
+  shopB.token = shopB.managerToken;
   tokenB = shopB.token;
   fxA = await createCustomerWithVehicle({ namePrefix: 'Iso2 A' });
 });

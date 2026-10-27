@@ -222,7 +222,7 @@ describe('GET/POST/PUT/DELETE /api/users — ตอนนี้เฉพาะ�
 
   test('ice → ลบบัญชีของตัวเองไม่ได้', async () => {
     const token = await getOwnerToken();
-    const [[me]] = await pool.query("SELECT id FROM users WHERE username = 'ice'");
+    const [[me]] = await pool.query("SELECT id FROM users WHERE username = 'shopowner'");
     const res = await request(app).delete(`/api/users/${me.id}`).set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(400);
   });

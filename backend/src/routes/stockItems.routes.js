@@ -1,6 +1,6 @@
 const express = require('express');
 const pool = require('../db/pool');
-const { authenticate, requireRole } = require('../middleware/auth');
+const { authenticate, requireRole, requireManager } = require('../middleware/auth');
 const { emitStockEvent } = require('../realtime');
 const { positionsFor } = require('../utils/stockPositions');
 
@@ -510,7 +510,7 @@ router.get('/:id/movements', async (req, res) => {
 });
 
 // ซ่อนรายการ (ไม่ลบจริง — ประวัติยังอยู่ และเพิ่มรหัสเดิมกลับมาได้ภายหลัง)
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requireManager, async (req, res) => {
   const id = parseId(req.params.id);
   if (!id) return res.status(400).json({ error: 'ข้อมูลไม่ถูกต้อง' });
   try {

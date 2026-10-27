@@ -1,7 +1,7 @@
 const express = require('express');
 const QRCode = require('qrcode');
 const pool = require('../db/pool');
-const { authenticate } = require('../middleware/auth');
+const { authenticate, requireManager } = require('../middleware/auth');
 const {
   isValidJobStatus,
   CLOSED_STATUSES,
@@ -565,7 +565,7 @@ router.patch('/:id/quotation', async (req, res) => {
 // กฎเดียวกับ DELETE /quotations/:id ถ้ามีใบเสนอราคาที่ยัง pending/scheduled/declined
 // อยู่ (ยังไม่มีใบเสร็จ) ปล่อยให้ลบได้ตามปกติ ใบเสนอราคานั้นจะกลายเป็นรายการลอย
 // จัดการต่อได้ที่หน้าใบเสนอราคาโดยตรง ไม่ต้องพึ่งงานนี้อีกต่อไป
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requireManager, async (req, res) => {
   let conn;
   try {
     conn = await pool.getConnection();

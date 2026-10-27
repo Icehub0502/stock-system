@@ -1,4 +1,4 @@
-// หน้า "ตั้งค่า" เฉพาะเจ้าของร้าน (username 'ice' — ดู requireOwner ใน middleware/auth.js)
+// หน้า "ตั้งค่า" สำหรับผู้จัดการขึ้นไป (ดู requireManager ใน middleware/auth.js)
 // ส่วนบอทไลน์: สถานะ token (อ่านจาก .env อย่างเดียว ไม่ให้แก้ผ่านเว็บเพราะเป็นความลับ
 // ต้องแก้ที่ไฟล์ .env บนเซิร์ฟเวอร์เอง), group id ที่จับไว้, และข้อความที่บอททั้ง 3
 // ตัวตอบกลับ/ส่งเข้ากลุ่มทุกแบบ (ดูทะเบียนทั้งหมดใน utils/lineMessageDefaults.js) —
@@ -6,7 +6,7 @@
 // lineWebhook.routes.js — ไม่เขียนกลไกเก็บค่าซ้ำ)
 const express = require('express');
 const pool = require('../db/pool');
-const { authenticate, requireOwner } = require('../middleware/auth');
+const { authenticate, requireManager } = require('../middleware/auth');
 const { getSetting, setSetting, getMessageTemplate } = require('./lineWebhook.routes');
 const { LINE_MESSAGE_DEFAULTS } = require('../utils/lineMessageDefaults');
 
@@ -29,7 +29,7 @@ router.get('/line-template-blank', async (req, res) => {
   }
 });
 
-router.get('/line', requireOwner, async (req, res) => {
+router.get('/line', requireManager, async (req, res) => {
   try {
     const [groupIdValues, messageValues] = await Promise.all([
       Promise.all(GROUP_ID_KEYS.map((k) => getSetting(k, req.shopId))),
@@ -70,7 +70,7 @@ router.get('/line', requireOwner, async (req, res) => {
   }
 });
 
-router.put('/line', requireOwner, async (req, res) => {
+router.put('/line', requireManager, async (req, res) => {
   const { group_ids = {}, messages = {} } = req.body || {};
   try {
     const writes = [];
@@ -104,7 +104,7 @@ router.get('/decline-reasons', async (req, res) => {
   }
 });
 
-router.post('/decline-reasons', requireOwner, async (req, res) => {
+router.post('/decline-reasons', requireManager, async (req, res) => {
   const { label } = req.body || {};
   if (!label || !label.trim()) {
     return res.status(400).json({ error: 'กรุณากรอกเหตุผล' });
@@ -122,7 +122,7 @@ router.post('/decline-reasons', requireOwner, async (req, res) => {
   }
 });
 
-router.put('/decline-reasons/:id', requireOwner, async (req, res) => {
+router.put('/decline-reasons/:id', requireManager, async (req, res) => {
   const { label } = req.body || {};
   if (!label || !label.trim()) {
     return res.status(400).json({ error: 'กรุณากรอกเหตุผล' });
@@ -137,7 +137,7 @@ router.put('/decline-reasons/:id', requireOwner, async (req, res) => {
   }
 });
 
-router.delete('/decline-reasons/:id', requireOwner, async (req, res) => {
+router.delete('/decline-reasons/:id', requireManager, async (req, res) => {
   try {
     const [result] = await pool.execute('DELETE FROM decline_reasons WHERE id = ? AND shop_id = ?', [req.params.id, req.shopId]);
     if (result.affectedRows === 0) return res.status(404).json({ error: 'ไม่พบเหตุผลนี้' });

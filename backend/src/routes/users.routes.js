@@ -4,14 +4,18 @@ const pool = require('../db/pool');
 const { authenticate, requireOwner } = require('../middleware/auth');
 
 const router = express.Router();
-// จัดการบัญชี/รหัสผ่าน/role ของทุกคนได้จากที่นี่ — อ่อนไหวกว่าสิทธิ์ office ทั่วไป
-// (เดิมเป็น requireRole('office') แต่ไม่เคยมีหน้าเว็บไหนเรียกใช้เลย จึงไม่กระทบของเดิม)
+// จัดการบัญชี/รหัสผ่าน/role ของทุกคนในร้านได้จากที่นี่ — เจ้าของร้านขึ้นไปเท่านั้น
+// บัญชี role 'dev' (ผู้ดูแลระบบ) ไม่โผล่ในรายการและเจ้าของร้านแก้/ลบ/ตั้งเป็น dev ไม่ได้
 router.use(authenticate, requireOwner);
+
+const SHOP_ROLES = ['technician', 'office', 'manager', 'owner'];
+const isDev = (req) => req.user.role === 'dev';
+const assignableRoles = (req) => (isDev(req) ? [...SHOP_ROLES, 'dev'] : SHOP_ROLES);
 
 router.get('/', async (req, res) => {
   try {
     const [rows] = await pool.execute(
-      'SELECT id, username, full_name, role, created_at FROM users WHERE shop_id = ? ORDER BY id',
+      `SELECT id, username, full_name, role, created_at FROM users WHERE shop_id = ?${isDev(req) ? '' : " AND role <> 'dev'"} ORDER BY id`,
       [req.shopId]
     );
     res.json(rows);
@@ -23,7 +27,7 @@ router.get('/', async (req, res) => {
 
 router.post('/', async (req, res) => {
   const { username, password, full_name = '', role } = req.body || {};
-  if (!username || !password || !['office', 'technician'].includes(role)) {
+  if (!username || !password || !assignableRoles(req).includes(role)) {
     return res.status(400).json({ error: 'ข้อมูลไม่ถูกต้อง (username, password, role จำเป็นต้องกรอก)' });
   }
   if (String(password).length < 8) {
@@ -52,9 +56,12 @@ router.put('/:id', async (req, res) => {
   try {
     const [existingRows] = await pool.execute('SELECT * FROM users WHERE id = ? AND shop_id = ?', [req.params.id, req.shopId]);
     const existing = existingRows[0];
-    if (!existing) return res.status(404).json({ error: 'ไม่พบผู้ใช้' });
+    if (!existing || (existing.role === 'dev' && !isDev(req))) return res.status(404).json({ error: 'ไม่พบผู้ใช้' });
 
     const { full_name = existing.full_name, role = existing.role, password } = req.body || {};
+    if (!assignableRoles(req).includes(role)) {
+      return res.status(400).json({ error: 'role ไม่ถูกต้อง' });
+    }
     if (password && String(password).length < 8) {
       return res.status(400).json({ error: 'รหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร' });
     }
@@ -74,8 +81,8 @@ router.put('/:id', async (req, res) => {
 router.delete('/:id', async (req, res) => {
   try {
     const [existingRows] = await pool.execute('SELECT * FROM users WHERE id = ? AND shop_id = ?', [req.params.id, req.shopId]);
-    if (!existingRows[0]) return res.status(404).json({ error: 'ไม่พบผู้ใช้' });
-    // กันลบบัญชีตัวเอง (ice) ทิ้งเผลอ — จะล็อกตัวเองออกจากหน้าตั้งค่าทันทีโดยไม่มีทาง
+    if (!existingRows[0] || (existingRows[0].role === 'dev' && !isDev(req))) return res.status(404).json({ error: 'ไม่พบผู้ใช้' });
+    // กันลบบัญชีตัวเองทิ้งเผลอ — จะล็อกตัวเองออกจากหน้าตั้งค่าทันทีโดยไม่มีทาง
     // กู้คืนผ่านเว็บอีก (ต้องเข้า DB ตรง ๆ)
     if (Number(req.params.id) === req.user.id) {
       return res.status(400).json({ error: 'ลบบัญชีของตัวเองไม่ได้' });

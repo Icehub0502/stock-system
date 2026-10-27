@@ -31,6 +31,14 @@ const IGNORABLE_ALTER_ERROR_CODES = new Set([
   'ER_CANT_DROP_FIELD_OR_KEY', // DROP COLUMN ที่ถูกลบไปแล้ว (รันซ้ำทุกครั้งที่บูต)
 ]);
 
+async function columnExists(conn, table, column) {
+  const [rows] = await conn.query(
+    'SELECT 1 FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?',
+    [table, column]
+  );
+  return rows.length > 0;
+}
+
 function ignoreIfAlreadyApplied(err) {
   if (IGNORABLE_ALTER_ERROR_CODES.has(err.code)) return;
   // error จริง (ไม่ใช่แค่ "มีอยู่แล้ว") — log แล้วโยนต่อให้บูตล้มเหลว แทนที่จะเงียบไป
@@ -473,10 +481,14 @@ async function initDatabase() {
   // ถ้า generateRepairNoticeCode/generateCode (ที่ล็อกด้วย FOR UPDATE ในทรานแซกชัน
   // อยู่แล้ว) มีช่องโหว่หลุดออกมาได้บ้าง จะได้ error ที่ ER_DUP_ENTRY ชัดเจนแทนที่จะ
   // ปล่อยให้เอกสาร 2 ใบใช้เลขเดียวกันเงียบ ๆ
-  await conn.query(`
-    ALTER TABLE repair_notices
-    ADD UNIQUE KEY uk_repair_notices_code (code)
-  `).catch(ignoreIfAlreadyApplied);
+  // (skipped once the table is per shop: tenantSchema.js replaces this key with (shop_id, code), and adding
+  //  the old single-shop key back on every start would stop a second shop from using the same code)
+  if (!(await columnExists(conn, 'repair_notices', 'shop_id'))) {
+    await conn.query(`
+      ALTER TABLE repair_notices
+      ADD UNIQUE KEY uk_repair_notices_code (code)
+    `).catch(ignoreIfAlreadyApplied);
+  }
 
   // เคลม (claim) — บันทึกอิสระ ไม่ผูกกับใบเสร็จ/ใบเสนอราคาเดิม (เจ้าของร้านยืนยันแล้ว
   // ว่าไม่ต้องอ้างอิงบิลเก่า แค่เก็บว่าลูกค้า/รถคันไหนมาเคลม อาการอะไร เปลี่ยนอะไหล่
@@ -598,10 +610,13 @@ async function initDatabase() {
   // (ใช้ INSERT IGNORE ยึดคีย์นี้) — ปลอดภัยที่จะรันซ้ำทุกครั้งที่บูตแบบ
   // ignoreIfAlreadyApplied เพราะถ้ามีข้อมูลซ้ำอยู่ก่อนแล้ว (ไม่ควรมี แต่กันไว้)
   // จะได้ error คนละแบบ (ER_DUP_ENTRY) ซึ่งไม่ควรเงียบไว้ ต้องแก้ข้อมูลก่อน
-  await conn.query(`
-    ALTER TABLE quote_part_prices
-    ADD UNIQUE KEY uniq_quote_part (brand, model, part_name)
-  `).catch(ignoreIfAlreadyApplied);
+  // (skipped once the table is per shop — see the note at uk_repair_notices_code)
+  if (!(await columnExists(conn, 'quote_part_prices', 'shop_id'))) {
+    await conn.query(`
+      ALTER TABLE quote_part_prices
+      ADD UNIQUE KEY uniq_quote_part (brand, model, part_name)
+    `).catch(ignoreIfAlreadyApplied);
+  }
 
   // needs_price: แถวที่ import_quote_parts_for_all_models.js สร้างให้อัตโนมัติ
   // ทุกรุ่นรถ (ราคาเริ่มต้น 0 เพราะไม่มีราคาจริงในไฟล์ต้นทาง) ใช้ flag นี้เตือน
@@ -1152,6 +1167,9 @@ async function initDatabase() {
 
   // SaaS phase 1: shops table + shop_id on every shop-owned table (see tenantSchema.js)
   await require('./tenantSchema').migrateTenants(conn);
+
+  // role levels (technician < office < manager < owner < dev) — see roleSchema.js
+  await require('./roleSchema').migrateRoles(conn);
 
   await conn.end();
 

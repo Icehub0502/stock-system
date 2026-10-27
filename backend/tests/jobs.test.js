@@ -1,7 +1,7 @@
 const request = require('supertest');
 const { createApp } = require('../src/app');
 const pool = require('../src/db/pool');
-const { getOfficeToken, createCustomerWithVehicle, cleanupCustomer } = require('./helpers');
+const { getManagerToken, createCustomerWithVehicle, cleanupCustomer } = require('./helpers');
 
 const app = createApp();
 
@@ -16,7 +16,7 @@ describe('POST /api/jobs — รูปตอนสร้างงาน รอ�
   let fixture;
 
   beforeAll(async () => {
-    token = await getOfficeToken();
+    token = await getManagerToken();
   });
 
   beforeEach(async () => {
@@ -82,7 +82,7 @@ describe('POST /api/jobs — auto-links a matching pending LINE quotation', () =
   let fixture;
 
   beforeAll(async () => {
-    token = await getOfficeToken();
+    token = await getManagerToken();
   });
 
   beforeEach(async () => {
@@ -189,7 +189,7 @@ describe('PATCH /api/jobs/:id/quote-draft* — concurrent draft/signature writes
   let jobId;
 
   beforeAll(async () => {
-    token = await getOfficeToken();
+    token = await getManagerToken();
   });
 
   beforeEach(async () => {
@@ -235,7 +235,7 @@ describe('DELETE /api/jobs/:id — blocked once the linked quotation is approved
   let jobId;
 
   beforeAll(async () => {
-    token = await getOfficeToken();
+    token = await getManagerToken();
   });
 
   beforeEach(async () => {
@@ -293,7 +293,7 @@ describe('POST /api/jobs/:id/part-photos — concurrent uploads do not collide o
   let jobId;
 
   beforeAll(async () => {
-    token = await getOfficeToken();
+    token = await getManagerToken();
   });
 
   beforeEach(async () => {
@@ -344,7 +344,7 @@ describe('POST /api/jobs — เลขคิวไม่ชนกัน แม�
   let fixtureB;
 
   beforeAll(async () => {
-    token = await getOfficeToken();
+    token = await getManagerToken();
   });
 
   beforeEach(async () => {
@@ -410,7 +410,7 @@ describe('POST/DELETE/PATCH /api/jobs/:id/photos — เพิ่ม/ลบ/จ�
   let jobId;
 
   beforeAll(async () => {
-    token = await getOfficeToken();
+    token = await getManagerToken();
   });
 
   beforeEach(async () => {
@@ -543,7 +543,7 @@ describe('GET /api/jobs/:id/quotations — บิลอื่นๆ ของง
   let jobId;
 
   beforeAll(async () => {
-    token = await getOfficeToken();
+    token = await getManagerToken();
   });
 
   beforeEach(async () => {
@@ -631,7 +631,7 @@ describe('GET /api/jobs/qr/track — QR คงที่ ลิงก์หน้
   let token;
 
   beforeAll(async () => {
-    token = await getOfficeToken();
+    token = await getManagerToken();
   });
 
   test('คืน tracking_url ที่ลงท้ายด้วย /track เฉยๆ ไม่มี query param ผูกรถคันไหน', async () => {

@@ -1,6 +1,6 @@
 const express = require('express');
 const pool = require('../db/pool');
-const { authenticate, requireRole } = require('../middleware/auth');
+const { authenticate, requireRole, requireManager } = require('../middleware/auth');
 const { saveDataUrlToFile, deleteUploadedFile } = require('../utils/photoStorage');
 
 const router = express.Router();
@@ -86,7 +86,7 @@ router.get('/', async (req, res) => {
 });
 
 // POST / — เพิ่มรายการราคาอะไหล่ใหม่
-router.post('/', async (req, res) => {
+router.post('/', requireManager, async (req, res) => {
   const { brand, model, part_name, description, price, image_data, category } = req.body;
   if (!brand?.trim() || !model?.trim() || !part_name?.trim()) {
     return res.status(400).json({ error: 'กรุณากรอกยี่ห้อ รุ่นรถ และชื่ออะไหล่ให้ครบถ้วน' });
@@ -106,7 +106,7 @@ router.post('/', async (req, res) => {
 });
 
 // PUT /:id — แก้ไขรายการ
-router.put('/:id', async (req, res) => {
+router.put('/:id', requireManager, async (req, res) => {
   const { brand, model, part_name, description, price, image_data, is_active } = req.body;
   if (!brand?.trim() || !model?.trim() || !part_name?.trim()) {
     return res.status(400).json({ error: 'กรุณากรอกยี่ห้อ รุ่นรถ และชื่ออะไหล่ให้ครบถ้วน' });
@@ -149,7 +149,7 @@ router.put('/:id', async (req, res) => {
 });
 
 // DELETE /:id
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requireManager, async (req, res) => {
   try {
     const [[existing]] = await pool.query('SELECT image_data FROM quote_part_prices WHERE id = ? AND shop_id = ?', [req.params.id, req.shopId]);
     const [result] = await pool.execute('DELETE FROM quote_part_prices WHERE id = ? AND shop_id = ?', [req.params.id, req.shopId]);

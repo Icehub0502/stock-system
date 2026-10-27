@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import client from "../api/client";
+import { useAuth } from "../context/AuthContext";
+import { hasRole } from "../utils/roles";
 import PaymentBreakdown from "../components/PaymentBreakdown";
 import { methodsFromObject, mergeByMethod } from "../utils/paymentMethods";
 
@@ -56,6 +58,10 @@ const QUICK_LINKS = [
 
 export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
+  // sales figures (revenue, payment channels, best sellers) are for managers and above;
+  // office staff get the same page without those parts (the API refuses them anyway)
+  const { user } = useAuth();
+  const canSeeSales = hasRole(user, 'manager');
   const [todaySummary, setTodaySummary] = useState({ bill_count: 0, customer_count: 0, total_revenue: 0 });
   const [todayMethods, setTodayMethods] = useState([]);
   const [monthMethods, setMonthMethods] = useState([]);
@@ -73,12 +79,12 @@ export default function DashboardPage() {
     let cancelled = false;
 
     Promise.all([
-      client.get('/receipts/daily-summary').catch(() => ({ data: { data: [] } })),
+      canSeeSales ? client.get('/receipts/daily-summary').catch(() => ({ data: { data: [] } })) : Promise.resolve({ data: { data: [] } }),
       client.get('/stock-items').catch(() => ({ data: [] })),
       client.get('/receipts').catch(() => ({ data: { data: [] } })),
-      client.get('/receipts/top-products', { params: { days: 30, limit: 5 } }).catch(() => ({ data: { data: [] } })),
-      client.get('/receipts/top-vehicle-models', { params: { limit: 10 } }).catch(() => ({ data: { data: [] } })),
-      client.get('/receipts/top-customers', { params: { limit: 10 } }).catch(() => ({ data: { data: [] } })),
+      canSeeSales ? client.get('/receipts/top-products', { params: { days: 30, limit: 5 } }).catch(() => ({ data: { data: [] } })) : Promise.resolve({ data: { data: [] } }),
+      canSeeSales ? client.get('/receipts/top-vehicle-models', { params: { limit: 10 } }).catch(() => ({ data: { data: [] } })) : Promise.resolve({ data: { data: [] } }),
+      canSeeSales ? client.get('/receipts/top-customers', { params: { limit: 10 } }).catch(() => ({ data: { data: [] } })) : Promise.resolve({ data: { data: [] } }),
       client.get('/quotations').catch(() => ({ data: { data: [] } })),
     ]).then(([summaryRes, stockRes, receiptsRes, topProductsRes, topVehicleModelsRes, topCustomersRes, quotationsRes]) => {
       if (cancelled) return;
@@ -153,18 +159,20 @@ export default function DashboardPage() {
               <div className="dash-stat-label">ลูกค้าวันนี้</div>
               <div className="dash-stat-value">{todaySummary.customer_count.toLocaleString('en-US')}</div>
             </div>
-            <div className="dash-stat-card dash-stat-highlight">
-              <div className="dash-stat-label">ยอดขายวันนี้</div>
-              <div className="dash-stat-value">฿{formatBaht(todaySummary.total_revenue)}</div>
-            </div>
+            {canSeeSales && (
+              <div className="dash-stat-card dash-stat-highlight">
+                <div className="dash-stat-label">ยอดขายวันนี้</div>
+                <div className="dash-stat-value">฿{formatBaht(todaySummary.total_revenue)}</div>
+              </div>
+            )}
             <div className="dash-stat-card">
               <div className="dash-stat-label">สต็อกใกล้หมด/หมด</div>
               <div className="dash-stat-value">{lowStockCount.toLocaleString('en-US')}</div>
             </div>
           </div>
 
-          <PaymentBreakdown title="ยอดวันนี้ แยกตามช่องทางชำระ" items={todayMethods} />
-          <PaymentBreakdown title="ยอดเดือนนี้ แยกตามช่องทางชำระ" items={monthMethods} />
+          {canSeeSales && <PaymentBreakdown title="ยอดวันนี้ แยกตามช่องทางชำระ" items={todayMethods} />}
+          {canSeeSales && <PaymentBreakdown title="ยอดเดือนนี้ แยกตามช่องทางชำระ" items={monthMethods} />}
 
           {/* ── Today's scheduled appointments — surfaced prominently so staff
               can't miss a customer who's due in today ── */}
@@ -189,6 +197,7 @@ export default function DashboardPage() {
           )}
 
           {/* ── Revenue trend (last 14 days) ── */}
+          {canSeeSales && (
           <div className="dash-panel">
             <div className="dash-panel-title">ยอดขายย้อนหลัง 14 วัน</div>
             {revenueTrend.every((r) => Number(r.total_revenue) === 0) || revenueTrend.length === 0 ? (
@@ -209,9 +218,11 @@ export default function DashboardPage() {
               </div>
             )}
           </div>
+          )}
 
           <div className="dash-columns">
             {/* ── Top selling products (last 30 days) ── */}
+            {canSeeSales && (
             <div className="dash-panel">
               <div className="dash-panel-title">สินค้าขายดี 5 อันดับแรก (30 วันล่าสุด)</div>
               {topProducts.length === 0 ? (
@@ -230,6 +241,7 @@ export default function DashboardPage() {
                 </div>
               )}
             </div>
+            )}
 
             {/* ── Recent receipts ── */}
             <div className="dash-panel">
@@ -254,6 +266,7 @@ export default function DashboardPage() {
 
           <div className="dash-columns">
             {/* ── Top customers ── */}
+            {canSeeSales && (
             <div className="dash-panel">
               <div className="dash-panel-title">ลูกค้ายอดเยี่ยม 10 อันดับแรก</div>
               {topCustomers.length === 0 ? (
@@ -272,6 +285,7 @@ export default function DashboardPage() {
                 </div>
               )}
             </div>
+            )}
 
             {/* ── Pending quotations ── */}
             <div className="dash-panel">
@@ -295,6 +309,7 @@ export default function DashboardPage() {
           </div>
 
           {/* ── Most frequent vehicle models ── */}
+          {canSeeSales && (
           <div className="dash-panel">
             <div className="dash-panel-title">รถที่เข้ามาทำบ่อยที่สุด 10 อันดับแรก</div>
             {topVehicleModels.length === 0 ? (
@@ -313,6 +328,7 @@ export default function DashboardPage() {
               </div>
             )}
           </div>
+          )}
 
           {/* ── Low stock detail ── */}
           <div className="dash-panel">

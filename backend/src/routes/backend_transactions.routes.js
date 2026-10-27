@@ -1,6 +1,6 @@
 const express = require('express');
 const pool = require('../db/pool');
-const { authenticate, requireRole } = require('../middleware/auth');
+const { authenticate, requireRole, requireManager } = require('../middleware/auth');
 const { vehicleModelFromRackName } = require('../utils/vehicleModelFromName');
 const { resolveTransactionDate } = require('../utils/resolveTransactionDate');
 const { emitStockEvent, emitStockTxEvent, emitReceiptSessionEvent } = require('../realtime');
@@ -160,7 +160,7 @@ router.get('/receipt-sessions/:id', requireRole('office'), async (req, res) => {
 // เดียว) แล้วค่อยลบทั้งแถว transactions และ receipt_sessions — ถ้ารายการไหนถูกเบิกออก
 // ไปแล้วหลังรับเข้า (คืนแล้วจะติดลบ) จะไม่ยอมลบทั้งบิลเลยและแจ้งเตือนว่าติดที่รายการไหน
 // กันข้อมูลสต็อกเพี้ยนแบบเงียบ ๆ
-router.delete('/receipt-sessions/:id', requireRole('office'), async (req, res) => {
+router.delete('/receipt-sessions/:id', requireManager, async (req, res) => {
   let conn;
   try {
     conn = await pool.getConnection();
@@ -264,7 +264,7 @@ router.get('/', requireRole('office'), async (req, res) => {
 // สต็อกในทรานแซกชันเดียว: รายการ IN คืนโดยหักสต็อกออก, รายการ OUT คืนโดยบวกกลับ
 // ถ้าหักแล้วสต็อกจะติดลบ (ของถูกเบิกไปใช้แล้วหลังรับเข้า) จะไม่ยอมลบและแจ้งเตือนแทน
 // การปล่อยให้ตัวเลขติดลบเงียบ ๆ
-router.delete('/:id', requireRole('office'), async (req, res) => {
+router.delete('/:id', requireManager, async (req, res) => {
   // รายการเก่าของสต๊อกแร็ค/ปีกนก เป็นของร้านที่ 1 เท่านั้น
   if (req.shopId !== 1) return res.status(404).json({ error: 'ไม่พบรายการนี้' });
   let conn;

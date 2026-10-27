@@ -140,7 +140,7 @@ describe('technicians, warranties, decline reasons, users, settings are per shop
     const ownerA = await require('./helpers').getOwnerToken();
     const listB = await request(app).get('/api/users').set(as(shopB.ownerToken));
     expect(listB.body.every((u) => [shopB.userId, shopB.ownerUserId].includes(u.id) || true)).toBe(true);
-    const [[ownerRow]] = await pool.query("SELECT id FROM users WHERE username = 'ice' AND shop_id = 1");
+    const [[ownerRow]] = await pool.query("SELECT id FROM users WHERE username = 'shopowner' AND shop_id = 1");
     expect(listB.body.some((u) => u.id === ownerRow.id)).toBe(false);
 
     expect((await request(app).put(`/api/users/${ownerRow.id}`).set(as(shopB.ownerToken)).send({ full_name: 'HACKED' })).status).toBe(404);

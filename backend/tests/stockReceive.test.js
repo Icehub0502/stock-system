@@ -1,7 +1,7 @@
 const request = require('supertest');
 const { createApp } = require('../src/app');
 const pool = require('../src/db/pool');
-const { getOfficeToken, getTechnicianToken } = require('./helpers');
+const { getManagerToken, getTechnicianToken } = require('./helpers');
 
 const app = createApp();
 
@@ -17,7 +17,7 @@ describe('/api/stock-receive — รับเข้าสต๊อกรวม�
   const asTech = (req) => req.set('Authorization', `Bearer ${techToken}`);
 
   beforeAll(async () => {
-    officeToken = await getOfficeToken();
+    officeToken = await getManagerToken();
     techToken = await getTechnicianToken();
     const cat = await asOffice(request(app).post('/api/stock-items/categories')).send({ name: `RCV-CAT-${suffix}` });
     categoryId = cat.body.id;

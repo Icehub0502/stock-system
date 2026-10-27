@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import client from '../api/client';
 import QRScanner from '../components/QRScanner';
 import { useAuth } from '../context/AuthContext';
+import { hasRole } from '../utils/roles';
 import { positionLabel, POSITION_COLOR, NEUTRAL_POSITION_COLOR } from '../utils/stockPositions';
 
 // ─────────────────────────────────────────
@@ -443,7 +444,7 @@ export default function TechnicianScanPage() {
   const { user } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
-  const isOffice = user?.role === 'office';
+  const isOffice = hasRole(user, 'office');
   const [step, setStep]           = useState(STEP.MODE);
   const [mode, setMode]           = useState(null);           // 'IN' | 'OUT'
   const [invoice, setInvoice]     = useState('');

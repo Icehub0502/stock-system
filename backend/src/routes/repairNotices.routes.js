@@ -1,6 +1,6 @@
 const express = require('express');
 const pool = require('../db/pool');
-const { authenticate, requireRole } = require('../middleware/auth');
+const { authenticate, requireRole, requireManager } = require('../middleware/auth');
 const { ownsRow } = require('../utils/tenant');
 
 const router = express.Router();
@@ -202,7 +202,7 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-router.delete('/:id', requireRole('office'), async (req, res) => {
+router.delete('/:id', requireManager, async (req, res) => {
   try {
     const [result] = await pool.execute('DELETE FROM repair_notices WHERE id = ? AND shop_id = ?', [req.params.id, req.shopId]);
     if (result.affectedRows === 0) return res.status(404).json({ error: 'ไม่พบใบแจ้งซ่อม' });

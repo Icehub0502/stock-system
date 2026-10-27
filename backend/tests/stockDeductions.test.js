@@ -1,7 +1,7 @@
 const request = require('supertest');
 const { createApp } = require('../src/app');
 const pool = require('../src/db/pool');
-const { getOfficeToken, getTechnicianToken } = require('./helpers');
+const { getManagerToken, getTechnicianToken } = require('./helpers');
 const { syncLegacy, MIGRATION_NOTE } = require('../scripts/sync-legacy-deductions');
 
 const app = createApp();
@@ -23,7 +23,7 @@ describe('/api/stock-deductions — ตัดสต๊อกของสต๊�
   const asTech = (req) => req.set('Authorization', `Bearer ${techToken}`);
 
   beforeAll(async () => {
-    officeToken = await getOfficeToken();
+    officeToken = await getManagerToken();
     techToken = await getTechnicianToken();
     const cat = await asOffice(request(app).post('/api/stock-items/categories')).send({ name: `DED-CAT-${suffix}` });
     categoryId = cat.body.id;
@@ -137,8 +137,8 @@ describe('scripts/sync-legacy-deductions — ซิงก์การตัด�
   const created = [];
 
   beforeAll(async () => {
-    officeToken = await getOfficeToken();
-    const [[user]] = await pool.query("SELECT id FROM users WHERE role='office' LIMIT 1");
+    officeToken = await getManagerToken();
+    const [[user]] = await pool.query("SELECT id FROM users WHERE shop_id = 1 AND role <> 'technician' LIMIT 1");
     fx.userId = user.id;
     const [[rackCat]] = await pool.query("SELECT id FROM stock_categories WHERE name='แร็ค' LIMIT 1");
     const [[wingCat]] = await pool.query("SELECT id FROM stock_categories WHERE name='ปีกนก' LIMIT 1");

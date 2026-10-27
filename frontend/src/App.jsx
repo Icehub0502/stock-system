@@ -6,6 +6,7 @@ import NavBar from "./components/NavBar";
 import QueueNavBar from "./components/QueueNavBar";
 import BottomNav from "./components/BottomNav";
 import PageSkeleton from "./components/PageSkeleton";
+import { hasRole } from "./utils/roles";
 import { isQueueHost } from "./utils/isQueueHost";
 // LoginPage stays a static import — every visitor needs it before we know
 // their role, so lazy-loading it would only add a network round trip.
@@ -56,7 +57,7 @@ function Home() {
   // subdomain คิวรับรถ ไม่มีแดชบอร์ด/หน้าสแกนของระบบหลักให้ไปต่อ (ดู
   // utils/isQueueHost.js) — พาไปหน้ารายการงานแทนเสมอไม่ว่า role ไหน
   if (isQueueHost()) return <Navigate to="/jobs" replace />;
-  return user.role === "office" ? (
+  return hasRole(user, "office") ? (
     <Navigate to="/dashboard" replace />
   ) : (
     <Navigate to="/scan" replace />
@@ -129,7 +130,7 @@ function AppRoutes() {
           <Route
             path="/product-costs"
             element={
-              <ProtectedRoute roles={["office"]}>
+              <ProtectedRoute minRole="manager">
                 <ProductCostPage />
               </ProtectedRoute>
             }
@@ -194,7 +195,7 @@ function AppRoutes() {
           <Route
             path="/settings"
             element={
-              <ProtectedRoute roles={["office"]} ownerOnly>
+              <ProtectedRoute minRole="manager">
                 <SettingsPage />
               </ProtectedRoute>
             }
@@ -242,7 +243,7 @@ function AppRoutes() {
           <Route
             path="/quote-parts"
             element={
-              <ProtectedRoute roles={["office"]}>
+              <ProtectedRoute minRole="manager">
                 <QuotePartPriceManagementPage />
               </ProtectedRoute>
             }
@@ -250,7 +251,7 @@ function AppRoutes() {
           <Route
             path="/daily-summary"
             element={
-              <ProtectedRoute roles={["office"]}>
+              <ProtectedRoute minRole="manager">
                 <DailySalesSummaryPage />
               </ProtectedRoute>
             }

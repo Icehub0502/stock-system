@@ -1,9 +1,24 @@
 const jwt = require('jsonwebtoken');
 const pool = require('../src/db/pool');
 
+// The middleware trusts the role inside the token, so tests sign tokens with the role they need for
+// a real shop-1 user (the test database's users keep whatever role the role migration gave them).
+async function signShop1Token(role, username) {
+  const [[user]] = await pool.query(
+    username
+      ? 'SELECT id, username FROM users WHERE username = ? AND shop_id = 1 LIMIT 1'
+      : "SELECT id, username FROM users WHERE role <> 'technician' AND shop_id = 1 ORDER BY id LIMIT 1",
+    username ? [username] : []
+  );
+  return jwt.sign({ id: user.id, username: user.username, role, shop_id: 1 }, process.env.JWT_SECRET, { expiresIn: '1h' });
+}
+
 async function getOfficeToken() {
-  const [[user]] = await pool.query("SELECT id, username, role FROM users WHERE role = 'office' AND shop_id = 1 LIMIT 1");
-  return jwt.sign({ id: user.id, username: user.username, role: user.role, shop_id: 1 }, process.env.JWT_SECRET, { expiresIn: '1h' });
+  return signShop1Token('office');
+}
+
+async function getManagerToken() {
+  return signShop1Token('manager');
 }
 
 async function getTechnicianToken() {
@@ -11,15 +26,19 @@ async function getTechnicianToken() {
   return jwt.sign({ id: user.id, username: user.username, role: user.role, shop_id: 1 }, process.env.JWT_SECRET, { expiresIn: '1h' });
 }
 
-// requireOwner (middleware/auth.js) เช็คเฉพาะ username === 'ice' ตรง ๆ ไม่ผูกกับ role
-// เลย — เทสต์หน้าตั้งค่า/endpoint ที่จำกัดเฉพาะเจ้าของร้านต้องมี user ชื่อนี้จริงใน DB
-// ทดสอบ (ปกติมีแค่ admin/tech1 จาก seed) จึงสร้างขึ้นเองแบบ idempotent (INSERT IGNORE)
+// Shop owner: needs a real user row (user-management tests look themselves up), created idempotently.
 async function getOwnerToken() {
   await pool.execute(
-    "INSERT IGNORE INTO users (username, password_hash, full_name, role) VALUES ('ice', 'x', 'Test Owner', 'office')"
+    "INSERT IGNORE INTO users (username, password_hash, full_name, role) VALUES ('shopowner', 'x', 'Test Owner', 'owner')"
   );
-  const [[user]] = await pool.query("SELECT id, username, role FROM users WHERE username = 'ice' AND shop_id = 1 LIMIT 1");
-  return jwt.sign({ id: user.id, username: user.username, role: user.role, shop_id: 1 }, process.env.JWT_SECRET, { expiresIn: '1h' });
+  return signShop1Token('owner', 'shopowner');
+}
+
+async function getDevToken() {
+  await pool.execute(
+    "INSERT IGNORE INTO users (username, password_hash, full_name, role) VALUES ('devtest', 'x', 'Test Dev', 'dev')"
+  );
+  return signShop1Token('dev', 'devtest');
 }
 
 // Creates a throwaway customer + vehicle directly in the DB (fast, and
@@ -74,17 +93,23 @@ async function createShop() {
     process.env.JWT_SECRET,
     { expiresIn: '1h' }
   );
-  // owner = username 'ice' (requireOwner) — each shop has its own 'ice' for settings / users / technicians
+  // owner of the shop: user accounts, settings, technicians
   const [owner] = await pool.query(
-    "INSERT INTO users (shop_id, username, password_hash, full_name, role) VALUES (?, 'ice', 'x', 'Shop B owner', 'office')",
+    "INSERT INTO users (shop_id, username, password_hash, full_name, role) VALUES (?, 'shopowner', 'x', 'Shop B owner', 'owner')",
     [shopId]
   );
   const ownerToken = jwt.sign(
-    { id: owner.insertId, username: 'ice', role: 'office', shop_id: shopId },
+    { id: owner.insertId, username: 'shopowner', role: 'owner', shop_id: shopId },
     process.env.JWT_SECRET,
     { expiresIn: '1h' }
   );
-  return { shopId, userId: user.insertId, token, ownerToken, ownerUserId: owner.insertId };
+  // manager token reuses the office user row (a token is only a signed claim of the role)
+  const managerToken = jwt.sign(
+    { id: user.insertId, username: 'office', role: 'manager', shop_id: shopId },
+    process.env.JWT_SECRET,
+    { expiresIn: '1h' }
+  );
+  return { shopId, userId: user.insertId, token, managerToken, ownerToken, ownerUserId: owner.insertId };
 }
 
 async function dropShop(shopId) {
@@ -109,4 +134,4 @@ async function dropShop(shopId) {
   await pool.query('DELETE FROM shops WHERE id = ?', [shopId]);
 }
 
-module.exports = { getOfficeToken, getTechnicianToken, getOwnerToken, createCustomerWithVehicle, cleanupCustomer, createShop, dropShop };
+module.exports = { getOfficeToken, getManagerToken, getTechnicianToken, getOwnerToken, getDevToken, createCustomerWithVehicle, cleanupCustomer, createShop, dropShop };

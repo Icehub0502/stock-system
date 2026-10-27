@@ -2,6 +2,7 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { hasRole } from '../utils/roles';
 
 // Icons kept as inline SVG (no new asset/dependency) — small, single-color,
 // inherit currentColor so active/inactive states are pure CSS.
@@ -66,7 +67,7 @@ export default function BottomNav() {
   if (!user) return null;
   if (HIDDEN_ON.some((p) => location.pathname.startsWith(p))) return null;
 
-  const items = user.role === 'office' ? OFFICE_ITEMS : TECHNICIAN_ITEMS;
+  const items = hasRole(user, 'office') ? OFFICE_ITEMS : TECHNICIAN_ITEMS;
 
   const openDrawer = () => {
     window.dispatchEvent(new CustomEvent('open-nav-drawer'));

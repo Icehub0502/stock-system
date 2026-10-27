@@ -1,6 +1,6 @@
 const express = require('express');
 const pool = require('../db/pool');
-const { authenticate, requireRole, requireOwner } = require('../middleware/auth');
+const { authenticate, requireRole, requireManager } = require('../middleware/auth');
 
 const router = express.Router();
 router.use(authenticate);
@@ -36,7 +36,7 @@ router.post('/', async (req, res) => {
 // ทั่วไปใช้ตอนมอบหมายงานได้อยู่แล้ว การแก้ไข/ลบเป็นงานจัดการรายชื่อ ไม่ใช่งานประจำวัน
 // จึงจำกัดเฉพาะเจ้าของร้าน — ปลอดภัยที่จะลบเพราะ jobs.technician เป็นแค่ VARCHAR
 // ก็อปปี้ชื่อไว้ตอนมอบหมาย (ไม่ใช่ foreign key) งานเก่าที่เคยมอบหมายไปแล้วไม่กระทบ
-router.put('/:id', requireOwner, async (req, res) => {
+router.put('/:id', requireManager, async (req, res) => {
   const name = String(req.body?.name || '').trim();
   if (!name) return res.status(400).json({ error: 'กรุณากรอกชื่อช่าง' });
   try {
@@ -53,7 +53,7 @@ router.put('/:id', requireOwner, async (req, res) => {
   }
 });
 
-router.delete('/:id', requireOwner, async (req, res) => {
+router.delete('/:id', requireManager, async (req, res) => {
   try {
     const [[existing]] = await pool.query('SELECT id FROM technicians WHERE id = ? AND shop_id = ?', [req.params.id, req.shopId]);
     if (!existing) return res.status(404).json({ error: 'ไม่พบช่างนี้' });

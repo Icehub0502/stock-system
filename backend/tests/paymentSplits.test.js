@@ -1,7 +1,7 @@
 const request = require('supertest');
 const { createApp } = require('../src/app');
 const pool = require('../src/db/pool');
-const { getOfficeToken, createCustomerWithVehicle, cleanupCustomer } = require('./helpers');
+const { getManagerToken, createCustomerWithVehicle, cleanupCustomer } = require('./helpers');
 const { parseSplitsFromText, normalizePaymentMethod } = require('../src/utils/paymentMethods');
 
 const app = createApp();
@@ -36,7 +36,7 @@ describe('PATCH /api/receipts/:id/meta — payment_splits', () => {
   const date = '2026-06-15';
 
   beforeAll(async () => {
-    token = await getOfficeToken();
+    token = await getManagerToken();
   });
 
   beforeEach(async () => {
@@ -126,7 +126,7 @@ describe('PATCH /api/quotations/:id/close — payment_splits', () => {
   let quotationId;
 
   beforeAll(async () => {
-    token = await getOfficeToken();
+    token = await getManagerToken();
   });
 
   beforeEach(async () => {
