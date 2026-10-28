@@ -291,6 +291,7 @@ function ModelsTab({ onChanged }) {
               <h2>{form.id ? 'แก้ไขรุ่นรถ' : (form.newBrand ? 'เพิ่มยี่ห้อใหม่' : 'เพิ่มรุ่นรถ')}</h2>
               <button className="btn-close" onClick={() => setForm(null)}>✕</button>
             </div>
+            {error && <div className="error-message">{error}</div>}
             {form.id && <div className="info-message">เปลี่ยนชื่อแล้ว ราคากลางและราคาของทุกร้านที่ผูกกับรุ่นนี้จะเปลี่ยนตาม</div>}
             {form.newBrand && <div className="info-message">ยี่ห้อใหม่เกิดจากการเพิ่มรุ่นแรกของยี่ห้อนั้น กรอกชื่อยี่ห้อและรุ่นแรกด้านล่าง</div>}
             <form onSubmit={save} className="modal-form">

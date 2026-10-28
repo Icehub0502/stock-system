@@ -6602,3 +6602,5 @@ td.stock-all-actions button { padding: 8px 14px; font-size: 0.85em; min-height: 
 .std-note-ok { color: #15803d; }
 .std-btn { border: 1px solid #d1d5db; background: #fff; border-radius: 6px; padding: 2px 8px; font-size: 12px; cursor: pointer; }
 .std-btn:hover { background: #f3f4f6; }
+.combo-list-up { top: auto; bottom: 100%; margin: 0 0 2px; }
+.saved-notice { position: fixed; top: 76px; left: 50%; transform: translateX(-50%); z-index: 60; background: #ecfdf5; border: 1px solid #6ee7b7; color: #065f46; padding: 10px 18px; border-radius: 8px; box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15); font-size: 15px; cursor: pointer; max-width: calc(100vw - 32px); }

@@ -23,6 +23,17 @@ export default function ComboInput({
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
   const closeTimer = useRef(null);
+  const wrapRef = useRef(null);
+  const [dropUp, setDropUp] = useState(false);
+
+  // open the list upwards when there is no room below (72px = the bottom bar on phones)
+  const measure = () => {
+    const el = wrapRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const below = window.innerHeight - rect.bottom - 72;
+    setDropUp(below < 200 && rect.top > below);
+  };
 
   const typed = normalizeName(value);
   const filtered = useMemo(() => {
@@ -64,7 +75,7 @@ export default function ComboInput({
   };
 
   return (
-    <div className="combo">
+    <div className="combo" ref={wrapRef}>
       <input
         type="text"
         value={value}
@@ -72,13 +83,13 @@ export default function ComboInput({
         placeholder={placeholder}
         autoComplete="off"
         onChange={(e) => { onChange(e.target.value); setActive(0); setOpen(true); }}
-        onFocus={() => { clearTimeout(closeTimer.current); setOpen(true); }}
+        onFocus={() => { clearTimeout(closeTimer.current); measure(); setOpen(true); }}
         onBlur={handleBlur}
         onKeyDown={handleKeyDown}
         {...rest}
       />
       {open && !disabled && (filtered.length > 0 || showCustom) && (
-        <ul className="combo-list" role="listbox">
+        <ul className={`combo-list ${dropUp ? 'combo-list-up' : ''}`} role="listbox">
           {filtered.map((o, i) => (
             <li
               key={o.value}

@@ -1,5 +1,46 @@
-import React from 'react';
-import CarBrandAutocomplete from './CarBrandAutocomplete';
+import React, { useEffect, useState } from 'react';
+import client from '../api/client';
+import ComboInput from './ComboInput';
+
+// Brand → model (with its years, "Vios ปี '07-13") searched from the vehicle book, typing a new one is allowed
+function BrandModelFields({ newVehicle, onFieldChange }) {
+  const [brands, setBrands] = useState([]);
+  const [models, setModels] = useState([]);
+  useEffect(() => {
+    client.get('/vehicle-models/brands').then((res) => setBrands(res.data.data || [])).catch(() => setBrands([]));
+  }, []);
+  const known = brands.find((b) => b.toLowerCase() === newVehicle.brand.trim().toLowerCase()) || '';
+  useEffect(() => {
+    if (!known) { setModels([]); return; }
+    client.get('/vehicle-models/models', { params: { brand: known } })
+      .then((res) => setModels((res.data.data || []).map((m) => ({ value: m.display_name, pending: m.pending }))))
+      .catch(() => setModels([]));
+  }, [known]);
+
+  const changeBrand = (value) => {
+    onFieldChange('brand', value);
+    if (value.trim().toLowerCase() !== newVehicle.brand.trim().toLowerCase()) onFieldChange('model', '');
+  };
+
+  return (
+    <>
+      <div className="form-group">
+        <label>ยี่ห้อ</label>
+        <ComboInput value={newVehicle.brand} options={brands.map((b) => ({ value: b }))} placeholder="พิมพ์ค้นหายี่ห้อ" onChange={changeBrand} />
+      </div>
+      <div className="form-group">
+        <label>รุ่น (ปี)</label>
+        <ComboInput
+          value={newVehicle.model}
+          options={models}
+          disabled={!newVehicle.brand.trim()}
+          placeholder={newVehicle.brand.trim() ? 'พิมพ์ค้นหารุ่น เช่น vios 07' : 'เลือกยี่ห้อก่อน'}
+          onChange={(value) => onFieldChange('model', value)}
+        />
+      </div>
+    </>
+  );
+}
 
 export default function VehicleSection({
   vehicles,
@@ -65,23 +106,7 @@ export default function VehicleSection({
       </div>
       {(vehicleMode === 'new' || vehicles.length === 0) && (
         <div className="form-row vehicle-new-grid">
-          <div className="form-group">
-            <label>ยี่ห้อ</label>
-            <CarBrandAutocomplete
-              value={newVehicle.brand}
-              onChange={(val) => onNewVehicleFieldChange('brand', val)}
-              placeholder="Honda"
-            />
-          </div>
-          <div className="form-group">
-            <label>รุ่น</label>
-            <input
-              type="text"
-              value={newVehicle.model}
-              onChange={(e) => onNewVehicleFieldChange('model', e.target.value)}
-              placeholder="Accord"
-            />
-          </div>
+          <BrandModelFields newVehicle={newVehicle} onFieldChange={onNewVehicleFieldChange} />
           <div className="form-group">
             <label>สี</label>
             <input

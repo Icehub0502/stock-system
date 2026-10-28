@@ -40,7 +40,7 @@ router.get('/models', async (req, res) => {
   if (!brand) return res.status(400).json({ error: 'กรุณาระบุยี่ห้อ' });
   try {
     const [rows] = await pool.execute(
-      `SELECT id, model, year_range, status FROM vehicle_models WHERE brand = ? AND ${VISIBLE} ORDER BY id ASC`,
+      `SELECT id, model, year_range, status FROM vehicle_models WHERE brand = ? AND ${VISIBLE} ORDER BY model ASC, year_range ASC, id ASC`,
       [brand, req.shopId]
     );
     const data = rows.map((r) => ({

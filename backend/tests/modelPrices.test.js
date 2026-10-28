@@ -15,6 +15,7 @@ let shopA2; // owner 1, branch 2 (same group)
 let shopB; // another owner
 let gen1;
 let gen2;
+let genHybrid;
 let pendingId;
 const groups = [];
 
@@ -56,6 +57,7 @@ beforeAll(async () => {
   ))[0].insertId;
   gen1 = await add('2013-2022');
   gen2 = await add('2022-ปัจจุบัน');
+  genHybrid = (await pool.query("INSERT INTO vehicle_models (brand, model, year_range, status) VALUES (?, 'Alpha Hybrid', '2020-2024', 'approved')", [BRAND]))[0].insertId;
   pendingId = (await pool.query(
     "INSERT INTO vehicle_models (brand, model, year_range, status, submitted_shop_id) VALUES (?, 'Pending car', NULL, 'pending', ?)",
     [BRAND, shopA1.shopId]
@@ -75,8 +77,12 @@ describe('which generation a car is', () => {
   const resolve = (query, shop = shopA1) => request(app).get('/api/model-prices/resolve').query(query).set(as(shop.token));
 
   test('one match when the name carries the years, several when it does not, none when nothing fits', async () => {
+    // a model name that starts with the typed text counts too ("Vios" also fits "Vios / Yaris Ativ")
     const plain = await resolve({ brand: BRAND, model: 'Alpha' });
-    expect(plain.body.data.matches.map((m) => m.id).sort()).toEqual([gen1, gen2].sort());
+    expect(plain.body.data.matches.map((m) => m.id).sort()).toEqual([gen1, gen2, genHybrid].sort());
+    expect((await resolve({ brand: BRAND, model: 'Alp' })).body.data.matches).toHaveLength(3);
+    expect((await resolve({ brand: BRAND, model: 'Alpha Hybrid' })).body.data.matches.map((m) => m.id)).toEqual([genHybrid]);
+    expect((await resolve({ brand: BRAND, model: 'A' })).body.data.matches).toEqual([]);
 
     for (const typed of ["Alpha ปี '13-22'", "alpha ปี 13-22", 'Alpha (2013-2022)', 'ALPHA ปี 13-22']) {
       const res = await resolve({ brand: BRAND, model: typed });
@@ -87,6 +93,15 @@ describe('which generation a car is', () => {
     expect((await resolve({ brand: BRAND, model: 'Pending car' })).body.data.matches).toEqual([]);
     expect((await resolve({ vehicle_model_id: gen1 })).body.data.matches[0]).toMatchObject({ id: gen1, display_name: "Alpha ปี '13-22'" });
     expect((await resolve({ vehicle_model_id: pendingId })).body.data.matches).toEqual([]);
+  });
+});
+
+describe('model lists for the pickers', () => {
+  test('generations are listed alphabetically by model, then by years', async () => {
+    const res = await request(app).get('/api/vehicle-models/models').query({ brand: BRAND }).set(as(shopA1.token));
+    res.body.data = res.body.data.filter((m) => !m.pending); // the shop's own pending model is listed too
+    expect(res.body.data.map((m) => m.label)).toEqual(['Alpha (2013-2022)', 'Alpha (2022-ปัจจุบัน)', 'Alpha Hybrid (2020-2024)']);
+    expect(res.body.data.map((m) => m.display_name)).toEqual(["Alpha ปี '13-22'", "Alpha ปี '22-ปัจจุบัน'", "Alpha Hybrid ปี '20-24'"]);
   });
 });
 

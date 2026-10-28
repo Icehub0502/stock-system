@@ -1939,3 +1939,5 @@
     color: var(--m-text-lo);
   }
 }
+/* a long option ("ชื่อประกัน • 1 ปี 0 เดือน 12,000 กม.") must not push the select past its card on a phone */
+.receipt-info-grid select { width: 100%; max-width: 100%; box-sizing: border-box; text-overflow: ellipsis; }

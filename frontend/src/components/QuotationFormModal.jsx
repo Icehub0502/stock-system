@@ -291,6 +291,8 @@ export default function QuotationFormModal({ quotation, onClose, onSuccess, onDe
 
   // what sits under a line's price field: the standard price and the buttons to use / remember it
   const renderPriceExtra = (item, index) => {
+    // the other lines of a promo set carry 0 because the set has one price
+    if (item.set_member && item.unit_price === '0') return <div className="std-note">รวมในราคาชุดแล้ว</div>;
     if (!vehicleModel || item.auto_labor) return null;
     const price = Number(item.unit_price || 0);
     const hasStandard = item.std_price !== undefined && item.std_price !== null;
@@ -302,7 +304,7 @@ export default function QuotationFormModal({ quotation, onClose, onSuccess, onDe
         {hasStandard && (
           <>
             <span>มาตรฐาน ฿{formatMoney(item.std_price)}</span>
-            <button type="button" className="std-btn" onClick={() => applyStandardPrice(index)}>ใช้</button>
+            <button type="button" className="std-btn" onClick={() => applyStandardPrice(index)}>ใช้ราคามาตรฐาน</button>
           </>
         )}
         {canRemember && (
@@ -657,6 +659,7 @@ export default function QuotationFormModal({ quotation, onClose, onSuccess, onDe
       });
       // the price of a set is one price for the whole set: it goes on the first line, remembered under the set's name
       rows[0].price_key_name = product.product_name;
+      rows.slice(1).forEach((row) => { row.set_member = true; });
       setItems((prev) => {
         const next = [...prev];
         next.splice(index, 1, ...rows);
@@ -799,8 +802,9 @@ export default function QuotationFormModal({ quotation, onClose, onSuccess, onDe
         vehicle_id: vehicleMode === 'existing' ? vehicleId : null,
         vehicle_model_id: vehicleModel ? vehicleModel.id : null,
         newVehicle: vehicleMode === 'new' ? {
-          brand: newVehicle.brand.trim(),
-          model: newVehicle.model.trim(),
+          brand: vehicleModel ? vehicleModel.brand : newVehicle.brand.trim(),
+          // a new car whose generation is known is saved under its full name ("Vios ปี '07-13'")
+          model: vehicleModel ? vehicleModel.display_name : newVehicle.model.trim(),
           color: newVehicle.color.trim() || null,
           license_plate: newVehicle.license_plate.trim() || null,
         } : null,
@@ -829,14 +833,17 @@ export default function QuotationFormModal({ quotation, onClose, onSuccess, onDe
         })),
       };
 
+      // told to the list page, which shows the number and opens the month the quotation went into
+      const saved = { quotation_no: quotationNo, quotation_date: quotationDate, edited: Boolean(quotation?.id) };
       if (quotation?.id) {
         await client.put(`/quotations/${quotation.id}`, payload);
         showToast('success', 'แก้ไขใบเสนอราคาสำเร็จ');
       } else {
-        await client.post('/quotations', payload);
+        const created = await client.post('/quotations', payload);
+        if (created.data?.quotation_no) saved.quotation_no = created.data.quotation_no;
         showToast('success', 'สร้างใบเสนอราคาสำเร็จ');
       }
-      onSuccess();
+      onSuccess(saved);
     } catch (err) {
       const resp = err.response?.data;
       if (resp && Array.isArray(resp.errors)) {

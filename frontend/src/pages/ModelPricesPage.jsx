@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import client from '../api/client';
-import ComboInput from '../components/ComboInput';
+import ComboInput, { normalizeName } from '../components/ComboInput';
 import { formatMoney } from '../utils/format';
 
 // Standard prices per vehicle generation (shared by every branch of the same owner), and the prices staff keep typing
@@ -217,6 +217,11 @@ function PriceForm({ initial, onClose, onSaved }) {
             {editing ? <input type="text" value={form.item_name} disabled /> : (
               <ComboInput value={form.item_name} options={itemOptions} customLabel="ใช้ชื่อที่พิมพ์" placeholder="เช่น โช๊คอัพหน้า"
                 onChange={(v) => setForm({ ...form, item_name: v })} />
+            )}
+            {!editing && form.item_name.trim() && !itemOptions.some((o) => normalizeName(o.value) === normalizeName(form.item_name)) && (
+              <div className="info-message">
+                ไม่พบ "{form.item_name.trim()}" ในรายการสินค้า/บริการ ราคานี้จะไม่ขึ้นให้ในใบเสนอราคา ถ้าชื่อไม่ตรงกับที่พนักงานเลือก ตรวจชื่อให้ตรงก่อนบันทึก
+              </div>
             )}
           </div>
           <div className="form-group">

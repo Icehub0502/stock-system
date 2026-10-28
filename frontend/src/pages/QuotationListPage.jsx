@@ -10,6 +10,7 @@ import AddJobModal from "../components/AddJobModal";
 import { useNavigate } from "react-router-dom";
 import { plateWithProvince } from "../utils/thaiProvinces";
 import StatusBadge from "../components/StatusBadge";
+import { formatMoney } from "../utils/format";
 import { todayStr } from "../utils/format";
 import { buildArchiveGroups, formatDateTh, formatMonthTh, formatYearTh } from "../utils/dateGroups";
 import useRealtimeEvent from "../hooks/useRealtimeEvent";
@@ -109,6 +110,13 @@ export default function QuotationListPage() {
   // โหลดมาก่อนถึงจะรู้ว่าปี/เดือนล่าสุดในข้อมูลจริงคือช่วงไหน)
   const [expandedYears, setExpandedYears] = useState(null);
   const [expandedMonths, setExpandedMonths] = useState(null);
+  // confirmation after saving: the form closes at once, so the list says what was saved
+  const [savedNotice, setSavedNotice] = useState('');
+  useEffect(() => {
+    if (!savedNotice) return undefined;
+    const timer = setTimeout(() => setSavedNotice(''), 8000);
+    return () => clearTimeout(timer);
+  }, [savedNotice]);
 
   useEffect(() => {
     if (expandedYears === null && archive.length > 0) {
@@ -273,10 +281,18 @@ export default function QuotationListPage() {
     }
   };
 
-  const handleFormSuccess = () => {
+  const handleFormSuccess = (saved) => {
     setShowFormModal(false);
     setEditingQuotation(null);
     fetchQuotations();
+    if (saved && saved.quotation_no) {
+      setSavedNotice(`${saved.edited ? 'แก้ไข' : 'บันทึก'}ใบเสนอราคา ${saved.quotation_no} เรียบร้อยแล้ว`);
+      if (saved.quotation_date) {
+        // open the year / month the quotation went into so it can be seen
+        setExpandedYears((prev) => new Set([...(prev || []), saved.quotation_date.slice(0, 4)]));
+        setExpandedMonths((prev) => new Set([...(prev || []), saved.quotation_date.slice(0, 7)]));
+      }
+    }
   };
 
   const handlePrinted = (quotationId) => {
@@ -392,16 +408,18 @@ export default function QuotationListPage() {
                             : ''
                       }
                     >
-                      <td data-label="เลขที่">
+                      <td data-label="เลขที่" style={{ whiteSpace: 'nowrap' }}>
                         <strong>{q.quotation_no}</strong>
                       </td>
                       <td className="col-customer-name" data-label="ชื่อลูกค้า">{q.customer_name}</td>
                       <td className="car-info" data-label="รุ่น/สี/ทะเบียน">
-                        {q.brand || q.car_brand} {q.model || q.car_model} / {q.color || q.car_color} /{" "}
-                        {plateWithProvince(q.license_plate, q.province)}
+                        {/* only the parts that exist, so a car without colour / plate does not end in " / /" */}
+                        {[`${q.brand || q.car_brand || ''} ${q.model || q.car_model || ''}`.trim(), q.color || q.car_color, plateWithProvince(q.license_plate, q.province)]
+                          .filter((part) => part && String(part).trim() && String(part).trim() !== '-')
+                          .join(' / ')}
                       </td>
-                      <td className="amount" data-label="จำนวนรวม">
-                        ฿{parseFloat(q.total_amount).toFixed(2)}
+                      <td className="amount" data-label="จำนวนรวม" style={{ whiteSpace: 'nowrap', wordBreak: 'keep-all' }}>
+                        ฿{formatMoney(q.total_amount)}
                       </td>
                       <td data-label="สถานะ">
                         <StatusBadge status={q.status} scheduledDate={q.scheduled_date} closedAt={q.closed_at} />
@@ -512,6 +530,10 @@ export default function QuotationListPage() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {savedNotice && (
+        <div className="saved-notice" role="status" onClick={() => setSavedNotice('')}>✅ {savedNotice}</div>
       )}
 
       {/* Modals */}

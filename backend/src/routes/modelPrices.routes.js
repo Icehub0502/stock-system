@@ -29,7 +29,9 @@ async function requireGroup(req, res) {
 
 // GET /model-prices/resolve?brand=Toyota&model=Vios  (or ?vehicle_model_id=12)
 // → { matches: [{ id, brand, model, year_range, display_name }] }. One match = the generation is known; several =
-// the typed name fits more than one generation (e.g. plain "Vios"), the staff pick; none = nothing in the book fits.
+// the typed name fits more than one generation (e.g. plain "Vios" also fits "Vios / Yaris Ativ": a model name that
+// starts with the typed text counts), the staff pick; none = nothing in the book fits. A full name with its years
+// ("Vios ปี '07-13") names exactly one generation.
 router.get('/resolve', async (req, res) => {
   try {
     if (req.query.vehicle_model_id) {
@@ -43,7 +45,7 @@ router.get('/resolve', async (req, res) => {
       "SELECT id, brand, model, year_range FROM vehicle_models WHERE brand = ? AND status = 'approved' ORDER BY id",
       [brand]
     );
-    const matches = rows.filter((r) => normalizeName(r.model) === typed
+    const matches = rows.filter((r) => (typed.length >= 2 && normalizeName(r.model).startsWith(typed))
       || normalizeName(r.year_range ? `${r.model} (${r.year_range})` : r.model) === typed
       || normalizeName(displayModelName(r.model, r.year_range)) === typed).map(withDisplay);
     res.json({ success: true, data: { matches } });
