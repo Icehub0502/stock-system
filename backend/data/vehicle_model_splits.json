@@ -1,0 +1,2388 @@
+{
+ "comment": "Plan for scripts/split_vehicle_models.js: each old catalogue entry (brand + old_model + old_years) is replaced by the listed generations; entries in retire have no year range and no parts.",
+ "splits": [
+  {
+   "brand": "Toyota",
+   "old_model": "Vios / Yaris Ativ",
+   "old_years": "2002-ปัจจุบัน",
+   "model": "Vios",
+   "year_range": "2002-2007"
+  },
+  {
+   "brand": "Toyota",
+   "old_model": "Vios / Yaris Ativ",
+   "old_years": "2002-ปัจจุบัน",
+   "model": "Vios",
+   "year_range": "2007-2013"
+  },
+  {
+   "brand": "Toyota",
+   "old_model": "Vios / Yaris Ativ",
+   "old_years": "2002-ปัจจุบัน",
+   "model": "Vios / Yaris Ativ",
+   "year_range": "2013-2022"
+  },
+  {
+   "brand": "Toyota",
+   "old_model": "Vios / Yaris Ativ",
+   "old_years": "2002-ปัจจุบัน",
+   "model": "Yaris Ativ",
+   "year_range": "2022-ปัจจุบัน"
+  },
+  {
+   "brand": "Toyota",
+   "old_model": "Yaris (แฮทช์แบ็ก)",
+   "old_years": "2006-ปัจจุบัน",
+   "model": "Yaris",
+   "year_range": "2006-2013"
+  },
+  {
+   "brand": "Toyota",
+   "old_model": "Yaris (แฮทช์แบ็ก)",
+   "old_years": "2006-ปัจจุบัน",
+   "model": "Yaris",
+   "year_range": "2013-ปัจจุบัน"
+  },
+  {
+   "brand": "Toyota",
+   "old_model": "Corolla Altis",
+   "old_years": "2001-ปัจจุบัน",
+   "model": "Corolla Altis",
+   "year_range": "2001-2008"
+  },
+  {
+   "brand": "Toyota",
+   "old_model": "Corolla Altis",
+   "old_years": "2001-ปัจจุบัน",
+   "model": "Corolla Altis",
+   "year_range": "2008-2014"
+  },
+  {
+   "brand": "Toyota",
+   "old_model": "Corolla Altis",
+   "old_years": "2001-ปัจจุบัน",
+   "model": "Corolla Altis",
+   "year_range": "2014-2019"
+  },
+  {
+   "brand": "Toyota",
+   "old_model": "Corolla Altis",
+   "old_years": "2001-ปัจจุบัน",
+   "model": "Corolla Altis",
+   "year_range": "2019-ปัจจุบัน"
+  },
+  {
+   "brand": "Toyota",
+   "old_model": "Camry",
+   "old_years": "1993-ปัจจุบัน",
+   "model": "Camry SXV10",
+   "year_range": "1993-1999"
+  },
+  {
+   "brand": "Toyota",
+   "old_model": "Camry",
+   "old_years": "1993-ปัจจุบัน",
+   "model": "Camry SXV20",
+   "year_range": "1999-2002"
+  },
+  {
+   "brand": "Toyota",
+   "old_model": "Camry",
+   "old_years": "1993-ปัจจุบัน",
+   "model": "Camry ACV30",
+   "year_range": "2002-2006"
+  },
+  {
+   "brand": "Toyota",
+   "old_model": "Camry",
+   "old_years": "1993-ปัจจุบัน",
+   "model": "Camry ACV40",
+   "year_range": "2006-2012"
+  },
+  {
+   "brand": "Toyota",
+   "old_model": "Camry",
+   "old_years": "1993-ปัจจุบัน",
+   "model": "Camry ASV50",
+   "year_range": "2012-2018"
+  },
+  {
+   "brand": "Toyota",
+   "old_model": "Camry",
+   "old_years": "1993-ปัจจุบัน",
+   "model": "Camry XV70",
+   "year_range": "2018-2024"
+  },
+  {
+   "brand": "Toyota",
+   "old_model": "Camry",
+   "old_years": "1993-ปัจจุบัน",
+   "model": "Camry XV80",
+   "year_range": "2024-ปัจจุบัน"
+  },
+  {
+   "brand": "Toyota",
+   "old_model": "Camry Hybrid",
+   "old_years": "2009-ปัจจุบัน",
+   "model": "Camry AHV40",
+   "year_range": "2009-2012"
+  },
+  {
+   "brand": "Toyota",
+   "old_model": "Camry Hybrid",
+   "old_years": "2009-ปัจจุบัน",
+   "model": "Camry AVV50",
+   "year_range": "2012-2018"
+  },
+  {
+   "brand": "Toyota",
+   "old_model": "Camry Hybrid",
+   "old_years": "2009-ปัจจุบัน",
+   "model": "Camry Hybrid XV70",
+   "year_range": "2018-2024"
+  },
+  {
+   "brand": "Toyota",
+   "old_model": "Hilux Vigo",
+   "old_years": "2004-2015",
+   "model": "Hilux Vigo",
+   "year_range": "2004-2011"
+  },
+  {
+   "brand": "Toyota",
+   "old_model": "Hilux Vigo",
+   "old_years": "2004-2015",
+   "model": "Hilux Vigo Champ",
+   "year_range": "2011-2015"
+  },
+  {
+   "brand": "Toyota",
+   "old_model": "Hilux Revo",
+   "old_years": "2015-ปัจจุบัน",
+   "model": "Hilux Revo",
+   "year_range": "2015-2020"
+  },
+  {
+   "brand": "Toyota",
+   "old_model": "Hilux Revo",
+   "old_years": "2015-ปัจจุบัน",
+   "model": "Hilux Revo",
+   "year_range": "2020-2025"
+  },
+  {
+   "brand": "Toyota",
+   "old_model": "Hilux Revo",
+   "old_years": "2015-ปัจจุบัน",
+   "model": "Hilux Travo",
+   "year_range": "2025-ปัจจุบัน"
+  },
+  {
+   "brand": "Toyota",
+   "old_model": "Fortuner",
+   "old_years": "2005-ปัจจุบัน",
+   "model": "Fortuner",
+   "year_range": "2005-2015"
+  },
+  {
+   "brand": "Toyota",
+   "old_model": "Fortuner",
+   "old_years": "2005-ปัจจุบัน",
+   "model": "Fortuner",
+   "year_range": "2015-ปัจจุบัน"
+  },
+  {
+   "brand": "Toyota",
+   "old_model": "Innova",
+   "old_years": "2005-2022",
+   "model": "Innova",
+   "year_range": "2005-2016"
+  },
+  {
+   "brand": "Toyota",
+   "old_model": "Innova",
+   "old_years": "2005-2022",
+   "model": "Innova",
+   "year_range": "2016-2022"
+  },
+  {
+   "brand": "Toyota",
+   "old_model": "Avanza",
+   "old_years": "2004-2022",
+   "model": "Avanza",
+   "year_range": "2004-2011"
+  },
+  {
+   "brand": "Toyota",
+   "old_model": "Avanza",
+   "old_years": "2004-2022",
+   "model": "Avanza",
+   "year_range": "2011-2022"
+  },
+  {
+   "brand": "Toyota",
+   "old_model": "Alphard",
+   "old_years": "2008-ปัจจุบัน",
+   "model": "Alphard",
+   "year_range": "2008-2015"
+  },
+  {
+   "brand": "Toyota",
+   "old_model": "Alphard",
+   "old_years": "2008-ปัจจุบัน",
+   "model": "Alphard",
+   "year_range": "2015-2023"
+  },
+  {
+   "brand": "Toyota",
+   "old_model": "Alphard",
+   "old_years": "2008-ปัจจุบัน",
+   "model": "Alphard",
+   "year_range": "2023-ปัจจุบัน"
+  },
+  {
+   "brand": "Toyota",
+   "old_model": "Land Cruiser Prado",
+   "old_years": "2003-ปัจจุบัน",
+   "model": "Land Cruiser Prado",
+   "year_range": "2003-2009"
+  },
+  {
+   "brand": "Toyota",
+   "old_model": "Land Cruiser Prado",
+   "old_years": "2003-ปัจจุบัน",
+   "model": "Land Cruiser Prado",
+   "year_range": "2009-2024"
+  },
+  {
+   "brand": "Toyota",
+   "old_model": "Land Cruiser Prado",
+   "old_years": "2003-ปัจจุบัน",
+   "model": "Land Cruiser Prado",
+   "year_range": "2024-ปัจจุบัน"
+  },
+  {
+   "brand": "Toyota",
+   "old_model": "Commuter / Hiace",
+   "old_years": "1990s-ปัจจุบัน",
+   "model": "Hiace",
+   "year_range": "1990-2005"
+  },
+  {
+   "brand": "Toyota",
+   "old_model": "Commuter / Hiace",
+   "old_years": "1990s-ปัจจุบัน",
+   "model": "Commuter",
+   "year_range": "2005-2019"
+  },
+  {
+   "brand": "Toyota",
+   "old_model": "Commuter / Hiace",
+   "old_years": "1990s-ปัจจุบัน",
+   "model": "Commuter",
+   "year_range": "2019-ปัจจุบัน"
+  },
+  {
+   "brand": "Toyota",
+   "old_model": "Wish",
+   "old_years": "2003-2012",
+   "model": "Wish",
+   "year_range": "2003-2009"
+  },
+  {
+   "brand": "Toyota",
+   "old_model": "Wish",
+   "old_years": "2003-2012",
+   "model": "Wish",
+   "year_range": "2009-2012"
+  },
+  {
+   "brand": "Honda",
+   "old_model": "City",
+   "old_years": "1996-ปัจจุบัน",
+   "model": "City",
+   "year_range": "1996-2002"
+  },
+  {
+   "brand": "Honda",
+   "old_model": "City",
+   "old_years": "1996-ปัจจุบัน",
+   "model": "City",
+   "year_range": "2002-2008"
+  },
+  {
+   "brand": "Honda",
+   "old_model": "City",
+   "old_years": "1996-ปัจจุบัน",
+   "model": "City",
+   "year_range": "2008-2014"
+  },
+  {
+   "brand": "Honda",
+   "old_model": "City",
+   "old_years": "1996-ปัจจุบัน",
+   "model": "City",
+   "year_range": "2014-2019"
+  },
+  {
+   "brand": "Honda",
+   "old_model": "City",
+   "old_years": "1996-ปัจจุบัน",
+   "model": "City",
+   "year_range": "2019-ปัจจุบัน"
+  },
+  {
+   "brand": "Honda",
+   "old_model": "Accord",
+   "old_years": "1998-ปัจจุบัน",
+   "model": "Accord",
+   "year_range": "1998-2003"
+  },
+  {
+   "brand": "Honda",
+   "old_model": "Accord",
+   "old_years": "1998-ปัจจุบัน",
+   "model": "Accord",
+   "year_range": "2003-2007"
+  },
+  {
+   "brand": "Honda",
+   "old_model": "Accord",
+   "old_years": "1998-ปัจจุบัน",
+   "model": "Accord",
+   "year_range": "2007-2013"
+  },
+  {
+   "brand": "Honda",
+   "old_model": "Accord",
+   "old_years": "1998-ปัจจุบัน",
+   "model": "Accord",
+   "year_range": "2013-2018"
+  },
+  {
+   "brand": "Honda",
+   "old_model": "Accord",
+   "old_years": "1998-ปัจจุบัน",
+   "model": "Accord",
+   "year_range": "2018-2023"
+  },
+  {
+   "brand": "Honda",
+   "old_model": "Accord",
+   "old_years": "1998-ปัจจุบัน",
+   "model": "Accord",
+   "year_range": "2023-ปัจจุบัน"
+  },
+  {
+   "brand": "Honda",
+   "old_model": "Jazz / Fit",
+   "old_years": "2003-2021",
+   "model": "Jazz",
+   "year_range": "2003-2008"
+  },
+  {
+   "brand": "Honda",
+   "old_model": "Jazz / Fit",
+   "old_years": "2003-2021",
+   "model": "Jazz",
+   "year_range": "2008-2014"
+  },
+  {
+   "brand": "Honda",
+   "old_model": "Jazz / Fit",
+   "old_years": "2003-2021",
+   "model": "Jazz",
+   "year_range": "2014-2022"
+  },
+  {
+   "brand": "Honda",
+   "old_model": "CR-V",
+   "old_years": "1997-ปัจจุบัน",
+   "model": "CR-V",
+   "year_range": "1996-2001"
+  },
+  {
+   "brand": "Honda",
+   "old_model": "CR-V",
+   "old_years": "1997-ปัจจุบัน",
+   "model": "CR-V",
+   "year_range": "2001-2006"
+  },
+  {
+   "brand": "Honda",
+   "old_model": "CR-V",
+   "old_years": "1997-ปัจจุบัน",
+   "model": "CR-V",
+   "year_range": "2006-2011"
+  },
+  {
+   "brand": "Honda",
+   "old_model": "CR-V",
+   "old_years": "1997-ปัจจุบัน",
+   "model": "CR-V",
+   "year_range": "2012-2016"
+  },
+  {
+   "brand": "Honda",
+   "old_model": "CR-V",
+   "old_years": "1997-ปัจจุบัน",
+   "model": "CR-V",
+   "year_range": "2017-2023"
+  },
+  {
+   "brand": "Honda",
+   "old_model": "CR-V",
+   "old_years": "1997-ปัจจุบัน",
+   "model": "CR-V",
+   "year_range": "2023-ปัจจุบัน"
+  },
+  {
+   "brand": "Honda",
+   "old_model": "HR-V",
+   "old_years": "2014-ปัจจุบัน",
+   "model": "HR-V",
+   "year_range": "2014-2021"
+  },
+  {
+   "brand": "Honda",
+   "old_model": "HR-V",
+   "old_years": "2014-ปัจจุบัน",
+   "model": "HR-V",
+   "year_range": "2021-ปัจจุบัน"
+  },
+  {
+   "brand": "Honda",
+   "old_model": "Civic Type R",
+   "old_years": "2016-ปัจจุบัน",
+   "model": "Civic Type R",
+   "year_range": "2017-2021"
+  },
+  {
+   "brand": "Honda",
+   "old_model": "Civic Type R",
+   "old_years": "2016-ปัจจุบัน",
+   "model": "Civic Type R",
+   "year_range": "2023-ปัจจุบัน"
+  },
+  {
+   "brand": "Honda",
+   "old_model": "Civic Hatchback",
+   "old_years": "2017-ปัจจุบัน",
+   "model": "Civic Hatchback",
+   "year_range": "2017-2021"
+  },
+  {
+   "brand": "Honda",
+   "old_model": "Odyssey",
+   "old_years": "2000s-2021",
+   "model": "Odyssey",
+   "year_range": "2000-2003"
+  },
+  {
+   "brand": "Honda",
+   "old_model": "Odyssey",
+   "old_years": "2000s-2021",
+   "model": "Odyssey",
+   "year_range": "2003-2008"
+  },
+  {
+   "brand": "Honda",
+   "old_model": "Odyssey",
+   "old_years": "2000s-2021",
+   "model": "Odyssey",
+   "year_range": "2009-2013"
+  },
+  {
+   "brand": "Honda",
+   "old_model": "Odyssey",
+   "old_years": "2000s-2021",
+   "model": "Odyssey",
+   "year_range": "2014-2021"
+  },
+  {
+   "brand": "Honda",
+   "old_model": "Stream",
+   "old_years": "2001-2013",
+   "model": "Stream",
+   "year_range": "2001-2006"
+  },
+  {
+   "brand": "Honda",
+   "old_model": "Stream",
+   "old_years": "2001-2013",
+   "model": "Stream",
+   "year_range": "2006-2013"
+  },
+  {
+   "brand": "Isuzu",
+   "old_model": "TFR (Dragon Eyes/Power)",
+   "old_years": "1990s-2002",
+   "model": "TFR",
+   "year_range": "1990-1997"
+  },
+  {
+   "brand": "Isuzu",
+   "old_model": "TFR (Dragon Eyes/Power)",
+   "old_years": "1990s-2002",
+   "model": "TFR Dragon Eyes",
+   "year_range": "1997-2002"
+  },
+  {
+   "brand": "Isuzu",
+   "old_model": "D-Max V-Cross",
+   "old_years": "2012-ปัจจุบัน",
+   "model": "D-Max V-Cross",
+   "year_range": "2012-2019"
+  },
+  {
+   "brand": "Isuzu",
+   "old_model": "D-Max V-Cross",
+   "old_years": "2012-ปัจจุบัน",
+   "model": "D-Max V-Cross",
+   "year_range": "2019-ปัจจุบัน"
+  },
+  {
+   "brand": "Isuzu",
+   "old_model": "D-Max X-Series",
+   "old_years": "2016-ปัจจุบัน",
+   "model": "D-Max X-Series",
+   "year_range": "2016-2019"
+  },
+  {
+   "brand": "Isuzu",
+   "old_model": "D-Max X-Series",
+   "old_years": "2016-ปัจจุบัน",
+   "model": "D-Max X-Series",
+   "year_range": "2019-ปัจจุบัน"
+  },
+  {
+   "brand": "Nissan",
+   "old_model": "Cefiro",
+   "old_years": "1990s-2003",
+   "model": "Cefiro",
+   "year_range": "1995-1998"
+  },
+  {
+   "brand": "Nissan",
+   "old_model": "Cefiro",
+   "old_years": "1990s-2003",
+   "model": "Cefiro",
+   "year_range": "1998-2003"
+  },
+  {
+   "brand": "Nissan",
+   "old_model": "Teana",
+   "old_years": "2004-2020",
+   "model": "Teana",
+   "year_range": "2004-2008"
+  },
+  {
+   "brand": "Nissan",
+   "old_model": "Teana",
+   "old_years": "2004-2020",
+   "model": "Teana",
+   "year_range": "2008-2013"
+  },
+  {
+   "brand": "Nissan",
+   "old_model": "Teana",
+   "old_years": "2004-2020",
+   "model": "Teana",
+   "year_range": "2013-2020"
+  },
+  {
+   "brand": "Nissan",
+   "old_model": "X-Trail (เจน 1-2)",
+   "old_years": "2001-2013",
+   "model": "X-Trail",
+   "year_range": "2001-2007"
+  },
+  {
+   "brand": "Nissan",
+   "old_model": "X-Trail (เจน 1-2)",
+   "old_years": "2001-2013",
+   "model": "X-Trail",
+   "year_range": "2007-2013"
+  },
+  {
+   "brand": "Nissan",
+   "old_model": "Urvan (รถตู้)",
+   "old_years": "2000s-ปัจจุบัน",
+   "model": "Urvan",
+   "year_range": "2001-2012"
+  },
+  {
+   "brand": "Nissan",
+   "old_model": "Urvan (รถตู้)",
+   "old_years": "2000s-ปัจจุบัน",
+   "model": "Urvan",
+   "year_range": "2012-ปัจจุบัน"
+  },
+  {
+   "brand": "Mazda",
+   "old_model": "323 / Protege",
+   "old_years": "1990s-2003",
+   "model": "323",
+   "year_range": "1990-1998"
+  },
+  {
+   "brand": "Mazda",
+   "old_model": "323 / Protege",
+   "old_years": "1990s-2003",
+   "model": "323 Protege",
+   "year_range": "1998-2003"
+  },
+  {
+   "brand": "Mazda",
+   "old_model": "626",
+   "old_years": "1990s-2002",
+   "model": "626",
+   "year_range": "1992-1997"
+  },
+  {
+   "brand": "Mazda",
+   "old_model": "626",
+   "old_years": "1990s-2002",
+   "model": "626",
+   "year_range": "1997-2002"
+  },
+  {
+   "brand": "Mazda",
+   "old_model": "Mazda3 (เจน 1-2)",
+   "old_years": "2004-2014",
+   "model": "Mazda3",
+   "year_range": "2004-2011"
+  },
+  {
+   "brand": "Mazda",
+   "old_model": "Mazda3 (เจน 1-2)",
+   "old_years": "2004-2014",
+   "model": "Mazda3",
+   "year_range": "2011-2014"
+  },
+  {
+   "brand": "Mazda",
+   "old_model": "Mazda6",
+   "old_years": "2003-2018",
+   "model": "Mazda6",
+   "year_range": "2003-2008"
+  },
+  {
+   "brand": "Mazda",
+   "old_model": "Mazda6",
+   "old_years": "2003-2018",
+   "model": "Mazda6",
+   "year_range": "2008-2012"
+  },
+  {
+   "brand": "Mazda",
+   "old_model": "Mazda6",
+   "old_years": "2003-2018",
+   "model": "Mazda6",
+   "year_range": "2012-2018"
+  },
+  {
+   "brand": "Mazda",
+   "old_model": "CX-5",
+   "old_years": "2013-ปัจจุบัน",
+   "model": "CX-5",
+   "year_range": "2013-2017"
+  },
+  {
+   "brand": "Mazda",
+   "old_model": "CX-5",
+   "old_years": "2013-ปัจจุบัน",
+   "model": "CX-5",
+   "year_range": "2017-ปัจจุบัน"
+  },
+  {
+   "brand": "Mazda",
+   "old_model": "MX-5",
+   "old_years": "2000s-ปัจจุบัน",
+   "model": "MX-5",
+   "year_range": "1998-2005"
+  },
+  {
+   "brand": "Mazda",
+   "old_model": "MX-5",
+   "old_years": "2000s-ปัจจุบัน",
+   "model": "MX-5",
+   "year_range": "2005-2015"
+  },
+  {
+   "brand": "Mazda",
+   "old_model": "MX-5",
+   "old_years": "2000s-ปัจจุบัน",
+   "model": "MX-5",
+   "year_range": "2015-ปัจจุบัน"
+  },
+  {
+   "brand": "Mitsubishi",
+   "old_model": "Lancer",
+   "old_years": "1990s-2010",
+   "model": "Lancer E-Car",
+   "year_range": "1992-1996"
+  },
+  {
+   "brand": "Mitsubishi",
+   "old_model": "Lancer",
+   "old_years": "1990s-2010",
+   "model": "Lancer ท้ายเบนซ์",
+   "year_range": "1996-2001"
+  },
+  {
+   "brand": "Mitsubishi",
+   "old_model": "Lancer",
+   "old_years": "1990s-2010",
+   "model": "Lancer Cedia",
+   "year_range": "2001-2010"
+  },
+  {
+   "brand": "Mitsubishi",
+   "old_model": "Space Wagon",
+   "old_years": "1990s-2004",
+   "model": "Space Wagon",
+   "year_range": "1991-1998"
+  },
+  {
+   "brand": "Mitsubishi",
+   "old_model": "Space Wagon",
+   "old_years": "1990s-2004",
+   "model": "Space Wagon",
+   "year_range": "1998-2004"
+  },
+  {
+   "brand": "Ford",
+   "old_model": "Laser",
+   "old_years": "1990s-2002",
+   "model": "Laser",
+   "year_range": "1990-1994"
+  },
+  {
+   "brand": "Ford",
+   "old_model": "Laser",
+   "old_years": "1990s-2002",
+   "model": "Laser",
+   "year_range": "1994-1999"
+  },
+  {
+   "brand": "Ford",
+   "old_model": "Laser",
+   "old_years": "1990s-2002",
+   "model": "Laser",
+   "year_range": "1999-2002"
+  },
+  {
+   "brand": "Ford",
+   "old_model": "Ranger (เจน 1-2)",
+   "old_years": "1999-2011",
+   "model": "Ranger",
+   "year_range": "1998-2006"
+  },
+  {
+   "brand": "Ford",
+   "old_model": "Ranger (เจน 1-2)",
+   "old_years": "1999-2011",
+   "model": "Ranger",
+   "year_range": "2006-2011"
+  },
+  {
+   "brand": "Ford",
+   "old_model": "Ranger Wildtrak",
+   "old_years": "2012-ปัจจุบัน",
+   "model": "Ranger Wildtrak",
+   "year_range": "2012-2022"
+  },
+  {
+   "brand": "Ford",
+   "old_model": "Ranger Wildtrak",
+   "old_years": "2012-ปัจจุบัน",
+   "model": "Ranger Wildtrak",
+   "year_range": "2022-ปัจจุบัน"
+  },
+  {
+   "brand": "Ford",
+   "old_model": "Focus",
+   "old_years": "2005-2018",
+   "model": "Focus",
+   "year_range": "2005-2011"
+  },
+  {
+   "brand": "Ford",
+   "old_model": "Focus",
+   "old_years": "2005-2018",
+   "model": "Focus",
+   "year_range": "2012-2018"
+  },
+  {
+   "brand": "Ford",
+   "old_model": "Escape",
+   "old_years": "2000s-2012",
+   "model": "Escape",
+   "year_range": "2003-2008"
+  },
+  {
+   "brand": "Ford",
+   "old_model": "Escape",
+   "old_years": "2000s-2012",
+   "model": "Escape",
+   "year_range": "2008-2012"
+  },
+  {
+   "brand": "Ford",
+   "old_model": "Mustang",
+   "old_years": "2015-ปัจจุบัน",
+   "model": "Mustang",
+   "year_range": "2015-2023"
+  },
+  {
+   "brand": "Ford",
+   "old_model": "Mustang",
+   "old_years": "2015-ปัจจุบัน",
+   "model": "Mustang",
+   "year_range": "2024-ปัจจุบัน"
+  },
+  {
+   "brand": "Chevrolet",
+   "old_model": "Aveo",
+   "old_years": "2003-2019",
+   "model": "Aveo",
+   "year_range": "2006-2011"
+  },
+  {
+   "brand": "Chevrolet",
+   "old_model": "Aveo",
+   "old_years": "2003-2019",
+   "model": "Sonic (Aveo T300)",
+   "year_range": "2012-2015"
+  },
+  {
+   "brand": "Chevrolet",
+   "old_model": "Cruze",
+   "old_years": "2009-2018",
+   "model": "Cruze",
+   "year_range": "2010-2018"
+  },
+  {
+   "brand": "Chevrolet",
+   "old_model": "Colorado",
+   "old_years": "2004-2020",
+   "model": "Colorado",
+   "year_range": "2004-2011"
+  },
+  {
+   "brand": "Chevrolet",
+   "old_model": "Colorado",
+   "old_years": "2004-2020",
+   "model": "Colorado",
+   "year_range": "2011-2020"
+  },
+  {
+   "brand": "Hyundai",
+   "old_model": "Atos",
+   "old_years": "1990s-2007",
+   "model": "Atos",
+   "year_range": "1997-2003"
+  },
+  {
+   "brand": "Hyundai",
+   "old_model": "Atos",
+   "old_years": "1990s-2007",
+   "model": "Atos Prime",
+   "year_range": "2003-2007"
+  },
+  {
+   "brand": "Hyundai",
+   "old_model": "Accent",
+   "old_years": "2000s-2016",
+   "model": "Accent",
+   "year_range": "2000-2006"
+  },
+  {
+   "brand": "Hyundai",
+   "old_model": "Accent",
+   "old_years": "2000s-2016",
+   "model": "Accent",
+   "year_range": "2006-2011"
+  },
+  {
+   "brand": "Hyundai",
+   "old_model": "Accent",
+   "old_years": "2000s-2016",
+   "model": "Accent",
+   "year_range": "2011-2016"
+  },
+  {
+   "brand": "Kia",
+   "old_model": "Grand Carnival",
+   "old_years": "2007-2020",
+   "model": "Grand Carnival",
+   "year_range": "2007-2014"
+  },
+  {
+   "brand": "Kia",
+   "old_model": "Grand Carnival",
+   "old_years": "2007-2020",
+   "model": "Grand Carnival",
+   "year_range": "2014-2020"
+  },
+  {
+   "brand": "Mercedes-Benz",
+   "old_model": "CLA-Class",
+   "old_years": "2013-ปัจจุบัน",
+   "model": "CLA-Class",
+   "year_range": "2013-2019"
+  },
+  {
+   "brand": "Mercedes-Benz",
+   "old_model": "CLA-Class",
+   "old_years": "2013-ปัจจุบัน",
+   "model": "CLA-Class",
+   "year_range": "2019-2025"
+  },
+  {
+   "brand": "Mercedes-Benz",
+   "old_model": "CLA-Class",
+   "old_years": "2013-ปัจจุบัน",
+   "model": "CLA-Class",
+   "year_range": "2025-ปัจจุบัน"
+  },
+  {
+   "brand": "Mercedes-Benz",
+   "old_model": "CLS-Class",
+   "old_years": "2005-2023",
+   "model": "CLS-Class",
+   "year_range": "2005-2010"
+  },
+  {
+   "brand": "Mercedes-Benz",
+   "old_model": "CLS-Class",
+   "old_years": "2005-2023",
+   "model": "CLS-Class",
+   "year_range": "2010-2017"
+  },
+  {
+   "brand": "Mercedes-Benz",
+   "old_model": "CLS-Class",
+   "old_years": "2005-2023",
+   "model": "CLS-Class",
+   "year_range": "2018-2023"
+  },
+  {
+   "brand": "Mercedes-Benz",
+   "old_model": "Maybach S-Class",
+   "old_years": "2015-ปัจจุบัน",
+   "model": "Maybach S-Class",
+   "year_range": "2015-2020"
+  },
+  {
+   "brand": "Mercedes-Benz",
+   "old_model": "Maybach S-Class",
+   "old_years": "2015-ปัจจุบัน",
+   "model": "Maybach S-Class",
+   "year_range": "2020-ปัจจุบัน"
+  },
+  {
+   "brand": "Mercedes-Benz",
+   "old_model": "GLA-Class",
+   "old_years": "2014-ปัจจุบัน",
+   "model": "GLA-Class",
+   "year_range": "2014-2019"
+  },
+  {
+   "brand": "Mercedes-Benz",
+   "old_model": "GLA-Class",
+   "old_years": "2014-ปัจจุบัน",
+   "model": "GLA-Class",
+   "year_range": "2020-ปัจจุบัน"
+  },
+  {
+   "brand": "Mercedes-Benz",
+   "old_model": "GLE-Class",
+   "old_years": "2016-ปัจจุบัน",
+   "model": "GLE-Class",
+   "year_range": "2015-2019"
+  },
+  {
+   "brand": "Mercedes-Benz",
+   "old_model": "GLE-Class",
+   "old_years": "2016-ปัจจุบัน",
+   "model": "GLE-Class",
+   "year_range": "2019-ปัจจุบัน"
+  },
+  {
+   "brand": "Mercedes-Benz",
+   "old_model": "GLS-Class",
+   "old_years": "2016-ปัจจุบัน",
+   "model": "GLS-Class",
+   "year_range": "2016-2019"
+  },
+  {
+   "brand": "Mercedes-Benz",
+   "old_model": "GLS-Class",
+   "old_years": "2016-ปัจจุบัน",
+   "model": "GLS-Class",
+   "year_range": "2019-ปัจจุบัน"
+  },
+  {
+   "brand": "Mercedes-Benz",
+   "old_model": "G-Class",
+   "old_years": "2000s-ปัจจุบัน",
+   "model": "G-Class",
+   "year_range": "1990-2018"
+  },
+  {
+   "brand": "Mercedes-Benz",
+   "old_model": "G-Class",
+   "old_years": "2000s-ปัจจุบัน",
+   "model": "G-Class",
+   "year_range": "2018-ปัจจุบัน"
+  },
+  {
+   "brand": "Mercedes-Benz",
+   "old_model": "SL-Class",
+   "old_years": "2000s-ปัจจุบัน",
+   "model": "SL-Class",
+   "year_range": "2001-2011"
+  },
+  {
+   "brand": "Mercedes-Benz",
+   "old_model": "SL-Class",
+   "old_years": "2000s-ปัจจุบัน",
+   "model": "SL-Class",
+   "year_range": "2012-2020"
+  },
+  {
+   "brand": "Mercedes-Benz",
+   "old_model": "SL-Class",
+   "old_years": "2000s-ปัจจุบัน",
+   "model": "SL-Class",
+   "year_range": "2022-ปัจจุบัน"
+  },
+  {
+   "brand": "Mercedes-Benz",
+   "old_model": "SLC / SLK",
+   "old_years": "2000s-2020",
+   "model": "SLK",
+   "year_range": "2004-2011"
+  },
+  {
+   "brand": "Mercedes-Benz",
+   "old_model": "SLC / SLK",
+   "old_years": "2000s-2020",
+   "model": "SLK / SLC",
+   "year_range": "2011-2020"
+  },
+  {
+   "brand": "Mercedes-Benz",
+   "old_model": "AMG GT",
+   "old_years": "2015-ปัจจุบัน",
+   "model": "AMG GT",
+   "year_range": "2015-2021"
+  },
+  {
+   "brand": "Mercedes-Benz",
+   "old_model": "AMG GT",
+   "old_years": "2015-ปัจจุบัน",
+   "model": "AMG GT",
+   "year_range": "2023-ปัจจุบัน"
+  },
+  {
+   "brand": "Mercedes-Benz",
+   "old_model": "Vito",
+   "old_years": "2000s-ปัจจุบัน",
+   "model": "Vito",
+   "year_range": "2003-2014"
+  },
+  {
+   "brand": "Mercedes-Benz",
+   "old_model": "Vito",
+   "old_years": "2000s-ปัจจุบัน",
+   "model": "Vito",
+   "year_range": "2014-ปัจจุบัน"
+  },
+  {
+   "brand": "BMW",
+   "old_model": "ซีรีส์ 1 (1 Series)",
+   "old_years": "2004-2019",
+   "model": "ซีรีส์ 1 (1 Series)",
+   "year_range": "2004-2011"
+  },
+  {
+   "brand": "BMW",
+   "old_model": "ซีรีส์ 1 (1 Series)",
+   "old_years": "2004-2019",
+   "model": "ซีรีส์ 1 (1 Series)",
+   "year_range": "2011-2019"
+  },
+  {
+   "brand": "BMW",
+   "old_model": "ซีรีส์ 2 Active Tourer",
+   "old_years": "2015-ปัจจุบัน",
+   "model": "ซีรีส์ 2 Active Tourer",
+   "year_range": "2015-2021"
+  },
+  {
+   "brand": "BMW",
+   "old_model": "ซีรีส์ 2 Active Tourer",
+   "old_years": "2015-ปัจจุบัน",
+   "model": "ซีรีส์ 2 Active Tourer",
+   "year_range": "2021-ปัจจุบัน"
+  },
+  {
+   "brand": "BMW",
+   "old_model": "ซีรีส์ 2 Coupe",
+   "old_years": "2014-ปัจจุบัน",
+   "model": "ซีรีส์ 2 Coupe",
+   "year_range": "2014-2021"
+  },
+  {
+   "brand": "BMW",
+   "old_model": "ซีรีส์ 2 Coupe",
+   "old_years": "2014-ปัจจุบัน",
+   "model": "ซีรีส์ 2 Coupe",
+   "year_range": "2021-ปัจจุบัน"
+  },
+  {
+   "brand": "BMW",
+   "old_model": "ซีรีส์ 4 Coupe / Gran Coupe",
+   "old_years": "2014-ปัจจุบัน",
+   "model": "ซีรีส์ 4 Coupe / Gran Coupe",
+   "year_range": "2013-2020"
+  },
+  {
+   "brand": "BMW",
+   "old_model": "ซีรีส์ 4 Coupe / Gran Coupe",
+   "old_years": "2014-ปัจจุบัน",
+   "model": "ซีรีส์ 4 Coupe / Gran Coupe",
+   "year_range": "2020-ปัจจุบัน"
+  },
+  {
+   "brand": "BMW",
+   "old_model": "X4",
+   "old_years": "2015-2025",
+   "model": "X4",
+   "year_range": "2015-2018"
+  },
+  {
+   "brand": "BMW",
+   "old_model": "X4",
+   "old_years": "2015-2025",
+   "model": "X4",
+   "year_range": "2018-2025"
+  },
+  {
+   "brand": "BMW",
+   "old_model": "X6",
+   "old_years": "2010-ปัจจุบัน",
+   "model": "X6",
+   "year_range": "2010-2014"
+  },
+  {
+   "brand": "BMW",
+   "old_model": "X6",
+   "old_years": "2010-ปัจจุบัน",
+   "model": "X6",
+   "year_range": "2014-2019"
+  },
+  {
+   "brand": "BMW",
+   "old_model": "X6",
+   "old_years": "2010-ปัจจุบัน",
+   "model": "X6",
+   "year_range": "2019-ปัจจุบัน"
+  },
+  {
+   "brand": "BMW",
+   "old_model": "Z4",
+   "old_years": "2003-ปัจจุบัน",
+   "model": "Z4",
+   "year_range": "2003-2008"
+  },
+  {
+   "brand": "BMW",
+   "old_model": "Z4",
+   "old_years": "2003-ปัจจุบัน",
+   "model": "Z4",
+   "year_range": "2009-2016"
+  },
+  {
+   "brand": "BMW",
+   "old_model": "Z4",
+   "old_years": "2003-ปัจจุบัน",
+   "model": "Z4",
+   "year_range": "2018-2026"
+  },
+  {
+   "brand": "BMW",
+   "old_model": "M2",
+   "old_years": "2016-ปัจจุบัน",
+   "model": "M2",
+   "year_range": "2016-2020"
+  },
+  {
+   "brand": "BMW",
+   "old_model": "M2",
+   "old_years": "2016-ปัจจุบัน",
+   "model": "M2",
+   "year_range": "2022-ปัจจุบัน"
+  },
+  {
+   "brand": "BMW",
+   "old_model": "M3",
+   "old_years": "2010s-ปัจจุบัน",
+   "model": "M3",
+   "year_range": "2008-2013"
+  },
+  {
+   "brand": "BMW",
+   "old_model": "M3",
+   "old_years": "2010s-ปัจจุบัน",
+   "model": "M3",
+   "year_range": "2014-2018"
+  },
+  {
+   "brand": "BMW",
+   "old_model": "M3",
+   "old_years": "2010s-ปัจจุบัน",
+   "model": "M3",
+   "year_range": "2020-ปัจจุบัน"
+  },
+  {
+   "brand": "BMW",
+   "old_model": "M4",
+   "old_years": "2014-ปัจจุบัน",
+   "model": "M4",
+   "year_range": "2014-2020"
+  },
+  {
+   "brand": "BMW",
+   "old_model": "M4",
+   "old_years": "2014-ปัจจุบัน",
+   "model": "M4",
+   "year_range": "2020-ปัจจุบัน"
+  },
+  {
+   "brand": "BMW",
+   "old_model": "M5",
+   "old_years": "2010s-ปัจจุบัน",
+   "model": "M5",
+   "year_range": "2011-2016"
+  },
+  {
+   "brand": "BMW",
+   "old_model": "M5",
+   "old_years": "2010s-ปัจจุบัน",
+   "model": "M5",
+   "year_range": "2017-2023"
+  },
+  {
+   "brand": "BMW",
+   "old_model": "M5",
+   "old_years": "2010s-ปัจจุบัน",
+   "model": "M5",
+   "year_range": "2024-ปัจจุบัน"
+  },
+  {
+   "brand": "Audi",
+   "old_model": "A3",
+   "old_years": "2000s-ปัจจุบัน",
+   "model": "A3",
+   "year_range": "2003-2012"
+  },
+  {
+   "brand": "Audi",
+   "old_model": "A3",
+   "old_years": "2000s-ปัจจุบัน",
+   "model": "A3",
+   "year_range": "2012-2020"
+  },
+  {
+   "brand": "Audi",
+   "old_model": "A3",
+   "old_years": "2000s-ปัจจุบัน",
+   "model": "A3",
+   "year_range": "2020-ปัจจุบัน"
+  },
+  {
+   "brand": "Audi",
+   "old_model": "A4",
+   "old_years": "2000s-ปัจจุบัน",
+   "model": "A4",
+   "year_range": "2000-2004"
+  },
+  {
+   "brand": "Audi",
+   "old_model": "A4",
+   "old_years": "2000s-ปัจจุบัน",
+   "model": "A4",
+   "year_range": "2004-2008"
+  },
+  {
+   "brand": "Audi",
+   "old_model": "A4",
+   "old_years": "2000s-ปัจจุบัน",
+   "model": "A4",
+   "year_range": "2008-2015"
+  },
+  {
+   "brand": "Audi",
+   "old_model": "A4",
+   "old_years": "2000s-ปัจจุบัน",
+   "model": "A4",
+   "year_range": "2015-2024"
+  },
+  {
+   "brand": "Audi",
+   "old_model": "A5",
+   "old_years": "2008-ปัจจุบัน",
+   "model": "A5",
+   "year_range": "2008-2016"
+  },
+  {
+   "brand": "Audi",
+   "old_model": "A5",
+   "old_years": "2008-ปัจจุบัน",
+   "model": "A5",
+   "year_range": "2016-2024"
+  },
+  {
+   "brand": "Audi",
+   "old_model": "A5",
+   "old_years": "2008-ปัจจุบัน",
+   "model": "A5 (B10, แทน A4)",
+   "year_range": "2024-ปัจจุบัน"
+  },
+  {
+   "brand": "Audi",
+   "old_model": "A6",
+   "old_years": "2000s-ปัจจุบัน",
+   "model": "A6",
+   "year_range": "1998-2004"
+  },
+  {
+   "brand": "Audi",
+   "old_model": "A6",
+   "old_years": "2000s-ปัจจุบัน",
+   "model": "A6",
+   "year_range": "2004-2011"
+  },
+  {
+   "brand": "Audi",
+   "old_model": "A6",
+   "old_years": "2000s-ปัจจุบัน",
+   "model": "A6",
+   "year_range": "2011-2018"
+  },
+  {
+   "brand": "Audi",
+   "old_model": "A6",
+   "old_years": "2000s-ปัจจุบัน",
+   "model": "A6",
+   "year_range": "2018-2025"
+  },
+  {
+   "brand": "Audi",
+   "old_model": "A6",
+   "old_years": "2000s-ปัจจุบัน",
+   "model": "A6",
+   "year_range": "2025-ปัจจุบัน"
+  },
+  {
+   "brand": "Audi",
+   "old_model": "A7",
+   "old_years": "2011-ปัจจุบัน",
+   "model": "A7",
+   "year_range": "2011-2017"
+  },
+  {
+   "brand": "Audi",
+   "old_model": "A7",
+   "old_years": "2011-ปัจจุบัน",
+   "model": "A7",
+   "year_range": "2018-ปัจจุบัน"
+  },
+  {
+   "brand": "Audi",
+   "old_model": "A8",
+   "old_years": "2000s-ปัจจุบัน",
+   "model": "A8",
+   "year_range": "2002-2010"
+  },
+  {
+   "brand": "Audi",
+   "old_model": "A8",
+   "old_years": "2000s-ปัจจุบัน",
+   "model": "A8",
+   "year_range": "2010-2017"
+  },
+  {
+   "brand": "Audi",
+   "old_model": "A8",
+   "old_years": "2000s-ปัจจุบัน",
+   "model": "A8",
+   "year_range": "2017-ปัจจุบัน"
+  },
+  {
+   "brand": "Audi",
+   "old_model": "Q3",
+   "old_years": "2012-ปัจจุบัน",
+   "model": "Q3",
+   "year_range": "2012-2018"
+  },
+  {
+   "brand": "Audi",
+   "old_model": "Q3",
+   "old_years": "2012-ปัจจุบัน",
+   "model": "Q3",
+   "year_range": "2018-2025"
+  },
+  {
+   "brand": "Audi",
+   "old_model": "Q3",
+   "old_years": "2012-ปัจจุบัน",
+   "model": "Q3",
+   "year_range": "2025-ปัจจุบัน"
+  },
+  {
+   "brand": "Audi",
+   "old_model": "Q5",
+   "old_years": "2009-ปัจจุบัน",
+   "model": "Q5",
+   "year_range": "2009-2017"
+  },
+  {
+   "brand": "Audi",
+   "old_model": "Q5",
+   "old_years": "2009-ปัจจุบัน",
+   "model": "Q5",
+   "year_range": "2017-2024"
+  },
+  {
+   "brand": "Audi",
+   "old_model": "Q5",
+   "old_years": "2009-ปัจจุบัน",
+   "model": "Q5",
+   "year_range": "2024-ปัจจุบัน"
+  },
+  {
+   "brand": "Audi",
+   "old_model": "Q7",
+   "old_years": "2006-ปัจจุบัน",
+   "model": "Q7",
+   "year_range": "2006-2015"
+  },
+  {
+   "brand": "Audi",
+   "old_model": "Q7",
+   "old_years": "2006-ปัจจุบัน",
+   "model": "Q7",
+   "year_range": "2015-ปัจจุบัน"
+  },
+  {
+   "brand": "Lexus",
+   "old_model": "IS",
+   "old_years": "2000s-ปัจจุบัน",
+   "model": "IS",
+   "year_range": "2000-2005"
+  },
+  {
+   "brand": "Lexus",
+   "old_model": "IS",
+   "old_years": "2000s-ปัจจุบัน",
+   "model": "IS",
+   "year_range": "2005-2013"
+  },
+  {
+   "brand": "Lexus",
+   "old_model": "IS",
+   "old_years": "2000s-ปัจจุบัน",
+   "model": "IS",
+   "year_range": "2013-ปัจจุบัน"
+  },
+  {
+   "brand": "Lexus",
+   "old_model": "ES",
+   "old_years": "2000s-ปัจจุบัน",
+   "model": "ES",
+   "year_range": "2001-2006"
+  },
+  {
+   "brand": "Lexus",
+   "old_model": "ES",
+   "old_years": "2000s-ปัจจุบัน",
+   "model": "ES",
+   "year_range": "2006-2012"
+  },
+  {
+   "brand": "Lexus",
+   "old_model": "ES",
+   "old_years": "2000s-ปัจจุบัน",
+   "model": "ES",
+   "year_range": "2012-2018"
+  },
+  {
+   "brand": "Lexus",
+   "old_model": "ES",
+   "old_years": "2000s-ปัจจุบัน",
+   "model": "ES",
+   "year_range": "2018-2025"
+  },
+  {
+   "brand": "Lexus",
+   "old_model": "ES",
+   "old_years": "2000s-ปัจจุบัน",
+   "model": "ES",
+   "year_range": "2025-ปัจจุบัน"
+  },
+  {
+   "brand": "Lexus",
+   "old_model": "GS",
+   "old_years": "2000s-2020",
+   "model": "GS",
+   "year_range": "2005-2011"
+  },
+  {
+   "brand": "Lexus",
+   "old_model": "GS",
+   "old_years": "2000s-2020",
+   "model": "GS",
+   "year_range": "2012-2020"
+  },
+  {
+   "brand": "Lexus",
+   "old_model": "LS",
+   "old_years": "2000s-ปัจจุบัน",
+   "model": "LS",
+   "year_range": "2000-2006"
+  },
+  {
+   "brand": "Lexus",
+   "old_model": "LS",
+   "old_years": "2000s-ปัจจุบัน",
+   "model": "LS",
+   "year_range": "2006-2017"
+  },
+  {
+   "brand": "Lexus",
+   "old_model": "LS",
+   "old_years": "2000s-ปัจจุบัน",
+   "model": "LS",
+   "year_range": "2017-ปัจจุบัน"
+  },
+  {
+   "brand": "Lexus",
+   "old_model": "NX",
+   "old_years": "2015-ปัจจุบัน",
+   "model": "NX",
+   "year_range": "2015-2021"
+  },
+  {
+   "brand": "Lexus",
+   "old_model": "NX",
+   "old_years": "2015-ปัจจุบัน",
+   "model": "NX",
+   "year_range": "2021-ปัจจุบัน"
+  },
+  {
+   "brand": "Lexus",
+   "old_model": "RX",
+   "old_years": "2000s-ปัจจุบัน",
+   "model": "RX",
+   "year_range": "2003-2009"
+  },
+  {
+   "brand": "Lexus",
+   "old_model": "RX",
+   "old_years": "2000s-ปัจจุบัน",
+   "model": "RX",
+   "year_range": "2009-2015"
+  },
+  {
+   "brand": "Lexus",
+   "old_model": "RX",
+   "old_years": "2000s-ปัจจุบัน",
+   "model": "RX",
+   "year_range": "2015-2022"
+  },
+  {
+   "brand": "Lexus",
+   "old_model": "RX",
+   "old_years": "2000s-ปัจจุบัน",
+   "model": "RX",
+   "year_range": "2022-ปัจจุบัน"
+  },
+  {
+   "brand": "Lexus",
+   "old_model": "LX",
+   "old_years": "2000s-ปัจจุบัน",
+   "model": "LX",
+   "year_range": "1998-2007"
+  },
+  {
+   "brand": "Lexus",
+   "old_model": "LX",
+   "old_years": "2000s-ปัจจุบัน",
+   "model": "LX",
+   "year_range": "2007-2021"
+  },
+  {
+   "brand": "Lexus",
+   "old_model": "LX",
+   "old_years": "2000s-ปัจจุบัน",
+   "model": "LX",
+   "year_range": "2021-ปัจจุบัน"
+  },
+  {
+   "brand": "Lexus",
+   "old_model": "GX",
+   "old_years": "2000s-ปัจจุบัน",
+   "model": "GX",
+   "year_range": "2002-2009"
+  },
+  {
+   "brand": "Lexus",
+   "old_model": "GX",
+   "old_years": "2000s-ปัจจุบัน",
+   "model": "GX",
+   "year_range": "2009-2023"
+  },
+  {
+   "brand": "Lexus",
+   "old_model": "GX",
+   "old_years": "2000s-ปัจจุบัน",
+   "model": "GX",
+   "year_range": "2023-ปัจจุบัน"
+  },
+  {
+   "brand": "Land Rover",
+   "old_model": "Discovery",
+   "old_years": "2000s-ปัจจุบัน",
+   "model": "Discovery",
+   "year_range": "1998-2004"
+  },
+  {
+   "brand": "Land Rover",
+   "old_model": "Discovery",
+   "old_years": "2000s-ปัจจุบัน",
+   "model": "Discovery",
+   "year_range": "2004-2009"
+  },
+  {
+   "brand": "Land Rover",
+   "old_model": "Discovery",
+   "old_years": "2000s-ปัจจุบัน",
+   "model": "Discovery",
+   "year_range": "2009-2016"
+  },
+  {
+   "brand": "Land Rover",
+   "old_model": "Discovery",
+   "old_years": "2000s-ปัจจุบัน",
+   "model": "Discovery",
+   "year_range": "2017-ปัจจุบัน"
+  },
+  {
+   "brand": "Land Rover",
+   "old_model": "Freelander",
+   "old_years": "2000s-2014",
+   "model": "Freelander",
+   "year_range": "2000-2006"
+  },
+  {
+   "brand": "Land Rover",
+   "old_model": "Freelander",
+   "old_years": "2000s-2014",
+   "model": "Freelander",
+   "year_range": "2006-2014"
+  },
+  {
+   "brand": "Land Rover",
+   "old_model": "Range Rover",
+   "old_years": "2000s-ปัจจุบัน",
+   "model": "Range Rover",
+   "year_range": "2002-2012"
+  },
+  {
+   "brand": "Land Rover",
+   "old_model": "Range Rover",
+   "old_years": "2000s-ปัจจุบัน",
+   "model": "Range Rover",
+   "year_range": "2012-2021"
+  },
+  {
+   "brand": "Land Rover",
+   "old_model": "Range Rover",
+   "old_years": "2000s-ปัจจุบัน",
+   "model": "Range Rover",
+   "year_range": "2022-ปัจจุบัน"
+  },
+  {
+   "brand": "Land Rover",
+   "old_model": "Range Rover Sport",
+   "old_years": "2005-ปัจจุบัน",
+   "model": "Range Rover Sport",
+   "year_range": "2005-2013"
+  },
+  {
+   "brand": "Land Rover",
+   "old_model": "Range Rover Sport",
+   "old_years": "2005-ปัจจุบัน",
+   "model": "Range Rover Sport",
+   "year_range": "2013-2022"
+  },
+  {
+   "brand": "Land Rover",
+   "old_model": "Range Rover Sport",
+   "old_years": "2005-ปัจจุบัน",
+   "model": "Range Rover Sport",
+   "year_range": "2022-ปัจจุบัน"
+  },
+  {
+   "brand": "Land Rover",
+   "old_model": "Range Rover Evoque",
+   "old_years": "2011-ปัจจุบัน",
+   "model": "Range Rover Evoque",
+   "year_range": "2011-2018"
+  },
+  {
+   "brand": "Land Rover",
+   "old_model": "Range Rover Evoque",
+   "old_years": "2011-ปัจจุบัน",
+   "model": "Range Rover Evoque",
+   "year_range": "2019-ปัจจุบัน"
+  },
+  {
+   "brand": "Jaguar",
+   "old_model": "XJ",
+   "old_years": "2000s-2019",
+   "model": "XJ",
+   "year_range": "2003-2009"
+  },
+  {
+   "brand": "Jaguar",
+   "old_model": "XJ",
+   "old_years": "2000s-2019",
+   "model": "XJ",
+   "year_range": "2009-2019"
+  },
+  {
+   "brand": "Volvo",
+   "old_model": "S60",
+   "old_years": "2000s-ปัจจุบัน",
+   "model": "S60",
+   "year_range": "2000-2009"
+  },
+  {
+   "brand": "Volvo",
+   "old_model": "S60",
+   "old_years": "2000s-ปัจจุบัน",
+   "model": "S60",
+   "year_range": "2010-2018"
+  },
+  {
+   "brand": "Volvo",
+   "old_model": "S60",
+   "old_years": "2000s-ปัจจุบัน",
+   "model": "S60",
+   "year_range": "2018-ปัจจุบัน"
+  },
+  {
+   "brand": "Volvo",
+   "old_model": "S80",
+   "old_years": "2000s-2016",
+   "model": "S80",
+   "year_range": "1998-2006"
+  },
+  {
+   "brand": "Volvo",
+   "old_model": "S80",
+   "old_years": "2000s-2016",
+   "model": "S80",
+   "year_range": "2006-2016"
+  },
+  {
+   "brand": "Volvo",
+   "old_model": "V60",
+   "old_years": "2010s-ปัจจุบัน",
+   "model": "V60",
+   "year_range": "2010-2018"
+  },
+  {
+   "brand": "Volvo",
+   "old_model": "V60",
+   "old_years": "2010s-ปัจจุบัน",
+   "model": "V60",
+   "year_range": "2018-ปัจจุบัน"
+  },
+  {
+   "brand": "Volvo",
+   "old_model": "XC60",
+   "old_years": "2009-ปัจจุบัน",
+   "model": "XC60",
+   "year_range": "2009-2017"
+  },
+  {
+   "brand": "Volvo",
+   "old_model": "XC60",
+   "old_years": "2009-ปัจจุบัน",
+   "model": "XC60",
+   "year_range": "2017-ปัจจุบัน"
+  },
+  {
+   "brand": "Volvo",
+   "old_model": "XC90",
+   "old_years": "2003-ปัจจุบัน",
+   "model": "XC90",
+   "year_range": "2003-2014"
+  },
+  {
+   "brand": "Volvo",
+   "old_model": "XC90",
+   "old_years": "2003-ปัจจุบัน",
+   "model": "XC90",
+   "year_range": "2015-ปัจจุบัน"
+  },
+  {
+   "brand": "Porsche",
+   "old_model": "911 (996/997/991/992)",
+   "old_years": "2000s-ปัจจุบัน",
+   "model": "911",
+   "year_range": "1998-2004"
+  },
+  {
+   "brand": "Porsche",
+   "old_model": "911 (996/997/991/992)",
+   "old_years": "2000s-ปัจจุบัน",
+   "model": "911",
+   "year_range": "2004-2011"
+  },
+  {
+   "brand": "Porsche",
+   "old_model": "911 (996/997/991/992)",
+   "old_years": "2000s-ปัจจุบัน",
+   "model": "911",
+   "year_range": "2011-2019"
+  },
+  {
+   "brand": "Porsche",
+   "old_model": "911 (996/997/991/992)",
+   "old_years": "2000s-ปัจจุบัน",
+   "model": "911",
+   "year_range": "2019-ปัจจุบัน"
+  },
+  {
+   "brand": "Porsche",
+   "old_model": "Boxster / 718 Boxster",
+   "old_years": "2000s-ปัจจุบัน",
+   "model": "Boxster",
+   "year_range": "1996-2004"
+  },
+  {
+   "brand": "Porsche",
+   "old_model": "Boxster / 718 Boxster",
+   "old_years": "2000s-ปัจจุบัน",
+   "model": "Boxster",
+   "year_range": "2004-2012"
+  },
+  {
+   "brand": "Porsche",
+   "old_model": "Boxster / 718 Boxster",
+   "old_years": "2000s-ปัจจุบัน",
+   "model": "Boxster",
+   "year_range": "2012-2016"
+  },
+  {
+   "brand": "Porsche",
+   "old_model": "Boxster / 718 Boxster",
+   "old_years": "2000s-ปัจจุบัน",
+   "model": "718 Boxster",
+   "year_range": "2016-2025"
+  },
+  {
+   "brand": "Porsche",
+   "old_model": "Cayman / 718 Cayman",
+   "old_years": "2006-ปัจจุบัน",
+   "model": "Cayman",
+   "year_range": "2006-2012"
+  },
+  {
+   "brand": "Porsche",
+   "old_model": "Cayman / 718 Cayman",
+   "old_years": "2006-ปัจจุบัน",
+   "model": "Cayman",
+   "year_range": "2013-2016"
+  },
+  {
+   "brand": "Porsche",
+   "old_model": "Cayman / 718 Cayman",
+   "old_years": "2006-ปัจจุบัน",
+   "model": "718 Cayman",
+   "year_range": "2016-2025"
+  },
+  {
+   "brand": "Porsche",
+   "old_model": "Panamera",
+   "old_years": "2010-ปัจจุบัน",
+   "model": "Panamera",
+   "year_range": "2010-2016"
+  },
+  {
+   "brand": "Porsche",
+   "old_model": "Panamera",
+   "old_years": "2010-ปัจจุบัน",
+   "model": "Panamera",
+   "year_range": "2016-2023"
+  },
+  {
+   "brand": "Porsche",
+   "old_model": "Panamera",
+   "old_years": "2010-ปัจจุบัน",
+   "model": "Panamera",
+   "year_range": "2024-ปัจจุบัน"
+  },
+  {
+   "brand": "Porsche",
+   "old_model": "Macan",
+   "old_years": "2014-ปัจจุบัน",
+   "model": "Macan",
+   "year_range": "2014-2026"
+  },
+  {
+   "brand": "Porsche",
+   "old_model": "Macan",
+   "old_years": "2014-ปัจจุบัน",
+   "model": "Macan Electric",
+   "year_range": "2024-ปัจจุบัน"
+  },
+  {
+   "brand": "Porsche",
+   "old_model": "Cayenne",
+   "old_years": "2003-ปัจจุบัน",
+   "model": "Cayenne",
+   "year_range": "2003-2010"
+  },
+  {
+   "brand": "Porsche",
+   "old_model": "Cayenne",
+   "old_years": "2003-ปัจจุบัน",
+   "model": "Cayenne",
+   "year_range": "2010-2017"
+  },
+  {
+   "brand": "Porsche",
+   "old_model": "Cayenne",
+   "old_years": "2003-ปัจจุบัน",
+   "model": "Cayenne",
+   "year_range": "2017-ปัจจุบัน"
+  },
+  {
+   "brand": "Subaru",
+   "old_model": "Impreza",
+   "old_years": "2000s-2018",
+   "model": "Impreza",
+   "year_range": "2000-2007"
+  },
+  {
+   "brand": "Subaru",
+   "old_model": "Impreza",
+   "old_years": "2000s-2018",
+   "model": "Impreza",
+   "year_range": "2007-2011"
+  },
+  {
+   "brand": "Subaru",
+   "old_model": "Impreza",
+   "old_years": "2000s-2018",
+   "model": "Impreza",
+   "year_range": "2011-2016"
+  },
+  {
+   "brand": "Subaru",
+   "old_model": "Impreza",
+   "old_years": "2000s-2018",
+   "model": "Impreza",
+   "year_range": "2016-2018"
+  },
+  {
+   "brand": "Subaru",
+   "old_model": "XV / Crosstrek",
+   "old_years": "2012-ปัจจุบัน",
+   "model": "XV / Crosstrek",
+   "year_range": "2012-2017"
+  },
+  {
+   "brand": "Subaru",
+   "old_model": "XV / Crosstrek",
+   "old_years": "2012-ปัจจุบัน",
+   "model": "XV / Crosstrek",
+   "year_range": "2017-2023"
+  },
+  {
+   "brand": "Subaru",
+   "old_model": "XV / Crosstrek",
+   "old_years": "2012-ปัจจุบัน",
+   "model": "Crosstrek",
+   "year_range": "2023-ปัจจุบัน"
+  },
+  {
+   "brand": "Subaru",
+   "old_model": "Forester (รุ่นเก่า)",
+   "old_years": "2000s-2018",
+   "model": "Forester",
+   "year_range": "2002-2008"
+  },
+  {
+   "brand": "Subaru",
+   "old_model": "Forester (รุ่นเก่า)",
+   "old_years": "2000s-2018",
+   "model": "Forester",
+   "year_range": "2008-2012"
+  },
+  {
+   "brand": "Subaru",
+   "old_model": "Forester (รุ่นเก่า)",
+   "old_years": "2000s-2018",
+   "model": "Forester",
+   "year_range": "2012-2018"
+  },
+  {
+   "brand": "Subaru",
+   "old_model": "BRZ",
+   "old_years": "2012-ปัจจุบัน",
+   "model": "BRZ",
+   "year_range": "2012-2020"
+  },
+  {
+   "brand": "Subaru",
+   "old_model": "BRZ",
+   "old_years": "2012-ปัจจุบัน",
+   "model": "BRZ",
+   "year_range": "2021-ปัจจุบัน"
+  },
+  {
+   "brand": "Subaru",
+   "old_model": "WRX",
+   "old_years": "2014-ปัจจุบัน",
+   "model": "WRX",
+   "year_range": "2014-2021"
+  },
+  {
+   "brand": "Subaru",
+   "old_model": "WRX",
+   "old_years": "2014-ปัจจุบัน",
+   "model": "WRX",
+   "year_range": "2021-ปัจจุบัน"
+  },
+  {
+   "brand": "Mini",
+   "old_model": "Cooper / Cooper S (R50-R56)",
+   "old_years": "2002-2013",
+   "model": "Cooper / Cooper S",
+   "year_range": "2002-2006"
+  },
+  {
+   "brand": "Mini",
+   "old_model": "Cooper / Cooper S (R50-R56)",
+   "old_years": "2002-2013",
+   "model": "Cooper / Cooper S",
+   "year_range": "2006-2013"
+  },
+  {
+   "brand": "Mini",
+   "old_model": "Countryman",
+   "old_years": "2011-ปัจจุบัน",
+   "model": "Countryman",
+   "year_range": "2011-2016"
+  },
+  {
+   "brand": "Mini",
+   "old_model": "Countryman",
+   "old_years": "2011-ปัจจุบัน",
+   "model": "Countryman",
+   "year_range": "2016-2023"
+  },
+  {
+   "brand": "Mini",
+   "old_model": "Countryman",
+   "old_years": "2011-ปัจจุบัน",
+   "model": "Countryman",
+   "year_range": "2024-ปัจจุบัน"
+  },
+  {
+   "brand": "Mini",
+   "old_model": "Clubman",
+   "old_years": "2008-2023",
+   "model": "Clubman",
+   "year_range": "2008-2014"
+  },
+  {
+   "brand": "Mini",
+   "old_model": "Clubman",
+   "old_years": "2008-2023",
+   "model": "Clubman",
+   "year_range": "2015-2024"
+  },
+  {
+   "brand": "Volkswagen",
+   "old_model": "Golf",
+   "old_years": "2000s-2018",
+   "model": "Golf",
+   "year_range": "1998-2003"
+  },
+  {
+   "brand": "Volkswagen",
+   "old_model": "Golf",
+   "old_years": "2000s-2018",
+   "model": "Golf",
+   "year_range": "2003-2008"
+  },
+  {
+   "brand": "Volkswagen",
+   "old_model": "Golf",
+   "old_years": "2000s-2018",
+   "model": "Golf",
+   "year_range": "2008-2013"
+  },
+  {
+   "brand": "Volkswagen",
+   "old_model": "Golf",
+   "old_years": "2000s-2018",
+   "model": "Golf",
+   "year_range": "2013-2018"
+  },
+  {
+   "brand": "Volkswagen",
+   "old_model": "Passat",
+   "old_years": "2000s-2018",
+   "model": "Passat",
+   "year_range": "1996-2005"
+  },
+  {
+   "brand": "Volkswagen",
+   "old_model": "Passat",
+   "old_years": "2000s-2018",
+   "model": "Passat",
+   "year_range": "2005-2010"
+  },
+  {
+   "brand": "Volkswagen",
+   "old_model": "Passat",
+   "old_years": "2000s-2018",
+   "model": "Passat",
+   "year_range": "2010-2014"
+  },
+  {
+   "brand": "Volkswagen",
+   "old_model": "Passat",
+   "old_years": "2000s-2018",
+   "model": "Passat",
+   "year_range": "2014-2018"
+  },
+  {
+   "brand": "Volkswagen",
+   "old_model": "Beetle",
+   "old_years": "2000s-2019",
+   "model": "Beetle",
+   "year_range": "1998-2010"
+  },
+  {
+   "brand": "Volkswagen",
+   "old_model": "Beetle",
+   "old_years": "2000s-2019",
+   "model": "Beetle",
+   "year_range": "2011-2019"
+  },
+  {
+   "brand": "Volkswagen",
+   "old_model": "Touareg",
+   "old_years": "2005-ปัจจุบัน",
+   "model": "Touareg",
+   "year_range": "2005-2010"
+  },
+  {
+   "brand": "Volkswagen",
+   "old_model": "Touareg",
+   "old_years": "2005-ปัจจุบัน",
+   "model": "Touareg",
+   "year_range": "2010-2018"
+  },
+  {
+   "brand": "Volkswagen",
+   "old_model": "Touareg",
+   "old_years": "2005-ปัจจุบัน",
+   "model": "Touareg",
+   "year_range": "2018-ปัจจุบัน"
+  },
+  {
+   "brand": "Bentley",
+   "old_model": "Continental GT",
+   "old_years": "2003-ปัจจุบัน",
+   "model": "Continental GT",
+   "year_range": "2003-2011"
+  },
+  {
+   "brand": "Bentley",
+   "old_model": "Continental GT",
+   "old_years": "2003-ปัจจุบัน",
+   "model": "Continental GT",
+   "year_range": "2011-2018"
+  },
+  {
+   "brand": "Bentley",
+   "old_model": "Continental GT",
+   "old_years": "2003-ปัจจุบัน",
+   "model": "Continental GT",
+   "year_range": "2018-2024"
+  },
+  {
+   "brand": "Bentley",
+   "old_model": "Continental GT",
+   "old_years": "2003-ปัจจุบัน",
+   "model": "Continental GT",
+   "year_range": "2024-ปัจจุบัน"
+  },
+  {
+   "brand": "Bentley",
+   "old_model": "Flying Spur",
+   "old_years": "2005-ปัจจุบัน",
+   "model": "Flying Spur",
+   "year_range": "2005-2013"
+  },
+  {
+   "brand": "Bentley",
+   "old_model": "Flying Spur",
+   "old_years": "2005-ปัจจุบัน",
+   "model": "Flying Spur",
+   "year_range": "2013-2019"
+  },
+  {
+   "brand": "Bentley",
+   "old_model": "Flying Spur",
+   "old_years": "2005-ปัจจุบัน",
+   "model": "Flying Spur",
+   "year_range": "2019-ปัจจุบัน"
+  },
+  {
+   "brand": "Rolls-Royce",
+   "old_model": "Phantom",
+   "old_years": "2003-ปัจจุบัน",
+   "model": "Phantom",
+   "year_range": "2003-2017"
+  },
+  {
+   "brand": "Rolls-Royce",
+   "old_model": "Phantom",
+   "old_years": "2003-ปัจจุบัน",
+   "model": "Phantom",
+   "year_range": "2017-ปัจจุบัน"
+  },
+  {
+   "brand": "Rolls-Royce",
+   "old_model": "Ghost",
+   "old_years": "2010-ปัจจุบัน",
+   "model": "Ghost",
+   "year_range": "2010-2020"
+  },
+  {
+   "brand": "Rolls-Royce",
+   "old_model": "Ghost",
+   "old_years": "2010-ปัจจุบัน",
+   "model": "Ghost",
+   "year_range": "2020-ปัจจุบัน"
+  },
+  {
+   "brand": "Aston Martin",
+   "old_model": "Vantage",
+   "old_years": "2000s-ปัจจุบัน",
+   "model": "Vantage",
+   "year_range": "2005-2017"
+  },
+  {
+   "brand": "Aston Martin",
+   "old_model": "Vantage",
+   "old_years": "2000s-ปัจจุบัน",
+   "model": "Vantage",
+   "year_range": "2018-ปัจจุบัน"
+  },
+  {
+   "brand": "Aston Martin",
+   "old_model": "DB11 / DB12",
+   "old_years": "2017-ปัจจุบัน",
+   "model": "DB11",
+   "year_range": "2017-2023"
+  },
+  {
+   "brand": "Aston Martin",
+   "old_model": "DB11 / DB12",
+   "old_years": "2017-ปัจจุบัน",
+   "model": "DB12",
+   "year_range": "2023-ปัจจุบัน"
+  },
+  {
+   "brand": "Maserati",
+   "old_model": "GranTurismo",
+   "old_years": "2008-ปัจจุบัน",
+   "model": "GranTurismo",
+   "year_range": "2008-2019"
+  },
+  {
+   "brand": "Maserati",
+   "old_model": "GranTurismo",
+   "old_years": "2008-ปัจจุบัน",
+   "model": "GranTurismo",
+   "year_range": "2023-ปัจจุบัน"
+  },
+  {
+   "brand": "Jeep",
+   "old_model": "Wrangler",
+   "old_years": "2007-ปัจจุบัน",
+   "model": "Wrangler",
+   "year_range": "2007-2017"
+  },
+  {
+   "brand": "Jeep",
+   "old_model": "Wrangler",
+   "old_years": "2007-ปัจจุบัน",
+   "model": "Wrangler",
+   "year_range": "2018-ปัจจุบัน"
+  }
+ ],
+ "retire": [
+  {
+   "brand": "Toyota",
+   "model": "Vios"
+  },
+  {
+   "brand": "Toyota",
+   "model": "Vios วีออส"
+  },
+  {
+   "brand": "Toyota",
+   "model": "QAFitModel"
+  },
+  {
+   "brand": "Honda",
+   "model": "Wave"
+  },
+  {
+   "brand": "Honda",
+   "model": "Civic"
+  },
+  {
+   "brand": "Isuzu",
+   "model": "D-Max"
+  },
+  {
+   "brand": "Mazda",
+   "model": "2"
+  },
+  {
+   "brand": "TESTBRAND",
+   "model": "QAMODEL"
+  },
+  {
+   "brand": "ทดสอบฟิตเมนต์",
+   "model": "รุ่นทดสอบX"
+  }
+ ]
+}

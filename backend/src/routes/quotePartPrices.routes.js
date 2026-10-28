@@ -75,18 +75,20 @@ async function loadEffectiveParts(shopId, criteria, limit) {
 // GET /quote-parts/brands — brands that have parts for this shop (step 1 of the quotation picker)
 router.get('/brands', async (req, res) => {
   try {
-    // Master brands come from the (small) vehicle catalogue and are probed in the parts index, and the shop
-    // layer is read from the (shop_id, brand, ...) index alone: scanning every part row takes ~0.3 s at 70k rows.
+    // Master brands come from the (small) vehicle catalogue and are probed in the parts index; the shop layer
+    // is read from the (shop_id, brand, ...) index alone. Scanning every part row takes ~0.3 s at 100k rows, and
+    // putting both halves in one UNION makes MySQL pick a slow plan, so they run as two queries and merge here.
     // A hidden shop row can add a brand with nothing visible under it; that is harmless.
-    const [rows] = await pool.query(
-      `SELECT v.brand FROM (SELECT DISTINCT brand FROM vehicle_models WHERE status = 'approved') v
-       WHERE EXISTS (SELECT 1 FROM catalog_parts c WHERE c.brand = v.brand AND c.is_active = 1)
-       UNION
-       SELECT DISTINCT brand FROM quote_part_prices WHERE shop_id = ?
-       ORDER BY brand ASC`,
-      [req.shopId]
-    );
-    res.json({ success: true, data: rows.map((r) => r.brand) });
+    const [[master], [own]] = await Promise.all([
+      pool.query(
+        `SELECT v.brand FROM (SELECT DISTINCT brand FROM vehicle_models WHERE status = 'approved') v
+         WHERE EXISTS (SELECT 1 FROM catalog_parts c WHERE c.brand = v.brand AND c.is_active = 1)`
+      ),
+      pool.query('SELECT DISTINCT brand FROM quote_part_prices WHERE shop_id = ?', [req.shopId]),
+    ]);
+    const brands = [...new Set([...master, ...own].map((r) => r.brand))]
+      .sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+    res.json({ success: true, data: brands });
   } catch (err) {
     console.error('Error loading quote part brands:', err);
     res.status(500).json({ error: 'โหลดรายการยี่ห้อไม่สำเร็จ' });
@@ -98,14 +100,22 @@ router.get('/models', async (req, res) => {
   const { brand } = req.query;
   if (!brand) return res.status(400).json({ error: 'กรุณาระบุยี่ห้อ' });
   try {
-    const [rows] = await pool.query(
-      `SELECT model FROM catalog_parts WHERE is_active = 1 AND brand = ?
-       UNION
-       SELECT model FROM quote_part_prices WHERE shop_id = ? AND brand = ?
-       ORDER BY model ASC`,
-      [brand, req.shopId, brand]
-    );
-    res.json({ success: true, data: rows.map((r) => r.model) });
+    // Master models: the model labels of the (small) vehicle catalogue that still have an active master part,
+    // probed through the parts index (a model's label is its text in catalog_parts). Scanning every part row of
+    // the brand takes ~0.1 s; the shop's own rows are a short range read.
+    const [[master], [own]] = await Promise.all([
+      pool.query(
+        `SELECT v.label AS model FROM (
+           SELECT CASE WHEN year_range IS NULL THEN model ELSE CONCAT(model, ' (', year_range, ')') END AS label
+           FROM vehicle_models WHERE brand = ? AND status = 'approved') v
+         WHERE EXISTS (SELECT 1 FROM catalog_parts c WHERE c.brand = ? AND c.model = v.label AND c.is_active = 1)`,
+        [brand, brand]
+      ),
+      pool.query('SELECT DISTINCT model FROM quote_part_prices WHERE shop_id = ? AND is_active = 1 AND brand = ?', [req.shopId, brand]),
+    ]);
+    const models = [...new Set([...master, ...own].map((r) => r.model))]
+      .sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+    res.json({ success: true, data: models });
   } catch (err) {
     console.error('Error loading quote part models:', err);
     res.status(500).json({ error: 'โหลดรายการรุ่นรถไม่สำเร็จ' });
@@ -155,6 +165,15 @@ router.post('/', requireManager, async (req, res) => {
     res.status(500).json({ error: 'เพิ่มรายการราคาอะไหล่ไม่สำเร็จ' });
   }
 });
+
+// A picture file can be shared by several rows (splitting a model copies its rows to every generation), so
+// the file is only removed when no row points at it any more.
+async function deleteImageIfUnused(imagePath, exceptRowId) {
+  if (!imagePath) return;
+  // tenant-ok: a picture file may be shared by rows of any shop
+  const [[used]] = await pool.query('SELECT COUNT(*) AS n FROM quote_part_prices WHERE image_data = ? AND id <> ?', [imagePath, exceptRowId || 0]);
+  if (used.n === 0) deleteUploadedFile(imagePath);
+}
 
 // The master part a shop row is attached to, if any
 async function masterPartFor(brand, model, partName) {
@@ -220,7 +239,7 @@ router.put('/:id', requireManager, async (req, res) => {
       );
     }
     // a replaced / removed picture: drop the old file so it is not left behind
-    if (oldImage && oldImage !== imageUrl) deleteUploadedFile(oldImage);
+    if (oldImage && oldImage !== imageUrl) await deleteImageIfUnused(oldImage, rowId);
     res.json({ success: true, message: 'แก้ไขรายการสำเร็จ' });
   } catch (err) {
     if (err.code === 'ER_DUP_ENTRY') return res.status(409).json({ error: 'มีรายการอะไหล่นี้ในรุ่นรถนี้อยู่แล้ว' });
@@ -277,7 +296,7 @@ router.delete('/:id', requireManager, async (req, res) => {
     } else {
       await pool.execute('DELETE FROM quote_part_prices WHERE id = ? AND shop_id = ?', [existing.id, req.shopId]);
     }
-    deleteUploadedFile(existing.image_data);
+    await deleteImageIfUnused(existing.image_data, existing.id);
     res.json({ success: true, message: 'ลบรายการสำเร็จ' });
   } catch (err) {
     console.error('Error deleting quote part price:', err);
