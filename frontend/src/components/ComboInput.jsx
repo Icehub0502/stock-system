@@ -1,0 +1,106 @@
+import React, { useMemo, useRef, useState } from 'react';
+
+// Compare ignoring case, spaces and punctuation ("camry", "CAM-RY" and "Camry" are the same name)
+export function normalizeName(value) {
+  return String(value || '').toLowerCase().replace(/[\s\-_./()]+/g, '');
+}
+
+const MAX_SHOWN = 60;
+
+/**
+ * Search-as-you-type field for picking from a list while still allowing a value that is not in it.
+ * The value is always the plain text in the box, so forms keep working with a string exactly as before.
+ *
+ * options: [{ value, label?, pending? }]   pending = typed in by staff, waiting for the administrator
+ * - typing filters the list (contains match, case / spaces / punctuation ignored)
+ * - choosing an entry fills the box; leaving the box with text that matches an entry in another spelling
+ *   switches it to the listed spelling
+ * - text that matches nothing is kept and offered as "ไม่พบ? กรอกเอง" — the caller decides what that means
+ */
+export default function ComboInput({
+  value, onChange, options, placeholder, disabled, customLabel = 'ไม่พบ? กรอกเอง', emptyHint = 'ไม่พบในรายการ', ...rest
+}) {
+  const [open, setOpen] = useState(false);
+  const [active, setActive] = useState(0);
+  const closeTimer = useRef(null);
+
+  const typed = normalizeName(value);
+  const filtered = useMemo(() => {
+    const list = typed ? options.filter((o) => normalizeName(o.label || o.value).includes(typed)) : options;
+    return list.slice(0, MAX_SHOWN);
+  }, [options, typed]);
+  const exact = typed ? options.find((o) => normalizeName(o.value) === typed) : null;
+  const showCustom = Boolean(value.trim()) && !exact;
+
+  const choose = (option) => {
+    onChange(option.value);
+    setOpen(false);
+  };
+
+  const handleBlur = () => {
+    // delay so a click on an entry lands before the list disappears
+    closeTimer.current = setTimeout(() => {
+      setOpen(false);
+      if (exact && exact.value !== value) onChange(exact.value);
+    }, 120);
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setOpen(true);
+      setActive((i) => Math.min(i + 1, filtered.length - 1));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setActive((i) => Math.max(i - 1, 0));
+    } else if (e.key === 'Enter' && open && filtered[active]) {
+      e.preventDefault();
+      choose(filtered[active]);
+    } else if (e.key === 'Escape') {
+      setOpen(false);
+    }
+  };
+
+  return (
+    <div className="combo">
+      <input
+        type="text"
+        value={value}
+        disabled={disabled}
+        placeholder={placeholder}
+        autoComplete="off"
+        onChange={(e) => { onChange(e.target.value); setActive(0); setOpen(true); }}
+        onFocus={() => { clearTimeout(closeTimer.current); setOpen(true); }}
+        onBlur={handleBlur}
+        onKeyDown={handleKeyDown}
+        {...rest}
+      />
+      {open && !disabled && (filtered.length > 0 || showCustom) && (
+        <ul className="combo-list" role="listbox">
+          {filtered.map((o, i) => (
+            <li
+              key={o.value}
+              role="option"
+              aria-selected={i === active}
+              className={`combo-item ${i === active ? 'active' : ''}`}
+              onMouseDown={(e) => { e.preventDefault(); choose(o); }}
+              onMouseEnter={() => setActive(i)}
+            >
+              <span>{o.label || o.value}</span>
+              {o.pending && <span className="combo-badge">รอตรวจ</span>}
+            </li>
+          ))}
+          {filtered.length === 0 && <li className="combo-empty">{emptyHint}</li>}
+          {showCustom && (
+            <li
+              className="combo-item combo-custom"
+              onMouseDown={(e) => { e.preventDefault(); setOpen(false); }}
+            >
+              {customLabel}: <strong>{value.trim()}</strong>
+            </li>
+          )}
+        </ul>
+      )}
+    </div>
+  );
+}

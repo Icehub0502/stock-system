@@ -87,6 +87,8 @@ export default function QuotePartPriceManagementPage() {
   }, [search, filterBrand, filterModel]);
 
   const needsPriceCount = parts.filter((p) => p.needs_price).length;
+  // a part from the shared catalogue keeps its brand / model / name; only the price, note and picture are the shop's
+  const fromCatalog = Boolean(editing && editing.source !== 'shop');
 
   const openAdd = () => {
     setEditing(null);
@@ -159,14 +161,29 @@ export default function QuotePartPriceManagementPage() {
     }
   };
 
-  const deletePart = async (id) => {
-    if (!window.confirm('คุณแน่ใจว่าจะลบรายการนี้หรือไม่?')) return;
+  const deletePart = async (part) => {
+    const message = part.source === 'shop'
+      ? 'คุณแน่ใจว่าจะลบรายการนี้หรือไม่?'
+      : 'รายการนี้มาจากสมุดกลาง จะซ่อนเฉพาะในร้านนี้ (ราคากลางไม่ถูกลบ) ยืนยันหรือไม่?';
+    if (!window.confirm(message)) return;
     try {
-      await client.delete(`/quote-parts/${id}`);
+      await client.delete(`/quote-parts/${part.id}`);
       fetchParts();
     } catch (err) {
       console.error('Delete quote part price error:', err);
       alert(err.response?.data?.error || 'ลบรายการไม่สำเร็จ');
+    }
+  };
+
+  // drop this shop's own price on a master part and go back to the master price
+  const resetToCatalog = async (part) => {
+    if (!window.confirm(`กลับไปใช้ราคากลาง ฿${formatMoney(part.catalog_price)} ใช่หรือไม่?`)) return;
+    try {
+      await client.post(`/quote-parts/${part.id}/reset`);
+      fetchParts();
+    } catch (err) {
+      console.error('Reset quote part price error:', err);
+      alert(err.response?.data?.error || 'กลับไปใช้ราคากลางไม่สำเร็จ');
     }
   };
 
@@ -251,10 +268,16 @@ export default function QuotePartPriceManagementPage() {
                 ) : (
                   <div className="qpp-card-price">฿{formatMoney(part.price)}</div>
                 )}
+                {part.source === 'custom' && (
+                  <div className="qpp-source qpp-source-custom">ปรับราคาเอง · ราคากลาง ฿{formatMoney(part.catalog_price)}</div>
+                )}
+                {part.source === 'catalog' && <div className="qpp-source">ราคากลาง</div>}
+                {part.source === 'shop' && <div className="qpp-source">รายการของร้านเอง</div>}
               </div>
               <div className="qpp-card-actions">
                 <button onClick={() => openEdit(part)}>แก้ไข</button>
-                <button className="btn-danger" onClick={() => deletePart(part.id)}>ลบ</button>
+                {part.source === 'custom' && <button onClick={() => resetToCatalog(part)}>ใช้ราคากลาง</button>}
+                <button className="btn-danger" onClick={() => deletePart(part)}>{part.source === 'shop' ? 'ลบ' : 'ซ่อน'}</button>
               </div>
             </div>
           ))}
@@ -269,12 +292,18 @@ export default function QuotePartPriceManagementPage() {
               <button className="btn-close" onClick={closeModal}>✕</button>
             </div>
             {error && <div className="error-message">{error}</div>}
+            {fromCatalog && (
+              <div className="info-message">
+                รายการนี้มาจากสมุดกลาง (ราคากลาง ฿{formatMoney(editing.catalog_price ?? editing.price)}) บันทึกแล้วร้านนี้จะใช้ราคาที่กรอกแทนราคากลาง
+              </div>
+            )}
             <form onSubmit={saveForm} className="modal-form">
               <div className="form-group">
                 <label>ยี่ห้อรถ</label>
                 <select
                   value={form.brand}
                   onChange={(e) => setForm({ ...form, brand: e.target.value, model: '' })}
+                  disabled={fromCatalog}
                   required
                 >
                   <option value="">-- เลือกยี่ห้อ --</option>
@@ -293,7 +322,7 @@ export default function QuotePartPriceManagementPage() {
                 <select
                   value={form.model}
                   onChange={(e) => setForm({ ...form, model: e.target.value })}
-                  disabled={!form.brand}
+                  disabled={!form.brand || fromCatalog}
                   required
                 >
                   <option value="">-- เลือกรุ่น --</option>
@@ -312,6 +341,7 @@ export default function QuotePartPriceManagementPage() {
                   value={form.part_name}
                   onChange={(e) => setForm({ ...form, part_name: e.target.value })}
                   placeholder="เช่น แร็คบิลด์รวมเทิร์น"
+                  disabled={fromCatalog}
                   required
                 />
               </div>

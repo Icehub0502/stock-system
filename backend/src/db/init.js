@@ -1177,6 +1177,9 @@ async function initDatabase() {
   // branch groups (one owner, several shops), audit log, users.is_active — see groupSchema.js
   await require('./groupSchema').migrateGroups(conn);
 
+  // shared parts catalogue (master book + per-shop adjustments) and vehicle model review status — see catalogSchema.js
+  await require('./catalogSchema').migrateCatalog(conn);
+
   await conn.end();
 
   console.log(`[init-db] Database "${DB_NAME}" ready`);

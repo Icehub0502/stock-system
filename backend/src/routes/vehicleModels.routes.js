@@ -1,20 +1,28 @@
 const express = require('express');
 const pool = require('../db/pool');
 const { authenticate, requireRole } = require('../middleware/auth');
+const { normalizeName } = require('../utils/normalizeName');
 
 const router = express.Router();
 router.use(authenticate);
 router.use(requireRole('office'));
 
-// GET /vehicle-models/brands — ยี่ห้อรถทั้งหมดในแคตตาล็อกอ้างอิง เรียงตามลำดับ
-// ที่นำเข้ามา (id ต่ำสุดของแต่ละยี่ห้อ) ให้ยี่ห้อที่พบบ่อยขึ้นก่อนตามไฟล์ต้นฉบับ
+// A model is visible to a shop when it is in the shared catalogue ('approved') or it is a model this very
+// shop typed in that the administrator has not reviewed yet ('pending'). Other shops never see pending
+// models. See db/catalogSchema.js and devCatalog.routes.js (approve / merge / reject).
+const VISIBLE = "(status = 'approved' OR (status = 'pending' AND submitted_shop_id = ?))";
+
+// GET /vehicle-models/brands — brands in the catalogue, in the order they were imported
+// (lowest id of each brand) so the common brands of the source file come first
 router.get('/brands', async (req, res) => {
   try {
     const [rows] = await pool.query(
       `SELECT brand, MIN(id) AS first_id
        FROM vehicle_models
+       WHERE ${VISIBLE}
        GROUP BY brand
-       ORDER BY first_id ASC`
+       ORDER BY first_id ASC`,
+      [req.shopId]
     );
     res.json({ success: true, data: rows.map((r) => r.brand) });
   } catch (err) {
@@ -23,21 +31,22 @@ router.get('/brands', async (req, res) => {
   }
 });
 
-// GET /vehicle-models/models?brand=Toyota — รุ่นรถของยี่ห้อนั้น พร้อม label
-// รวมช่วงปี (ใช้ label เดียวกันทั้งตอนแสดงผลและตอนอ้างอิงราคาอะไหล่ กันสะกด
-// ไม่ตรงกันระหว่างหน้าคีออสกับหน้ากรอกราคา)
+// GET /vehicle-models/models?brand=Toyota — models of that brand with a label that includes the year range
+// (the same label is used when showing a model and when looking up its parts prices, so the two pages
+// cannot disagree on spelling). `pending` marks a model this shop typed in that is still under review.
 router.get('/models', async (req, res) => {
   const { brand } = req.query;
   if (!brand) return res.status(400).json({ error: 'กรุณาระบุยี่ห้อ' });
   try {
     const [rows] = await pool.execute(
-      'SELECT id, model, year_range FROM vehicle_models WHERE brand = ? ORDER BY id ASC',
-      [brand]
+      `SELECT id, model, year_range, status FROM vehicle_models WHERE brand = ? AND ${VISIBLE} ORDER BY id ASC`,
+      [brand, req.shopId]
     );
     const data = rows.map((r) => ({
       model: r.model,
       year_range: r.year_range,
       label: r.year_range ? `${r.model} (${r.year_range})` : r.model,
+      pending: r.status === 'pending',
     }));
     res.json({ success: true, data });
   } catch (err) {
@@ -46,24 +55,41 @@ router.get('/models', async (req, res) => {
   }
 });
 
-// POST /vehicle-models — เพิ่มยี่ห้อ/รุ่นใหม่เข้าแคตตาล็อกอ้างอิง ใช้ตอนเจอรถ
-// รุ่นใหม่ที่ยังไม่มีในระบบระหว่างกรอกหน้างานจริง (เช่นหน้าเพิ่มคิวรับรถ) — ไม่
-// บังคับ year_range เพราะพนักงานมักพิมพ์ปีต่อท้ายชื่อรุ่นไปเลย (เช่น "Altis 08")
-// แทนที่จะแยกกรอกช่วงปี ใช้ INSERT IGNORE เพราะมี UNIQUE (brand, model,
-// year_range) อยู่แล้ว — ถ้ามีอยู่แล้วพอดีก็แค่ไม่ทำอะไร ไม่ใช่ error
+// POST /vehicle-models — a model that is not in the catalogue, typed in by staff while filling in a job.
+// It is NOT added to the shared catalogue: it is stored as 'pending' for this shop only, until the
+// administrator approves it. If the typed name matches a model this shop can already see (ignoring case /
+// spaces / punctuation) nothing is added and the existing spelling is returned, so a car that is in the
+// book but was not found by searching does not get a second entry.
 router.post('/', async (req, res) => {
-  const brand = req.body.brand?.toString().trim();
-  const model = req.body.model?.toString().trim();
-  const yearRange = req.body.year_range?.toString().trim() || null;
-  if (!brand || !model) {
+  const brandInput = req.body.brand?.toString().trim();
+  const modelInput = req.body.model?.toString().trim();
+  if (!brandInput || !modelInput) {
     return res.status(400).json({ error: 'กรุณากรอกยี่ห้อและรุ่นรถ' });
   }
+  if (brandInput.length > 100 || modelInput.length > 100) {
+    return res.status(400).json({ error: 'ชื่อยี่ห้อหรือรุ่นยาวเกินไป' });
+  }
   try {
-    await pool.execute(
-      'INSERT IGNORE INTO vehicle_models (brand, model, year_range) VALUES (?, ?, ?)',
-      [brand, model, yearRange]
+    const [brandRows] = await pool.query(`SELECT DISTINCT brand FROM vehicle_models WHERE ${VISIBLE}`, [req.shopId]);
+    const brand = brandRows.find((r) => normalizeName(r.brand) === normalizeName(brandInput))?.brand || brandInput;
+
+    const [modelRows] = await pool.execute(
+      `SELECT model, year_range FROM vehicle_models WHERE brand = ? AND ${VISIBLE}`,
+      [brand, req.shopId]
     );
-    res.status(201).json({ success: true });
+    const typed = normalizeName(modelInput);
+    const existing = modelRows.find((r) => normalizeName(r.model) === typed
+      || normalizeName(r.year_range ? `${r.model} (${r.year_range})` : r.model) === typed);
+    if (existing) {
+      return res.json({ success: true, data: { brand, model: existing.model, existed: true } });
+    }
+
+    await pool.execute(
+      `INSERT INTO vehicle_models (brand, model, year_range, status, submitted_shop_id, submitted_by, submitted_at)
+       VALUES (?, ?, NULL, 'pending', ?, ?, NOW())`,
+      [brand, modelInput, req.shopId, String(req.user.full_name || req.user.username || '').slice(0, 100) || null]
+    );
+    res.status(201).json({ success: true, data: { brand, model: modelInput, pending: true } });
   } catch (err) {
     console.error('Error adding vehicle model:', err);
     res.status(500).json({ error: 'เพิ่มรุ่นรถไม่สำเร็จ' });

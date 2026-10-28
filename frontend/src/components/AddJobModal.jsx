@@ -4,11 +4,11 @@ import { todayStr } from '../utils/format';
 import { formatDateTh } from '../utils/dateGroups';
 import { resizePhotos, describePhotoFailures, IMAGE_ACCEPT } from '../utils/resizeImage';
 import ProvinceSelect from './ProvinceSelect';
+import ComboInput from './ComboInput';
 
-// ยี่ห้อ/รุ่นรถ: พิมพ์แล้วมีตัวเลือกจากฐานข้อมูลเด้งขึ้นมาให้กด (เช่นพิมพ์ "To" แล้ว
-// เห็น "Toyota") แต่ยังพิมพ์ค่าที่ไม่มีในระบบได้อยู่ (รถรุ่นใหม่) — ใช้ <datalist>
-// ของ HTML ตรง ๆ แทนที่จะเขียน dropdown เอง เพราะพฤติกรรม "พิมพ์กรองได้ + เลือกได้
-// + พิมพ์อิสระได้" ตรงกับที่ขอเป๊ะ และเบราว์เซอร์รองรับเองอยู่แล้วทั้งมือถือ/เดสก์ท็อป
+// ยี่ห้อ/รุ่นรถ: ช่องค้นหา (ComboInput) — พิมพ์แล้วกรองจากสมุดรุ่นรถ ต้องเลือกยี่ห้อก่อนถึงจะกรอกรุ่น
+// ได้ ถ้าหาไม่เจอพิมพ์เองได้ (รถรุ่นใหม่) ค่าที่พิมพ์เองจะเข้าสมุดแบบ "รอตรวจ" ต้องให้ dev อนุมัติ
+// ก่อนร้านอื่นจะเห็น (ดู POST /vehicle-models)
 
 /**
  * ฟอร์มเพิ่มคิวรับรถ — เปิดเป็น modal จากปุ่ม "+" ลอยที่หน้ารายการงานวันนี้
@@ -226,20 +226,22 @@ function CarForm({
       <div className="ajm-grid-2">
         <div className="ajm-field">
           <label>ยี่ห้อรถ</label>
-          <input
-            type="text" list={`${idp}-brands`} value={car.brand}
-            onChange={(e) => onChange({ brand: e.target.value, model: '' })}
+          <ComboInput
+            value={car.brand}
+            options={brands.map((b) => ({ value: b }))}
+            placeholder="พิมพ์ค้นหายี่ห้อ"
+            onChange={(brand) => onChange(brand.trim().toLowerCase() === car.brand.trim().toLowerCase() ? { brand } : { brand, model: '' })}
           />
-          <datalist id={`${idp}-brands`}>
-            {brands.map((b) => <option key={b} value={b} />)}
-          </datalist>
         </div>
         <div className="ajm-field">
           <label>รุ่นรถ</label>
-          <input type="text" list={`${idp}-models`} value={car.model} onChange={(e) => onChange({ model: e.target.value })} />
-          <datalist id={`${idp}-models`}>
-            {models.map((m) => <option key={m.model} value={m.model} />)}
-          </datalist>
+          <ComboInput
+            value={car.model}
+            options={models.map((m) => ({ value: m.model, pending: m.pending }))}
+            disabled={!car.brand.trim()}
+            placeholder={car.brand.trim() ? 'พิมพ์ค้นหารุ่นรถ' : 'เลือกยี่ห้อก่อน'}
+            onChange={(model) => onChange({ model })}
+          />
         </div>
         <div className="ajm-field">
           <label>สีรถ</label>

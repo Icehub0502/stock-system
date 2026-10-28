@@ -50,6 +50,7 @@ const settingsRoutes = require('./routes/settings.routes');
 const claimsRoutes = require('./routes/claims.routes');
 const devRoutes = require('./routes/dev.routes');
 const devShopsRoutes = require('./routes/devShops.routes');
+const devCatalogRoutes = require('./routes/devCatalog.routes');
 const ownerRoutes = require('./routes/owner.routes');
 
 const { UPLOADS_DIR } = require('./utils/photoStorage');
@@ -164,6 +165,7 @@ function createApp() {
   app.use('/api/claims', claimsRoutes);
   app.use('/api/dev', devRoutes);
   app.use('/api/dev', devShopsRoutes);
+  app.use('/api/dev', devCatalogRoutes);
   app.use('/api/owner', ownerRoutes);
 
   app.get('/api/health', (req, res) => res.json({ status: 'ok' }));

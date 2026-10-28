@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import client from '../api/client';
 import { plateWithProvince } from '../utils/thaiProvinces';
 import ProvinceSelect from '../components/ProvinceSelect';
+import ComboInput from '../components/ComboInput';
 import { jobStatusDef, MAIN_PATH } from '../utils/jobStatus';
 import { formatDbDateTime, todayStr } from '../utils/format';
 import { resizePhotos, resizeFullPhotos, describePhotoFailures, IMAGE_ACCEPT } from '../utils/resizeImage';
@@ -825,19 +826,21 @@ export default function JobDetailPage() {
             <input type="text" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
 
             <label>ยี่ห้อรถ</label>
-            <input
-              type="text" list="jdp-brand-options" value={form.brand}
-              onChange={(e) => setForm({ ...form, brand: e.target.value, model: '' })}
+            <ComboInput
+              value={form.brand}
+              options={brands.map((b) => ({ value: b }))}
+              placeholder="พิมพ์ค้นหายี่ห้อ"
+              onChange={(brand) => setForm((f) => (brand.trim().toLowerCase() === f.brand.trim().toLowerCase() ? { ...f, brand } : { ...f, brand, model: '' }))}
             />
-            <datalist id="jdp-brand-options">
-              {brands.map((b) => <option key={b} value={b} />)}
-            </datalist>
 
             <label>รุ่นรถ</label>
-            <input type="text" list="jdp-model-options" value={form.model} onChange={(e) => setForm({ ...form, model: e.target.value })} />
-            <datalist id="jdp-model-options">
-              {models.map((m) => <option key={m.model} value={m.model} />)}
-            </datalist>
+            <ComboInput
+              value={form.model}
+              options={models.map((m) => ({ value: m.model, pending: m.pending }))}
+              disabled={!form.brand.trim()}
+              placeholder={form.brand.trim() ? 'พิมพ์ค้นหารุ่นรถ' : 'เลือกยี่ห้อก่อน'}
+              onChange={(model) => setForm((f) => ({ ...f, model }))}
+            />
 
             <label>สีรถ</label>
             <input type="text" value={form.color} onChange={(e) => setForm({ ...form, color: e.target.value })} />
