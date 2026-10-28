@@ -57,6 +57,17 @@ describe('master parts and a shop adjusting them', () => {
 
   test('dev adds a model and a part; validation and duplicates are refused', async () => {
     expect((await dev.post('/models', { brand: BRAND, model: '' })).status).toBe(400);
+    // year range: 2013-2022 / 2022-ปัจจุบัน only, end not before start
+    for (const bad of ['13-22', '2013', '2022-2013', '2013 - 2022', 'abcd-efgh']) {
+      expect((await dev.post('/models', { brand: BRAND, model: 'BadYears', year_range: bad })).status).toBe(400);
+    }
+    expect((await dev.post('/models', { brand: BRAND, model: 'OpenEnded', year_range: '2022-ปัจจุบัน' })).status).toBe(201);
+    // an old loose value stays editable as long as it is not changed
+    await pool.query("INSERT INTO vehicle_models (brand, model, year_range, status) VALUES (?, 'Legacy', '1990s-2001', 'approved')", [BRAND]);
+    const [[legacy]] = await pool.query("SELECT id FROM vehicle_models WHERE brand = ? AND model = 'Legacy'", [BRAND]);
+    expect((await dev.patch(`/models/${legacy.id}`, { model: 'Legacy Renamed' })).status).toBe(200);
+    expect((await dev.patch(`/models/${legacy.id}`, { year_range: '1990s-2002' })).status).toBe(400);
+    expect((await dev.patch(`/models/${legacy.id}`, { year_range: '1990-2001' })).status).toBe(200);
     expect((await dev.post('/models', { brand: BRAND, model: 'Alpha', year_range: '2020-2024' })).status).toBe(201);
     expect((await dev.post('/models', { brand: BRAND, model: 'alpha', year_range: '2020-2024' })).status).toBe(409);
 

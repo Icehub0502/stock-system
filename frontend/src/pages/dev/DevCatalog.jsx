@@ -13,6 +13,19 @@ const TABS = [
   { key: 'parts', label: 'อะไหล่และราคากลาง' },
 ];
 
+// "2013-2022" / "2022-ปัจจุบัน" <-> the three year fields of the form; text that does not fit (old rows such as
+// "1990s-2001") is kept as it is until the administrator types a new range
+function parseYears(yearRange) {
+  const match = /^(\d{4})-(\d{4}|ปัจจุบัน)$/.exec(yearRange || '');
+  if (!match) return { year_from: '', year_to: '', to_present: false, year_raw: yearRange || '' };
+  return { year_from: match[1], year_to: match[2] === 'ปัจจุบัน' ? '' : match[2], to_present: match[2] === 'ปัจจุบัน', year_raw: '' };
+}
+
+function composeYears(form) {
+  if (!form.year_from) return form.year_raw || '';
+  return `${form.year_from}-${form.to_present || !form.year_to ? 'ปัจจุบัน' : form.year_to}`;
+}
+
 function errorText(err, fallback) {
   return err.response?.data?.error || fallback;
 }
@@ -203,7 +216,7 @@ function ModelsTab({ onChanged }) {
   const save = async (e) => {
     e.preventDefault();
     try {
-      const body = { brand: form.brand, model: form.model, year_range: form.year_range };
+      const body = { brand: form.brand, model: form.model, year_range: composeYears(form) };
       if (form.id) await client.patch(`/dev/catalog/models/${form.id}`, body);
       else await client.post('/dev/catalog/models', body);
       setForm(null);
@@ -248,7 +261,8 @@ function ModelsTab({ onChanged }) {
         <div className="form-group">
           <label>&nbsp;</label>
           <div className="dev-purge-row">
-            <button type="button" className="btn btn-primary" onClick={() => setForm({ brand, model: '', year_range: '' })}>+ เพิ่มรุ่น</button>
+            <button type="button" className="btn btn-primary" onClick={() => setForm({ brand, model: '', ...parseYears(''), newBrand: false })}>+ เพิ่มรุ่น</button>
+            <button type="button" className="btn btn-primary" onClick={() => setForm({ brand: '', model: '', ...parseYears(''), newBrand: true })}>+ เพิ่มยี่ห้อใหม่</button>
             {brand && <button type="button" className="btn btn-secondary" onClick={renameBrand}>เปลี่ยนชื่อยี่ห้อ</button>}
           </div>
         </div>
@@ -264,7 +278,7 @@ function ModelsTab({ onChanged }) {
                 <td data-label="รุ่น">{r.model}</td>
                 <td data-label="ช่วงปี">{r.year_range || '-'}</td>
                 <td className="actions" data-label="จัดการ">
-                  <button type="button" onClick={() => setForm({ id: r.id, brand: r.brand, model: r.model, year_range: r.year_range || '' })}>แก้ไข</button>
+                  <button type="button" onClick={() => setForm({ id: r.id, brand: r.brand, model: r.model, ...parseYears(r.year_range), newBrand: false })}>แก้ไข</button>
                 </td>
               </tr>
             ))}
@@ -277,22 +291,38 @@ function ModelsTab({ onChanged }) {
         <div className="modal-backdrop" onClick={() => setForm(null)}>
           <div className="modal-card medium" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h2>{form.id ? 'แก้ไขรุ่นรถ' : 'เพิ่มรุ่นรถ'}</h2>
+              <h2>{form.id ? 'แก้ไขรุ่นรถ' : (form.newBrand ? 'เพิ่มยี่ห้อใหม่' : 'เพิ่มรุ่นรถ')}</h2>
               <button className="btn-close" onClick={() => setForm(null)}>✕</button>
             </div>
             {form.id && <div className="info-message">เปลี่ยนชื่อแล้ว ราคากลางและราคาของทุกร้านที่ผูกกับรุ่นนี้จะเปลี่ยนตาม</div>}
+            {form.newBrand && <div className="info-message">ยี่ห้อใหม่เกิดจากการเพิ่มรุ่นแรกของยี่ห้อนั้น กรอกชื่อยี่ห้อและรุ่นแรกด้านล่าง</div>}
             <form onSubmit={save} className="modal-form">
               <div className="form-group">
                 <label>ยี่ห้อ</label>
-                <input type="text" value={form.brand} onChange={(e) => setForm({ ...form, brand: e.target.value })} required />
+                <ComboInput
+                  value={form.brand}
+                  options={brands.map((b) => ({ value: b }))}
+                  placeholder={form.newBrand ? 'ชื่อยี่ห้อใหม่ เช่น Toyota' : 'พิมพ์ค้นหายี่ห้อ'}
+                  customLabel="ยี่ห้อใหม่"
+                  required
+                  onChange={(value) => setForm({ ...form, brand: value })}
+                />
               </div>
               <div className="form-group">
                 <label>รุ่น</label>
                 <input type="text" value={form.model} onChange={(e) => setForm({ ...form, model: e.target.value })} required />
               </div>
               <div className="form-group">
-                <label>ช่วงปี (ถ้ามี)</label>
-                <input type="text" value={form.year_range} onChange={(e) => setForm({ ...form, year_range: e.target.value })} placeholder="เช่น 2012-2018" />
+                <label>ช่วงปี (ปีที่เริ่มขายจนถึงปีที่เลิกขาย)</label>
+                <div className="dev-year-row">
+                  <input type="number" min="1950" max="2100" placeholder="ปีเริ่ม เช่น 2013" value={form.year_from} onChange={(e) => setForm({ ...form, year_from: e.target.value, year_raw: '' })} />
+                  <span>ถึง</span>
+                  <input type="number" min="1950" max="2100" placeholder="ปีสิ้นสุด เช่น 2022" value={form.to_present ? '' : form.year_to} disabled={form.to_present} onChange={(e) => setForm({ ...form, year_to: e.target.value })} />
+                  <label className="dev-year-present">
+                    <input type="checkbox" checked={form.to_present} onChange={(e) => setForm({ ...form, to_present: e.target.checked, year_to: '' })} /> ปัจจุบัน
+                  </label>
+                </div>
+                {form.year_raw && <div className="dev-detail">ช่วงปีเดิม: {form.year_raw} (กรอกปีด้านบนเพื่อเปลี่ยนเป็นรูปแบบมาตรฐาน)</div>}
               </div>
               <div className="modal-actions">
                 <button type="submit" className="btn btn-primary">บันทึก</button>

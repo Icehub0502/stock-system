@@ -23,6 +23,17 @@ function cleanText(value, max) {
   return text && text.length <= max ? text : null;
 }
 
+// "2013-2022" or "2022-ปัจจุบัน". Old catalogue rows hold looser text ("1990s-2001"), so the format is only
+// enforced when a year range is set or changed, never on rows that keep their old value.
+const YEAR_RANGE = /^(\d{4})-(\d{4}|ปัจจุบัน)$/;
+function yearRangeProblem(yearRange) {
+  if (!yearRange) return null;
+  const match = YEAR_RANGE.exec(yearRange);
+  if (!match) return 'ช่วงปีต้องเป็นรูปแบบ 2013-2022 หรือ 2022-ปัจจุบัน';
+  if (match[2] !== 'ปัจจุบัน' && Number(match[2]) < Number(match[1])) return 'ปีสิ้นสุดต้องไม่น้อยกว่าปีเริ่มต้น';
+  return null;
+}
+
 // the model text used in prices: "Camry (2012-2018)" or just "Camry"
 function modelLabel(model, yearRange) {
   return yearRange ? `${model} (${yearRange})` : model;
@@ -104,6 +115,8 @@ router.post('/catalog/models', async (req, res) => {
   const model = cleanText(req.body?.model, 100);
   const yearRange = cleanText(req.body?.year_range, 50);
   if (!brand || !model) return res.status(400).json({ error: 'กรุณากรอกยี่ห้อและรุ่นรถ' });
+  const yearProblem = yearRangeProblem(yearRange);
+  if (yearProblem) return res.status(400).json({ error: yearProblem });
   try {
     if (await findDuplicateModel(brand, model, yearRange)) {
       return res.status(409).json({ error: 'มีรุ่นนี้ในสมุดอยู่แล้ว' });
@@ -131,6 +144,8 @@ router.patch('/catalog/models/:id', async (req, res) => {
     const model = req.body?.model === undefined ? current.model : cleanText(req.body.model, 100);
     const yearRange = req.body?.year_range === undefined ? current.year_range : cleanText(req.body.year_range, 50);
     if (!brand || !model) return res.status(400).json({ error: 'กรุณากรอกยี่ห้อและรุ่นรถ' });
+    const yearProblem = yearRange === current.year_range ? null : yearRangeProblem(yearRange);
+    if (yearProblem) return res.status(400).json({ error: yearProblem });
     if (await findDuplicateModel(brand, model, yearRange, current.id)) {
       return res.status(409).json({ error: 'มีรุ่นนี้ในสมุดอยู่แล้ว' });
     }
