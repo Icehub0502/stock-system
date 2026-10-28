@@ -29,6 +29,7 @@ export default function ItemTable({
   placeholder = 'พิมพ์ชื่อสินค้า/บริการ',
   showWarranty = true,
   codeFormatter,
+  renderPriceExtra,
 }) {
   const getCodeValue = (item) => {
     if (codeFormatter) return codeFormatter(item);
@@ -125,6 +126,7 @@ export default function ItemTable({
                       }
                     }}
                   />
+                  {renderPriceExtra && renderPriceExtra(item, idx)}
                 </td>
                 <td className="price-cell" data-label={amountHeader}>฿{formatMoney(item.amount)}</td>
                 <td className="item-row-actions">

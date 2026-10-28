@@ -39,7 +39,6 @@ async function execute(commit) {
   }
 }
 const count = async (sql, params) => Number((await pool.query(sql, params))[0][0].n);
-const partsFor = async (model) => (await request(app).get('/api/quote-parts/parts').query({ brand: BRAND, model }).set(as(shop.token))).body.data;
 
 beforeAll(async () => {
   shop = await createShop();
@@ -88,18 +87,16 @@ test('applying splits the entry: parts and the shop prices follow, the old entry
     expect(await count('SELECT COUNT(*) AS n FROM catalog_parts WHERE brand = ? AND model = ? AND is_active = 1', [BRAND, gen])).toBe(3);
   }
 
-  // what the shop sees: its own price kept, the part it hid stays hidden, the picture is kept
+  // the shop's own rows followed to every generation: its own price, the part it hid (still hidden), the picture
   for (const gen of [GEN1, GEN2]) {
-    const parts = await partsFor(gen);
-    expect(parts.map((p) => p.part_name).sort()).toEqual(['Rack', 'Shock']);
-    expect(Number(parts.find((p) => p.part_name === 'Shock').price)).toBe(999);
-    expect(parts.find((p) => p.part_name === 'Rack').image_data).toBe(IMAGE);
+    const [rows] = await pool.query('SELECT part_name, price, is_active, image_data, own_price FROM quote_part_prices WHERE shop_id = ? AND brand = ? AND model = ? ORDER BY part_name', [shop.shopId, BRAND, gen]);
+    expect(rows.map((r) => r.part_name)).toEqual(['Mount', 'Rack', 'Shock']);
+    expect(Number(rows.find((r) => r.part_name === 'Shock').price)).toBe(999);
+    expect(rows.find((r) => r.part_name === 'Mount').is_active).toBe(0);
+    expect(rows.find((r) => r.part_name === 'Rack').image_data).toBe(IMAGE);
   }
-  expect(await partsFor(OLD)).toHaveLength(0);
 
-  // pickers: the shop lists the generations, not the retired entry
-  const models = (await request(app).get('/api/quote-parts/models').query({ brand: BRAND }).set(as(shop.token))).body.data;
-  expect(models.sort()).toEqual([GEN1, GEN2, 'HasParts'].sort());
+  // the picker lists the generations, not the retired entry
   const vehicleModels = (await request(app).get('/api/vehicle-models/models').query({ brand: BRAND }).set(as(shop.token))).body.data;
   expect(vehicleModels.map((m) => m.label).sort()).toEqual([GEN1, GEN2, 'HasParts'].sort());
 });

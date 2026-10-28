@@ -39,7 +39,7 @@ const repairNoticesRoutes = require('./routes/repairNotices.routes');
 const lineWebhookRoutes = require('./routes/lineWebhook.routes');
 const lineWebhookBot2Routes = require('./routes/lineWebhookBot2.routes');
 const lineWebhookBot3Routes = require('./routes/lineWebhookBot3.routes');
-const quotePartPricesRoutes = require('./routes/quotePartPrices.routes');
+const modelPricesRoutes = require('./routes/modelPrices.routes');
 const vehicleModelsRoutes = require('./routes/vehicleModels.routes');
 const jobsMoveDateRoutes = require('./routes/jobsMoveDate.routes');
 const jobsRoutes = require('./routes/jobs.routes');
@@ -150,7 +150,7 @@ function createApp() {
   // Secret ของตัวเอง (ดู routes/lineWebhookBot2.routes.js, lineWebhookBot3.routes.js)
   app.use('/api/line/bot2', lineWebhookBot2Routes);
   app.use('/api/line/bot3', lineWebhookBot3Routes);
-  app.use('/api/quote-parts', quotePartPricesRoutes);
+  app.use('/api/model-prices', modelPricesRoutes);
   app.use('/api/vehicle-models', vehicleModelsRoutes);
   // ระบบคิวรับรถ — /api/jobs ต้องล็อกอิน (ทำ auth เองในไฟล์ route) ส่วน /api/board
   // เปิดสาธารณะสำหรับจอ TV ห้องรับรอง คืนเฉพาะข้อมูลที่ไม่ระบุตัวลูกค้า (ดูคอมเมนต์

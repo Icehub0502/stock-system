@@ -381,17 +381,6 @@ describe('claims, repair notices, catalogues', () => {
     expect((await request(app).delete(`/api/service-items/${siId}`).set(as(tokenB))).status).toBe(404);
     await pool.query('DELETE FROM service_items WHERE id = ?', [siId]);
 
-    const qp = await request(app).post('/api/quote-parts').set(as(tokenA)).send({ brand: 'ISO2', model: 'M', part_name: 'P', price: 10 });
-    expect(qp.status).toBe(201);
-    const qpId = qp.body.data.id;
-    expect((await request(app).get('/api/quote-parts/brands').set(as(tokenB))).body.data).not.toContain('ISO2');
-    expect((await request(app).get('/api/quote-parts/parts?brand=ISO2&model=M').set(as(tokenB))).body.data).toEqual([]);
-    expect((await request(app).put(`/api/quote-parts/${qpId}`).set(as(tokenB)).send({ brand: 'a', model: 'b', part_name: 'c' })).status).toBe(404);
-    expect((await request(app).delete(`/api/quote-parts/${qpId}`).set(as(tokenB))).status).toBe(404);
-    // same brand/model/part is allowed in the other shop (unique per shop)
-    expect((await request(app).post('/api/quote-parts').set(as(tokenB)).send({ brand: 'ISO2', model: 'M', part_name: 'P', price: 99 })).status).toBe(201);
-    await pool.query('DELETE FROM quote_part_prices WHERE id = ?', [qpId]);
-
     const pc = await request(app).post('/api/product-costs').set(as(tokenA)).send({ items: [{ parts: 'ISO2', description: 'ISO2 cost', price: 5 }] });
     const pcId = pc.body.ids[0];
     expect((await request(app).get('/api/product-costs?search=ISO2').set(as(tokenB))).body.data).toEqual([]);

@@ -46,7 +46,7 @@ const NAV_CATEGORIES = [
       { to: "/quotations", label: "ใบเสนอราคา" },
       { to: "/appointments", label: "ลูกค้าที่นัดหมาย" },
       { to: "/quotations/declined-summary", label: "สรุปลูกค้าไม่ได้ทำ" },
-      { to: "/quote-parts", label: "ราคาอะไหล่ตามรุ่นรถ", min: "manager" },
+      { to: "/model-prices", label: "ราคามาตรฐานตามรุ่นรถ", min: "manager" },
       { to: "/daily-summary", label: "สรุปยอดขายรายวัน", min: "manager" },
     ],
   },

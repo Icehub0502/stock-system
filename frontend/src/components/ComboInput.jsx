@@ -2,7 +2,7 @@ import React, { useMemo, useRef, useState } from 'react';
 
 // Compare ignoring case, spaces and punctuation ("camry", "CAM-RY" and "Camry" are the same name)
 export function normalizeName(value) {
-  return String(value || '').toLowerCase().replace(/[\s\-_./()]+/g, '');
+  return String(value || '').toLowerCase().replace(/[\s\-_./()'’]+/g, '');
 }
 
 const MAX_SHOWN = 60;
@@ -18,7 +18,7 @@ const MAX_SHOWN = 60;
  * - text that matches nothing is kept and offered as "ไม่พบ? กรอกเอง" — the caller decides what that means
  */
 export default function ComboInput({
-  value, onChange, options, placeholder, disabled, customLabel = 'ไม่พบ? กรอกเอง', emptyHint = 'ไม่พบในรายการ', ...rest
+  value, onChange, options, placeholder, disabled, customLabel = 'ไม่พบ? กรอกเอง', emptyHint = 'ไม่พบในรายการ', allowCustom = true, ...rest
 }) {
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
@@ -26,11 +26,13 @@ export default function ComboInput({
 
   const typed = normalizeName(value);
   const filtered = useMemo(() => {
-    const list = typed ? options.filter((o) => normalizeName(o.label || o.value).includes(typed)) : options;
+    // every word typed must appear in the entry ("vios 07" finds "Vios ปี '02-07'")
+    const words = String(value || '').toLowerCase().split(/\s+/).map(normalizeName).filter(Boolean);
+    const list = words.length ? options.filter((o) => { const name = normalizeName(o.label || o.value); return words.every((w) => name.includes(w)); }) : options;
     return list.slice(0, MAX_SHOWN);
-  }, [options, typed]);
+  }, [options, value]);
   const exact = typed ? options.find((o) => normalizeName(o.value) === typed) : null;
-  const showCustom = Boolean(value.trim()) && !exact;
+  const showCustom = allowCustom && Boolean(value.trim()) && !exact;
 
   const choose = (option) => {
     onChange(option.value);

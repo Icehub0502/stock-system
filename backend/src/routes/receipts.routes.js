@@ -107,7 +107,7 @@ router.get('/customers/:customerId/vehicles', async (req, res) => {
   try {
     const { customerId } = req.params;
     const [rows] = await pool.execute(
-      'SELECT id, brand, model, color, license_plate, mileage FROM vehicles WHERE customer_id = ? AND shop_id = ? ORDER BY created_at DESC',
+      'SELECT id, brand, model, color, license_plate, mileage, vehicle_model_id FROM vehicles WHERE customer_id = ? AND shop_id = ? ORDER BY created_at DESC',
       [customerId, req.shopId]
     );
     res.json({ success: true, data: rows });

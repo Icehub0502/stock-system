@@ -55,7 +55,7 @@ function describeError(file) {
     : `"${name}" เปิดไม่ได้ (ไฟล์เสียหรือรูปแบบไม่รองรับ) — ลองถ่ายใหม่หรือเลือกรูปอื่น`;
 }
 
-// คงชื่อ/พารามิเตอร์เดิมไว้ — QuotePartPriceManagementPage.jsx ยังเรียกใช้ตรง ๆ
+// คงชื่อ/พารามิเตอร์เดิมไว้ — มีหลายหน้าเรียกใช้ตรง ๆ
 export async function resizeImageToDataUrl(file, maxDimension = 640, quality = 0.75) {
   let source;
   try {

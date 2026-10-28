@@ -35,7 +35,7 @@ const DevConsole = lazy(() => import("./pages/dev/DevConsole"));
 const WarrantyManagementPage = lazy(() => import("./pages/WarrantyManagementPage"));
 const ClaimManagementPage = lazy(() => import("./pages/ClaimManagementPage"));
 const ProductCostPage = lazy(() => import("./pages/ProductCostPage"));
-const QuotePartPriceManagementPage = lazy(() => import("./pages/QuotePartPriceManagementPage"));
+const ModelPricesPage = lazy(() => import("./pages/ModelPricesPage"));
 const DailySalesSummaryPage = lazy(() => import("./pages/DailySalesSummaryPage"));
 const RepairNoticeListPage = lazy(() => import("./pages/RepairNoticeListPage"));
 const RepairNoticePage = lazy(() => import("./pages/RepairNoticePage"));
@@ -260,10 +260,10 @@ function AppRoutes() {
             }
           />
           <Route
-            path="/quote-parts"
+            path="/model-prices"
             element={
               <ProtectedRoute minRole="manager">
-                <QuotePartPriceManagementPage />
+                <ModelPricesPage />
               </ProtectedRoute>
             }
           />

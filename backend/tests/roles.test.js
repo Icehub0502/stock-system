@@ -56,15 +56,15 @@ describe('manager-level routes: sales figures, costs, settings, part prices', ()
     }
   });
 
-  test('office can read part prices but not change them', async () => {
-    expect((await request(app).get('/api/quote-parts/brands').set(as(tokens.office))).status).toBe(200);
-    expect((await request(app).post('/api/quote-parts').set(as(tokens.office))
-      .send({ brand: 'RoleBrand', model: 'M', part_name: 'P', price: 1 })).status).toBe(403);
-    const created = await request(app).post('/api/quote-parts').set(as(tokens.manager))
-      .send({ brand: 'RoleBrand', model: 'M', part_name: 'P', price: 1 });
-    expect(created.status).toBe(201);
-    expect((await request(app).delete(`/api/quote-parts/${created.body.data.id}`).set(as(tokens.office))).status).toBe(403);
-    expect((await request(app).delete(`/api/quote-parts/${created.body.data.id}`).set(as(tokens.manager))).status).toBe(200);
+  test('office can look standard prices up, only a manager can see the list and change prices', async () => {
+    const lookup = (token) => request(app).get('/api/model-prices/lookup').query({ vehicle_model_id: 1, name: 'x' }).set(as(token));
+    expect((await lookup(tokens.office)).status).toBe(200);
+    for (const [method, url] of [['get', '/api/model-prices'], ['get', '/api/model-prices/suggestions']]) {
+      expect((await request(app)[method](url).set(as(tokens.office))).status).toBe(403);
+      for (const role of ['manager', 'owner', 'dev']) expect((await request(app)[method](url).set(as(tokens[role]))).status).toBe(200);
+    }
+    expect((await request(app).put('/api/model-prices').set(as(tokens.office)).send({ vehicle_model_id: 1, item_name: 'x', part_price: 1 })).status).toBe(403);
+    expect((await request(app).delete('/api/model-prices/99999999').set(as(tokens.office))).status).toBe(403);
   });
 
   test('deleting / cancelling documents needs manager', async () => {

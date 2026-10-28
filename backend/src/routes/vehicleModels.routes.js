@@ -2,6 +2,7 @@ const express = require('express');
 const pool = require('../db/pool');
 const { authenticate, requireRole } = require('../middleware/auth');
 const { normalizeName } = require('../utils/normalizeName');
+const { displayModelName } = require('../utils/modelDisplay');
 
 const router = express.Router();
 router.use(authenticate);
@@ -43,9 +44,11 @@ router.get('/models', async (req, res) => {
       [brand, req.shopId]
     );
     const data = rows.map((r) => ({
+      id: r.id,
       model: r.model,
       year_range: r.year_range,
       label: r.year_range ? `${r.model} (${r.year_range})` : r.model,
+      display_name: displayModelName(r.model, r.year_range),
       pending: r.status === 'pending',
     }));
     res.json({ success: true, data });
@@ -79,9 +82,10 @@ router.post('/', async (req, res) => {
     );
     const typed = normalizeName(modelInput);
     const existing = modelRows.find((r) => normalizeName(r.model) === typed
-      || normalizeName(r.year_range ? `${r.model} (${r.year_range})` : r.model) === typed);
+      || normalizeName(r.year_range ? `${r.model} (${r.year_range})` : r.model) === typed
+      || normalizeName(displayModelName(r.model, r.year_range)) === typed);
     if (existing) {
-      return res.json({ success: true, data: { brand, model: existing.model, existed: true } });
+      return res.json({ success: true, data: { brand, model: displayModelName(existing.model, existing.year_range), existed: true } });
     }
 
     await pool.execute(

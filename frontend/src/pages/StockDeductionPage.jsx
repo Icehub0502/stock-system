@@ -162,8 +162,7 @@ export default function StockDeductionPage() {
 
     setSubmitting(true);
     try {
-      const modelLabel = models.find((m) => m.model === model)?.label || model;
-      const vehicleModel = brand ? `${brand} ${modelLabel}`.trim() : null;
+      const vehicleModel = brand ? `${brand} ${model}`.trim() : null;
       await client.post('/stock-deductions', {
         item_id: selected.id,
         lines: payloadLines,
@@ -319,7 +318,7 @@ export default function StockDeductionPage() {
                   <label>รุ่นรถ</label>
                   <select value={model} onChange={(e) => setModel(e.target.value)}>
                     <option value="">-- เลือกรุ่น --</option>
-                    {models.map((m) => <option key={m.model} value={m.model}>{m.label}</option>)}
+                    {models.map((m) => <option key={m.display_name} value={m.display_name}>{m.display_name}</option>)}
                   </select>
                 </>
               )}

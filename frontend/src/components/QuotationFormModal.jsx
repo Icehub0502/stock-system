@@ -6,6 +6,9 @@ import ItemTable from "./ItemTable";
 import WarrantySection from "./WarrantySection";
 import QuotationPrintTemplate from "./QuotationPrintTemplate";
 import FormModalShell from "./FormModalShell";
+import CarModelPicker from "./CarModelPicker";
+import { useAuth } from "../context/AuthContext";
+import { hasRole } from "../utils/roles";
 import { todayStr, formatMoney } from "../utils/format";
 import { RACK_KEYWORDS, BALL_JOINT_KEYWORDS, ALL_WARRANTY_KEYWORDS, applyWarrantyToItems, findMatchingWarrantyId } from "../utils/warrantyKeywords";
 
@@ -28,6 +31,7 @@ const defaultItem = {
 // ไลน์สร้างลูกค้า/รถไว้ให้แล้วแต่ยังไม่มีรายการอะไหล่) ซึ่งจะถูกเติมต่อท้ายรายการ
 // เดิมที่โหลดมาจาก loadQuotation
 export default function QuotationFormModal({ quotation, onClose, onSuccess, onDelete, initialItems }) {
+  const { user } = useAuth();
   const [quotationNo, setQuotationNo] = useState('');
   const [quotationDate, setQuotationDate] = useState(todayStr());
   const [customerQuery, setCustomerQuery] = useState('');
@@ -47,12 +51,10 @@ export default function QuotationFormModal({ quotation, onClose, onSuccess, onDe
   const [depositDate, setDepositDate] = useState('');
   const [items, setItems] = useState([{ ...defaultItem }]);
   const [warranties, setWarranties] = useState([]);
-  const [partBrands, setPartBrands] = useState([]);
-  const [partModels, setPartModels] = useState([]);
-  const [partBrand, setPartBrand] = useState('');
-  const [partModel, setPartModel] = useState('');
-  const [partCards, setPartCards] = useState([]);
-  const [partCardsLoading, setPartCardsLoading] = useState(false);
+  // standard prices per vehicle generation: the generation of the chosen car (null = not known yet) and, when the
+  // typed model name fits several generations, those candidates
+  const [vehicleModel, setVehicleModel] = useState(null);
+  const [modelChoices, setModelChoices] = useState([]);
   const [rackWarrantyId, setRackWarrantyId] = useState('');
   const [ballJointWarrantyId, setBallJointWarrantyId] = useState('');
   const [otherWarrantyId, setOtherWarrantyId] = useState('');
@@ -75,6 +77,11 @@ export default function QuotationFormModal({ quotation, onClose, onSuccess, onDe
   const customerSearchAbortRef = useRef(null);
   const productSearchAbortRef = useRef({});
   const vehicleLoadAbortRef = useRef(null);
+  const itemsRef = useRef([]);
+  const stdCache = useRef(new Map());
+  const resolveSeq = useRef(0);
+  // the car the staff picked a generation for by hand: it is not resolved again until the car changes
+  const pickedKey = useRef('');
 
   const fetchQuotationNo = async () => {
     try {
@@ -112,9 +119,10 @@ export default function QuotationFormModal({ quotation, onClose, onSuccess, onDe
           }))
         : [{ ...defaultItem }]
     );
-    setPartBrand('');
-    setPartModel('');
-    setPartCards([]);
+    setVehicleModel(null);
+    setModelChoices([]);
+    pickedKey.current = '';
+    stdCache.current.clear();
     setRackWarrantyId('');
     setBallJointWarrantyId('');
     setOtherWarrantyId('');
@@ -132,55 +140,178 @@ export default function QuotationFormModal({ quotation, onClose, onSuccess, onDe
       .catch((err) => console.error('Error loading warranties:', err));
   }, []);
 
-  useEffect(() => {
-    client.get('/quote-parts/brands')
-      .then((res) => setPartBrands(res.data.data || []))
-      .catch((err) => console.error('Error loading part brands:', err));
-  }, []);
+  // ── standard prices per vehicle generation ──────────────────────────────────
+  // The generation of the chosen car decides which standard prices apply (see routes/modelPrices.routes.js).
+  const currentVehicle = vehicleMode === 'existing' ? vehicles.find((v) => v.id.toString() === vehicleId) : null;
+  const carBrand = (vehicleMode === 'existing' ? currentVehicle?.brand : newVehicle.brand) || '';
+  const carModelText = (vehicleMode === 'existing' ? currentVehicle?.model : newVehicle.model) || '';
+  const carKey = `${vehicleMode}|${vehicleId}|${carBrand}|${carModelText}`;
+  const canSetStandard = hasRole(user, 'manager');
+  itemsRef.current = items;
 
+  // Find the generation of the car: the one stored on the car, else the one its brand + model text names. Exactly
+  // one match = known; several = the staff choose among them; none = the staff search the book.
   useEffect(() => {
-    if (!partBrand) {
-      setPartModels([]);
-      setPartModel('');
-      return;
-    }
-    client.get('/quote-parts/models', { params: { brand: partBrand } })
-      .then((res) => setPartModels(res.data.data || []))
-      .catch((err) => console.error('Error loading part models:', err));
-  }, [partBrand]);
-
-  useEffect(() => {
-    if (!partBrand || !partModel) {
-      setPartCards([]);
-      return;
-    }
-    setPartCardsLoading(true);
-    client.get('/quote-parts/parts', { params: { brand: partBrand, model: partModel } })
-      .then((res) => setPartCards(res.data.data || []))
-      .catch((err) => console.error('Error loading part cards:', err))
-      .finally(() => setPartCardsLoading(false));
-  }, [partBrand, partModel]);
-
-  // เพิ่มอะไหล่จากการ์ดเข้ารายการ — ถ้าแถวสุดท้ายยังว่างอยู่ (ยังไม่ได้กรอกชื่อ)
-  // ใช้แถวนั้นแทนที่จะเพิ่มแถวใหม่ กันแถวว่างค้างอยู่เปล่าๆ ด้านล่าง
-  const addPartCardToItems = (part) => {
-    setItems((prev) => {
-      const newRow = {
-        ...defaultItem,
-        product_name: part.part_name,
-        unit_price: String(part.price ?? 0),
-        quantity: 1,
-        amount: Number(part.price || 0),
-      };
-      const lastIndex = prev.length - 1;
-      if (prev.length > 0 && !prev[lastIndex].product_name?.trim()) {
-        const next = [...prev];
-        next[lastIndex] = newRow;
-        return next;
+    if (pickedKey.current === carKey) return undefined;
+    const seq = resolveSeq.current + 1;
+    resolveSeq.current = seq;
+    const timer = setTimeout(async () => {
+      try {
+        let matches = [];
+        if (currentVehicle?.vehicle_model_id) {
+          const res = await client.get('/model-prices/resolve', { params: { vehicle_model_id: currentVehicle.vehicle_model_id } });
+          matches = res.data.data.matches;
+        }
+        if (matches.length === 0 && carBrand.trim() && carModelText.trim()) {
+          const res = await client.get('/model-prices/resolve', { params: { brand: carBrand.trim(), model: carModelText.trim() } });
+          matches = res.data.data.matches;
+        }
+        if (seq !== resolveSeq.current) return;
+        setVehicleModel(matches.length === 1 ? matches[0] : null);
+        setModelChoices(matches.length > 1 ? matches : []);
+      } catch (err) {
+        console.error('Error resolving the vehicle generation:', err);
+        if (seq === resolveSeq.current) {
+          setVehicleModel(null);
+          setModelChoices([]);
+        }
       }
-      return [...prev, newRow];
+    }, 300);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [carKey, currentVehicle?.vehicle_model_id]);
+
+  const pickVehicleModel = (model) => {
+    pickedKey.current = carKey;
+    setVehicleModel(model);
+    setModelChoices([]);
+    // remember the generation on a saved car so the staff are asked only once
+    if (vehicleMode === 'existing' && vehicleId) {
+      client.post('/model-prices/attach-vehicle', { vehicle_id: Number(vehicleId), vehicle_model_id: model.id }).catch(() => {});
+    }
+  };
+
+  const clearVehicleModel = () => {
+    pickedKey.current = carKey;
+    setVehicleModel(null);
+    setModelChoices([]);
+  };
+
+  // standard price of one item for the generation (null when there is none); answers are cached per generation + name
+  const lookupStandard = async (modelId, name) => {
+    const key = `${modelId}|${String(name).trim().toLowerCase()}`;
+    if (stdCache.current.has(key)) return stdCache.current.get(key);
+    try {
+      const res = await client.get('/model-prices/lookup', { params: { vehicle_model_id: modelId, name } });
+      stdCache.current.set(key, res.data.data);
+      return res.data.data;
+    } catch (err) {
+      console.error('Error looking up the standard price:', err);
+      return null;
+    }
+  };
+
+  // put what is known about a line's standard price on it; force = also set the line's price (an item was just chosen)
+  const applyStandardToRow = (item, std, force) => {
+    if (!std) return { ...item, std_price: null, std_labor: null };
+    const price = Number(std.part_price);
+    const blank = item.unit_price === '' || item.unit_price === null || item.unit_price === undefined;
+    const next = { ...item, std_price: price, std_labor: std.labor_price != null ? Number(std.labor_price) : null };
+    if (force || blank) {
+      next.unit_price = String(price);
+      next.amount = Number(item.quantity || 0) * price;
+    }
+    return next;
+  };
+
+  // the generation became known (or changed): check every line that already has a name
+  useEffect(() => {
+    stdCache.current.clear();
+    if (!vehicleModel) {
+      setItems((prev) => (prev.some((it) => it.std_price !== undefined)
+        ? prev.map((it) => (it.std_price === undefined ? it : { ...it, std_price: undefined, std_labor: undefined }))
+        : prev));
+      return undefined;
+    }
+    let cancelled = false;
+    (async () => {
+      const names = [...new Set(itemsRef.current.map((it) => (it.price_key_name || it.product_name || '').trim()).filter(Boolean))];
+      const found = {};
+      for (const name of names) {
+        found[name] = await lookupStandard(vehicleModel.id, name);
+        if (cancelled) return;
+      }
+      setItems((prev) => prev.map((it) => {
+        const name = (it.price_key_name || it.product_name || '').trim();
+        return name && name in found ? applyStandardToRow(it, found[name], false) : it;
+      }));
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [vehicleModel?.id]);
+
+  // a name typed by hand (not picked from the list): look its standard price up when the field is left
+  const ensureRowStandard = async (index) => {
+    const item = itemsRef.current[index];
+    const name = (item?.price_key_name || item?.product_name || '').trim();
+    if (!vehicleModel || !name || item.std_price !== undefined) return;
+    const std = await lookupStandard(vehicleModel.id, name);
+    setItems((prev) => {
+      if (!prev[index] || (prev[index].price_key_name || prev[index].product_name || '').trim() !== name) return prev;
+      const next = [...prev];
+      next[index] = applyStandardToRow(next[index], std, false);
+      return next;
     });
-    setFieldErrors((prev) => ({ ...prev, items: null }));
+  };
+
+  const applyStandardPrice = (index) => {
+    setItems((prev) => {
+      const next = [...prev];
+      const price = Number(next[index].std_price);
+      next[index] = { ...next[index], unit_price: String(price), amount: Number(next[index].quantity || 0) * price };
+      return next;
+    });
+  };
+
+  // a manager makes the price on a line the standard price of this generation
+  const saveStandard = async (index) => {
+    const item = items[index];
+    const price = Number(item?.unit_price);
+    if (!vehicleModel || !item || !(price > 0)) return;
+    const name = item.price_key_name || item.product_name;
+    try {
+      await client.put('/model-prices', { vehicle_model_id: vehicleModel.id, item_name: name, part_price: price, is_set: Boolean(item.price_key_name) });
+      stdCache.current.clear();
+      setItems((prev) => prev.map((it, i) => (i === index ? { ...it, std_price: price } : it)));
+      showToast('success', `จำราคา "${name}" ของ ${vehicleModel.display_name} แล้ว`);
+    } catch (err) {
+      showToast('error', err.response?.data?.error || 'บันทึกราคามาตรฐานไม่สำเร็จ');
+    }
+  };
+
+  // what sits under a line's price field: the standard price and the buttons to use / remember it
+  const renderPriceExtra = (item, index) => {
+    if (!vehicleModel || item.auto_labor) return null;
+    const price = Number(item.unit_price || 0);
+    const hasStandard = item.std_price !== undefined && item.std_price !== null;
+    if (hasStandard && price === item.std_price) return <div className="std-note std-note-ok">ราคามาตรฐานของรุ่นนี้</div>;
+    const canRemember = canSetStandard && price > 0 && (item.product_name || '').trim();
+    if (!hasStandard && !canRemember) return null;
+    return (
+      <div className="std-note">
+        {hasStandard && (
+          <>
+            <span>มาตรฐาน ฿{formatMoney(item.std_price)}</span>
+            <button type="button" className="std-btn" onClick={() => applyStandardPrice(index)}>ใช้</button>
+          </>
+        )}
+        {canRemember && (
+          <button type="button" className="std-btn" onClick={() => saveStandard(index)}>
+            {hasStandard ? 'ตั้งเป็นราคามาตรฐานใหม่' : 'จำราคานี้ให้รุ่นนี้'}
+          </button>
+        )}
+      </div>
+    );
   };
 
   const handleRackWarrantyChange = (id) => {
@@ -246,9 +377,7 @@ export default function QuotationFormModal({ quotation, onClose, onSuccess, onDe
         })),
       ];
       setItems(combinedItems.length > 0 ? combinedItems : [{ ...defaultItem }]);
-      setPartBrand('');
-      setPartModel('');
-      setPartCards([]);
+      pickedKey.current = '';
 
       // ตั้งค่าเริ่มต้นของ dropdown ประกันให้ตรงกับข้อมูลที่บันทึกไว้แล้วในรายการ —
       // ดึงแคตตาล็อกสดใหม่ตรงนี้ (แทนที่จะพึ่ง state `warranties` ที่โหลดจาก effect
@@ -443,6 +572,7 @@ export default function QuotationFormModal({ quotation, onClose, onSuccess, onDe
       next[index] = {
         ...next[index],
         [field]: field === 'quantity' ? Number(value) : value,
+        ...(field === 'product_name' ? { std_price: undefined, std_labor: undefined } : {}),
       };
       const qty = Number(next[index].quantity || 0);
       const price = Number(next[index].unit_price || 0);
@@ -495,6 +625,8 @@ export default function QuotationFormModal({ quotation, onClose, onSuccess, onDe
   // selection still wins the race against this.
   const handleItemBlur = (index) => {
     setProductSuggestions((prev) => ({ ...prev, [index]: null }));
+    // after a short delay so a suggestion that was just clicked has been applied to the line first
+    setTimeout(() => ensureRowStandard(index), 250);
   };
 
   // A "set" (e.g. ชุดโปรช่วงล่างเก๋ง) carries one warranty for the whole
@@ -523,11 +655,26 @@ export default function QuotationFormModal({ quotation, onClose, onSuccess, onDe
           amount: 0,
         };
       });
+      // the price of a set is one price for the whole set: it goes on the first line, remembered under the set's name
+      rows[0].price_key_name = product.product_name;
       setItems((prev) => {
         const next = [...prev];
         next.splice(index, 1, ...rows);
         return next;
       });
+      if (vehicleModel) {
+        lookupStandard(vehicleModel.id, product.product_name).then((std) => {
+          setItems((prev) => {
+            if (!prev[index] || prev[index].price_key_name !== product.product_name) return prev;
+            return prev.map((it, i) => {
+              if (i === index) return applyStandardToRow(it, std, true);
+              // the other lines of the set carry 0 once the set has a standard price
+              if (std && i > index && i < index + rows.length && (it.unit_price === '' || it.unit_price == null)) return { ...it, unit_price: '0', amount: 0 };
+              return it;
+            });
+          });
+        });
+      }
     } catch (err) {
       console.error('Error expanding set into items:', err);
     }
@@ -556,11 +703,31 @@ export default function QuotationFormModal({ quotation, onClose, onSuccess, onDe
         warranty_year: product.warranty_year || 0,
         warranty_month: product.warranty_month || 0,
         warranty_km: product.warranty_km || 0,
+        price_key_name: undefined,
+        std_price: undefined,
+        std_labor: undefined,
       };
       return next;
     });
     setProductSuggestions((prev) => ({ ...prev, [index]: null }));
     setFieldErrors((prev) => ({ ...prev, items: null }));
+    // standard price of this item for the car's generation: fills the price, and adds a labour line when labour is billed separately
+    if (vehicleModel) {
+      const name = product.product_name;
+      lookupStandard(vehicleModel.id, name).then((std) => {
+        setItems((prev) => {
+          if (!prev[index] || prev[index].product_name !== name) return prev;
+          const next = [...prev];
+          next[index] = applyStandardToRow(next[index], std, true);
+          const labor = std && std.labor_price != null ? Number(std.labor_price) : 0;
+          const laborName = `ค่าแรง${name}`;
+          if (labor > 0 && !(next[index + 1] && next[index + 1].product_name === laborName)) {
+            next.splice(index + 1, 0, { ...defaultItem, product_name: laborName, quantity: 1, unit_price: String(labor), amount: labor, auto_labor: true });
+          }
+          return next;
+        });
+      });
+    }
     setTimeout(() => {
       const qtyRef = itemQtyRefs.current[index];
       if (qtyRef && qtyRef.focus) qtyRef.focus();
@@ -630,6 +797,7 @@ export default function QuotationFormModal({ quotation, onClose, onSuccess, onDe
           phone: newCustomer.phone.trim() || null,
         } : null,
         vehicle_id: vehicleMode === 'existing' ? vehicleId : null,
+        vehicle_model_id: vehicleModel ? vehicleModel.id : null,
         newVehicle: vehicleMode === 'new' ? {
           brand: newVehicle.brand.trim(),
           model: newVehicle.model.trim(),
@@ -649,6 +817,9 @@ export default function QuotationFormModal({ quotation, onClose, onSuccess, onDe
         items: validItems.map((item) => ({
           product_id: item.product_id || null,
           product_name: item.product_name.trim(),
+          price_key_name: item.price_key_name || null,
+          // the labour line added from a standard price is already part of that price: not remembered on its own
+          skip_price_memory: item.auto_labor ? true : undefined,
           quantity: Number(item.quantity || 0),
           unit_price: Number(item.unit_price || 0),
           warranty_name: item.warranty_name || null,
@@ -805,70 +976,18 @@ export default function QuotationFormModal({ quotation, onClose, onSuccess, onDe
                 />
               </div>
 
-              <div className="info-card">
-                <div className="info-card-title">เลือกอะไหล่จากราคาตามรุ่นรถ</div>
-                <div className="qp-picker">
-                  <div className="qp-picker-selects">
-                    <div className="form-group">
-                      <label>ยี่ห้อรถ</label>
-                      <select value={partBrand} onChange={(e) => setPartBrand(e.target.value)}>
-                        <option value="">-- เลือกยี่ห้อ --</option>
-                        {partBrands.map((b) => (
-                          <option key={b} value={b}>{b}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="form-group">
-                      <label>รุ่นรถ</label>
-                      <select value={partModel} onChange={(e) => setPartModel(e.target.value)} disabled={!partBrand}>
-                        <option value="">-- เลือกรุ่น --</option>
-                        {partModels.map((m) => (
-                          <option key={m} value={m}>{m}</option>
-                        ))}
-                      </select>
-                    </div>
+              <div className="info-card model-price-card">
+                <div className="info-card-title">รุ่นรถสำหรับราคามาตรฐาน</div>
+                {vehicleModel ? (
+                  <div className="model-price-known">
+                    <span>{vehicleModel.brand} <strong>{vehicleModel.display_name}</strong></span>
+                    <button type="button" className="btn btn-secondary" onClick={clearVehicleModel}>เปลี่ยนรุ่น</button>
                   </div>
-
-                  {partCardsLoading ? (
-                    <div className="loading">กำลังโหลดรายการอะไหล่...</div>
-                  ) : partBrand && partModel && partCards.length === 0 ? (
-                    <div className="empty-message">ยังไม่มีราคาอะไหล่สำหรับ {partBrand} {partModel}</div>
-                  ) : partCards.length > 0 ? (
-                    <div className="qp-picker-grid">
-                      {partCards.map((part) => (
-                        <div key={part.id} className="qp-picker-card">
-                          <div className="qp-picker-card-image">
-                            {part.image_data ? (
-                              <img src={part.image_data} alt={part.part_name} />
-                            ) : (
-                              <div className="qp-picker-card-noimage">ไม่มีรูป</div>
-                            )}
-                          </div>
-                          <div className="qp-picker-card-body">
-                            <div className="qp-picker-card-name">{part.part_name}</div>
-                            {part.description && <div className="qp-picker-card-desc">{part.description}</div>}
-                            {part.needs_price ? (
-                              <div className="qp-picker-card-needs-price">ยังไม่ตั้งราคา</div>
-                            ) : (
-                              <div className="qp-picker-card-price">฿{formatMoney(part.price)}</div>
-                            )}
-                          </div>
-                          {/* แถวที่ยังไม่ตั้งราคาจริง (needs_price) ห้ามเพิ่มเข้ารายการ —
-                              กันเสนอราคา 0 บาทให้ลูกค้าจริงโดยไม่ตั้งใจ ไปตั้งราคาที่
-                              เมนู "ราคาอะไหล่ตามรุ่นรถ" ก่อน */}
-                          <button
-                            type="button"
-                            className="btn btn-primary qp-picker-card-add"
-                            onClick={() => addPartCardToItems(part)}
-                            disabled={part.needs_price}
-                          >
-                            {part.needs_price ? 'ยังไม่มีราคา' : '+ เพิ่มรายการ'}
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  ) : null}
-                </div>
+                ) : (carBrand.trim() || carModelText.trim()) ? (
+                  <CarModelPicker brandHint={carBrand} choices={modelChoices} onPick={pickVehicleModel} />
+                ) : (
+                  <div className="receipt-subtle">เลือกหรือกรอกรถของลูกค้าก่อน ระบบจะหาราคามาตรฐานของรุ่นนั้นให้</div>
+                )}
               </div>
 
               <ItemTable
@@ -892,6 +1011,7 @@ export default function QuotationFormModal({ quotation, onClose, onSuccess, onDe
                 showWarranty={false}
                 placeholder="พิมพ์ชื่อสินค้า/บริการ"
                 compactRows={true}
+                renderPriceExtra={renderPriceExtra}
               />
 
               <WarrantySection

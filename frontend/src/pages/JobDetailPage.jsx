@@ -244,7 +244,7 @@ export default function JobDetailPage() {
     setError('');
     try {
       const brandKnown = brands.includes(form.brand.trim());
-      const modelKnown = models.some((m) => m.model === form.model.trim());
+      const modelKnown = models.some((m) => m.model === form.model.trim() || m.display_name === form.model.trim());
       if (form.brand.trim() && form.model.trim() && (!brandKnown || !modelKnown)) {
         await client.post('/vehicle-models', { brand: form.brand.trim(), model: form.model.trim() }).catch(() => {});
       }
@@ -836,7 +836,7 @@ export default function JobDetailPage() {
             <label>รุ่นรถ</label>
             <ComboInput
               value={form.model}
-              options={models.map((m) => ({ value: m.model, pending: m.pending }))}
+              options={models.map((m) => ({ value: m.display_name, pending: m.pending }))}
               disabled={!form.brand.trim()}
               placeholder={form.brand.trim() ? 'พิมพ์ค้นหารุ่นรถ' : 'เลือกยี่ห้อก่อน'}
               onChange={(model) => setForm((f) => ({ ...f, model }))}

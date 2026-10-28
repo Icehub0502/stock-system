@@ -8,6 +8,7 @@ const { emitQuotationEvent, emitReceiptEvent, emitJobEvent } = require('../realt
 const { syncJobOnQuotationStatusChange } = require('../utils/jobQuotationSync');
 const { applyReceiptSplits } = require('../utils/paymentMethods');
 const { ownsAll } = require('../utils/tenant');
+const { recordQuotationPrices } = require('../utils/modelPrices');
 
 // ทำให้ตรงรูปแบบเดียวกับที่ customers.routes.js ใช้ กันเบอร์ที่พิมพ์ไม่มีขีดตรงนี้
 // ไปหลุดจากการค้นหาของบอทไลน์ (lineWebhook.routes.js เทียบแบบ phone = ? ตรง ๆ)
@@ -312,6 +313,9 @@ router.post('/', async (req, res) => {
     }
 
     await conn.commit();
+
+    // prices staff typed + the car's generation, for the standard price list (advisory: never blocks saving)
+    await recordQuotationPrices({ shopId: req.shopId, quotationId: quotation_id, vehicleId: selectedVehicleId, vehicleModelId: req.body.vehicle_model_id, items: validItems });
 
     emitQuotationEvent('quotation:created', { shopId: req.shopId, quotationId: quotation_id, status: 'pending', actorId: req.user.id });
 
@@ -627,6 +631,8 @@ router.put('/:id', async (req, res) => {
     }
 
     await conn.commit();
+
+    await recordQuotationPrices({ shopId: req.shopId, quotationId: Number(id), vehicleId: selectedVehicleId, vehicleModelId: req.body.vehicle_model_id, items: validItems });
 
     emitQuotationEvent('quotation:updated', { shopId: req.shopId, quotationId: Number(id), status: existingQuotation.status, actorId: req.user.id });
     if (syncedReceipt) {

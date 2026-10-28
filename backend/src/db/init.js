@@ -1180,6 +1180,9 @@ async function initDatabase() {
   // shared parts catalogue (master book + per-shop adjustments) and vehicle model review status — see catalogSchema.js
   await require('./catalogSchema').migrateCatalog(conn);
 
+  // standard prices per vehicle generation (per branch group) + the prices staff typed — see priceSchema.js
+  await require('./priceSchema').migratePrices(conn);
+
   await conn.end();
 
   console.log(`[init-db] Database "${DB_NAME}" ready`);

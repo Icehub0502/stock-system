@@ -1,16 +1,14 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import client from '../../api/client';
 import ComboInput from '../../components/ComboInput';
-import { formatMoney } from '../../utils/format';
 import { formatDateTime } from './DevOverview';
 
-// Shared parts catalogue (สมุดกลาง): models typed in by shops waiting for review, the vehicle model list,
-// and the master parts / prices every shop starts from.
+// Shared vehicle model book (สมุดรุ่นรถ): models typed in by shops waiting for review, and the vehicle model list.
+// (The old master parts / prices screen is gone; standard prices now live in pages/ModelPricesPage.jsx.)
 
 const TABS = [
   { key: 'pending', label: 'รอตรวจ' },
   { key: 'models', label: 'รุ่นรถ' },
-  { key: 'parts', label: 'อะไหล่และราคากลาง' },
 ];
 
 // "2013-2022" / "2022-ปัจจุบัน" <-> the three year fields of the form; text that does not fit (old rows such as
@@ -51,7 +49,7 @@ export default function DevCatalog({ onChanged }) {
           <h1>สมุดรุ่นรถและราคากลาง</h1>
           <p className="subtitle">
             {summary
-              ? `${summary.brands} ยี่ห้อ · ${summary.models} รุ่น · ${summary.parts} อะไหล่ในสมุดกลาง`
+              ? `${summary.brands} ยี่ห้อ · ${summary.models} รุ่น`
               : 'ข้อมูลกลางที่ทุกร้านใช้ร่วมกัน แก้ได้เฉพาะแอดมิน'}
           </p>
         </div>
@@ -68,7 +66,6 @@ export default function DevCatalog({ onChanged }) {
 
       {tab === 'pending' && <PendingTab onChanged={changed} />}
       {tab === 'models' && <ModelsTab onChanged={changed} />}
-      {tab === 'parts' && <PartsTab onChanged={changed} />}
     </div>
   );
 }
@@ -173,7 +170,7 @@ function MergeModal({ row, onClose, onMerge }) {
           <button className="btn-close" onClick={onClose}>✕</button>
         </div>
         <p className="subtitle">
-          รถ ใบเสนอราคา และราคาอะไหล่ของร้าน {row.shop_name} ที่ใช้ชื่อ “{row.model}” จะถูกเปลี่ยนเป็นชื่อรุ่นที่เลือก
+          รถและใบเสนอราคาของร้าน {row.shop_name} ที่ใช้ชื่อ “{row.model}” จะถูกเปลี่ยนเป็นชื่อรุ่นที่เลือก
         </p>
         <div className="form-group">
           <label>รุ่นในสมุดของ {row.brand}</label>
@@ -270,12 +267,12 @@ function ModelsTab({ onChanged }) {
 
       <div className="quotation-table-wrap">
         <table className="quotation-table">
-          <thead><tr><th>ยี่ห้อ</th><th>รุ่น</th><th>ช่วงปี</th><th>จัดการ</th></tr></thead>
+          <thead><tr><th>ยี่ห้อ</th><th>ชื่อรุ่น (ที่พนักงานเห็น)</th><th>ช่วงปี</th><th>จัดการ</th></tr></thead>
           <tbody>
             {rows.map((r) => (
               <tr key={r.id}>
                 <td data-label="ยี่ห้อ">{r.brand}</td>
-                <td data-label="รุ่น">{r.model}</td>
+                <td data-label="ชื่อรุ่น">{r.display_name}</td>
                 <td data-label="ช่วงปี">{r.year_range || '-'}</td>
                 <td className="actions" data-label="จัดการ">
                   <button type="button" onClick={() => setForm({ id: r.id, brand: r.brand, model: r.model, ...parseYears(r.year_range), newBrand: false })}>แก้ไข</button>
@@ -323,181 +320,6 @@ function ModelsTab({ onChanged }) {
                   </label>
                 </div>
                 {form.year_raw && <div className="dev-detail">ช่วงปีเดิม: {form.year_raw} (กรอกปีด้านบนเพื่อเปลี่ยนเป็นรูปแบบมาตรฐาน)</div>}
-              </div>
-              <div className="modal-actions">
-                <button type="submit" className="btn btn-primary">บันทึก</button>
-                <button type="button" className="btn btn-secondary" onClick={() => setForm(null)}>ยกเลิก</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-    </>
-  );
-}
-
-// ── master parts and prices ─────────────────────────────────────────────────
-
-function PartsTab({ onChanged }) {
-  const [brands, setBrands] = useState([]);
-  const [brand, setBrand] = useState('');
-  const [models, setModels] = useState([]);
-  const [model, setModel] = useState('');
-  const [search, setSearch] = useState('');
-  const [rows, setRows] = useState([]);
-  const [error, setError] = useState('');
-  const [form, setForm] = useState(null);
-
-  useEffect(() => {
-    client.get('/dev/catalog/brands').then((res) => setBrands(res.data.data));
-  }, []);
-  useEffect(() => {
-    setModel('');
-    if (!brand) { setModels([]); return; }
-    client.get('/dev/catalog/models', { params: { brand } }).then((res) => setModels(res.data.data));
-  }, [brand]);
-
-  const ready = Boolean((brand && model) || search.trim());
-  const load = useCallback(() => {
-    if (!ready) { setRows([]); return; }
-    client.get('/dev/catalog/parts', { params: { brand, model, search: search.trim() } })
-      .then((res) => setRows(res.data.data))
-      .catch((err) => setError(errorText(err, 'โหลดไม่สำเร็จ')));
-  }, [brand, model, search, ready]);
-  useEffect(() => {
-    const timer = setTimeout(load, 250);
-    return () => clearTimeout(timer);
-  }, [load]);
-
-  const patch = async (row, body, fallback) => {
-    try {
-      await client.patch(`/dev/catalog/parts/${row.id}`, body);
-      setError('');
-      load();
-      onChanged();
-    } catch (err) {
-      setError(errorText(err, fallback));
-    }
-  };
-
-  const changePrice = (row) => {
-    const input = window.prompt(`ราคากลางใหม่ของ "${row.part_name}" (${row.model})\nร้านที่ยังไม่ปรับราคาเองจะได้ราคานี้ทันที`, String(Number(row.price)));
-    if (input === null || input.trim() === '') return;
-    const price = Number(input);
-    if (!Number.isFinite(price) || price < 0) { setError('ราคาไม่ถูกต้อง'); return; }
-    patch(row, { price }, 'แก้ราคาไม่สำเร็จ');
-  };
-
-  const toggleActive = (row) => {
-    const text = row.is_active
-      ? `ซ่อน "${row.part_name}" จากทุกร้าน? (ไม่ลบ เปิดกลับมาได้)`
-      : `เปิด "${row.part_name}" ให้ทุกร้านเห็นอีกครั้ง?`;
-    if (window.confirm(text)) patch(row, { is_active: !row.is_active }, 'แก้ไขไม่สำเร็จ');
-  };
-
-  const rename = (row) => {
-    const name = window.prompt('ชื่ออะไหล่ใหม่ (ชื่อที่ร้านปรับราคาไว้จะเปลี่ยนตามด้วย)', row.part_name);
-    if (name && name.trim() !== row.part_name) patch(row, { part_name: name.trim() }, 'เปลี่ยนชื่อไม่สำเร็จ');
-  };
-
-  const add = async (e) => {
-    e.preventDefault();
-    try {
-      await client.post('/dev/catalog/parts', {
-        brand, model, part_name: form.part_name, category: form.category, description: form.description, price: Number(form.price) || 0,
-      });
-      setForm(null);
-      setError('');
-      load();
-      onChanged();
-    } catch (err) {
-      setError(errorText(err, 'เพิ่มอะไหล่ไม่สำเร็จ'));
-    }
-  };
-
-  return (
-    <>
-      <p className="subtitle">ราคากลางที่ร้านใหม่ทุกร้านเริ่มใช้ แก้ราคาแล้วร้านที่ไม่ได้ตั้งราคาเองจะเปลี่ยนตามทันที ร้านที่ตั้งราคาเองไว้ไม่ถูกแตะ</p>
-      {error && <div className="error-message">{error}</div>}
-      <div className="qpp-filter-bar">
-        <div className="form-group">
-          <label>ยี่ห้อ</label>
-          <select value={brand} onChange={(e) => setBrand(e.target.value)}>
-            <option value="">-- เลือกยี่ห้อ --</option>
-            {brands.map((b) => <option key={b} value={b}>{b}</option>)}
-          </select>
-        </div>
-        <div className="form-group">
-          <label>รุ่น</label>
-          <select value={model} onChange={(e) => setModel(e.target.value)} disabled={!brand}>
-            <option value="">-- เลือกรุ่น --</option>
-            {models.map((m) => <option key={m.id} value={m.label}>{m.label}</option>)}
-          </select>
-        </div>
-        <div className="form-group qpp-filter-search">
-          <label>หรือค้นหาชื่ออะไหล่ข้ามรุ่น</label>
-          <input type="text" className="search-input" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="ชื่ออะไหล่/รายละเอียด" />
-        </div>
-        <div className="form-group">
-          <label>&nbsp;</label>
-          <button
-            type="button" className="btn btn-primary" disabled={!(brand && model)}
-            title={brand && model ? undefined : 'เลือกยี่ห้อและรุ่นก่อน'}
-            onClick={() => setForm({ part_name: '', category: '', description: '', price: '' })}
-          >
-            + เพิ่มอะไหล่
-          </button>
-        </div>
-      </div>
-
-      {!ready ? <div className="empty-message">เลือกยี่ห้อและรุ่น หรือพิมพ์ค้นหา เพื่อดูอะไหล่</div> : (
-        <div className="quotation-table-wrap">
-          <table className="quotation-table">
-            <thead><tr><th>ยี่ห้อ / รุ่น</th><th>อะไหล่</th><th>หมวด</th><th>ราคากลาง</th><th>สถานะ</th><th>จัดการ</th></tr></thead>
-            <tbody>
-              {rows.map((r) => (
-                <tr key={r.id} className={r.is_active ? '' : 'row-muted'}>
-                  <td data-label="ยี่ห้อ / รุ่น">{r.brand} · {r.model}</td>
-                  <td data-label="อะไหล่">{r.part_name}{r.description && <div className="dev-detail">{r.description}</div>}</td>
-                  <td data-label="หมวด">{r.category || '-'}</td>
-                  <td data-label="ราคากลาง">{r.needs_price ? <span className="dev-chip">ยังไม่ตั้งราคา</span> : `฿${formatMoney(r.price)}`}</td>
-                  <td data-label="สถานะ">{r.is_active ? 'ใช้งาน' : 'ซ่อนอยู่'}</td>
-                  <td className="actions" data-label="จัดการ">
-                    <button type="button" onClick={() => changePrice(r)}>แก้ราคา</button>
-                    <button type="button" onClick={() => rename(r)}>แก้ชื่อ</button>
-                    <button type="button" className={r.is_active ? 'btn-danger' : ''} onClick={() => toggleActive(r)}>{r.is_active ? 'ซ่อน' : 'เปิดใช้'}</button>
-                  </td>
-                </tr>
-              ))}
-              {rows.length === 0 && <tr><td colSpan="6" className="empty-message">ไม่พบอะไหล่</td></tr>}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {form && (
-        <div className="modal-backdrop" onClick={() => setForm(null)}>
-          <div className="modal-card medium" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2>เพิ่มอะไหล่ให้ {brand} · {model}</h2>
-              <button className="btn-close" onClick={() => setForm(null)}>✕</button>
-            </div>
-            <form onSubmit={add} className="modal-form">
-              <div className="form-group">
-                <label>ชื่ออะไหล่</label>
-                <input type="text" value={form.part_name} onChange={(e) => setForm({ ...form, part_name: e.target.value })} required />
-              </div>
-              <div className="form-group">
-                <label>หมวด (ถ้ามี)</label>
-                <input type="text" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} />
-              </div>
-              <div className="form-group">
-                <label>รายละเอียด (ถ้ามี)</label>
-                <input type="text" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
-              </div>
-              <div className="form-group">
-                <label>ราคากลาง (บาท)</label>
-                <input type="number" min="0" step="0.01" value={form.price} onChange={(e) => setForm({ ...form, price: e.target.value })} required />
               </div>
               <div className="modal-actions">
                 <button type="submit" className="btn btn-primary">บันทึก</button>

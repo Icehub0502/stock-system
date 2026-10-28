@@ -237,7 +237,7 @@ function CarForm({
           <label>รุ่นรถ</label>
           <ComboInput
             value={car.model}
-            options={models.map((m) => ({ value: m.model, pending: m.pending }))}
+            options={models.map((m) => ({ value: m.display_name, pending: m.pending }))}
             disabled={!car.brand.trim()}
             placeholder={car.brand.trim() ? 'พิมพ์ค้นหารุ่นรถ' : 'เลือกยี่ห้อก่อน'}
             onChange={(model) => onChange({ model })}
@@ -380,7 +380,7 @@ export default function AddJobModal({ onClose, onCreated, prefill = null }) {
       let modelKnown = false;
       if (brandKnown) {
         const res = await client.get('/vehicle-models/models', { params: { brand } }).catch(() => null);
-        modelKnown = !!res?.data?.data?.some((m) => m.model === model);
+        modelKnown = !!res?.data?.data?.some((m) => m.model === model || m.display_name === model);
       }
       if (!brandKnown || !modelKnown) {
         await client.post('/vehicle-models', { brand, model }).catch(() => {});

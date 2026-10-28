@@ -595,7 +595,7 @@ function QuickLinksSection() {
       <div className="dash-panel-title">ลิงก์ด่วน</div>
       <div className="modal-actions" style={{ flexWrap: 'wrap' }}>
         <Link to="/service-items" className="btn btn-secondary">รายการสินค้า/บริการ</Link>
-        <Link to="/quote-parts" className="btn btn-secondary">ราคาอะไหล่ตามรุ่นรถ</Link>
+        <Link to="/model-prices" className="btn btn-secondary">ราคามาตรฐานตามรุ่นรถ</Link>
         <Link to="/warranties" className="btn btn-secondary">การรับประกัน</Link>
       </div>
     </div>
