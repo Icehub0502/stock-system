@@ -91,6 +91,7 @@ const ACTION_LABEL = {
   update_shop: 'แก้ไข/ระงับ/เปิดร้าน',
   reset_password: 'รีเซ็ตรหัสผ่าน',
   change_role: 'เปลี่ยนสิทธิ์ผู้ใช้',
+  create_user: 'เพิ่มผู้ใช้',
   disable_user: 'ปิดบัญชี',
   enable_user: 'เปิดบัญชี',
   switch_shop: 'สลับเข้าสาขา',

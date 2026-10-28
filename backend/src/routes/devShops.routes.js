@@ -196,6 +196,30 @@ router.get('/users', async (req, res) => {
   }
 });
 
+// Add an account to any shop. body: { shop_id, username, password, full_name?, role }
+router.post('/users', async (req, res) => {
+  const { shop_id, password, role } = req.body || {};
+  const username = String(req.body?.username || '').trim();
+  const fullName = String(req.body?.full_name || '').trim();
+  if (!username || username.length > 50) return res.status(400).json({ error: 'กรุณากรอก username (ไม่เกิน 50 ตัวอักษร)' });
+  if (fullName.length > 100) return res.status(400).json({ error: 'ชื่อยาวเกินไป' });
+  if (String(password || '').length < 8) return res.status(400).json({ error: 'รหัสผ่านต้องมีอย่างน้อย 8 ตัวอักษร' });
+  if (!USER_ROLES.includes(role)) return res.status(400).json({ error: 'สิทธิ์ไม่ถูกต้อง' });
+  try {
+    const [[shop]] = await pool.query('SELECT id FROM shops WHERE id = ?', [Number(shop_id) || 0]);
+    if (!shop) return res.status(404).json({ error: 'ไม่พบร้าน' });
+    const [result] = await pool.query(
+      'INSERT INTO users (shop_id, username, password_hash, full_name, role) VALUES (?, ?, ?, ?, ?)',
+      [shop.id, username, bcrypt.hashSync(String(password), 10), fullName, role]
+    );
+    await logAudit(req, 'create_user', { shopId: shop.id, detail: { user_id: result.insertId, username, role } });
+    res.status(201).json({ success: true, data: { id: result.insertId } });
+  } catch (err) {
+    if (err.code === 'ER_DUP_ENTRY') return res.status(409).json({ error: 'username นี้มีอยู่แล้วในร้านนี้' });
+    serverError(res, err, 'เพิ่มผู้ใช้ไม่สำเร็จ');
+  }
+});
+
 router.post('/users/:id/reset-password', async (req, res) => {
   const password = (req.body || {}).new_password;
   if (String(password || '').length < 8) {

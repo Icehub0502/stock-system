@@ -22,7 +22,7 @@ beforeAll(async () => {
 afterAll(async () => {
   for (const id of shopsToDrop) await dropShop(id);
   await pool.query("DELETE FROM shop_groups WHERE name LIKE 'Console test group%' AND NOT EXISTS (SELECT 1 FROM shops WHERE group_id = shop_groups.id)");
-  await pool.query("DELETE FROM dev_audit_log WHERE action IN ('create_shop','switch_shop','update_shop','reset_password','disable_user','change_role') AND created_at > DATE_SUB(NOW(), INTERVAL 1 HOUR)");
+  await pool.query("DELETE FROM dev_audit_log WHERE action IN ('create_shop','switch_shop','update_shop','reset_password','disable_user','change_role','create_user') AND created_at > DATE_SUB(NOW(), INTERVAL 1 HOUR)");
   await pool.end();
 });
 
@@ -167,6 +167,42 @@ describe('editing a shop code and a user role', () => {
 
     const audit = await request(app).get('/api/dev/audit').set(as(devToken));
     expect(audit.body.data.some((r) => r.action === 'change_role' && String(r.detail).includes('"to":"manager"'))).toBe(true);
+  });
+});
+
+describe('adding a user to a shop', () => {
+  test('dev only; bad input and a missing shop are refused', async () => {
+    const shop = await createShop();
+    shopsToDrop.push(shop.shopId);
+    const body = { shop_id: shop.shopId, username: 'newbie', password: 'password123', full_name: 'New Bie', role: 'office' };
+    const post = (b, token = devToken) => request(app).post('/api/dev/users').set(as(token)).send(b);
+
+    for (const t of [managerToken, shop.ownerToken, shop.token]) expect((await post(body, t)).status).toBe(403);
+    expect((await post({ ...body, username: '  ' })).status).toBe(400);
+    expect((await post({ ...body, password: 'short' })).status).toBe(400);
+    expect((await post({ ...body, role: 'superuser' })).status).toBe(400);
+    expect((await post({ ...body, shop_id: 99999999 })).status).toBe(404);
+  });
+
+  test('creates the account in the chosen shop: it can log in, a repeated username is refused, and it is audited', async () => {
+    const shop = await createShop();
+    shopsToDrop.push(shop.shopId);
+    const [[row]] = await pool.query('SELECT code FROM shops WHERE id = ?', [shop.shopId]);
+    const body = { shop_id: shop.shopId, username: 'newbie', password: 'password123', full_name: 'New Bie', role: 'manager' };
+
+    const created = await request(app).post('/api/dev/users').set(as(devToken)).send(body);
+    expect(created.status).toBe(201);
+    const [[saved]] = await pool.query('SELECT shop_id, role, full_name FROM users WHERE id = ?', [created.body.data.id]);
+    expect(saved).toMatchObject({ shop_id: shop.shopId, role: 'manager', full_name: 'New Bie' });
+
+    const login = await request(app).post('/api/auth/login').send({ username: 'newbie', password: 'password123', shop_code: row.code });
+    expect(login.status).toBe(200);
+
+    expect((await request(app).post('/api/dev/users').set(as(devToken)).send(body)).status).toBe(409);
+
+    const audit = await request(app).get('/api/dev/audit').set(as(devToken));
+    expect(audit.body.data.some((r) => r.action === 'create_user' && String(r.detail).includes('newbie'))).toBe(true);
+    expect(JSON.stringify(audit.body.data)).not.toContain('password123');
   });
 });
 

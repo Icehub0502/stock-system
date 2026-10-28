@@ -206,6 +206,9 @@ export function DevUsers() {
   const [shopId, setShopId] = useState('');
   const [q, setQ] = useState('');
   const [error, setError] = useState('');
+  const [newUser, setNewUser] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [modalError, setModalError] = useState('');
 
   const load = useCallback(() => {
     client.get('/dev/users', { params: { shop_id: shopId || undefined, q: q || undefined } })
@@ -218,6 +221,21 @@ export function DevUsers() {
     const t = setTimeout(load, 250);
     return () => clearTimeout(t);
   }, [load]);
+
+  const createUser = async (e) => {
+    e.preventDefault();
+    setSaving(true);
+    setModalError('');
+    try {
+      await client.post('/dev/users', { ...newUser, shop_id: Number(newUser.shop_id) });
+      setNewUser(null);
+      load();
+    } catch (err) {
+      setModalError(err.response?.data?.error || 'เพิ่มผู้ใช้ไม่สำเร็จ');
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const resetPassword = async (u) => {
     const password = window.prompt(`ตั้งรหัสผ่านใหม่ให้ "${u.username}" (ร้าน ${u.shop_name}) อย่างน้อย 8 ตัวอักษร`);
@@ -257,8 +275,14 @@ export function DevUsers() {
       <div className="quotation-header">
         <div>
           <h1>ผู้ใช้ทุกร้าน</h1>
-          <p className="subtitle">ค้นหาผู้ใช้ข้ามร้าน รีเซ็ตรหัสผ่าน หรือปิดบัญชี</p>
+          <p className="subtitle">เพิ่มผู้ใช้ ค้นหาข้ามร้าน รีเซ็ตรหัสผ่าน หรือปิดบัญชี</p>
         </div>
+        <button
+          type="button" className="btn btn-primary"
+          onClick={() => { setNewUser({ shop_id: shopId || '', username: '', full_name: '', password: '', role: 'office' }); setModalError(''); }}
+        >
+          + เพิ่มผู้ใช้
+        </button>
       </div>
       {error && <div className="error-message">{error}</div>}
       <div className="owner-range">
@@ -295,6 +319,49 @@ export function DevUsers() {
           </tbody>
         </table>
       </div>
+
+      {newUser && (
+        <div className="modal-backdrop" onClick={() => !saving && setNewUser(null)}>
+          <div className="modal-card medium" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>เพิ่มผู้ใช้</h2>
+              <button className="btn-close" onClick={() => setNewUser(null)}>✕</button>
+            </div>
+            {modalError && <div className="error-message">{modalError}</div>}
+            <form onSubmit={createUser} className="modal-form">
+              <div className="form-group">
+                <label>ร้าน</label>
+                <select value={newUser.shop_id} onChange={(e) => setNewUser({ ...newUser, shop_id: e.target.value })} required>
+                  <option value="">-- เลือกร้าน --</option>
+                  {shops.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+              </div>
+              <div className="form-group">
+                <label>Username</label>
+                <input type="text" value={newUser.username} onChange={(e) => setNewUser({ ...newUser, username: e.target.value })} autoComplete="off" required />
+              </div>
+              <div className="form-group">
+                <label>ชื่อ-สกุล</label>
+                <input type="text" value={newUser.full_name} onChange={(e) => setNewUser({ ...newUser, full_name: e.target.value })} />
+              </div>
+              <div className="form-group">
+                <label>รหัสผ่าน (อย่างน้อย 8 ตัวอักษร)</label>
+                <input type="password" value={newUser.password} onChange={(e) => setNewUser({ ...newUser, password: e.target.value })} autoComplete="new-password" minLength={8} required />
+              </div>
+              <div className="form-group">
+                <label>สิทธิ์</label>
+                <select value={newUser.role} onChange={(e) => setNewUser({ ...newUser, role: e.target.value })}>
+                  {Object.keys(ROLE_LABEL).map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
+                </select>
+              </div>
+              <div className="modal-actions">
+                <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? 'กำลังบันทึก...' : 'เพิ่มผู้ใช้'}</button>
+                <button type="button" className="btn btn-secondary" onClick={() => setNewUser(null)} disabled={saving}>ยกเลิก</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
