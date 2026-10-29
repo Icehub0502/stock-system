@@ -226,6 +226,20 @@ function ModelsTab({ onChanged }) {
     }
   };
 
+  const removeModel = async (row) => {
+    if (!window.confirm(`ลบรุ่น "${row.brand} ${row.display_name}" ออกจากสมุด?
+รถของลูกค้าที่ใช้ชื่อนี้จะยังอยู่ แต่ต้องเลือกรุ่นใหม่ตอนใช้ราคามาตรฐาน`)) return;
+    try {
+      await client.delete(`/dev/catalog/models/${row.id}`);
+      setError('');
+      load();
+      loadBrands();
+      onChanged();
+    } catch (err) {
+      setError(errorText(err, 'ลบรุ่นรถไม่สำเร็จ'));
+    }
+  };
+
   const renameBrand = async () => {
     const to = window.prompt(`ชื่อใหม่ของยี่ห้อ "${brand}" (เปลี่ยนในสมุด ราคากลาง และราคาของทุกร้าน)`, brand);
     if (!to || to.trim() === brand) return;
@@ -276,6 +290,7 @@ function ModelsTab({ onChanged }) {
                 <td data-label="ช่วงปี">{r.year_range || '-'}</td>
                 <td className="actions" data-label="จัดการ">
                   <button type="button" onClick={() => setForm({ id: r.id, brand: r.brand, model: r.model, ...parseYears(r.year_range), newBrand: false })}>แก้ไข</button>
+                  <button type="button" className="btn-danger" onClick={() => removeModel(r)}>ลบ</button>
                 </td>
               </tr>
             ))}

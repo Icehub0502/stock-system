@@ -71,6 +71,30 @@ describe('adding and renaming models', () => {
   });
 });
 
+describe('deleting a model', () => {
+  test('a model with no prices is deleted and its cars lose only the link; one with prices is refused', async () => {
+    const free = (await dev.post('/models', { brand: BRAND, model: 'Gone', year_range: '2000-2005' })).body.data.id;
+    const kept = (await dev.post('/models', { brand: BRAND, model: 'Kept', year_range: '2006-2010' })).body.data.id;
+    const [c] = await pool.query('INSERT INTO customers (shop_id, customer_name, phone) VALUES (?, ?, NULL)', [shopA.shopId, `Del ${unique}`]);
+    const [v] = await pool.query('INSERT INTO vehicles (shop_id, customer_id, brand, model, license_plate, vehicle_model_id) VALUES (?, ?, ?, ?, ?, ?)', [shopA.shopId, c.insertId, BRAND, 'Gone', `DL${unique}`.slice(0, 15), free]);
+    await pool.query('INSERT INTO model_item_prices (group_id, vehicle_model_id, item_key, item_name, part_price) VALUES (?, ?, ?, ?, 100)', [shopA.groupId, kept, 'x', 'X']);
+
+    expect((await request(app).delete(`/api/dev/catalog/models/${free}`).set(as(shopA.managerToken))).status).toBe(403);
+    expect((await dev.del(`/models/${kept}`)).status).toBe(409);
+    expect((await dev.del(`/models/${free}`)).status).toBe(200);
+    expect((await dev.del(`/models/${free}`)).status).toBe(404);
+
+    const [[car]] = await pool.query('SELECT brand, model, vehicle_model_id FROM vehicles WHERE id = ?', [v.insertId]);
+    expect(car).toMatchObject({ brand: BRAND, model: 'Gone', vehicle_model_id: null });
+    const [[still]] = await pool.query('SELECT COUNT(*) n FROM vehicle_models WHERE id = ?', [kept]);
+    expect(still.n).toBe(1);
+
+    await pool.query('DELETE FROM model_item_prices WHERE vehicle_model_id = ?', [kept]);
+    await pool.query('DELETE FROM vehicles WHERE shop_id = ?', [shopA.shopId]);
+    await pool.query('DELETE FROM customers WHERE shop_id = ?', [shopA.shopId]);
+  });
+});
+
 describe('models typed in by staff', () => {
   const PBRAND = `${BRAND}P`;
   let pendingId;

@@ -164,6 +164,39 @@ router.patch('/catalog/models/:id', async (req, res) => {
   }
 });
 
+// Delete an approved model. Refused while standard prices or remembered price observations hang on it (that data is
+// never thrown away); cars that point at it only lose the link and are matched again by their brand + model text.
+router.delete('/catalog/models/:id', async (req, res) => {
+  try {
+    const [[current]] = await pool.query(
+      "SELECT id, brand, model, year_range FROM vehicle_models WHERE id = ? AND status = 'approved'",
+      [req.params.id]
+    );
+    if (!current) return res.status(404).json({ error: 'ไม่พบรุ่นรถ' });
+    const [[used]] = await pool.query(
+      `SELECT (SELECT COUNT(*) FROM model_item_prices WHERE vehicle_model_id = ?) AS prices,
+              (SELECT COUNT(*) FROM price_observations WHERE vehicle_model_id = ?) AS observations`,
+      [current.id, current.id]
+    );
+    if (Number(used.prices) > 0 || Number(used.observations) > 0) {
+      return res.status(409).json({
+        error: `รุ่นนี้มีราคามาตรฐาน ${used.prices} รายการและราคาที่จำไว้ ${used.observations} รายการ จึงลบไม่ได้`,
+      });
+    }
+    await inTransaction(async (conn) => {
+      // tenant-ok: the shared book is dev-only and the model is deleted for every shop
+      await conn.execute('UPDATE vehicles SET vehicle_model_id = NULL WHERE vehicle_model_id = ?', [current.id]);
+      await conn.execute("DELETE FROM vehicle_models WHERE id = ? AND status = 'approved'", [current.id]);
+    });
+    await logAudit(req, 'catalog_delete_model', {
+      detail: { id: current.id, model: `${current.brand} ${modelLabel(current.model, current.year_range)}` },
+    });
+    res.json({ success: true });
+  } catch (err) {
+    serverError(res, err, 'ลบรุ่นรถไม่สำเร็จ');
+  }
+});
+
 // Rename a brand in the catalogue
 router.patch('/catalog/brands', async (req, res) => {
   const from = cleanText(req.body?.from, 100);
