@@ -13,6 +13,7 @@ const { generateJobNo } = require('../utils/generateJobNo');
 const { emitJobEvent, emitQuotationEvent, emitReceiptEvent } = require('../realtime');
 const { saveDataUrlToFile, deleteUploadedFile } = require('../utils/photoStorage');
 const { ownsRow } = require('../utils/tenant');
+const { recordQuotationPrices } = require('../utils/modelPrices');
 // ใช้ตรรกะออกเลขที่/กรองรายการชุดเดียวกับ quotations.routes.js — กันไม่ให้เลขที่
 // เอกสาร/กติกากรองรายการแยกกันเป็น 2 ชุดที่อาจเพี้ยนไม่ตรงกันในอนาคต (ดู
 // promoteDraftToQuotation ด้านล่าง ที่ใช้ตอน "โปรโมท" quote_draft เป็นใบเสนอราคาจริง)
@@ -150,7 +151,7 @@ router.get('/:id', async (req, res) => {
   try {
     const [rows] = await pool.execute(`
       SELECT j.*, c.customer_name, c.phone, c.customer_code,
-             v.license_plate, v.province, v.brand, v.model, v.color, v.year,
+             v.license_plate, v.province, v.brand, v.model, v.color, v.year, v.vehicle_model_id,
              q.quotation_no, q.status AS quotation_status, q.total_amount,
              q.deposit_amount, q.deposit_date,
              (q.customer_signature IS NOT NULL) AS customer_signature
@@ -915,6 +916,10 @@ router.patch('/:id/quote-draft', async (req, res) => {
         product_name: i.product_name,
         quantity: parseInt(i.quantity || 1),
         unit_price: parseFloat(i.unit_price || 0),
+        // what the standard-price list needs when the draft becomes a quotation (see recordPromotedPrices)
+        price_key_name: i.price_key_name ? String(i.price_key_name).trim().slice(0, 255) : undefined,
+        skip_price_memory: i.skip_price_memory ? true : undefined,
+        set_member: i.set_member ? true : undefined,
       })),
       remark: remark === undefined ? (prevDraft.remark || null) : (remark || null),
       deposit_amount: deposit_amount === undefined
@@ -1000,6 +1005,15 @@ router.patch('/:id/quote-draft/staff-signature', async (req, res) => {
 // ไปแล้วก็ไม่มีทางย้อนกลับไปรู้ว่าจะพิมพ์รายการอะไรลงไป (รถกลับไปแล้ว) แต่ยังต้อง
 // บันทึกไว้ว่า "ลูกค้าไม่ทำ" เพื่อนับสถิติ/เหตุผลได้ถูกต้อง — อนุมัติ/นัดวันมาทำยังคง
 // บังคับต้องมีรายการเหมือนเดิม เพราะสร้างใบเสร็จ/ใบเสนอราคาจริงที่ต้องมีรายการอยู่แล้ว
+// Remember the prices staff typed on the draft once it has become a quotation (advisory: never blocks the decision).
+// The car's generation was stored on the vehicle when the staff picked it.
+async function recordPromotedPrices(shopId, job, quotationId) {
+  const draft = parseDraft(job.quote_draft);
+  await recordQuotationPrices({
+    shopId, quotationId, vehicleId: job.vehicle_id, vehicleModelId: null, items: buildValidItems(draft.items || []),
+  });
+}
+
 async function promoteDraftToQuotation(conn, shopId, job, { status, scheduledDate, declineReason, declineNote, depositAmount, depositDate, allowEmptyItems = false } = {}) {
   const draft = parseDraft(job.quote_draft);
   const validItems = buildValidItems(draft.items || []);
@@ -1116,6 +1130,7 @@ router.post('/:id/quotation/approve', async (req, res) => {
 
     await conn.commit();
 
+    await recordPromotedPrices(req.shopId, job, quotation_id);
     emitQuotationEvent('quotation:updated', { shopId: req.shopId, quotationId: quotation_id, status: 'approved', actorId: req.user.id });
     emitReceiptEvent('receipt:created', { shopId: req.shopId, receiptId, actorId: req.user.id });
     emitJobEvent('job:status-changed', { shopId: req.shopId, jobId: job.id, jobDate: job.job_date, status: 'approved', actorId: req.user.id });
@@ -1157,6 +1172,7 @@ router.post('/:id/quotation/schedule', async (req, res) => {
 
     await conn.commit();
 
+    await recordPromotedPrices(req.shopId, job, promoted.quotation_id);
     emitQuotationEvent('quotation:updated', { shopId: req.shopId, quotationId: promoted.quotation_id, status: 'scheduled', actorId: req.user.id });
     emitJobEvent('job:status-changed', { shopId: req.shopId, jobId: job.id, jobDate: job.job_date, status: 'scheduled', actorId: req.user.id });
 
@@ -1206,6 +1222,7 @@ router.post('/:id/quotation/deposit', async (req, res) => {
 
     await conn.commit();
 
+    await recordPromotedPrices(req.shopId, job, promoted.quotation_id);
     emitQuotationEvent('quotation:updated', { shopId: req.shopId, quotationId: promoted.quotation_id, status: 'no_date', actorId: req.user.id });
     emitJobEvent('job:status-changed', { shopId: req.shopId, jobId: job.id, jobDate: job.job_date, status: 'carout', actorId: req.user.id });
 
@@ -1264,6 +1281,7 @@ router.post('/:id/quotation/decline', async (req, res) => {
 
     await conn.commit();
 
+    await recordPromotedPrices(req.shopId, job, promoted.quotation_id);
     emitQuotationEvent('quotation:updated', { shopId: req.shopId, quotationId: promoted.quotation_id, status: 'declined', actorId: req.user.id });
     emitJobEvent('job:status-changed', { shopId: req.shopId, jobId: job.id, jobDate: job.job_date, status: 'rejected', actorId: req.user.id });
 

@@ -1439,13 +1439,13 @@
   margin-bottom: 0;
   padding-top: 0;
   padding-bottom: 10px;
-  border-bottom: 2px solid #17171a;
+  border-bottom: 2px solid var(--doc-rule, #17171a);
   flex-shrink: 0;
 }
 
 .doc-header-top {
   display: grid;
-  grid-template-columns: 1.5fr 1.15fr;
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1.15fr);
   gap: 14px;
   align-items: flex-start;
 }
@@ -1453,41 +1453,44 @@
 .doc-logo-big {
   width: 130px;
   height: auto;
+  max-height: 130px;
   object-fit: contain;
   flex-shrink: 0;
 }
 
-.doc-brand { display: flex; gap: 12px; align-items: flex-start; }
-.doc-brand-info { display: flex; flex-direction: column; gap: 2px; }
-.doc-brand-name { font-size: 19px; font-weight: 800; color: #17171a; letter-spacing: .1px; white-space: nowrap; }
-.doc-brand-addr { font-size: 11.5px; color: #6b6155; text-align: left; }
+.doc-brand { display: flex; gap: 12px; align-items: flex-start; max-height: 130px; overflow: hidden; }
+.doc-brand-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; overflow: hidden; }
+.doc-brand-name { font-size: 19px; font-weight: 800; color: var(--doc-strong, #17171a); letter-spacing: .1px; overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+.doc-brand-addr { font-size: 11.5px; line-height: 1.3; color: #6b6155; text-align: left; overflow-wrap: anywhere; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; }
 .doc-brand-contact-line { white-space: nowrap; }
 .doc-brand-row b { color: #45403a; font-weight: 700; }
 .doc-brand-contact { color: #333; }
 .doc-icon { display: inline-block; margin: 0 2px; font-size: 11px; }
 
-.doc-title-block { text-align: right; }
+.doc-title-block { text-align: right; min-width: 0; }
 .doc-title-block h1 {
   margin: 0 0 6px;
   font-size: 16.5px;
   font-weight: 800;
-  color: #17171a;
+  color: var(--doc-strong, #17171a);
   letter-spacing: 0;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .doc-infobox {
   display: inline-block;
   text-align: left;
-  background: #f1e6d2;
-  border: 1px solid #ddcba3;
+  background: var(--doc-tint, #f1e6d2);
+  border: 1px solid var(--doc-tint-border, #ddcba3);
   border-radius: 4px;
   padding: 6px 12px;
   font-size: 11.5px;
   min-width: 210px;
 }
 .doc-meta-row { display: flex; justify-content: flex-start; gap: 6px; padding: 2px 0; }
-.doc-meta-row span { color: #6b5f45; min-width: 88px; flex-shrink: 0; }
+.doc-meta-row span { color: var(--doc-meta-label, #6b5f45); min-width: 88px; flex-shrink: 0; }
 .doc-meta-row strong { color: #17171a; font-weight: 700; text-align: left; }
 .doc-meta-row.doc-meta-primary strong { font-size: 13.5px; font-family: 'Consolas', monospace; }
 
@@ -1499,10 +1502,10 @@
 .doc-info-label { color: #17171a; font-weight: 700; font-size: 12px; flex-shrink: 0; }
 .doc-info-value { color: #17171a; font-weight: 400; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-.doc-items { width: 100%; border-collapse: collapse; border: 1px solid #17171a; font-size: 11.5px; margin-top: 3px; page-break-inside: auto; }
-.doc-items th, .doc-items td { border-left: 1px solid #17171a; border-right: 1px solid #17171a; padding: 6px 9px; vertical-align: top; }
+.doc-items { width: 100%; border-collapse: collapse; border: 1px solid var(--doc-rule, #17171a); font-size: 11.5px; margin-top: 3px; page-break-inside: auto; }
+.doc-items th, .doc-items td { border-left: 1px solid var(--doc-rule, #17171a); border-right: 1px solid var(--doc-rule, #17171a); padding: 6px 9px; vertical-align: top; }
 .doc-items thead { display: table-header-group; }
-.doc-items thead th { background: #f1e6d2; color: #17171a; font-weight: 700; text-align: center; white-space: nowrap; border-bottom: 1px solid #17171a; }
+.doc-items thead th { background: var(--doc-th-bg, #f1e6d2); color: var(--doc-th-text, #17171a); font-weight: 700; text-align: center; white-space: nowrap; border-bottom: 1px solid var(--doc-rule, #17171a); }
 .doc-items tbody tr { page-break-inside: avoid; break-inside: avoid; }
 .doc-num { text-align: right; font-variant-numeric: tabular-nums; }
 .doc-center { text-align: center; }
@@ -1512,12 +1515,12 @@
   justify-content: space-between;
   align-items: center;
   gap: 14px;
-  border: 1px solid #17171a;
+  border: 1px solid var(--doc-rule, #17171a);
   padding: 9px 12px;
   font-size: 13px;
   font-weight: 700;
-  background: #f1e6d2;
-  color: #17171a;
+  background: var(--doc-tint, #f1e6d2);
+  color: var(--doc-strong, #17171a);
   page-break-inside: avoid;
 }
 .doc-total-box-words {
@@ -1630,7 +1633,7 @@
    inside the line's own 64px margin-top so the drawn signature reads as
    sitting "on" the line instead of pushing the layout around. */
 .doc-sig-image { grid-row: 2; align-self: start; justify-self: center; max-height: 54px; max-width: 100%; object-fit: contain; }
-.doc-sig-name { grid-row: 3; text-align: center; font-size: 12px; color: #17171a; }
+.doc-sig-name { grid-row: 3; text-align: center; font-size: 12px; color: #17171a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .doc-sig-date { grid-row: 4; margin-top: 4px; text-align: center; color: #17171a; font-size: 10.5px; }
 .doc-sig-col-1 { grid-column: 2; }
 .doc-sig-col-2 { grid-column: 3; }
@@ -1842,42 +1845,42 @@
    so the receipt print template (shares these same .doc-* classes) keeps
    its own cream/sepia theme untouched. ── */
 #quotation-print-area .doc-header {
-  border-bottom-color: #1e40af;
+  border-bottom-color: var(--doc-rule, #1e40af);
 }
 #quotation-print-area .doc-brand-name,
 #quotation-print-area .doc-title-block h1 {
-  color: #1e3a8a;
+  color: var(--doc-strong, #1e3a8a);
 }
 #quotation-print-area .doc-infobox {
-  background: #eff6ff;
-  border-color: #bfdbfe;
+  background: var(--doc-tint, #eff6ff);
+  border-color: var(--doc-tint-border, #bfdbfe);
 }
 #quotation-print-area .doc-meta-row strong,
 #quotation-print-area .doc-info-label,
 #quotation-print-area .doc-info-value,
 #quotation-print-area .doc-info-row b {
-  color: #1e3a8a;
+  color: var(--doc-strong, #1e3a8a);
 }
 #quotation-print-area .doc-items {
-  border-color: #1e3a8a;
+  border-color: var(--doc-rule, #1e3a8a);
 }
 #quotation-print-area .doc-items th,
 #quotation-print-area .doc-items td {
-  border-left-color: #1e3a8a;
-  border-right-color: #1e3a8a;
+  border-left-color: var(--doc-rule, #1e3a8a);
+  border-right-color: var(--doc-rule, #1e3a8a);
 }
 #quotation-print-area .doc-items thead th {
-  background: #1e40af;
-  color: #fff;
-  border-bottom-color: #1e3a8a;
+  background: var(--doc-th-bg, #1e40af);
+  color: var(--doc-th-text, #fff);
+  border-bottom-color: var(--doc-rule, #1e3a8a);
 }
 #quotation-print-area .doc-total-box {
-  background: #eff6ff;
-  border-color: #1e3a8a;
-  color: #1e3a8a;
+  background: var(--doc-tint, #eff6ff);
+  border-color: var(--doc-rule, #1e3a8a);
+  color: var(--doc-strong, #1e3a8a);
 }
 #quotation-print-area .doc-original-tag {
-  color: #2563eb;
+  color: var(--doc-strong, #2563eb);
 }
 
 /* ════════════════════════════════════════════════════════════════════

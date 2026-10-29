@@ -6604,3 +6604,43 @@ td.stock-all-actions button { padding: 8px 14px; font-size: 0.85em; min-height: 
 .std-btn:hover { background: #f3f4f6; }
 .combo-list-up { top: auto; bottom: 100%; margin: 0 0 2px; }
 .saved-notice { position: fixed; top: 76px; left: 50%; transform: translateX(-50%); z-index: 60; background: #ecfdf5; border: 1px solid #6ee7b7; color: #065f46; padding: 10px 18px; border-radius: 8px; box-shadow: 0 6px 16px rgba(0, 0, 0, 0.15); font-size: 15px; cursor: pointer; max-width: calc(100vw - 32px); }
+
+/* ── Print header settings (pages/DocHeaderSettingsPage.jsx) ── */
+.dh-layout { display: grid; grid-template-columns: minmax(280px, 420px) 1fr; gap: 24px; align-items: start; margin-top: 12px; }
+.dh-form { grid-column: 1; grid-row: 1; }
+.dh-preview-col { grid-column: 2; grid-row: 1; min-width: 0; }
+.dh-form .form-group { margin-bottom: 14px; }
+.dh-form input[type="text"], .dh-form textarea { width: 100%; }
+.dh-logo-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.dh-logo-thumb { width: 96px; height: 96px; object-fit: contain; border: 1px solid #e5e7eb; border-radius: 8px; background: #fff; }
+.dh-logo-empty { width: 96px; height: 96px; display: flex; align-items: center; justify-content: center; border: 1px dashed #cbd5e1; border-radius: 8px; color: #64748b; font-size: 0.85rem; }
+.dh-logo-actions { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.dh-color-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.dh-color-row input[type="color"] { width: 48px; height: 38px; padding: 2px; border: 1px solid #cbd5e1; border-radius: 6px; background: #fff; cursor: pointer; }
+.dh-color-hex { width: 110px !important; font-family: monospace; }
+.dh-swatches { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+.dh-swatch { width: 36px; height: 36px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 1px #cbd5e1; cursor: pointer; padding: 0; }
+.dh-swatch.active { box-shadow: 0 0 0 2px #111827; }
+.dh-preview-label { font-size: 0.85rem; color: #64748b; margin-bottom: 6px; }
+/* A4 sheet drawn at 60% so the whole header sits beside the form */
+.dh-preview { overflow: hidden; border: 1px solid #e5e7eb; border-radius: 6px; background: #f1f5f9; }
+.dh-preview-inner { width: 210mm; transform-origin: top left; pointer-events: none; }
+.dh-preview-inner .doc-print-wrap { padding: 0; gap: 0; }
+.dh-preview-inner .doc-page { box-shadow: none; border-radius: 0; border: 0; }
+.dh-clip-warning { margin-bottom: 10px; padding: 10px 12px; border-radius: 8px; background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; font-size: 0.9rem; }
+/* narrow screens: the preview comes first, one column */
+@media (max-width: 1100px) {
+  .dh-layout { grid-template-columns: 1fr; }
+  .dh-form, .dh-preview-col { grid-column: 1; }
+  .dh-form { grid-row: 2; }
+}
+
+/* standard-price note under a selected row of the job page */
+.jdp-std-note { flex-basis: 100%; justify-content: flex-end; margin-top: 0; }
+.jdp-part-picker .model-price-card { margin-bottom: 12px; }
+
+/* phones: bigger touch targets in a selected row; the controls wrap instead of running past the card */
+@media (max-width: 640px) {
+  .jdp-selected-controls { flex-wrap: wrap; justify-content: flex-end; width: 100%; max-width: 100%; }
+  .jdp-selected-toggle, .jdp-selected-qty button, .jdp-selected-remove { width: 36px; height: 36px; min-height: 36px; }
+}

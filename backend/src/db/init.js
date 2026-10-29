@@ -1183,6 +1183,9 @@ async function initDatabase() {
   // standard prices per vehicle generation (per branch group) + the prices staff typed — see priceSchema.js
   await require('./priceSchema').migratePrices(conn);
 
+  // print header per branch (logo, company details, colour) — see docSettingsSchema.js
+  await require('./docSettingsSchema').migrateDocSettings(conn);
+
   await conn.end();
 
   console.log(`[init-db] Database "${DB_NAME}" ready`);

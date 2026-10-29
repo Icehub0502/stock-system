@@ -1,6 +1,8 @@
 import React from 'react';
-import champpowerLogo from '../image/champpower-logo.jpg';
-import { COMPANY, amountToWords } from '../utils/printDoc';
+import { amountToWords } from '../utils/printDoc';
+import DocBrand from './DocBrand';
+import { useDocHeader } from '../hooks/useDocHeader';
+import { docThemeStyle } from '../utils/docTheme';
 import { formatMoney } from '../utils/format';
 import { highlightDeposit } from '../utils/highlightDeposit';
 import { ALL_WARRANTY_KEYWORDS } from '../utils/warrantyKeywords';
@@ -113,7 +115,10 @@ function SignatureBlock({ sellerName, customerName, docDateText, signatureDataUr
   );
 }
 
-export default function ReceiptPrintTemplate({ data }) {
+// header: optional override (the settings page previews unsaved changes); by default the signed-in shop's saved header
+export default function ReceiptPrintTemplate({ data, header: headerOverride }) {
+  const saved = useDocHeader('receipt').header;
+  const header = headerOverride || saved;
   if (!data) return null;
 
   const {
@@ -144,28 +149,20 @@ export default function ReceiptPrintTemplate({ data }) {
         const startNo = pageIndex * ITEMS_PER_PAGE;
 
         return (
-          <div className="doc-page" key={pageIndex}>
+          <div className="doc-page" key={pageIndex} style={docThemeStyle(header.accent_color)}>
             <div className="doc-original-tag">(ต้นฉบับ)</div>
 
             <header className="doc-header">
               <div className="doc-header-top">
-                <div className="doc-brand">
-                  <img className="doc-logo-big" src={champpowerLogo} alt="Champ Power" />
-                  <div className="doc-brand-info">
-                    <div className="doc-brand-name">{COMPANY.legalName}</div>
-                    <div className="doc-brand-addr">ที่อยู่ : {COMPANY.address}</div>
-                    <div className="doc-brand-addr">โทร : {COMPANY.phone}</div>
-                    <div className="doc-brand-addr">LINE : {COMPANY.line}</div>
-                  </div>
-                </div>
+                <DocBrand header={header} />
 
                 <div className="doc-title-block">
-                  <h1>ใบเสร็จรับเงิน/ใบรับประกันสินค้า</h1>
+                  <h1>{header.title || 'ใบเสร็จรับเงิน/ใบรับประกันสินค้า'}</h1>
                   <div className="doc-infobox">
                     <div className="doc-meta-row doc-meta-primary"><span>เลขที่เอกสาร :</span><strong>{receipt_no || '-'}</strong></div>
                     <div className="doc-meta-row"><span>วันที่ :</span><strong>{receipt_date ? formatThaiDate(receipt_date) : '-'}</strong></div>
                     <div className="doc-meta-row"><span>รหัสลูกค้า :</span><strong>{customer.customer_code || '-'}</strong></div>
-                    <div className="doc-meta-row"><span>PIC :</span><strong>สมุทรปราการ</strong></div>
+                    {header.branch_text && <div className="doc-meta-row"><span>PIC :</span><strong>{header.branch_text}</strong></div>}
                   </div>
                 </div>
               </div>
@@ -255,7 +252,7 @@ export default function ReceiptPrintTemplate({ data }) {
               ))}
             </div>
 
-            <SignatureBlock sellerName={COMPANY.legalName} customerName={customer.customer_name} docDateText={docDateText} signatureDataUrl={data.customer_signature} />
+            <SignatureBlock sellerName={header.company_name} customerName={customer.customer_name} docDateText={docDateText} signatureDataUrl={data.customer_signature} />
           </div>
         );
       })}

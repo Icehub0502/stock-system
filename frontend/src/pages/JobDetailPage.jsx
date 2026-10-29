@@ -5,14 +5,18 @@ import { plateWithProvince } from '../utils/thaiProvinces';
 import ProvinceSelect from '../components/ProvinceSelect';
 import ComboInput from '../components/ComboInput';
 import { jobStatusDef, MAIN_PATH } from '../utils/jobStatus';
-import { formatDbDateTime, todayStr } from '../utils/format';
+import { formatDbDateTime, formatMoney, todayStr } from '../utils/format';
 import { resizePhotos, resizeFullPhotos, describePhotoFailures, IMAGE_ACCEPT } from '../utils/resizeImage';
 import DeclineReasonModal from '../components/DeclineReasonModal';
 import ExtraBillModal from '../components/ExtraBillModal';
 import PhotoLightbox from '../components/PhotoLightbox';
 import QuotationPrintModal from '../components/QuotationPrintModal';
 import RepairWorksheetPrintModal from '../components/RepairWorksheetPrintModal';
+import CarModelPicker from '../components/CarModelPicker';
 import useRealtimeEvent from '../hooks/useRealtimeEvent';
+import useVehicleGeneration from '../hooks/useVehicleGeneration';
+import { useAuth } from '../context/AuthContext';
+import { hasRole } from '../utils/roles';
 
 /**
  * รายละเอียดงาน 1 คัน — ข้อมูลรถ/ลูกค้า, รายการอะไหล่/ใบเสนอราคา, ประวัติสถานะ
@@ -108,6 +112,165 @@ export default function JobDetailPage() {
   const [siblingQuotations, setSiblingQuotations] = useState([]);
   const [showExtraBillModal, setShowExtraBillModal] = useState(false);
 
+  // ── standard prices per vehicle generation ──────────────────────────────────
+  // The generation of the job's car decides which standard prices fill in when an item is ticked (see
+  // hooks/useVehicleGeneration.js and routes/modelPrices.routes.js). Rows keep what is known about their standard
+  // price: stdPrice / stdLabor (undefined = not checked yet, null = no standard price), priceKey (the set name a promo
+  // set's price is remembered under), setMember (a later row of a set, price 0), autoLabor (a labour line added from a
+  // standard price, not remembered on its own).
+  const { user } = useAuth();
+  const canSetStandard = hasRole(user, 'manager');
+  const gen = useVehicleGeneration({ vehicleId: job?.vehicle_id, vehicleModelId: job?.vehicle_model_id, brand: job?.brand, model: job?.model });
+  const vehicleModel = gen.vehicleModel;
+  const vehicleModelRef = useRef(null);
+  vehicleModelRef.current = vehicleModel;
+  const selectedPartsRef = useRef({});
+  selectedPartsRef.current = selectedParts;
+  const [partsNotice, setPartsNotice] = useState('');
+  const partsNoticeTimer = useRef(null);
+
+  const showPartsNotice = (text) => {
+    setPartsNotice(text);
+    clearTimeout(partsNoticeTimer.current);
+    partsNoticeTimer.current = setTimeout(() => setPartsNotice(''), 4000);
+  };
+  useEffect(() => () => clearTimeout(partsNoticeTimer.current), []);
+
+  const stdName = (item) => String(item.priceKey || item.part_name || '').trim();
+
+  // put the standard price on a row; force = also fill the price (the item was just ticked)
+  const withStandard = (item, std, force) => {
+    if (!std) return { ...item, stdPrice: null, stdLabor: null };
+    const price = Number(std.part_price);
+    const next = { ...item, stdPrice: price, stdLabor: std.labor_price != null ? Number(std.labor_price) : null };
+    if (force || item.unitPrice === '' || item.unitPrice === null || item.unitPrice === undefined) next.unitPrice = String(price);
+    return next;
+  };
+
+  // a single item was ticked: fill its standard price and add a labour line when labour is billed separately
+  const fillStandard = async (key, name) => {
+    const model = vehicleModelRef.current;
+    if (!model) return;
+    const std = await gen.lookupStandard(model.id, name);
+    const labor = std && std.labor_price != null ? Number(std.labor_price) : 0;
+    const laborKey = `labor-${key}`;
+    setSelectedParts((prev) => {
+      if (!prev[key] || prev[key].part_name !== name) return prev;
+      const next = { ...prev, [key]: withStandard(prev[key], std, true) };
+      const laborName = `ค่าแรง${name}`;
+      const hasLabor = Object.values(next).some((it) => it.autoLabor && it.part_name === laborName);
+      if (labor > 0 && !hasLabor) {
+        next[laborKey] = { part_name: `ค่าแรง${name}`, quantity: 1, unitPrice: String(labor), enabled: true, autoLabor: true };
+      }
+      return next;
+    });
+    if (labor > 0) {
+      setOrderedKeys((prev) => {
+        if (prev.includes(laborKey) || !prev.includes(key) || !selectedPartsRef.current[laborKey]) return prev;
+        const next = [...prev];
+        next.splice(prev.indexOf(key) + 1, 0, laborKey);
+        return next;
+      });
+    }
+  };
+
+  // a promo set was ticked: its price is one price for the whole set, on the first row; the other rows carry 0
+  const fillSetStandard = async (part, keys) => {
+    const model = vehicleModelRef.current;
+    if (!model) return;
+    const std = await gen.lookupStandard(model.id, part.part_name);
+    setSelectedParts((prev) => {
+      if (!prev[keys[0]]) return prev;
+      const next = { ...prev };
+      keys.forEach((k, i) => {
+        if (!next[k]) return;
+        if (i === 0) next[k] = withStandard(next[k], std, true);
+        else if (std) next[k] = { ...next[k], unitPrice: '0' };
+      });
+      return next;
+    });
+  };
+
+  // the generation became known (or the rows were loaded): check every named row
+  useEffect(() => {
+    if (itemsLoading) return undefined;
+    if (!vehicleModel) {
+      setSelectedParts((prev) => (Object.values(prev).some((it) => it.stdPrice !== undefined)
+        ? Object.fromEntries(Object.entries(prev).map(([k, it]) => [k, it.stdPrice === undefined ? it : { ...it, stdPrice: undefined, stdLabor: undefined }]))
+        : prev));
+      return undefined;
+    }
+    let cancelled = false;
+    (async () => {
+      const current = selectedPartsRef.current;
+      const names = [...new Set(Object.values(current).filter((it) => !it.autoLabor).map(stdName).filter(Boolean))];
+      const found = {};
+      for (const name of names) {
+        found[name] = await gen.lookupStandard(vehicleModel.id, name);
+        if (cancelled) return;
+      }
+      setSelectedParts((prev) => {
+        const next = { ...prev };
+        Object.keys(next).forEach((k) => {
+          const it = next[k];
+          const name = it.autoLabor ? '' : stdName(it);
+          if (name && name in found) next[k] = withStandard(it, found[name], false);
+        });
+        return next;
+      });
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [vehicleModel?.id, itemsLoading, job?.id]);
+
+  const applyStandardPrice = (key) => {
+    setSelectedParts((prev) => (prev[key] ? { ...prev, [key]: { ...prev[key], unitPrice: String(prev[key].stdPrice) } } : prev));
+  };
+
+  // a manager makes the price on a row the standard price of this generation
+  const saveStandard = async (key) => {
+    const item = selectedParts[key];
+    const price = Number(item?.unitPrice);
+    if (!vehicleModel || !item || !(price > 0)) return;
+    const name = item.priceKey || item.part_name;
+    if (item.stdPrice !== undefined && item.stdPrice !== null
+      && !window.confirm(`เปลี่ยนราคามาตรฐานของ "${name}" (${vehicleModel.display_name})\nจาก ฿${formatMoney(item.stdPrice)} เป็น ฿${formatMoney(price)}\n\nมีผลกับทุกสาขาของเจ้าของเดียวกัน ยืนยันหรือไม่?`)) return;
+    try {
+      await client.put('/model-prices', { vehicle_model_id: vehicleModel.id, item_name: name, part_price: price, is_set: Boolean(item.priceKey) });
+      gen.forgetStandards();
+      setSelectedParts((prev) => (prev[key] ? { ...prev, [key]: { ...prev[key], stdPrice: price } } : prev));
+      showPartsNotice(`จำราคา "${name}" ของ ${vehicleModel.display_name} แล้ว`);
+    } catch (err) {
+      setError(err.response?.data?.error || 'บันทึกราคามาตรฐานไม่สำเร็จ');
+    }
+  };
+
+  // what sits under a row: the standard price and the buttons to use / remember it
+  const renderPriceExtra = (key, item) => {
+    if (item.setMember && item.unitPrice === '0') return <div className="std-note jdp-std-note">รวมในราคาชุดแล้ว</div>;
+    if (!vehicleModel || item.autoLabor) return null;
+    const price = Number(item.unitPrice || 0);
+    const hasStandard = item.stdPrice !== undefined && item.stdPrice !== null;
+    if (hasStandard && price === item.stdPrice) return <div className="std-note std-note-ok jdp-std-note">ราคามาตรฐานของรุ่นนี้</div>;
+    const canRemember = canSetStandard && price > 0;
+    if (!hasStandard && !canRemember) return null;
+    return (
+      <div className="std-note jdp-std-note">
+        {hasStandard && (
+          <>
+            <span>มาตรฐาน ฿{formatMoney(item.stdPrice)}</span>
+            <button type="button" className="std-btn" onClick={() => applyStandardPrice(key)}>ใช้ราคามาตรฐาน</button>
+          </>
+        )}
+        {canRemember && (
+          <button type="button" className="std-btn" onClick={() => saveStandard(key)}>
+            {hasStandard ? 'ตั้งเป็นราคามาตรฐานใหม่' : 'จำราคานี้ให้รุ่นนี้'}
+          </button>
+        )}
+      </div>
+    );
+  };
+
   const load = async ({ silent } = {}) => {
     try {
       if (!silent) setLoading(true);
@@ -191,6 +354,9 @@ export default function JobDetailPage() {
           quantity: it.quantity,
           unitPrice: String(it.unit_price),
           enabled: true,
+          priceKey: it.price_key_name || undefined,
+          setMember: it.set_member || undefined,
+          autoLabor: it.skip_price_memory || undefined,
         };
       });
       setSelectedParts(seeded);
@@ -303,11 +469,14 @@ export default function JobDetailPage() {
               quantity: Number(comp.default_qty) > 0 ? Number(comp.default_qty) : 1,
               unitPrice: '',
               enabled: true,
+              priceKey: idx === 0 ? part.part_name : undefined,
+              setMember: idx > 0 ? true : undefined,
             };
           });
           return next;
         });
         setOrderedKeys((prev) => [...prev, ...newKeys]);
+        fillSetStandard(part, newKeys);
       } catch (err) {
         setCatalogError(err.response?.data?.error || 'โหลดรายการย่อยของชุดไม่สำเร็จ');
       }
@@ -316,18 +485,42 @@ export default function JobDetailPage() {
 
     const key = String(part.id);
     const isRemoving = Boolean(selectedParts[key]);
+    if (isRemoving) {
+      removeKeys(relatedKeys(key));
+      return;
+    }
+    setSelectedParts((prev) => ({ ...prev, [key]: { ...part, quantity: 1, unitPrice: '', enabled: true } }));
+    setOrderedKeys((prev) => [...prev, key]);
+    fillStandard(key, part.part_name);
+  }
+
+  // Removing an item takes along what the system added for it: the "ค่าแรง..." line made from its standard price,
+  // and, for the first row of a promo set, the set's other rows (the following rows marked setMember).
+  function relatedKeys(key) {
+    const item = selectedParts[key];
+    if (!item) return [key];
+    const keys = [key];
+    if (item.priceKey) {
+      const start = orderedKeys.indexOf(key);
+      for (let i = start + 1; i < orderedKeys.length && selectedParts[orderedKeys[i]]?.setMember; i += 1) keys.push(orderedKeys[i]);
+    }
+    if (!item.autoLabor && !item.setMember) {
+      const laborName = `ค่าแรง${item.part_name}`;
+      orderedKeys.forEach((k) => {
+        if (selectedParts[k]?.autoLabor && selectedParts[k].part_name === laborName) keys.push(k);
+      });
+    }
+    return keys;
+  }
+
+  function removeKeys(keys) {
+    const gone = new Set(keys);
     setSelectedParts((prev) => {
-      if (prev[key]) {
-        const next = { ...prev };
-        delete next[key];
-        return next;
-      }
-      return {
-        ...prev,
-        [key]: { ...part, quantity: 1, unitPrice: '', enabled: true },
-      };
+      const next = { ...prev };
+      keys.forEach((k) => { delete next[k]; });
+      return next;
     });
-    setOrderedKeys((prev) => (isRemoving ? prev.filter((k) => k !== key) : [...prev, key]));
+    setOrderedKeys((prev) => prev.filter((k) => !gone.has(k)));
   }
 
   function changePartQty(key, delta) {
@@ -338,12 +531,7 @@ export default function JobDetailPage() {
     if (!current) return;
     const nextQty = current.quantity + delta;
     if (nextQty <= 0) {
-      setSelectedParts((prev) => {
-        const next = { ...prev };
-        delete next[key];
-        return next;
-      });
-      setOrderedKeys((prev) => prev.filter((k) => k !== key));
+      removeKeys(relatedKeys(key));
     } else {
       setSelectedParts((prev) => ({ ...prev, [key]: { ...prev[key], quantity: nextQty } }));
     }
@@ -354,12 +542,7 @@ export default function JobDetailPage() {
   }
 
   function removeSelected(key) {
-    setSelectedParts((prev) => {
-      const next = { ...prev };
-      delete next[key];
-      return next;
-    });
-    setOrderedKeys((prev) => prev.filter((k) => k !== key));
+    removeKeys(relatedKeys(key));
   }
 
   // ปิดการมองเห็น/นับราคา — ไม่ได้ลบรายการทิ้ง แค่กันไม่ให้นับรวมยอด ใช้ตอนเสนอลูกค้า
@@ -539,6 +722,10 @@ export default function JobDetailPage() {
       product_name: p.part_name,
       quantity: p.quantity,
       unit_price: Number(p.unitPrice) || 0,
+      // for the standard-price memory: the set name a promo set's price is remembered under, rows to skip
+      price_key_name: p.priceKey || undefined,
+      set_member: p.setMember || undefined,
+      skip_price_memory: p.autoLabor ? true : undefined,
     }));
     try {
       if (job.quotation_id) {
@@ -552,6 +739,7 @@ export default function JobDetailPage() {
           symptom: quotationMeta?.symptom,
           deposit_amount: quotationMeta?.deposit_amount,
           deposit_date: quotationMeta?.deposit_date,
+          vehicle_model_id: vehicleModel ? vehicleModel.id : null,
           items,
         });
         await load();
@@ -933,6 +1121,33 @@ export default function JobDetailPage() {
           {error && <p className="error-text">{error}</p>}
           {catalogError && <p className="error-text">{catalogError}</p>}
 
+          {/* รุ่นรถของงานนี้ — ใช้หาราคามาตรฐานของรุ่น (เหมือนในฟอร์มใบเสนอราคา) */}
+          {job.vehicle_id && (
+            <div className="info-card model-price-card">
+              <div className="info-card-title">รุ่นรถสำหรับราคามาตรฐาน</div>
+              {vehicleModel ? (
+                <div className="model-price-known">
+                  <span>{vehicleModel.brand} <strong>{vehicleModel.display_name}</strong></span>
+                  <button type="button" className="btn btn-secondary" onClick={gen.clear}>เปลี่ยนรุ่น</button>
+                </div>
+              ) : gen.resolving ? (
+                <div className="receipt-subtle">กำลังหาราคามาตรฐานของรุ่นนี้...</div>
+              ) : (job.brand || job.model) ? (
+                <>
+                  <CarModelPicker brandHint={job.brand || ''} choices={gen.modelChoices} onPick={gen.pick} />
+                  {gen.previousModel && (
+                    <button type="button" className="btn btn-secondary" onClick={gen.restore}>
+                      ยกเลิก (กลับไปใช้ {gen.previousModel.display_name})
+                    </button>
+                  )}
+                </>
+              ) : (
+                <div className="receipt-subtle">งานนี้ยังไม่มียี่ห้อ/รุ่นรถ กด "แก้ไข" ที่ข้อมูลรถก่อน ระบบจะหาราคามาตรฐานของรุ่นนั้นให้</div>
+              )}
+              {partsNotice && <div className="std-note std-note-ok">{partsNotice}</div>}
+            </div>
+          )}
+
           {/* รายการที่เลือกไว้ — โชว์ตลอดไม่ว่าจะกรองหมวดหมู่ไหนอยู่ (ทั้งของเดิม
               ที่มีอยู่แล้วในใบเสนอราคา และของที่เพิ่งติ๊กเพิ่ม) แก้จำนวน/ราคา/ลบ
               ได้ตรงนี้เลย ไม่ต้องไล่หาในกริดด้านล่าง */}
@@ -1000,6 +1215,7 @@ export default function JobDetailPage() {
                         ✕
                       </button>
                     </div>
+                    {renderPriceExtra(key, item)}
                       </div>
                       {showIndicatorAfter && <div className="jdp-drag-indicator" />}
                     </React.Fragment>
