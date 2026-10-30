@@ -54,6 +54,9 @@ const devRoutes = require('./routes/dev.routes');
 const devShopsRoutes = require('./routes/devShops.routes');
 const devCatalogRoutes = require('./routes/devCatalog.routes');
 const ownerRoutes = require('./routes/owner.routes');
+const ownerStatsRoutes = require('./routes/ownerStats.routes');
+const devActivityRoutes = require('./routes/devActivity.routes');
+const { activityLogger } = require('./middleware/activityLogger');
 
 const { UPLOADS_DIR } = require('./utils/photoStorage');
 
@@ -131,6 +134,8 @@ function createApp() {
   // การเก็บ req.rawBody ด้านบน เพราะ compression ทำงานกับฝั่ง response ไม่ยุ่งกับ
   // การ parse/เก็บ raw body ของ request เลย จึงไม่กระทบการตรวจลายเซ็น LINE webhook
   app.use(compression());
+  // every change by a signed-in user is recorded for the administrator (see middleware/activityLogger.js)
+  app.use('/api', activityLogger);
 
   app.use('/api/auth', authRoutes);
   app.use('/api/stock-items', stockItemsRoutes);
@@ -167,10 +172,12 @@ function createApp() {
   app.use('/api/track', trackRoutes);
   app.use('/api/settings', settingsRoutes);
   app.use('/api/claims', claimsRoutes);
+  app.use('/api/dev/activity', devActivityRoutes);
   app.use('/api/dev', devRoutes);
   app.use('/api/dev', devShopsRoutes);
   app.use('/api/dev', devCatalogRoutes);
   app.use('/api/owner', ownerRoutes);
+  app.use('/api/owner-stats', ownerStatsRoutes);
 
   app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
   app.get('/api/landing-images', (req, res) => {

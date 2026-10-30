@@ -18,3 +18,9 @@ export function roleRank(role) {
 export function hasRole(user, minRole) {
   return !!user && roleRank(user.role) >= roleRank(minRole);
 }
+
+// An owner (not the developer account) sees the numbers only: overview, branch comparison and settings.
+// This hides menus; it does not remove any permission.
+export function isOwnerView(user) {
+  return user?.role === 'owner';
+}

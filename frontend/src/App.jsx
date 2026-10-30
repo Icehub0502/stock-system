@@ -32,6 +32,7 @@ const VehicleManagementPage = lazy(() => import("./pages/VehicleManagementPage")
 const ServiceItemManagementPage = lazy(() => import("./pages/ServiceItemManagementPage"));
 const OwnerOverviewPage = lazy(() => import("./pages/OwnerOverviewPage"));
 const ManagerPage = lazy(() => import("./pages/ManagerPage"));
+const OwnerDashboardPage = lazy(() => import("./pages/OwnerDashboardPage"));
 const DevConsole = lazy(() => import("./pages/dev/DevConsole"));
 const WarrantyManagementPage = lazy(() => import("./pages/WarrantyManagementPage"));
 const ClaimManagementPage = lazy(() => import("./pages/ClaimManagementPage"));
@@ -61,6 +62,7 @@ function Home() {
   // subdomain คิวรับรถ ไม่มีแดชบอร์ด/หน้าสแกนของระบบหลักให้ไปต่อ (ดู
   // utils/isQueueHost.js) — พาไปหน้ารายการงานแทนเสมอไม่ว่า role ไหน
   if (isQueueHost()) return <Navigate to="/jobs" replace />;
+  if (user.role === "owner") return <Navigate to="/owner" replace />;
   return hasRole(user, "office") ? (
     <Navigate to="/dashboard" replace />
   ) : (
@@ -201,6 +203,14 @@ function AppRoutes() {
             element={
               <ProtectedRoute minRole="manager">
                 <ManagerPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/owner"
+            element={
+              <ProtectedRoute minRole="owner">
+                <OwnerDashboardPage />
               </ProtectedRoute>
             }
           />

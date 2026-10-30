@@ -2,7 +2,7 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { hasRole } from '../utils/roles';
+import { hasRole, isOwnerView } from '../utils/roles';
 
 // Icons kept as inline SVG (no new asset/dependency) — small, single-color,
 // inherit currentColor so active/inactive states are pure CSS.
@@ -50,6 +50,12 @@ const OFFICE_ITEMS = [
   { to: '/scan', label: 'สแกน', icon: 'scan' },
 ];
 
+const OWNER_ITEMS = [
+  { to: '/owner', label: 'ภาพรวม', icon: 'home' },
+  { to: '/owner/overview', label: 'เทียบสาขา', icon: 'receipt' },
+  { to: '/settings', label: 'ตั้งค่า', icon: 'repair' },
+];
+
 const TECHNICIAN_ITEMS = [
   { to: '/scan', label: 'สแกน QR', icon: 'scan' },
 ];
@@ -60,7 +66,8 @@ export default function BottomNav() {
 
   if (!user) return null;
 
-  const items = hasRole(user, 'office') ? OFFICE_ITEMS : TECHNICIAN_ITEMS;
+  let items = hasRole(user, 'office') ? OFFICE_ITEMS : TECHNICIAN_ITEMS;
+  if (isOwnerView(user)) items = OWNER_ITEMS;
 
   const openDrawer = () => {
     window.dispatchEvent(new CustomEvent('open-nav-drawer'));

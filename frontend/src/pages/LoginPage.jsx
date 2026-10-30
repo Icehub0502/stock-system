@@ -30,6 +30,10 @@ export default function LoginPage() {
         navigate('/jobs');
         return;
       }
+      if (user.role === 'owner') {
+        navigate('/owner');
+        return;
+      }
       navigate(hasRole(user, 'office') ? '/dashboard' : '/scan');
     } catch (err) {
       setError(err.response?.data?.error || 'เข้าสู่ระบบไม่สำเร็จ');

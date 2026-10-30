@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { NavLink, Route, Routes } from 'react-router-dom';
 import client from '../../api/client';
+import DevActivity from './DevActivity';
 import DevCatalog from './DevCatalog';
 import DevOverview, { DevAudit } from './DevOverview';
 import DevShops, { DevUsers } from './DevShops';
@@ -12,7 +13,8 @@ const SECTIONS = [
   { to: '/dev/users', label: 'ผู้ใช้ทุกร้าน' },
   { to: '/dev/catalog', label: 'สมุดรุ่นรถ / ราคากลาง', badge: 'pending' },
   { to: '/dev/trash', label: 'รายการที่ถูกลบ' },
-  { to: '/dev/audit', label: 'บันทึกการทำงาน' },
+  { to: '/dev/activity', label: 'กิจกรรมผู้ใช้' },
+  { to: '/dev/audit', label: 'บันทึกการทำงาน (แอดมิน)' },
 ];
 
 // Platform console: a page of its own (side menu) so it is not mixed with the daily shop menus.
@@ -42,6 +44,7 @@ export default function DevConsole() {
           <Route path="users" element={<DevUsers />} />
           <Route path="catalog" element={<DevCatalog onChanged={loadPending} />} />
           <Route path="trash" element={<DevTrash />} />
+          <Route path="activity" element={<DevActivity />} />
           <Route path="audit" element={<DevAudit />} />
         </Routes>
       </main>

@@ -3,7 +3,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import ChangePasswordModal from "./ChangePasswordModal";
-import { hasRole, ROLE_LABEL } from "../utils/roles";
+import { hasRole, isOwnerView, ROLE_LABEL } from "../utils/roles";
 import { BranchSwitcher } from "./BranchSwitcher";
 
 const NAV_CATEGORIES = [
@@ -129,7 +129,10 @@ export default function NavBar() {
       {menuOpen && <div className="navbar-drawer-backdrop" onClick={close} />}
 
       <div className={`navbar-links ${menuOpen ? "open" : ""}`}>
-        {hasRole(user, "office") && (
+        {isOwnerView(user) && (
+          <Link to="/owner" className={`navbar-standalone-link ${location.pathname === "/owner" ? "active" : ""}`} onClick={close}>ภาพรวม</Link>
+        )}
+        {hasRole(user, "office") && !isOwnerView(user) && (
           <Link
             to="/dashboard"
             className={`navbar-standalone-link ${location.pathname === "/dashboard" ? "active" : ""}`}
@@ -138,7 +141,7 @@ export default function NavBar() {
             แดชบอร์ด
           </Link>
         )}
-        {hasRole(user, "office") &&
+        {hasRole(user, "office") && !isOwnerView(user) &&
           NAV_CATEGORIES.map((cat) => (
             <div
               className={`navbar-category ${openCategory === cat.key ? "open" : ""} ${isCategoryActive(cat.items) ? "active" : ""}`}
@@ -167,12 +170,12 @@ export default function NavBar() {
             </div>
           ))}
 
-        <Link to="/scan" className="navbar-standalone-link" onClick={close}>สแกน QR</Link>
-        {hasRole(user, "manager") && (
+        {!isOwnerView(user) && <Link to="/scan" className="navbar-standalone-link" onClick={close}>สแกน QR</Link>}
+        {hasRole(user, "manager") && !isOwnerView(user) && (
           <Link to="/manager" className={`navbar-standalone-link ${location.pathname === "/manager" ? "active" : ""}`} onClick={close}>หน้าผู้จัดการ</Link>
         )}
         {hasRole(user, "owner") && (
-          <Link to="/owner/overview" className={`navbar-standalone-link ${location.pathname === "/owner/overview" ? "active" : ""}`} onClick={close}>ภาพรวมทุกสาขา</Link>
+          <Link to="/owner/overview" className={`navbar-standalone-link ${location.pathname === "/owner/overview" ? "active" : ""}`} onClick={close}>{isOwnerView(user) ? "เทียบสาขา" : "ภาพรวมทุกสาขา"}</Link>
         )}
         {hasRole(user, "dev") && (
           <Link to="/dev" className={`navbar-standalone-link ${location.pathname.startsWith("/dev") ? "active" : ""}`} onClick={close}>🛠️ จัดการระบบ</Link>

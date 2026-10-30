@@ -104,3 +104,4 @@ router.get('/overview', async (req, res) => {
 });
 
 module.exports = router;
+module.exports.resolveGroupId = resolveGroupId; // owner stats use the same group rule
