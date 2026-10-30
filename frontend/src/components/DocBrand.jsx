@@ -17,7 +17,7 @@ export default function DocBrand({ header }) {
         {header.company_name && <div className="doc-brand-name">{header.company_name}</div>}
         {header.address && (
           <div className="doc-brand-addr doc-brand-addr-hang">
-            <span className="doc-addr-label">ที่อยู่ :</span>{header.address}
+            ที่อยู่ : {header.address}
           </div>
         )}
         {(header.phone || header.line_id) && (
