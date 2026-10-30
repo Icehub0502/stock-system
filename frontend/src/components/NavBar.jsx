@@ -44,6 +44,7 @@ const NAV_CATEGORIES = [
     items: [
       { to: "/receipt-list", label: "ใบเสร็จรับเงิน" },
       { to: "/quotations", label: "ใบเสนอราคา" },
+      { to: "/vehicle-history", label: "ประวัติรถ" },
       { to: "/appointments", label: "ลูกค้าที่นัดหมาย" },
       { to: "/quotations/declined-summary", label: "สรุปลูกค้าไม่ได้ทำ" },
       { to: "/model-prices", label: "ราคามาตรฐานตามรุ่นรถ", min: "manager" },
@@ -166,8 +167,10 @@ export default function NavBar() {
             </div>
           ))}
 
-        <Link to="/repair-notices" className="navbar-standalone-link" onClick={close}>ใบแจ้งซ่อม</Link>
         <Link to="/scan" className="navbar-standalone-link" onClick={close}>สแกน QR</Link>
+        {hasRole(user, "manager") && (
+          <Link to="/manager" className={`navbar-standalone-link ${location.pathname === "/manager" ? "active" : ""}`} onClick={close}>หน้าผู้จัดการ</Link>
+        )}
         {hasRole(user, "owner") && (
           <Link to="/owner/overview" className={`navbar-standalone-link ${location.pathname === "/owner/overview" ? "active" : ""}`} onClick={close}>ภาพรวมทุกสาขา</Link>
         )}

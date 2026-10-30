@@ -31,6 +31,7 @@ const CustomerManagementPage = lazy(() => import("./pages/CustomerManagementPage
 const VehicleManagementPage = lazy(() => import("./pages/VehicleManagementPage"));
 const ServiceItemManagementPage = lazy(() => import("./pages/ServiceItemManagementPage"));
 const OwnerOverviewPage = lazy(() => import("./pages/OwnerOverviewPage"));
+const ManagerPage = lazy(() => import("./pages/ManagerPage"));
 const DevConsole = lazy(() => import("./pages/dev/DevConsole"));
 const WarrantyManagementPage = lazy(() => import("./pages/WarrantyManagementPage"));
 const ClaimManagementPage = lazy(() => import("./pages/ClaimManagementPage"));
@@ -38,8 +39,7 @@ const ProductCostPage = lazy(() => import("./pages/ProductCostPage"));
 const ModelPricesPage = lazy(() => import("./pages/ModelPricesPage"));
 const DocHeaderSettingsPage = lazy(() => import("./pages/DocHeaderSettingsPage"));
 const DailySalesSummaryPage = lazy(() => import("./pages/DailySalesSummaryPage"));
-const RepairNoticeListPage = lazy(() => import("./pages/RepairNoticeListPage"));
-const RepairNoticePage = lazy(() => import("./pages/RepairNoticePage"));
+const VehicleServiceHistoryPage = lazy(() => import("./pages/VehicleServiceHistoryPage"));
 const StockDeductionPage = lazy(() => import("./pages/StockDeductionPage"));
 const StockUsageReportPage = lazy(() => import("./pages/StockUsageReportPage"));
 const SettingsPage = lazy(() => import("./pages/SettingsPage"));
@@ -197,6 +197,14 @@ function AppRoutes() {
             }
           />
           <Route
+            path="/manager"
+            element={
+              <ProtectedRoute minRole="manager">
+                <ManagerPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
             path="/owner/overview"
             element={
               <ProtectedRoute minRole="owner">
@@ -285,26 +293,18 @@ function AppRoutes() {
             }
           />
           <Route
-            path="/repair-notices"
+            path="/vehicle-history"
             element={
-              <ProtectedRoute roles={["office", "technician"]}>
-                <RepairNoticeListPage />
+              <ProtectedRoute roles={["office"]}>
+                <VehicleServiceHistoryPage />
               </ProtectedRoute>
             }
           />
           <Route
-            path="/repair-notices/new"
+            path="/vehicle-history/:id"
             element={
-              <ProtectedRoute roles={["office", "technician"]}>
-                <RepairNoticePage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/repair-notices/:id"
-            element={
-              <ProtectedRoute roles={["office", "technician"]}>
-                <RepairNoticePage />
+              <ProtectedRoute roles={["office"]}>
+                <VehicleServiceHistoryPage />
               </ProtectedRoute>
             }
           />

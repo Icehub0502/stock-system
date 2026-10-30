@@ -423,11 +423,6 @@ export default function QuotationListPage() {
                       </td>
                       <td data-label="สถานะ">
                         <StatusBadge status={q.status} scheduledDate={q.scheduled_date} closedAt={q.closed_at} />
-                        {Number(q.repair_notice_filled) === 1 ? (
-                          <span className="status-badge status-badge-success" style={{ marginTop: 4, display: 'inline-block' }}>🔧 แจ้งซ่อมแล้ว</span>
-                        ) : (
-                          <span className="status-badge status-badge-neutral" style={{ marginTop: 4, display: 'inline-block' }}>🔧 ยังไม่กรอกแจ้งซ่อม</span>
-                        )}
                         {q.customer_signature ? (
                           <span className="status-badge status-badge-success" style={{ marginTop: 4, display: 'inline-block' }}>✍️ เซ็นแล้ว</span>
                         ) : (

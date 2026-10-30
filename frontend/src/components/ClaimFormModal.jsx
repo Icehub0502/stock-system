@@ -92,7 +92,7 @@ export default function ClaimFormModal({ claim, onClose, onSaved }) {
     searchTimer.current = setTimeout(async () => {
       setSearching(true);
       try {
-        const res = await client.get('/repair-notices/vehicle-search', { params: { search: value } });
+        const res = await client.get('/claims/vehicle-search', { params: { search: value } });
         setVehicleResults(res.data.data || []);
       } catch (err) {
         console.error('Error searching vehicles:', err);

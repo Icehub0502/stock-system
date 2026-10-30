@@ -4,7 +4,7 @@ import { formatBytes, formatDateTime } from './DevOverview';
 
 const ENTITY_FILTERS = [
   ['', 'ทุกประเภท'], ['customers', 'ลูกค้า'], ['vehicles', 'รถ'], ['jobs', 'งาน/คิว'], ['quotations', 'ใบเสนอราคา'],
-  ['receipts', 'ใบเสร็จ'], ['claims', 'เคลม'], ['repair_notices', 'ใบแจ้งซ่อม'], ['warranties', 'การรับประกัน'], ['technicians', 'ช่าง'],
+  ['receipts', 'ใบเสร็จ'], ['claims', 'เคลม'], ['warranties', 'การรับประกัน'], ['technicians', 'ช่าง'],
 ];
 
 // Fields worth showing in the detail view, in this order; the rest of the row is still there when restoring

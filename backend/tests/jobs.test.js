@@ -11,6 +11,9 @@ function todayStr() {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
+// photos are stored as files and the table keeps their URL
+const PHOTO_URL = /^\/uploads\/job-photos\/[\w-]+\.png$/;
+
 describe('POST /api/jobs — รูปตอนสร้างงาน รองรับทั้ง {full, thumb} และ string เดิม', () => {
   let token;
   let fixture;
@@ -46,8 +49,9 @@ describe('POST /api/jobs — รูปตอนสร้างงาน รอ�
       'SELECT photo_data, photo_thumb_data FROM job_photos WHERE job_id = ?',
       [createRes.body.id]
     );
-    expect(photo.photo_data).toBe(fullPng);
-    expect(photo.photo_thumb_data).toBe(thumbPng);
+    expect(photo.photo_data).toMatch(PHOTO_URL);
+    expect(photo.photo_thumb_data).toMatch(PHOTO_URL);
+    expect(photo.photo_thumb_data).not.toBe(photo.photo_data);
 
     await pool.execute('DELETE FROM jobs WHERE id = ?', [createRes.body.id]);
   });
@@ -70,7 +74,7 @@ describe('POST /api/jobs — รูปตอนสร้างงาน รอ�
       'SELECT photo_data, photo_thumb_data FROM job_photos WHERE job_id = ?',
       [createRes.body.id]
     );
-    expect(photo.photo_data).toBe(fullPng);
+    expect(photo.photo_data).toMatch(PHOTO_URL);
     expect(photo.photo_thumb_data).toBeNull();
 
     await pool.execute('DELETE FROM jobs WHERE id = ?', [createRes.body.id]);
@@ -514,7 +518,13 @@ describe('POST/DELETE/PATCH /api/jobs/:id/photos — เพิ่ม/ลบ/จ�
       .set('Authorization', `Bearer ${token}`)
       .send();
     const listedJob = listRes.body.data.find((j) => j.id === jobId);
-    expect(listedJob.photo_thumb).toBe(thumbPng);
+    const [[stored]] = await pool.query(
+      "SELECT photo_data, photo_thumb_data FROM job_photos WHERE job_id = ? ORDER BY id DESC LIMIT 1",
+      [jobId]
+    );
+    expect(stored.photo_thumb_data).toMatch(PHOTO_URL);
+    expect(listedJob.photo_thumb).toBe(stored.photo_thumb_data);
+    expect(listedJob.photo_thumb).not.toBe(stored.photo_data);
   });
 
   test('ส่งรูปแบบ string ธรรมดา (ไม่มี thumb) → GET /jobs ใช้รูปเต็มแทน (fallback ย้อนหลังให้รูปเก่ายังโชว์ได้)', async () => {
@@ -530,7 +540,12 @@ describe('POST/DELETE/PATCH /api/jobs/:id/photos — เพิ่ม/ลบ/จ�
       .set('Authorization', `Bearer ${token}`)
       .send();
     const listedJob = listRes.body.data.find((j) => j.id === jobId);
-    expect(listedJob.photo_thumb).toBe(fullPng);
+    const [[stored]] = await pool.query(
+      "SELECT photo_data FROM job_photos WHERE job_id = ? ORDER BY id DESC LIMIT 1",
+      [jobId]
+    );
+    expect(stored.photo_data).toMatch(PHOTO_URL);
+    expect(listedJob.photo_thumb).toBe(stored.photo_data);
   });
 });
 

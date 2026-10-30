@@ -28,7 +28,6 @@ const ENTITIES = {
   quotations: { type: 'ใบเสนอราคา', label: (r) => r.quotation_no },
   receipts: { type: 'ใบเสร็จ', label: (r) => r.receipt_no },
   claims: { type: 'เคลม', label: (r) => r.claim_no },
-  repair_notices: { type: 'ใบแจ้งซ่อม', label: (r) => r.code },
   warranties: { type: 'การรับประกัน', label: (r) => r.warranty_name },
   technicians: { type: 'ช่าง', label: (r) => r.name },
 };

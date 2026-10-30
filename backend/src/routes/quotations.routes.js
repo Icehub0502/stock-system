@@ -25,37 +25,11 @@ router.use(authenticate);
 // endpoint พวกนี้เลย กันไม่ให้ยิง API ตรง ๆ ข้ามการล็อกฝั่ง UI ไปแก้ไข/ลบ/อนุมัติได้)
 router.use(requireRole('office'));
 
-// ใบแจ้งซ่อมถือว่า "กรอกแล้ว" ก็ต่อเมื่อมีเนื้อหาจริง (ติ๊กอย่างน้อย 1 ช่อง,
-// กรอกหมายเหตุ/other, หรือกรอกชื่อผู้ตรวจ/ช่างซ่อม) ไม่ใช่แค่เคยกดบันทึกแล้ว —
-// เพราะฟอร์มส่ง checklist แบบเต็มโครงสร้าง (ทุกช่องเป็น false) กลับมาเสมอแม้ไม่ได้
-// ติ๊กอะไรเลย ถ้าเช็คแค่ checklist <> '{}' จะกลายเป็น false positive ทันทีที่กดบันทึก
-function hasCheckedContent(node) {
-  if (node == null) return false;
-  if (typeof node === 'boolean') return node === true;
-  if (typeof node === 'string') return node.trim() !== '';
-  if (typeof node === 'object') {
-    return Object.values(node).some(hasCheckedContent);
-  }
-  return false;
-}
-
-function isRepairNoticeFilled(checklistRaw, checkedBy, repairedBy) {
-  if ((checkedBy && checkedBy.trim()) || (repairedBy && repairedBy.trim())) return true;
-  if (!checklistRaw) return false;
-  let checklist;
-  try {
-    checklist = typeof checklistRaw === 'string' ? JSON.parse(checklistRaw) : checklistRaw;
-  } catch {
-    return false;
-  }
-  return hasCheckedContent(checklist);
-}
-
 // Generate quotation number (IV260630001)
 // conn: รับ connection ของ transaction ที่กำลังสร้างใบเสนอราคาอยู่ (ถ้ามี) — ใช้
 // FOR UPDATE ล็อกแถวที่อ่านไว้จนกว่า transaction นั้นจะ commit กัน 2 คำขอพร้อมกัน
 // อ่าน MAX เดิมแล้วได้เลขซ้ำกัน (ดูจุดเดียวกันใน generateReceiptNo/
-// generateCustomerCode/generateRepairNoticeCode ด้านล่าง และ generateQuotationNo
+// generateCustomerCode ด้านล่าง และ generateQuotationNo
 // ใน lineWebhook.routes.js) ไม่มี conn ส่งมา (เช่น route /next-no ที่แค่พรีวิว
 // เลขไว้ดู ไม่ได้ insert จริง) ใช้ pool เฉย ๆ ไม่ต้องล็อกอะไร
 async function generateQuotationNo(conn, shopId) {
@@ -115,19 +89,6 @@ async function generateCustomerCode(conn, shopId) {
   );
   const nextNumber = (rows[0]?.maxCode || 0) + 1;
   return `CMM-${String(nextNumber).padStart(4, '0')}`;
-}
-
-// Mirrors generateCode() in repairNotices.routes.js — creating a quotation now
-// auto-creates its repair notice in the same transaction, so it needs the same
-// "RN-####" numbering scheme.
-async function generateRepairNoticeCode(conn, shopId) {
-  // FOR UPDATE เหตุผลเดียวกับตัวสร้างเลขเอกสารด้านบน
-  const [rows] = await conn.execute(
-    "SELECT MAX(CAST(SUBSTRING(code, 4) AS UNSIGNED)) AS maxNo FROM repair_notices WHERE shop_id = ? AND code LIKE 'RN-%' FOR UPDATE",
-    [shopId]
-  );
-  const nextNumber = (rows[0]?.maxNo || 0) + 1;
-  return `RN-${String(nextNumber).padStart(4, '0')}`;
 }
 
 router.get('/next-no', async (req, res) => {
@@ -297,21 +258,6 @@ router.post('/', async (req, res) => {
       );
     }
 
-    // Auto-create an (empty) repair notice for this quotation right away, so the
-    // vehicle appears on the repair-notice list the moment the quotation is
-    // created — no waiting for approval. An empty '{}' checklist is filled in
-    // later by whoever ticks what needs repair (normalizeChecklist handles the
-    // empty shape on read). repair_notice_filled in the list query flips once
-    // it has real content, which is how the UI shows "already filled".
-    if (selectedVehicleId) {
-      const rnCode = await generateRepairNoticeCode(conn, req.shopId);
-      await conn.execute(
-        `INSERT INTO repair_notices (shop_id, code, customer_id, vehicle_id, quotation_id, notice_date, checklist)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [req.shopId, rnCode, selectedCustomerId, selectedVehicleId, quotation_id, quotation_date, '{}']
-      );
-    }
-
     await conn.commit();
 
     // prices staff typed + the car's generation, for the standard price list (advisory: never blocks saving)
@@ -363,8 +309,6 @@ router.get('/', async (req, res) => {
               q.decline_note, (q.customer_signature IS NOT NULL) AS customer_signature,
               c.customer_name, c.customer_code, c.phone,
               v.brand, v.model, v.color, v.license_plate, v.province,
-              rn.id AS repair_notice_id, rn.checklist AS repair_notice_checklist,
-              rn.checked_by AS repair_notice_checked_by, rn.repaired_by AS repair_notice_repaired_by,
               -- เฉพาะงานที่ "ยังเปิดอยู่" เท่านั้น — ใบที่ลูกค้ามัดจำแล้วขับรถกลับไป
               -- (งานเดิมจบเป็น carout) ต้องกด "สร้างคิว" ใหม่ได้อีกตอนกลับมาทำจริง
               -- ไม่ใช่โดนล็อกให้ไปหน้างานเก่าที่ปิดไปแล้ว
@@ -374,24 +318,13 @@ router.get('/', async (req, res) => {
        FROM quotations q
        LEFT JOIN customers c ON q.customer_id = c.id
        LEFT JOIN vehicles v ON q.vehicle_id = v.id
-       LEFT JOIN repair_notices rn ON rn.quotation_id = q.id
        WHERE q.shop_id = ?
        ORDER BY q.created_at DESC
        LIMIT 5000`,
       [req.shopId]
     );
 
-    const data = rows.map((row) => {
-      const { repair_notice_checklist, repair_notice_checked_by, repair_notice_repaired_by, ...rest } = row;
-      return {
-        ...rest,
-        repair_notice_filled: isRepairNoticeFilled(
-          repair_notice_checklist,
-          repair_notice_checked_by,
-          repair_notice_repaired_by
-        ),
-      };
-    });
+    const data = rows;
 
     res.json({
       success: true,
@@ -725,22 +658,6 @@ router.patch('/:id/approve', async (req, res) => {
     // งานเลยค้างเป็น carout ทั้งที่จริงอนุมัติ+ออกใบเสร็จไปแล้ว) — ดูรายละเอียดเงื่อนไข
     // ที่ syncJobOnQuotationStatusChange ด้านล่างไฟล์
     const linkedJob = await syncJobOnQuotationStatusChange(conn, req.shopId, id, 'approved', req.user.id);
-
-    // ใบเสนอราคาปกติที่สร้างจากหน้าเว็บมีใบแจ้งซ่อมคู่กันมาตั้งแต่ตอนสร้างแล้ว
-    // (ดู POST / ด้านบน) แต่ใบที่บอทไลน์สร้างตั้งใจไม่สร้างใบแจ้งซ่อมให้ทันที —
-    // รอถึงตอนอนุมัติแบบนี้ค่อยสร้าง (หน้างานได้ตรวจสอบร่างจากไลน์ก่อนแล้ว)
-    const [existingNotice] = await conn.execute(
-      'SELECT id FROM repair_notices WHERE quotation_id = ? AND shop_id = ? LIMIT 1',
-      [id, req.shopId]
-    );
-    if (existingNotice.length === 0) {
-      const rnCode = await generateRepairNoticeCode(conn, req.shopId);
-      await conn.execute(
-        `INSERT INTO repair_notices (shop_id, code, customer_id, vehicle_id, quotation_id, notice_date, checklist)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        [req.shopId, rnCode, quotation.customer_id, quotation.vehicle_id, id, quotation.quotation_date, '{}']
-      );
-    }
 
     await conn.commit();
 
@@ -1184,6 +1101,5 @@ module.exports = router;
 module.exports.generateQuotationNo = generateQuotationNo; // ให้ jobs.routes.js ใช้เลขที่ชุดเดียวกันตอนโปรโมท quote_draft เป็นใบเสนอราคาจริง
 module.exports.generateReceiptNo = generateReceiptNo; // ให้ jobs.routes.js สร้างใบเสร็จตอนอนุมัติ ด้วยตรรกะออกเลขเดียวกับ /:id/approve
 module.exports.generateCarSequenceNo = generateCarSequenceNo; // เหตุผลเดียวกับ generateReceiptNo ด้านบน
-module.exports.generateRepairNoticeCode = generateRepairNoticeCode; // ให้ jobs.routes.js สร้างใบแจ้งซ่อมคู่กันเหมือน POST /quotations เดิม
 module.exports.buildValidItems = buildValidItems; // ให้ jobs.routes.js กรองรายการจาก quote_draft ด้วยกติกาเดียวกัน
 module.exports.findInvalidItems = findInvalidItems; // ให้ jobs.routes.js ตรวจสอบ quote_draft.items ก่อนโปรโมท

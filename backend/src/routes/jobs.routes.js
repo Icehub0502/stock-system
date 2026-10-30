@@ -18,7 +18,7 @@ const { recordQuotationPrices } = require('../utils/modelPrices');
 // เอกสาร/กติกากรองรายการแยกกันเป็น 2 ชุดที่อาจเพี้ยนไม่ตรงกันในอนาคต (ดู
 // promoteDraftToQuotation ด้านล่าง ที่ใช้ตอน "โปรโมท" quote_draft เป็นใบเสนอราคาจริง)
 const {
-  generateQuotationNo, generateReceiptNo, generateRepairNoticeCode, generateCarSequenceNo,
+  generateQuotationNo, generateReceiptNo, generateCarSequenceNo,
   buildValidItems, findInvalidItems,
 } = require('./quotations.routes');
 
@@ -1049,17 +1049,6 @@ async function promoteDraftToQuotation(conn, shopId, job, { status, scheduledDat
       `INSERT INTO quotation_items (quotation_id, product_id, product_name, quantity, unit_price, warranty_name, warranty_year, warranty_month, warranty_km)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [quotation_id, null, item.product_name, parseInt(item.quantity || 1), parseFloat(item.unit_price || 0), null, 0, 0, 0]
-    );
-  }
-
-  // ใบแจ้งซ่อมคู่กัน เหมือน POST /quotations เดิม — สร้างตอนโปรโมทนี้เลย ไม่ต้องรอ
-  // ขั้นอนุมัติ (รถขึ้นทะเบียนในหน้าใบแจ้งซ่อมได้ทันทีที่มีใบเสนอราคาจริงแล้ว)
-  if (job.vehicle_id) {
-    const rnCode = await generateRepairNoticeCode(conn, shopId);
-    await conn.execute(
-      `INSERT INTO repair_notices (shop_id, code, customer_id, vehicle_id, quotation_id, notice_date, checklist)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [shopId, rnCode, job.customer_id, job.vehicle_id, quotation_id, todayStr(), '{}']
     );
   }
 

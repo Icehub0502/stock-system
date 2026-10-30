@@ -1174,7 +1174,7 @@ describe('POST /api/line/webhook', () => {
       expect(receiptItems).toHaveLength(2);
 
       const [notices] = await pool.query('SELECT id FROM repair_notices WHERE quotation_id = ?', [quotation.id]);
-      expect(notices).toHaveLength(1); // อนุมัติเองแล้วต้องได้ใบแจ้งซ่อมคู่กันเหมือนอนุมัติผ่านเว็บ
+      expect(notices).toHaveLength(0); // the old repair notice form is gone: nothing is created on approval
     });
 
     test('วลีแจ้งจ่ายเงินแล้ว พร้อมมัดจำ (ยอดที่ต้องชำระ > 0) → ยอดใบเสร็จ = มัดจำ + ยอดที่จ่ายปิดบิลจริง', async () => {

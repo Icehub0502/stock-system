@@ -299,17 +299,6 @@ async function generateCarSequenceNo(conn, shopId = LINE_SHOP_ID) {
   return shopId === 1 && nextNumber < 1396 ? 1396 : nextNumber;
 }
 
-// Mirrors quotations.routes.js's generateRepairNoticeCode() — ใบเสนอราคาที่บอท
-// อนุมัติเองต้องได้ใบแจ้งซ่อมคู่กันเหมือนอนุมัติผ่านหน้าเว็บทุกประการ
-async function generateRepairNoticeCode(conn, shopId = LINE_SHOP_ID) {
-  const [rows] = await conn.execute(
-    "SELECT MAX(CAST(SUBSTRING(code, 4) AS UNSIGNED)) AS maxNo FROM repair_notices WHERE shop_id = ? AND code LIKE 'RN-%' FOR UPDATE",
-    [shopId]
-  );
-  const nextNumber = (rows[0]?.maxNo || 0) + 1;
-  return `RN-${String(nextNumber).padStart(4, '0')}`;
-}
-
 function todayStr() {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -976,21 +965,6 @@ async function createQuotationFromQueue(parsed) {
           // ถ้าใบนี้ผูกกับงานในหน้าคิวที่ยังไม่ถูกตัดสินใจไปทางไหน — ดันสถานะงานตามด้วย
           // (บั๊กเดียวกับที่เจอตอนอนุมัติผ่านหน้าเว็บ — ดู syncJobOnQuotationStatusChange)
           syncedJob = await syncJobOnQuotationStatusChange(conn, LINE_SHOP_ID, quotationId, 'approved', null);
-          // ใบเสนอราคาปกติที่สร้างจากหน้าเว็บมีใบแจ้งซ่อมคู่กันมาตั้งแต่ตอนสร้างแล้ว
-          // แต่ใบที่บอทไลน์สร้างไม่มี (รอถึงตอนอนุมัติ) — อนุมัติเองตรงนี้ก็ต้องสร้าง
-          // ใบแจ้งซ่อมให้ครบเหมือนอนุมัติผ่านเว็บทุกประการ
-          const [existingNotice] = await conn.execute(
-            'SELECT id FROM repair_notices WHERE quotation_id = ? AND shop_id = ? LIMIT 1',
-            [quotationId, LINE_SHOP_ID]
-          );
-          if (existingNotice.length === 0) {
-            const rnCode = await generateRepairNoticeCode(conn);
-            await conn.execute(
-              `INSERT INTO repair_notices (shop_id, code, customer_id, vehicle_id, quotation_id, notice_date, checklist)
-               VALUES (?, ?, ?, ?, ?, ?, ?)`,
-              [LINE_SHOP_ID, rnCode, customerId, vehicleId, quotationId, quotationDate, '{}']
-            );
-          }
           paymentReceiptNo = receipt_no;
           paymentClosed = true;
           closedReceiptId = receiptId;
@@ -1215,19 +1189,6 @@ async function closeQuotationByQueue(parsed) {
       // ถ้าใบนี้ผูกกับงานในหน้าคิวที่ยังไม่ถูกตัดสินใจไปทางไหน — ดันสถานะงานตามด้วย
       // (บั๊กเดียวกับที่เจอตอนอนุมัติผ่านหน้าเว็บ — ดู syncJobOnQuotationStatusChange)
       syncedJob = await syncJobOnQuotationStatusChange(conn, LINE_SHOP_ID, quotation.id, 'approved', null);
-      // ใบแจ้งซ่อมคู่กัน เหมือนอนุมัติผ่านเว็บ/ผ่าน createQuotationFromQueue ทุกประการ
-      const [existingNotice] = await conn.execute(
-        'SELECT id FROM repair_notices WHERE quotation_id = ? AND shop_id = ? LIMIT 1',
-        [quotation.id, LINE_SHOP_ID]
-      );
-      if (existingNotice.length === 0) {
-        const rnCode = await generateRepairNoticeCode(conn);
-        await conn.execute(
-          `INSERT INTO repair_notices (shop_id, code, customer_id, vehicle_id, quotation_id, notice_date, checklist)
-           VALUES (?, ?, ?, ?, ?, ?, ?)`,
-          [LINE_SHOP_ID, rnCode, quotation.customer_id, quotation.vehicle_id, quotation.id, quotationDate, '{}']
-        );
-      }
     }
 
     await conn.execute('UPDATE quotations SET closed_at = NOW() WHERE id = ? AND shop_id = ?', [quotation.id, LINE_SHOP_ID]);

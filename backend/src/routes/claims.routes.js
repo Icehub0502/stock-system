@@ -8,10 +8,8 @@ const router = express.Router();
 router.use(authenticate);
 router.use(requireRole('office'));
 
-// เลขที่เคลม CLM-YYMMDD-NNN ผูกกับวันที่ (ไม่ใช่เลขวิ่งรวมทั้งระบบเหมือน
-// repair_notices) เพราะ "วันนี้เคลมใบที่เท่าไหร่" เป็นข้อมูลที่มีความหมายกับหน้างาน
-// มากกว่าเลขวิ่งเปล่า ๆ — FOR UPDATE ล็อกกันคำขอพร้อมกันได้เลขซ้ำ (เหมือน
-// generateCode ใน repairNotices.routes.js)
+// Claim number CLM-YYMMDD-NNN: bound to the date (not a running number) because "which claim of today is this" means more
+// to the shop floor than a bare counter. FOR UPDATE stops two concurrent requests from taking the same number.
 async function generateClaimNo(conn, shopId) {
   const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '').slice(2); // YYMMDD
   const prefix = `CLM-${dateStr}-`;
@@ -22,6 +20,35 @@ async function generateClaimNo(conn, shopId) {
   const nextNumber = (rows[0]?.maxNo || 0) + 1;
   return `${prefix}${String(nextNumber).padStart(3, '0')}`;
 }
+
+// Vehicle lookup for the claim form (words match brand / model / plate / customer separately)
+router.get('/vehicle-search', async (req, res) => {
+  try {
+    const { search } = req.query;
+    if (!search || !search.trim()) return res.json({ success: true, data: [] });
+    // Split into words so "Toyota Revo" matches brand="Toyota" AND
+    // model="Revo" separately — a single LIKE '%Toyota Revo%' would never
+    // match since those live in different columns.
+    const words = search.trim().split(/\s+/).filter(Boolean);
+    const perWordClause = 'v.license_plate LIKE ? OR v.brand LIKE ? OR v.model LIKE ? OR c.customer_name LIKE ? OR c.phone LIKE ? OR c.customer_code LIKE ?';
+    const whereClause = words.map(() => `(${perWordClause})`).join(' AND ');
+    const params = [req.shopId, ...words.flatMap((w) => Array(6).fill(`%${w}%`))];
+    const [rows] = await pool.execute(
+      `SELECT v.id AS vehicle_id, v.brand, v.model, v.color, v.license_plate, v.mileage,
+              c.id AS customer_id, c.customer_name, c.customer_code, c.phone
+       FROM vehicles v
+       JOIN customers c ON v.customer_id = c.id
+       WHERE v.shop_id = ? AND ${whereClause}
+       ORDER BY v.created_at DESC
+       LIMIT 20`,
+      params
+    );
+    res.json({ success: true, data: rows });
+  } catch (err) {
+    console.error('Error searching vehicles:', err);
+    res.status(500).json({ error: 'ค้นหารถไม่สำเร็จ' });
+  }
+});
 
 router.get('/next-code', async (req, res) => {
   try {

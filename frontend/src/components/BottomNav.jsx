@@ -52,20 +52,13 @@ const OFFICE_ITEMS = [
 
 const TECHNICIAN_ITEMS = [
   { to: '/scan', label: 'สแกน QR', icon: 'scan' },
-  { to: '/repair-notices', label: 'ใบแจ้งซ่อม', icon: 'repair' },
 ];
-
-// Pages that already own a fixed bottom bar of their own (repair notice
-// checklist's save bar) — stacking two fixed footers would overlap and
-// cover each other's tap targets.
-const HIDDEN_ON = ['/repair-notices/new'];
 
 export default function BottomNav() {
   const { user } = useAuth();
   const location = useLocation();
 
   if (!user) return null;
-  if (HIDDEN_ON.some((p) => location.pathname.startsWith(p))) return null;
 
   const items = hasRole(user, 'office') ? OFFICE_ITEMS : TECHNICIAN_ITEMS;
 

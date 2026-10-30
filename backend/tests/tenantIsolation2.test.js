@@ -353,22 +353,11 @@ describe('claims, repair notices, catalogues', () => {
     expect(next.body.claim_no).toMatch(/-001$/);
   });
 
-  test('repair notices', async () => {
-    const mk = await request(app).post('/api/repair-notices').set(as(tokenA)).send({ vehicle_id: fxA.vehicleId, customer_id: fxA.customerId, checklist: {} });
-    expect(mk.status).toBe(201);
-    const id = mk.body.id;
-    expect((await request(app).get(`/api/repair-notices/${id}`).set(as(tokenB))).status).toBe(404);
-    expect((await request(app).put(`/api/repair-notices/${id}`).set(as(tokenB)).send({ vehicle_id: fxA.vehicleId, checklist: {} })).status).toBe(404);
-    expect((await request(app).delete(`/api/repair-notices/${id}`).set(as(tokenB))).status).toBe(404);
-    expect((await request(app).post('/api/repair-notices').set(as(tokenB)).send({ vehicle_id: fxA.vehicleId, checklist: {} })).status).toBe(404);
-    const listB = await request(app).get('/api/repair-notices').set(as(tokenB));
-    expect(listB.body.data.some((r) => r.id === id)).toBe(false);
-    const search = await request(app).get('/api/repair-notices/vehicle-search?search=ISO2').set(as(tokenB));
-    expect(search.body.data.some((r) => r.customer_id === fxA.customerId)).toBe(false);
-    // shop B already has one notice (auto-created with its quotation); the counter is its own, not shop 1's
-    const [[maxB]] = await pool.query("SELECT COUNT(*) AS n FROM repair_notices WHERE shop_id = ?", [shopB.shopId]);
-    const nextB = await request(app).get('/api/repair-notices/next-code').set(as(tokenB));
-    expect(nextB.body.code).toBe('RN-' + String(maxB.n + 1).padStart(4, '0'));
+  test('claim form vehicle search', async () => {
+    const own = await request(app).get('/api/claims/vehicle-search?search=ISO2').set(as(tokenA));
+    expect(own.body.data.some((r) => r.customer_id === fxA.customerId)).toBe(true);
+    const other = await request(app).get('/api/claims/vehicle-search?search=ISO2').set(as(tokenB));
+    expect(other.body.data.some((r) => r.customer_id === fxA.customerId)).toBe(false);
   });
 
   test('service items, quote part prices, product costs', async () => {
