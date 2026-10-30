@@ -275,10 +275,10 @@ export default function JobBoardPage() {
             + เพิ่มคิว
           </button>
           <button type="button" onClick={() => setShowClaimModal(true)}>
-            🛠️ เคลม
+            🛠️ บันทึกเคลม
           </button>
           <button type="button" onClick={handleShowQr} disabled={qrLoading}>
-            {qrLoading ? 'กำลังสร้าง QR...' : '📱 QR ติดตามสถานะ'}
+            {qrLoading ? 'กำลังสร้าง QR...' : '📱 QR ให้ลูกค้าดูสถานะรถ'}
           </button>
         </div>
       </div>

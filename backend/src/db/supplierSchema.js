@@ -5,6 +5,8 @@
 //                              shop_id; nothing used it): it is kept as it is and only guide_categories is added.
 //   receipt_sessions.supplier_*  which supplier a receive bill came from (one bill = one supplier)
 //   stock_receive_lines.unit_cost  price per piece on that bill line (can be filled in after the bill is closed)
+//   stock_receive_lines.movement_id / voided_at  the stock movement a closed line became, and when that receive was
+//                              cancelled (a cancelled line no longer counts in the average cost)
 //   stock_items.avg_cost       cost of an item = average of its received lines that have a cost, weighted by quantity;
 //                              manual_cost is the fallback typed by hand for stock bought before costs were recorded
 async function hasColumn(conn, table, column) {
@@ -63,6 +65,8 @@ async function migrateSuppliers(conn) {
   await addColumn(conn, 'receipt_sessions', 'supplier_id', 'INT DEFAULT NULL');
   await addColumn(conn, 'receipt_sessions', 'supplier_name', 'VARCHAR(150) DEFAULT NULL');
   await addColumn(conn, 'stock_receive_lines', 'unit_cost', 'DECIMAL(12,2) DEFAULT NULL');
+  await addColumn(conn, 'stock_receive_lines', 'movement_id', 'BIGINT UNSIGNED DEFAULT NULL');
+  await addColumn(conn, 'stock_receive_lines', 'voided_at', 'DATETIME DEFAULT NULL');
   await addColumn(conn, 'stock_items', 'avg_cost', 'DECIMAL(12,2) DEFAULT NULL');
   await addColumn(conn, 'stock_items', 'manual_cost', 'DECIMAL(12,2) DEFAULT NULL');
   // the first branch's list, added once (a name that is already there, in any case, is left alone)

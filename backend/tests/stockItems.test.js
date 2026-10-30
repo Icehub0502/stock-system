@@ -99,6 +99,17 @@ describe('/api/stock-items — สต๊อกรวม', () => {
     expect(moves.body.map((m) => m.reason)).toEqual(['set', 'adjust', 'create']);
   });
 
+  test('ตั้งยอดจากฟอร์มที่เปิดค้างไว้ ไม่ทับยอดที่เพิ่งเปลี่ยนจากเครื่องอื่น', async () => {
+    const { body } = await createItem({ stock_qty: 5 });
+    // another device deducts 2 while the edit form still shows 5
+    await auth(request(app).patch(`/api/stock-items/${body.id}/qty`)).send({ delta: -2 });
+    const stale = await auth(request(app).patch(`/api/stock-items/${body.id}/qty`)).send({ set_to: 6, expected_qty: 5 });
+    expect(stale.status).toBe(409);
+    const fresh = await auth(request(app).patch(`/api/stock-items/${body.id}/qty`)).send({ set_to: 6, expected_qty: 3 });
+    expect(fresh.body.stock_qty).toBe(6);
+    expect((await auth(request(app).patch(`/api/stock-items/${body.id}/qty`)).send({ set_to: 1, expected_qty: 'x' })).status).toBe(400);
+  });
+
   test('ซ่อนรายการแล้วไม่โผล่ในรายการ และเพิ่มรหัสเดิมกลับมาได้', async () => {
     const code = `HIDE-${suffix}`;
     const { body } = await createItem({ oem_code: code, stock_qty: 4 });

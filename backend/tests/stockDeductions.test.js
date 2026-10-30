@@ -128,6 +128,21 @@ describe('/api/stock-deductions — ตัดสต๊อกของสต๊�
     expect(after.body.data.some((r) => r.source === 'stock_item' && r.id === movementId)).toBe(false);
     expect((await asOffice(request(app).delete(`/api/stock-deductions/movements/${movementId}`))).status).toBe(404);
   });
+
+  test('ช่างยกเลิกรายการที่ตัวเองจ่ายผิดได้ภายใน 30 นาที เกินนั้นต้องผู้จัดการ', async () => {
+    const id = await createItem({ oem_code: `DU-${suffix}`, stock_qty: 5 });
+    const own = (await deduct(asTech, { item_id: id, lines: [{ qty: 2 }] })).body.movement_ids[0];
+    expect((await asTech(request(app).delete(`/api/stock-deductions/movements/${own}`))).status).toBe(200);
+    expect((await getItem(`DU-${suffix}`)).stock_qty).toBe(5);
+
+    const old = (await deduct(asTech, { item_id: id, lines: [{ qty: 1 }] })).body.movement_ids[0];
+    await pool.query('UPDATE stock_item_movements SET created_at = NOW() - INTERVAL 31 MINUTE WHERE id = ?', [old]);
+    const late = await asTech(request(app).delete(`/api/stock-deductions/movements/${old}`));
+    expect(late.status).toBe(403);
+    expect(late.body.error).toContain('30 นาที');
+    expect((await asOffice(request(app).delete(`/api/stock-deductions/movements/${old}`))).status).toBe(200);
+    expect((await getItem(`DU-${suffix}`)).stock_qty).toBe(5);
+  });
 });
 
 describe('scripts/sync-legacy-deductions — ซิงก์การตัดสต๊อกเก่าเข้าสต๊อกรวม', () => {

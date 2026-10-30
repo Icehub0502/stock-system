@@ -1,7 +1,7 @@
 const express = require('express');
 const QRCode = require('qrcode');
 const pool = require('../db/pool');
-const { authenticate, requireRole, requireManager } = require('../middleware/auth');
+const { authenticate, requireRole, requireManager, roleRank } = require('../middleware/auth');
 const { emitStockEvent, emitStockTxEvent } = require('../realtime');
 const { positionsFor, positionLabel } = require('../utils/stockPositions');
 const { recomputeItemCost, parseUnitCost } = require('../utils/stockCost');
@@ -121,7 +121,7 @@ async function loadOwnedSession(conn, sessionId, user, shopId, { lock = false } 
     [sessionId, shopId]
   );
   if (!session) return { status: 404, error: 'ไม่พบบิลนี้' };
-  if (user.role !== 'office' && session.user_id !== user.id) return { status: 403, error: 'บิลนี้ไม่ใช่ของคุณ' };
+  if (roleRank(user.role) < roleRank('office') && session.user_id !== user.id) return { status: 403, error: 'บิลนี้ไม่ใช่ของคุณ' };
   return { session };
 }
 
@@ -155,6 +155,7 @@ function shapeLine(row) {
 
 // เพิ่มรายการรอยืนยันเข้าบิล (ยังไม่บวกสต๊อก) — สแกนชิ้น/ตำแหน่งเดิมซ้ำในบิลเดียวกัน = รวมจำนวนใน
 // แถวเดิม (แก้ได้ทีหลัง) แทนที่จะเกิดแถวซ้ำ
+// A different price per piece starts its own line, so one price never silently replaces another.
 router.post('/lines', async (req, res) => {
   const itemId = parseId(req.body?.item_id);
   const position = req.body?.position ?? null;
@@ -196,8 +197,10 @@ router.post('/lines', async (req, res) => {
 
     const [[existing]] = await conn.execute(
       `SELECT id, qty FROM stock_receive_lines
-       WHERE receipt_session_id = ? AND item_id = ? AND position <=> ? AND applied_at IS NULL FOR UPDATE`,
-      [sessionId, itemId, position]
+       WHERE receipt_session_id = ? AND item_id = ? AND position <=> ? AND applied_at IS NULL
+         ${cost.value === null ? '' : 'AND unit_cost <=> ?'}
+       ORDER BY id DESC LIMIT 1 FOR UPDATE`,
+      cost.value === null ? [sessionId, itemId, position] : [sessionId, itemId, position, cost.value]
     );
     let lineId;
     let lineQty;
@@ -257,7 +260,7 @@ async function loadOwnedPendingLine(conn, lineId, user, shopId) {
     [lineId, shopId]
   );
   if (!line) return { status: 404, error: 'ไม่พบรายการนี้ (อาจถูกยืนยันหรือลบไปแล้ว)' };
-  if (user.role !== 'office' && line.session_user_id !== user.id) return { status: 403, error: 'บิลนี้ไม่ใช่ของคุณ' };
+  if (roleRank(user.role) < roleRank('office') && line.session_user_id !== user.id) return { status: 403, error: 'บิลนี้ไม่ใช่ของคุณ' };
   return { line };
 }
 
@@ -355,12 +358,12 @@ async function applyLine(conn, line, userId, shopId) {
   if (after > MAX_QTY) return { status: 400, error: `จำนวนรวมของ "${item.description}" สูงเกินไป` };
 
   await conn.execute('UPDATE stock_items SET stock_qty = ? WHERE id = ? AND shop_id = ?', [total, line.item_id, shopId]);
-  await conn.execute(
+  const [mv] = await conn.execute(
     `INSERT INTO stock_item_movements (item_id, qty_before, qty_after, reason, position, receipt_session_id, user_id)
      VALUES (?, ?, ?, 'receive', ?, ?, ?)`,
     [line.item_id, before, after, line.position, line.receipt_session_id, userId]
   );
-  await conn.execute('UPDATE stock_receive_lines SET applied_at = NOW() WHERE id = ?', [line.id]);
+  await conn.execute('UPDATE stock_receive_lines SET applied_at = NOW(), movement_id = ? WHERE id = ?', [mv.insertId, line.id]);
   return { itemId: line.item_id };
 }
 
@@ -490,6 +493,22 @@ async function voidReceiveMovement(conn, movementId, userId, shopId) {
      VALUES (?, ?, ?, 'adjust', ?, 'ยกเลิกรายการรับเข้า', ?)`,
     [mv.item_id, current, next, mv.position, userId]
   );
+  // the bill line behind this receive stops counting in the item's cost
+  const [marked] = await conn.execute(
+    'UPDATE stock_receive_lines SET voided_at = NOW() WHERE movement_id = ? AND voided_at IS NULL',
+    [movementId]
+  );
+  if (marked.affectedRows === 0 && mv.receipt_session_id) {
+    // closed before movement_id was recorded: the closed line of the same bill, item, position and quantity
+    await conn.execute(
+      `UPDATE stock_receive_lines SET voided_at = NOW()
+       WHERE receipt_session_id = ? AND item_id = ? AND position <=> ? AND qty = ?
+         AND applied_at IS NOT NULL AND voided_at IS NULL AND movement_id IS NULL
+       ORDER BY id LIMIT 1`,
+      [mv.receipt_session_id, mv.item_id, mv.position, delta]
+    );
+  }
+  await recomputeItemCost(conn, mv.item_id, shopId);
   return { itemId: mv.item_id };
 }
 
@@ -530,7 +549,7 @@ router.get('/costs/missing', requireRole('office'), async (req, res) => {
        FROM stock_receive_lines l
        JOIN receipt_sessions s ON s.id = l.receipt_session_id
        JOIN stock_items i ON i.id = l.item_id JOIN stock_categories c ON c.id = i.category_id
-       WHERE s.shop_id = ? AND i.shop_id = ? AND l.applied_at IS NOT NULL AND l.unit_cost IS NULL
+       WHERE s.shop_id = ? AND i.shop_id = ? AND l.applied_at IS NOT NULL AND l.voided_at IS NULL AND l.unit_cost IS NULL
        ORDER BY l.id DESC LIMIT 300`,
       [req.shopId, req.shopId]
     );
@@ -558,13 +577,17 @@ router.put('/costs/lines/:id', requireRole('office'), async (req, res) => {
     conn = await pool.getConnection();
     await conn.beginTransaction();
     const [[line]] = await conn.execute(
-      `SELECT l.id, l.item_id, l.applied_at FROM stock_receive_lines l JOIN receipt_sessions s ON s.id = l.receipt_session_id
+      `SELECT l.id, l.item_id, l.applied_at, l.voided_at FROM stock_receive_lines l JOIN receipt_sessions s ON s.id = l.receipt_session_id
        WHERE l.id = ? AND s.shop_id = ? FOR UPDATE`,
       [lineId, req.shopId]
     );
     if (!line) {
       await conn.rollback();
       return res.status(404).json({ error: 'ไม่พบรายการ' });
+    }
+    if (line.voided_at) {
+      await conn.rollback();
+      return res.status(400).json({ error: 'รายการนี้ถูกยกเลิกการรับเข้าไปแล้ว' });
     }
     await conn.execute('UPDATE stock_receive_lines SET unit_cost = ? WHERE id = ?', [cost.value, lineId]);
     if (line.applied_at) await recomputeItemCost(conn, line.item_id, req.shopId);

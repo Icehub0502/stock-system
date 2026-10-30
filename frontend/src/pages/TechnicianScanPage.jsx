@@ -108,25 +108,30 @@ function kindLabel(type) {
 // ─────────────────────────────────────────
 //  QUANTITY BOTTOM SHEET — ยืนยันจำนวนหลังสแกน/เลือกรายการ
 // ─────────────────────────────────────────
+// quantity box text → what to keep: '' while the box is being retyped, else a whole number 1..100000
+function qtyFromInput(value) {
+  if (value === '') return '';
+  const n = Math.floor(Number(value));
+  return Number.isFinite(n) && n >= 1 ? Math.min(n, 100000) : '';
+}
+
 function ConfirmSheet({ item, mode, onConfirm, onCancel, loading, deferred = false }) {
   const [qty, setQty] = useState(1);
   const [cost, setCost] = useState('');
   const isIN = mode === 'IN';
+  const qtyNum = Number(qty) || 0;
+  const qtyValid = Number.isInteger(qtyNum) && qtyNum >= 1;
 
   useEffect(() => { setQty(1); setCost(''); }, [item]);
 
   if (!item) return null;
 
   const stock = item.stock_qty ?? item.stock ?? 0;
-  const stockAfter = isIN ? stock + qty : Math.max(0, stock - qty);
+  const stockAfter = isIN ? stock + qtyNum : Math.max(0, stock - qtyNum);
   const label = item.name || item.model_name || '—';
   const code = item.sku || item.model_code || '—';
   const stockClass = stock === 0 ? 'is-out' : stock <= (item.min_stock || 1) ? 'is-low' : 'is-ok';
-
-  const setQtyFromInput = (value) => {
-    const n = Math.floor(Number(value));
-    setQty(Number.isFinite(n) && n >= 1 ? Math.min(n, 100000) : 1);
-  };
+  const notEnough = !isIN && qtyNum > stock; // paying out more than is on the shelf is refused anyway
 
   return (
     <div className="scan-sheet-backdrop">
@@ -142,22 +147,22 @@ function ConfirmSheet({ item, mode, onConfirm, onCancel, loading, deferred = fal
         </div>
 
         <div className="scan-confirm-stock">
-          <span>สต็อกปัจจุบัน{item.position ? ` (${positionLabel(item.position)})` : ''}</span>
+          <span>สต๊อกปัจจุบัน{item.position ? ` (${positionLabel(item.position)})` : ''}</span>
           <strong className={stockClass}>{stock === 0 ? 'หมด' : `${stock} ชิ้น`}</strong>
         </div>
 
         <div className="scan-stepper">
-          <button type="button" className="scan-stepper-btn" onClick={() => setQty((q) => Math.max(1, q - 1))} aria-label="ลดจำนวน">−</button>
+          <button type="button" className="scan-stepper-btn" onClick={() => setQty((q) => Math.max(1, (Number(q) || 0) - 1))} aria-label="ลดจำนวน">−</button>
           <input
             className="scan-stepper-input"
             type="number"
             inputMode="numeric"
             min="1"
             value={qty}
-            onChange={(e) => setQtyFromInput(e.target.value)}
+            onChange={(e) => setQty(qtyFromInput(e.target.value))}
             aria-label="จำนวน"
           />
-          <button type="button" className="scan-stepper-btn" onClick={() => setQty((q) => Math.min(100000, q + 1))} aria-label="เพิ่มจำนวน">+</button>
+          <button type="button" className="scan-stepper-btn" onClick={() => setQty((q) => Math.min(100000, (Number(q) || 0) + 1))} aria-label="เพิ่มจำนวน">+</button>
         </div>
 
 {isIN && deferred && (
@@ -167,17 +172,21 @@ function ConfirmSheet({ item, mode, onConfirm, onCancel, loading, deferred = fal
         </div>
 
 )}
-        <p className="scan-confirm-result">
-          {deferred
-            ? <>รับเข้า <b>{qty}</b> ชิ้น → จะเป็น <b>{stockAfter}</b> ชิ้น หลังกดเสร็จสิ้น</>
-            : <>{isIN ? 'รับเข้า' : 'จ่ายออก'} <b>{qty}</b> ชิ้น → คงเหลือ <b>{stockAfter}</b> ชิ้น</>}
-        </p>
+        {!qtyValid && <p className="scan-error">กรุณาใส่จำนวนตั้งแต่ 1 ชิ้นขึ้นไป</p>}
+        {qtyValid && !notEnough && (
+          <p className="scan-confirm-result">
+            {deferred
+              ? <>รับเข้า <b>{qtyNum}</b> ชิ้น → จะเป็น <b>{stockAfter}</b> ชิ้น หลังกดเสร็จสิ้น</>
+              : <>{isIN ? 'รับเข้า' : 'จ่ายออก'} <b>{qtyNum}</b> ชิ้น → คงเหลือ <b>{stockAfter}</b> ชิ้น</>}
+          </p>
+        )}
+        {notEnough && <p className="scan-error">สต๊อกเหลือไม่พอ (คงเหลือ {stock} ชิ้น)</p>}
 
         <button
           type="button"
           className={`scan-btn scan-btn--block scan-btn--lg ${isIN ? 'scan-btn--in' : 'scan-btn--out'}`}
-          onClick={() => onConfirm(qty, cost)}
-          disabled={loading}
+          onClick={() => onConfirm(qtyNum, cost)}
+          disabled={loading || notEnough || !qtyValid}
         >
           {loading ? 'กำลังบันทึก...' : <><IconCheck /> {deferred ? 'เพิ่มเข้ารายการรับเข้า' : `ยืนยัน${isIN ? 'รับเข้า' : 'จ่ายออก'}`}</>}
         </button>
@@ -196,11 +205,8 @@ function EditQtySheet({ order, onSave, onDelete, onCancel, loading }) {
   const [cost, setCost] = useState(startCost);
 
   useEffect(() => { setQty(order.qty); setCost(startCost); }, [order]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const setQtyFromInput = (value) => {
-    const n = Math.floor(Number(value));
-    setQty(Number.isFinite(n) && n >= 1 ? Math.min(n, 100000) : 1);
-  };
+  const qtyNum = Number(qty) || 0;
+  const qtyValid = Number.isInteger(qtyNum) && qtyNum >= 1;
 
   return (
     <div className="scan-sheet-backdrop">
@@ -218,31 +224,32 @@ function EditQtySheet({ order, onSave, onDelete, onCancel, loading }) {
         </div>
 
         <div className="scan-stepper">
-          <button type="button" className="scan-stepper-btn" onClick={() => setQty((q) => Math.max(1, q - 1))} aria-label="ลดจำนวน">−</button>
+          <button type="button" className="scan-stepper-btn" onClick={() => setQty((q) => Math.max(1, (Number(q) || 0) - 1))} aria-label="ลดจำนวน">−</button>
           <input
             className="scan-stepper-input"
             type="number"
             inputMode="numeric"
             min="1"
             value={qty}
-            onChange={(e) => setQtyFromInput(e.target.value)}
+            onChange={(e) => setQty(qtyFromInput(e.target.value))}
             aria-label="จำนวน"
           />
-          <button type="button" className="scan-stepper-btn" onClick={() => setQty((q) => Math.min(100000, q + 1))} aria-label="เพิ่มจำนวน">+</button>
+          <button type="button" className="scan-stepper-btn" onClick={() => setQty((q) => Math.min(100000, (Number(q) || 0) + 1))} aria-label="เพิ่มจำนวน">+</button>
         </div>
+        {!qtyValid && <p className="scan-error">กรุณาใส่จำนวนตั้งแต่ 1 ชิ้นขึ้นไป</p>}
 
         <div className="scan-cost">
           <label className="scan-label" htmlFor="scan-edit-cost">ต้นทุนต่อชิ้น (บาท) — ยังไม่ทราบ ใส่ทีหลังได้</label>
           <input id="scan-edit-cost" className="scan-input" type="number" inputMode="decimal" min="0" step="0.01" placeholder="เช่น 850" value={cost} onChange={(e) => setCost(e.target.value)} />
         </div>
 
-        <p className="scan-confirm-result">จำนวนที่จะรับเข้า <b>{qty}</b> ชิ้น (ยังไม่บวกสต๊อกจนกว่าจะกดเสร็จสิ้น)</p>
+        <p className="scan-confirm-result">จำนวนที่จะรับเข้า <b>{qtyNum}</b> ชิ้น (ยังไม่บวกสต๊อกจนกว่าจะกดเสร็จสิ้น)</p>
 
         <button
           type="button"
           className="scan-btn scan-btn--block scan-btn--lg scan-btn--in"
-          onClick={() => onSave(qty, cost)}
-          disabled={loading || (qty === order.qty && cost === startCost)}
+          onClick={() => onSave(qtyNum, cost)}
+          disabled={loading || !qtyValid || (qtyNum === order.qty && cost === startCost)}
         >
           {loading ? 'กำลังบันทึก...' : <><IconCheck /> บันทึกจำนวน</>}
         </button>
@@ -264,7 +271,7 @@ function ScanOverlay({ active, mode, onResult, onClose }) {
     <div className="scan-camera">
       <div className="scan-camera-top">
         <span className={`scan-pill ${isIN ? 'scan-pill--in' : 'scan-pill--out'}`}>
-          {isIN ? '▼ รับเข้าสต็อก' : '▲ จ่ายออก'}
+          {isIN ? '▼ รับเข้าสต๊อก' : '▲ จ่ายออก'}
         </span>
         <button type="button" onClick={onClose} className="scan-camera-close" aria-label="ปิดกล้อง">
           <IconX />
@@ -488,6 +495,7 @@ export default function TechnicianScanPage() {
   const [editingOrder, setEditingOrder] = useState(null);     // รายการรอยืนยันที่กำลังแก้จำนวน/ลบ
   const [savingQty, setSavingQty] = useState(false);
   const [committing, setCommitting] = useState(false);        // กำลังกดเสร็จสิ้น/ยืนยันบวกสต๊อก
+  const fromCameraRef = useRef(false);                         // the item being confirmed came from a camera scan
 
   const [orders, setOrders]       = useState([]);             // รายการในบิลนี้
   const [toast, setToast]         = useState(null);
@@ -495,10 +503,7 @@ export default function TechnicianScanPage() {
   // ── มาจากหน้าบิลรับเข้า: "สแกนของเข้าบิลนี้" — เปิดบิลเดิมต่อได้เลย ไม่ต้องเปิดบิลใหม่
   // ใช้ตอนต้นทางส่งของมาไม่ครบ/บิลมาทีหลัง แล้วต้องแอดของเข้าบิลเดิมภายหลัง
   // โหลดของที่เคยสแกนเข้าบิลไว้แล้วมาแสดงด้วย จะได้เห็นบิลทั้งใบและกดลบรายการเก่าได้
-  useEffect(() => {
-    const resume = location.state?.resumeSession;
-    if (!resume) return;
-    navigate(location.pathname, { replace: true, state: {} }); // กันเปิดซ้ำตอนกด back
+  const resumeSession = useCallback((resume) => {
     setMode('IN');
     setSession(resume);
     setStep(STEP.SCAN);
@@ -508,12 +513,13 @@ export default function TechnicianScanPage() {
           // source='pending_line' = สแกนไว้แล้วแต่ยังไม่กดเสร็จสิ้น (ยังไม่บวกสต๊อก) แก้/ลบได้
           const pending = it.source === 'pending_line';
           return {
-            key: `${it.source || 'legacy'}-${it.id}`,
+            key: pending ? `line-${it.id}` : `${it.source || 'legacy'}-${it.id}`,
             sku: it.model_code,
             name: it.rack_name,
             qty: Number(it.qty),
             txId: pending ? null : it.id,
             lineId: pending ? it.id : null,
+            unitCost: pending && it.unit_cost !== null && it.unit_cost !== undefined ? Number(it.unit_cost) : null,
             pending,
             type: it.item_type === 'rack' ? 'rack' : it.item_type === 'stock_item' ? 'stock_item' : 'wing-arm',
             position: it.position || null,
@@ -522,7 +528,21 @@ export default function TechnicianScanPage() {
         setOrders(existing.reverse()); // ในหน้านี้เรียงใหม่สุดอยู่บน
       })
       .catch(() => setOrders([]));
-  }, [location.state, location.pathname, navigate]);
+  }, []);
+
+  useEffect(() => {
+    if (location.state?.startMode === 'IN') {
+      navigate(location.pathname, { replace: true, state: {} });
+      selectMode('IN');
+    }
+  }, [location.state]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    const resume = location.state?.resumeSession;
+    if (!resume) return;
+    navigate(location.pathname, { replace: true, state: {} }); // กันเปิดซ้ำตอนกด back
+    resumeSession(resume);
+  }, [location.state, location.pathname, navigate, resumeSession]);
 
   // ── เลือก mode ──
   const selectMode = (m) => {
@@ -535,22 +555,35 @@ export default function TechnicianScanPage() {
   };
 
   // ── เปิด session บิล (IN) ──
-  const startSession = async () => {
-    if (!supplier.trim()) { setSupplierErr('กรุณาเลือกหรือพิมพ์ชื่อร้านอะไหล่'); return; }
-    setSupplierErr('');
-    if (!invoice.trim()) { setInvoiceErr('กรุณากรอกเลขบิล'); return; }
-    setStarting(true); setInvoiceErr('');
+  const startSession = async (allowDuplicate = false) => {
+    const noSupplier = !supplier.trim();
+    const noInvoice = !invoice.trim();
+    setSupplierErr(noSupplier ? 'กรุณาเลือกหรือพิมพ์ชื่อร้านอะไหล่' : '');
+    setInvoiceErr(noInvoice ? 'กรุณากรอกเลขบิล' : '');
+    if (noSupplier || noInvoice) return;
+    setStarting(true);
     try {
       const res = await client.post('/transactions/receipt-session', {
         invoice_no: invoice.trim(),
         supplier_name: supplier.trim(),
         bill_date: billDate || undefined,
+        allow_duplicate: allowDuplicate || undefined,
       });
       setSession(res.data);
       setOrders([]);
       setStep(STEP.SCAN);
     } catch (err) {
-      setInvoiceErr(err?.response?.data?.error || 'เปิดบิลไม่สำเร็จ');
+      const data = err?.response?.data;
+      if (data?.code === 'DUPLICATE_BILL' && data.existing) {
+        const ex = data.existing;
+        if (window.confirm(`บิลเลข "${ex.invoice_no}" ของร้าน ${ex.supplier_name || '-'} (วันที่ ${ex.bill_date || '-'}) มีอยู่แล้ว\n\nกด OK = เปิดบิลเดิมแล้วสแกนต่อ\nกด ยกเลิก = ไม่เปิดบิลเดิม`)) {
+          resumeSession(ex);
+        } else if (window.confirm('สร้างบิลใหม่เลขซ้ำกันจริงใช่ไหม? (เช่น ร้านใช้เลขบิลเดิมกับของคนละรอบ)')) {
+          await startSession(true);
+        }
+        return;
+      }
+      setInvoiceErr(data?.error || 'เปิดบิลไม่สำเร็จ');
     } finally { setStarting(false); }
   };
 
@@ -565,7 +598,7 @@ export default function TechnicianScanPage() {
 
   // ── ลบรายการที่ทำผิด ──
   // รายการรอยืนยัน (ยังไม่บวกสต๊อก) ลบได้เลยไม่มีอะไรต้องคืน ส่วนรายการที่บวกสต๊อกไปแล้วหรือของระบบเดิม
-  // backend คืนสต็อกให้เองในทรานแซกชันเดียว (ติดลบไม่ได้)
+  // backend คืนสต๊อกให้เองในทรานแซกชันเดียว (ติดลบไม่ได้)
   const handleDeleteOrder = async (order) => {
     const ref = order.pending ? order.lineId : order.txId;
     if (!ref) {
@@ -581,7 +614,7 @@ export default function TechnicianScanPage() {
       setToast({
         ok: true,
         title: 'ลบรายการแล้ว',
-        body: order.pending ? `${order.name} — ยังไม่เคยบวกสต๊อก` : `${order.name} — คืนสต็อกเรียบร้อย`,
+        body: order.pending ? `${order.name} — ยังไม่เคยบวกสต๊อก` : `${order.name} — คืนสต๊อกเรียบร้อย`,
       });
     } catch (err) {
       setToast({ ok: false, title: 'ลบไม่สำเร็จ', body: err?.response?.data?.error || '' });
@@ -646,6 +679,7 @@ export default function TechnicianScanPage() {
   const handleScan = useCallback(async (code) => {
     if (!code) return;
     setScanning(false);
+    fromCameraRef.current = true;
 
     // ทั้งรับเข้าและจ่ายออกใช้สต๊อกรวมเท่านั้น (ไม่ย้อนไปตารางเก่า) — ป้าย QR เป็นรหัส OEM ล้วน ๆ หรือ
     // JSON ของป้ายปีกนกเดิม (backend แกะ sku ให้เอง)
@@ -728,7 +762,7 @@ export default function TechnicianScanPage() {
       }
       setScannedItem(null);
       setScannedType(null);
-      setScanning(true); // เปิดกล้องต่อทันที
+      setScanning(fromCameraRef.current); // สแกนด้วยกล้อง = เปิดกล้องต่อทันที, กรอกเอง = กลับหน้ารายการ
     } catch (err) {
       setToast({ ok: false, title: 'บันทึกไม่สำเร็จ', body: err?.response?.data?.error || '' });
     } finally { setConfirmLoading(false); }
@@ -739,6 +773,7 @@ export default function TechnicianScanPage() {
   const resetAll = () => {
     setStep(STEP.MODE); setMode(null); setSession(null);
     setInvoice(''); setInvoiceErr(''); setOrders([]);
+    setSupplier(''); setSupplierOther(false); setSupplierErr('');
     setBillDate(todayStr());
     setScannedItem(null); setScannedType(null); setScanning(false);
     setManualOpen(false); setPickMatches(null);
@@ -773,8 +808,8 @@ export default function TechnicianScanPage() {
               <button type="button" className="scan-mode-card scan-mode-card--in" onClick={() => selectMode('IN')}>
                 <span className="scan-mode-icon"><IconArrowDown /></span>
                 <span className="scan-mode-text">
-                  <strong>รับเข้าสต็อก</strong>
-                  <small>นำสินค้าเข้าคลัง · ต้องใส่เลขบิล</small>
+                  <strong>รับเข้าสต๊อก</strong>
+                  <small>ของมาจากร้านอะไหล่ · ต้องใส่เลขบิล</small>
                 </span>
                 <span className="scan-mode-chevron" aria-hidden="true">›</span>
               </button>
@@ -782,7 +817,7 @@ export default function TechnicianScanPage() {
             <button type="button" className="scan-mode-card scan-mode-card--out" onClick={() => selectMode('OUT')}>
               <span className="scan-mode-icon"><IconArrowUp /></span>
               <span className="scan-mode-text">
-                <strong>จ่ายออกจากสต็อก</strong>
+                <strong>จ่ายออกจากสต๊อก</strong>
                 <small>นำสินค้าออกใช้งาน</small>
               </span>
               <span className="scan-mode-chevron" aria-hidden="true">›</span>
@@ -806,8 +841,8 @@ export default function TechnicianScanPage() {
             <div className="scan-card-head">
               <span className="scan-card-head-icon"><IconReceipt /></span>
               <div>
-                <strong>เลขที่บิล / Invoice No.</strong>
-                <small>กรอกเลขจากซัพพลายเออร์</small>
+                <strong>บิลจากร้านอะไหล่</strong>
+                <small>กรอกเลขบิลที่อยู่บนกระดาษจากร้าน</small>
               </div>
             </div>
             <div className="scan-card-body">
@@ -819,7 +854,7 @@ export default function TechnicianScanPage() {
                 className={`scan-input scan-input--mono${invoiceErr ? ' has-error' : ''}`}
                 placeholder="เช่น INV-2026-0001"
                 value={invoice}
-                onChange={(e) => setInvoice(e.target.value)}
+                onChange={(e) => { setInvoice(e.target.value); setInvoiceErr(''); }}
                 onKeyDown={(e) => e.key === 'Enter' && startSession()}
               />
               {invoiceErr && <p className="scan-error">{invoiceErr}</p>}
@@ -871,7 +906,7 @@ export default function TechnicianScanPage() {
               <button
                 type="button"
                 className="scan-btn scan-btn--primary scan-btn--block scan-btn--lg"
-                onClick={startSession}
+                onClick={() => startSession()}
                 disabled={starting}
               >
                 {starting ? 'กำลังเปิดบิล...' : 'เริ่มสแกน'}
@@ -886,18 +921,18 @@ export default function TechnicianScanPage() {
         <div className="scan-shell scan-shell--wide scan-shell--has-dock">
 
           <header className="scan-topbar">
-            <button type="button" className="scan-icon-btn" onClick={() => confirmLeave(resetAll)} aria-label="ออกจากหน้านี้"><IconX /></button>
+            <button type="button" className="scan-icon-btn" onClick={() => confirmLeave(resetAll)} aria-label="ย้อนกลับ ออกจากหน้านี้"><IconArrowLeft /></button>
             <div className="scan-topbar-text">
-              <strong>{isIN ? 'รับเข้าสต็อก' : 'จ่ายออกจากสต็อก'}</strong>
+              <strong>{isIN ? 'รับเข้าสต๊อก' : 'จ่ายออกจากสต๊อก'}</strong>
               <small>{isIN ? 'สแกน QR เพื่อรับของเข้าบิลนี้' : 'สแกน QR เพื่อจ่ายของออก'}</small>
             </div>
-            <span className={`scan-pill ${isIN ? 'scan-pill--in' : 'scan-pill--out'}`}>{isIN ? 'IN' : 'OUT'}</span>
+            <span className={`scan-pill ${isIN ? 'scan-pill--in' : 'scan-pill--out'}`}>{isIN ? 'รับเข้า' : 'จ่ายออก'}</span>
           </header>
 
           <section className="scan-bill">
             <div className="scan-bill-main">
               <span className="scan-bill-label">{isIN && session ? 'บิลปัจจุบัน' : 'รอบนี้'}</span>
-              <span className="scan-bill-no">{isIN && session ? session.invoice_no : 'จ่ายออกจากคลัง'}</span>
+              <span className="scan-bill-no">{isIN && session ? session.invoice_no : 'จ่ายออกจากสต๊อก'}</span>
             </div>
             <div className="scan-stats">
               <div><b>{orders.length}</b><span>รายการ</span></div>
@@ -905,7 +940,7 @@ export default function TechnicianScanPage() {
             </div>
             {isIN && pendingOrders.length > 0 && (
               <p className="scan-pending-note">
-                ⏳ มี {pendingOrders.length} รายการ (+{pendingQty} ชิ้น) ที่ยังไม่บวกสต๊อก — กด “เสร็จสิ้น” เพื่อตรวจและยืนยัน
+                ⏳ มี {pendingOrders.length} รายการ (+{pendingQty} ชิ้น) ที่ยังไม่บวกสต๊อก — กด “ตรวจและบันทึก” ด้านล่างเพื่อบวกสต๊อก
               </p>
             )}
             {isIN && session && (
@@ -914,7 +949,7 @@ export default function TechnicianScanPage() {
                 className="scan-btn scan-btn--ghost scan-btn--sm"
                 onClick={() => confirmLeave(() => { setStep(STEP.INVOICE); setSession(null); setOrders([]); setInvoice(''); })}
               >
-                ปิดบิล / เปิดใหม่
+                เริ่มบิลใหม่ (บิลนี้ยังค้างไว้)
               </button>
             )}
           </section>
@@ -944,7 +979,7 @@ export default function TechnicianScanPage() {
             <div className="scan-dock-inner">
               <button type="button" className="scan-dock-btn scan-dock-btn--side" onClick={() => setManualOpen(true)}>
                 <IconSearch />
-                <span>กรอกเอง</span>
+                <span>ค้นหาเอง</span>
               </button>
               <button type="button" className="scan-dock-btn scan-dock-btn--scan" onClick={() => setScanning(true)}>
                 <IconQR />
@@ -958,7 +993,7 @@ export default function TechnicianScanPage() {
                 disabled={orders.length === 0}
               >
                 <IconCheck />
-                <span>เสร็จสิ้น</span>
+                <span>{isIN ? 'ตรวจและบันทึก' : 'สรุป'}</span>
               </button>
             </div>
           </div>
@@ -973,7 +1008,7 @@ export default function TechnicianScanPage() {
           )}
 
           {manualOpen && (
-            <StockSearchSheet onPick={handleStockPick} onCancel={() => setManualOpen(false)} />
+            <StockSearchSheet onPick={(m) => { fromCameraRef.current = false; handleStockPick(m); }} onCancel={() => setManualOpen(false)} />
           )}
 
           {pickMatches && (
@@ -989,7 +1024,7 @@ export default function TechnicianScanPage() {
               item={scannedItem}
               mode={mode}
               onConfirm={handleConfirm}
-              onCancel={() => { setScannedItem(null); setScannedType(null); setScanning(true); }}
+              onCancel={() => { setScannedItem(null); setScannedType(null); setScanning(fromCameraRef.current); }}
               loading={confirmLoading}
               deferred={isIN && scannedType === 'stock_item'}
             />
@@ -1005,7 +1040,7 @@ export default function TechnicianScanPage() {
             <div>
               <h1 className="scan-title">สรุปรายการ</h1>
               <p className="scan-subtitle">
-                {isIN ? 'รับเข้าสต็อก' : 'จ่ายออกจากสต็อก'}
+                {isIN ? 'รับเข้าสต๊อก' : 'จ่ายออกจากสต๊อก'}
                 {isIN && session ? ` · บิล ${session.invoice_no}` : ''}
               </p>
             </div>
@@ -1025,7 +1060,9 @@ export default function TechnicianScanPage() {
           <p className="scan-note">
             {isIN && pendingOrders.length > 0
               ? 'ตรวจทานก่อนยืนยัน — แก้จำนวนหรือลบรายการที่กรอกผิดได้ สต๊อกจะบวกเมื่อกด “ยืนยันบวกสต๊อก”'
-              : 'ตรวจทานก่อนปิดงาน — สแกนผิดกดถังขยะแล้วสแกนใหม่ได้'}
+              : isIN
+                ? 'ตรวจทานก่อนปิดงาน'
+                : 'ตรวจทานก่อนปิดงาน — จ่ายผิดกดถังขยะเพื่อคืนสต๊อกได้ภายใน 30 นาที เกินนั้นให้ผู้จัดการยกเลิก'}
           </p>
 
           <section className="scan-list" aria-label="สรุปรายการ">

@@ -240,7 +240,7 @@ export default function ReceiptListPage() {
                               onClick={() => setSelectedReceiptForPrint(receipt.id)}
                               title={receipt.printed_at ? `พิมพ์แล้วเมื่อ ${new Date(receipt.printed_at).toLocaleString('th-TH')}` : 'ยังไม่ได้พิมพ์'}
                             >
-                              {receipt.printed_at ? 'พิมพ์แล้ว' : 'พิมพ์'}
+                              {receipt.printed_at ? '🖨️ พิมพ์ซ้ำ' : '🖨️ พิมพ์'}
                             </button>
                             <button
                               className="btn-icon-small btn-danger"

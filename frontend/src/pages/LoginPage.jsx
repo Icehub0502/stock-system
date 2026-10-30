@@ -47,12 +47,12 @@ export default function LoginPage() {
       </div>
       <h2>เข้าสู่ระบบ</h2>
       <form onSubmit={handleSubmit}>
-        <label>รหัสร้าน (ถ้าเป็นร้านหลักเว้นว่างได้)</label>
-        <input value={shopCode} onChange={(e) => setShopCode(e.target.value)} autoCapitalize="none" autoComplete="organization" />
         <label>ชื่อผู้ใช้งาน</label>
-        <input value={username} onChange={(e) => setUsername(e.target.value)} autoFocus={!shopCode} />
+        <input value={username} onChange={(e) => setUsername(e.target.value)} autoFocus />
         <label>รหัสผ่าน</label>
         <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+        <label>รหัสสาขา <small style={{ fontWeight: 400, color: '#6b7280' }}>(พนักงานร้านหลักไม่ต้องกรอก)</small></label>
+        <input value={shopCode} onChange={(e) => setShopCode(e.target.value)} autoCapitalize="none" autoComplete="organization" />
         {error && <p className="error-text">{error}</p>}
         <button type="submit">เข้าสู่ระบบ</button>
       </form>

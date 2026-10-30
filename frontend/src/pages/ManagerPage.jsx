@@ -153,7 +153,7 @@ export default function ManagerPage() {
                 <strong className={i.stock_qty <= 0 ? 'mg-out' : ''}>เหลือ {i.stock_qty} / ขั้นต่ำ {i.min_stock}</strong>
               </div>
             ))}
-            <Link to="/stock-all" className="btn btn-secondary">ไปหน้าสต็อก</Link>
+            <Link to="/stock-all" className="btn btn-secondary">ไปหน้าสต๊อก</Link>
           </>
         )}
       </div>

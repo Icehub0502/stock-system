@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import client from '../api/client';
 import { formatDbTime, formatDbDateTime, todayStr } from '../utils/format';
 import useRealtimeEvent from '../hooks/useRealtimeEvent';
+import { useAuth } from '../context/AuthContext';
+import { hasRole } from '../utils/roles';
 
 // ── Icons ──
 const IconDoc = () => (
@@ -53,6 +55,9 @@ function billDateKey(session) {
 
 export default function ReceiptSessionPage() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  // lines not yet added to stock can be removed by office; what is already in stock, and whole bills, by managers
+  const isManager = hasRole(user, 'manager');
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -122,11 +127,11 @@ export default function ReceiptSessionPage() {
     }
   }, [deletingId, deletingBill, detailLoading]);
 
-  // ลบรายการในบิล — backend คืนสต็อกให้เองในทรานแซกชันเดียว (DELETE /transactions/:id)
+  // ลบรายการในบิล — backend คืนสต๊อกให้เองในทรานแซกชันเดียว (DELETE /transactions/:id)
   const handleDeleteItem = async (item) => {
     const message = item.pending
       ? `ลบ "${item.rack_name}" ออกจากบิลนี้? (ยังไม่เคยบวกสต๊อก)`
-      : `ลบ "${item.rack_name}" ออกจากบิลนี้? ระบบจะคืนสต็อกให้อัตโนมัติ`;
+      : `ลบ "${item.rack_name}" ออกจากบิลนี้? ระบบจะคืนสต๊อกให้อัตโนมัติ`;
     if (!window.confirm(message)) return;
     setDeletingId(`${item.source}-${item.id}`);
     try {
@@ -148,10 +153,10 @@ export default function ReceiptSessionPage() {
     }
   };
 
-  // ลบทั้งบิล — เผื่อบิลผิด/ไม่ได้ใช้แล้ว คืนสต็อกทุกรายการในบิลให้อัตโนมัติ
+  // ลบทั้งบิล — เผื่อบิลผิด/ไม่ได้ใช้แล้ว คืนสต๊อกทุกรายการในบิลให้อัตโนมัติ
   const handleDeleteBill = async () => {
     if (!selected) return;
-    if (!window.confirm(`ลบบิล "${selected.session.invoice_no}" ทั้งใบ? ระบบจะคืนสต็อกทุกรายการในบิลนี้ให้อัตโนมัติ และไม่สามารถย้อนกลับได้`)) return;
+    if (!window.confirm(`ลบบิล "${selected.session.invoice_no}" ทั้งใบ? ระบบจะคืนสต๊อกทุกรายการในบิลนี้ให้อัตโนมัติ และไม่สามารถย้อนกลับได้`)) return;
     setDeletingBill(true);
     try {
       await client.delete(`/transactions/receipt-sessions/${selected.session.id}`);
@@ -201,8 +206,11 @@ export default function ReceiptSessionPage() {
             <IconDoc />
             <h1 style={{ margin: 0 }}>บิลรับเข้า</h1>
           </div>
-          <p className="subtitle">ของที่รับเข้าคลังจากซัพพลายเออร์ · กดที่บิลเพื่อดูรายการข้างใน</p>
+          <p className="subtitle">ของที่รับเข้าสต๊อกจากร้านอะไหล่ · กดที่บิลเพื่อดูรายการข้างใน</p>
         </div>
+        <button type="button" className="btn-primary" onClick={() => navigate('/scan', { state: { startMode: 'IN' } })}>
+          + รับของเข้า (เปิดบิลใหม่)
+        </button>
 
         <div className="quotation-actions intake-toolbar">
           <div className="intake-seg">
@@ -377,14 +385,16 @@ export default function ReceiptSessionPage() {
                         </td>
                         <td data-label="เวลาที่สแกน">{formatDbTime(item.created_at)}</td>
                         <td data-label="จัดการ">
-                          <button
-                            className="intake-del-btn"
-                            onClick={() => handleDeleteItem(item)}
-                            disabled={deletingId === `${item.source}-${item.id}`}
-                            aria-label={`ลบ ${item.rack_name}`}
-                          >
-                            <IconTrash />
-                          </button>
+                          {(item.pending || isManager) && (
+                            <button
+                              className="intake-del-btn"
+                              onClick={() => handleDeleteItem(item)}
+                              disabled={deletingId === `${item.source}-${item.id}`}
+                              aria-label={`ลบ ${item.rack_name}`}
+                            >
+                              <IconTrash />
+                            </button>
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -410,9 +420,11 @@ export default function ReceiptSessionPage() {
             )}
 
             <div className="modal-actions" style={{ marginTop: '1rem', justifyContent: 'space-between' }}>
-              <button className="btn-danger" onClick={handleDeleteBill} disabled={deletingBill}>
-                {deletingBill ? 'กำลังลบ...' : 'ลบบิลนี้ทั้งใบ'}
-              </button>
+              {isManager ? (
+                <button className="btn-danger" onClick={handleDeleteBill} disabled={deletingBill}>
+                  {deletingBill ? 'กำลังลบ...' : 'ลบบิลนี้ทั้งใบ'}
+                </button>
+              ) : <span />}
               <div style={{ display: 'flex', gap: '0.5rem' }}>
                 <button className="btn-primary" onClick={handleScanIntoBill}>
                   <IconQR /> สแกนของเข้าบิลนี้

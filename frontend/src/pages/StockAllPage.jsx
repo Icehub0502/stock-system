@@ -80,6 +80,7 @@ export default function StockAllPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [stockFilter, setStockFilter] = useState(''); // '' | 'low' | 'out'
   const [errorMsg, setErrorMsg] = useState('');
+  const [loadError, setLoadError] = useState(''); // list loading only: a background refresh never clears a form error
 
   const [showForm, setShowForm] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
@@ -88,7 +89,7 @@ export default function StockAllPage() {
   const [movements, setMovements] = useState([]);
 
   // ── เลือกหลายรายการเพื่อพิมพ์ป้าย QR (เหมือนหน้า StockRack เดิม) ──
-  // หนึ่งรายการแยกตำแหน่งได้หลายป้าย (หนึ่งป้ายต่อรหัส OEM ของแต่ละตำแหน่ง) ป้ายพิมพ์ผ่าน
+  // หนึ่งรายการแยกตำแหน่งได้หลายป้าย (หนึ่งป้ายต่อรหัสอะไหล่ ของแต่ละตำแหน่ง) ป้ายพิมพ์ผ่าน
   // #qr-print-area ตัวเดียวกับหน้าเดิม (สไตล์อยู่ใน app.css) QR เป็นรหัสล้วน ๆ จึงสแกนที่
   // หน้า /scan ได้ และป้ายเก่าที่ติดของไปแล้วก็ใช้ต่อได้เพราะรหัสเดียวกัน
   // ดู QR ของรายการเดียว (ปุ่ม QR ท้ายแต่ละบรรทัด) — เปิดให้พนักงานสแกนจากหน้าจอได้ทีละรายการ
@@ -108,9 +109,9 @@ export default function StockAllPage() {
       ]);
       setCategories(catRes.data);
       setItems(itemRes.data);
-      setErrorMsg('');
+      setLoadError('');
     } catch (err) {
-      setErrorMsg(err.response?.data?.error || 'โหลดข้อมูลไม่สำเร็จ');
+      setLoadError(err.response?.data?.error || 'โหลดข้อมูลไม่สำเร็จ');
     } finally {
       setLoading(false);
     }
@@ -176,7 +177,7 @@ export default function StockAllPage() {
         item,
         labels: res.data.labels,
         loading: false,
-        error: res.data.labels.length === 0 ? 'รายการนี้ยังไม่มีรหัส OEM จึงยังไม่มี QR — กด "แก้ไข" เพื่อใส่รหัสก่อน' : '',
+        error: res.data.labels.length === 0 ? 'รายการนี้ยังไม่มีรหัสอะไหล่ จึงยังไม่มี QR — กด "แก้ไข" เพื่อใส่รหัสก่อน' : '',
       });
     } catch (err) {
       setQrView({ item, labels: [], loading: false, error: err.response?.data?.error || 'โหลด QR Code ไม่สำเร็จ' });
@@ -201,7 +202,7 @@ export default function StockAllPage() {
     try {
       const res = await client.get('/stock-receive/qrcodes', { params: { ids: ids.join(',') } });
       if (res.data.labels.length === 0) {
-        setErrorMsg('รายการที่เลือกยังไม่มีรหัส OEM จึงไม่มี QR ให้พิมพ์');
+        setErrorMsg('รายการที่เลือกยังไม่มีรหัสอะไหล่ จึงไม่มี QR ให้พิมพ์');
       } else {
         setPrintQueue(res.data.labels);
       }
@@ -257,7 +258,7 @@ export default function StockAllPage() {
   async function handleSubmit(e) {
     e.preventDefault();
     if (formPositions.length > 0 && !formPositions.some((p) => (form.codes[p] || '').trim())) {
-      setErrorMsg('กรุณากรอกรหัส OEM อย่างน้อยหนึ่งตำแหน่ง');
+      setErrorMsg('กรุณากรอกรหัสอะไหล่ อย่างน้อยหนึ่งตำแหน่ง');
       return;
     }
     setSaving(true);
@@ -273,18 +274,18 @@ export default function StockAllPage() {
         fitments: form.fitments.filter((f) => f.brand.trim() || f.model.trim()),
       };
       if (editingItem) {
-        await client.put(`/stock-items/${editingItem.id}`, payload);
         const note = 'แก้ไขจากหน้าแก้ไขรายการ';
         if (editingItem.positions.length > 0) {
           for (const { position, qty } of editingItem.positions) {
             const value = Number(form.stocks[position]);
             if (value !== qty) {
-              await client.patch(`/stock-items/${editingItem.id}/qty`, { position, set_to: value, note });
+              await client.patch(`/stock-items/${editingItem.id}/qty`, { position, set_to: value, expected_qty: qty, note });
             }
           }
         } else if (Number(form.stock_qty) !== editingItem.stock_qty) {
-          await client.patch(`/stock-items/${editingItem.id}/qty`, { set_to: Number(form.stock_qty), note });
+          await client.patch(`/stock-items/${editingItem.id}/qty`, { set_to: Number(form.stock_qty), expected_qty: editingItem.stock_qty, note });
         }
+        await client.put(`/stock-items/${editingItem.id}`, payload);
       } else {
         await client.post('/stock-items', {
           ...payload,
@@ -300,7 +301,26 @@ export default function StockAllPage() {
       closeForm();
       await load();
     } catch (err) {
-      setErrorMsg(err.response?.data?.error || 'บันทึกไม่สำเร็จ');
+      if (err.response?.status === 409 && editingItem) {
+        // someone received or paid this item out meanwhile: take the latest numbers as the new starting point,
+        // keep what was typed, and say so until the person saves again
+        try {
+          const fresh = (await client.get('/stock-items')).data;
+          setItems(fresh);
+          const latest = fresh.find((i) => i.id === editingItem.id);
+          if (latest) setEditingItem(latest);
+          const now = latest
+            ? (latest.positions.length > 0
+              ? latest.positions.map((p) => `${positionLabel(p.position)} ${p.qty}`).join(', ')
+              : String(latest.stock_qty))
+            : '';
+          setErrorMsg(`ยอดของรายการนี้เพิ่งเปลี่ยน (มีการรับเข้า/ตัดสต๊อกระหว่างที่แก้) — ยอดล่าสุดคือ ${now} ยังไม่ได้บันทึกอะไร ตรวจตัวเลขแล้วกดบันทึกอีกครั้ง`);
+        } catch {
+          setErrorMsg(err.response.data?.error || 'บันทึกไม่สำเร็จ');
+        }
+      } else {
+        setErrorMsg(err.response?.data?.error || 'บันทึกไม่สำเร็จ');
+      }
     } finally {
       setSaving(false);
     }
@@ -362,12 +382,12 @@ export default function StockAllPage() {
   return (
     <div className="office-dashboard container">
       <div className="dashboard-header">
-        <h2>สต๊อกรวม <span className="dashboard-header-sub">— แยกตามหมวดหมู่ ค้นด้วยรหัส OEM</span></h2>
+        <h2>สต๊อกรวม <span className="dashboard-header-sub">— แยกตามหมวดหมู่ ค้นด้วยรหัสอะไหล่</span></h2>
         <div className="header-actions">
           {!selectMode ? (
             <>
-              <button type="button" onClick={toggleSelectMode}>🖨️ เลือกพิมพ์ QR</button>
-              <button className="btn-primary" onClick={openAdd} disabled={categories.length === 0}>+ เพิ่มรายการ</button>
+              <button type="button" onClick={toggleSelectMode}>🖨️ พิมพ์ป้าย QR หลายชิ้น</button>
+              <button className="btn-primary" onClick={openAdd} disabled={categories.length === 0}>+ เพิ่มอะไหล่เข้าสต๊อก</button>
             </>
           ) : (
             <>
@@ -414,7 +434,7 @@ export default function StockAllPage() {
       <div className="search-bar">
         <input
           type="text"
-          placeholder={activeCategory ? `ค้นหาในหมวด ${activeCategory.name} (รหัส OEM / รายละเอียด / รุ่นรถ)...` : 'ค้นหาในทุกหมวด (รหัส OEM / รายละเอียด / รุ่นรถ)...'}
+          placeholder={activeCategory ? `ค้นหาในหมวด ${activeCategory.name} (รหัสอะไหล่ / รายละเอียด / รุ่นรถ)...` : 'ค้นหาในทุกหมวด (รหัสอะไหล่ / รายละเอียด / รุ่นรถ)...'}
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
         />
@@ -431,7 +451,7 @@ export default function StockAllPage() {
           onClick={() => setStockFilter(stockFilter === 'out' ? '' : 'out')}>❌ หมด</button>
       </div>
 
-      {errorMsg && !showForm && <p className="error-text">{errorMsg}</p>}
+      {(loadError || errorMsg) && !showForm && <p className="error-text">{loadError || errorMsg}</p>}
 
       <div className="table-wrapper">
         <table className="rack-table">
@@ -439,7 +459,7 @@ export default function StockAllPage() {
             <tr>
               {selectMode && <th></th>}
               {showCategoryColumn && <th>หมวด</th>}
-              <th>รหัส OEM</th>
+              <th>รหัสอะไหล่</th>
               <th>รายละเอียด</th>
               <th>ใช้กับรถ</th>
               <th>จำนวน</th>
@@ -455,7 +475,7 @@ export default function StockAllPage() {
                   </td>
                 )}
                 {showCategoryColumn && <td data-label="หมวด">{item.category_name}</td>}
-                <td data-label="รหัส OEM">
+                <td data-label="รหัสอะไหล่">
                   {item.positions.length === 0 ? (
                     <strong className="stock-all-code">{item.oem_code}</strong>
                   ) : item.positions.map(({ position, oem_code: code }) => (
@@ -498,7 +518,7 @@ export default function StockAllPage() {
                         <rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" />
                         <rect x="3" y="14" width="7" height="7" rx="1" /><path d="M14 14h3v3h-3zM19 19h2M14 21h1" />
                       </svg>
-                      QR
+                      ป้าย QR
                     </button>
                     <button type="button" onClick={() => openEdit(item)}>แก้ไข</button>
                   </div>
@@ -508,7 +528,7 @@ export default function StockAllPage() {
             {visibleItems.length === 0 && (
               <tr>
                 <td colSpan={(showCategoryColumn ? 6 : 5) + (selectMode ? 1 : 0)} className="no-result-text">
-                  {items.length === 0 ? 'ยังไม่มีรายการ กด "+ เพิ่มรายการ" เพื่อเริ่มกรอก' : 'ไม่พบรายการที่ตรงเงื่อนไข'}
+                  {items.length === 0 ? 'ยังไม่มีรายการ กด "+ เพิ่มอะไหล่เข้าสต๊อก" เพื่อเริ่มกรอก' : 'ไม่พบรายการที่ตรงเงื่อนไข'}
                 </td>
               </tr>
             )}
@@ -601,7 +621,7 @@ export default function StockAllPage() {
 
               {formPositions.length === 0 && (
                 <>
-                  <label>รหัส OEM</label>
+                  <label>รหัสอะไหล่</label>
                   <input
                     placeholder="เช่น 45510-0K010"
                     value={form.oem_code}
@@ -625,14 +645,14 @@ export default function StockAllPage() {
                 <div className="stock-all-pos-form">
                   <div className="stock-all-pos-form-head">
                     <span />
-                    <span>รหัส OEM ของตำแหน่งนี้</span>
+                    <span>รหัสอะไหล่ ของตำแหน่งนี้</span>
                     <span>จำนวน</span>
                   </div>
                   {formPositions.map((position) => (
                     <div key={position} className="stock-all-pos-form-row">
                       <PositionChip position={position} />
                       <input
-                        placeholder="รหัส OEM"
+                        placeholder="รหัสอะไหล่"
                         value={form.codes[position] ?? ''}
                         maxLength={100}
                         onChange={(e) => setForm({ ...form, codes: { ...form.codes, [position]: e.target.value } })}

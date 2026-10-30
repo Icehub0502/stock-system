@@ -57,7 +57,7 @@ export default function StockCostsPage() {
       <div className="quotation-header">
         <div>
           <h1>กรอกต้นทุนที่ยังขาด</h1>
-          <p className="subtitle">ต้นทุนต่อชิ้นของสินค้าที่รับเข้ามา ใช้คำนวณกำไรและมูลค่าสต็อกในหน้าเจ้าของ กรอกเสร็จแถวจะหายไป</p>
+          <p className="subtitle">ต้นทุนต่อชิ้นของสินค้าที่รับเข้ามา ใช้คำนวณกำไรและมูลค่าสต๊อกในหน้าเจ้าของ กรอกเสร็จแถวจะหายไป</p>
         </div>
       </div>
       {error && <div className="error-message">{error}</div>}
@@ -76,7 +76,7 @@ export default function StockCostsPage() {
       </div>
 
       <div className="dash-panel">
-        <div className="dash-panel-title">สินค้าในสต็อกที่ยังไม่มีต้นทุนเลย ({data.items.length})</div>
+        <div className="dash-panel-title">สินค้าในสต๊อกที่ยังไม่มีต้นทุนเลย ({data.items.length})</div>
         <p className="sc-muted">ของที่ซื้อมาก่อนเริ่มบันทึกต้นทุน ใส่ต้นทุนโดยประมาณไว้ก่อนได้ (เฉพาะผู้จัดการ) เมื่อรับเข้ารอบใหม่พร้อมราคา ระบบจะใช้ราคาจากบิลแทน</p>
         {data.items.length === 0 ? <div className="empty-message">ทุกรายการมีต้นทุนแล้ว</div> : data.items.map((i) => (
           canSetItemCost ? (

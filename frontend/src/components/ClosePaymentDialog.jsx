@@ -58,6 +58,9 @@ export default function ClosePaymentDialog({ quotation, onConfirm, onCancel, loa
             />
           </div>
           {formError && <p className="error-text">{formError}</p>}
+          {Object.keys(selection).length === 0 && (
+            <p className="subtitle" style={{ color: '#92400e' }}>เลือกช่องทางการชำระก่อน ปุ่ม "ยืนยันรับเงินและปิดบิล" ถึงจะกดได้</p>
+          )}
         </div>
         <div className="modal-actions">
           <button type="button" className="btn btn-secondary" onClick={onCancel} disabled={loading}>
@@ -69,7 +72,7 @@ export default function ClosePaymentDialog({ quotation, onConfirm, onCancel, loa
             onClick={handleConfirm}
             disabled={loading || Object.keys(selection).length === 0}
           >
-            {loading ? 'กำลังบันทึก...' : 'ยืนยันปิดบิล'}
+            {loading ? 'กำลังบันทึก...' : 'ยืนยันรับเงินและปิดบิล'}
           </button>
         </div>
       </div>

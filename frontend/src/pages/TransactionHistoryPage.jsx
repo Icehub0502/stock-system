@@ -22,7 +22,7 @@ export default function TransactionHistoryPage() {
   return (
     <div className="office-dashboard container">
       <div className="dashboard-header">
-        <h2>ประวัติรายการรับ-จ่ายสต็อก</h2>
+        <h2>ประวัติรายการรับ-จ่ายสต๊อก</h2>
       </div>
 
       <div className="table-wrapper">

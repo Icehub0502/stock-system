@@ -1,11 +1,11 @@
 // What an item costs: the average of the lines received for it that have a cost, weighted by quantity.
-// Lines without a cost are ignored; when no line has a cost the manual cost (typed by hand) is used, and when that is
+// Lines without a cost and cancelled receives are ignored; when no line has a cost the manual cost (typed by hand) is used, and when that is
 // missing too the item has no cost (null). Called whenever a received line gets its cost or a bill is closed.
 async function recomputeItemCost(conn, itemId, shopId) {
   const [[row]] = await conn.query(
     `SELECT SUM(l.qty * l.unit_cost) AS total, SUM(l.qty) AS qty
      FROM stock_receive_lines l JOIN receipt_sessions s ON s.id = l.receipt_session_id
-     WHERE l.item_id = ? AND s.shop_id = ? AND l.applied_at IS NOT NULL AND l.unit_cost IS NOT NULL`,
+     WHERE l.item_id = ? AND s.shop_id = ? AND l.applied_at IS NOT NULL AND l.voided_at IS NULL AND l.unit_cost IS NOT NULL`,
     [itemId, shopId]
   );
   const qty = Number(row.qty) || 0;

@@ -1103,7 +1103,7 @@ export default function QuotationFormModal({ quotation, onClose, onSuccess, onDe
           <div className={`receipt-preview-pane ${showMobilePreview ? '' : 'preview-collapsed-mobile'}`}>
             <div className="receipt-preview-header">
               <div>
-                <strong>Live Preview</strong>
+                <strong>ตัวอย่างใบเสนอราคา</strong>
                 <p className="preview-subtitle">ดูตัวอย่างใบเสนอราคาทันที</p>
               </div>
             </div>

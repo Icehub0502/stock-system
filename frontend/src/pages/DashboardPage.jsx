@@ -141,7 +141,7 @@ export default function DashboardPage() {
       <div className="quotation-header">
         <div>
           <h1>แดชบอร์ด</h1>
-          <p className="subtitle">ภาพรวมยอดขายและสต็อกวันนี้</p>
+          <p className="subtitle">ภาพรวมยอดขายและสต๊อกวันนี้</p>
         </div>
       </div>
 
@@ -166,7 +166,7 @@ export default function DashboardPage() {
               </div>
             )}
             <div className="dash-stat-card">
-              <div className="dash-stat-label">สต็อกใกล้หมด/หมด</div>
+              <div className="dash-stat-label">สต๊อกใกล้หมด/หมด</div>
               <div className="dash-stat-value">{lowStockCount.toLocaleString('en-US')}</div>
             </div>
           </div>
@@ -332,9 +332,9 @@ export default function DashboardPage() {
 
           {/* ── Low stock detail ── */}
           <div className="dash-panel">
-            <div className="dash-panel-title">รายการสต็อกใกล้หมด/หมด ({lowStockCount})</div>
+            <div className="dash-panel-title">รายการสต๊อกใกล้หมด/หมด ({lowStockCount})</div>
             {lowStockItems.length === 0 ? (
-              <div className="dash-empty">สต็อกทุกรายการยังเพียงพอ</div>
+              <div className="dash-empty">สต๊อกทุกรายการยังเพียงพอ</div>
             ) : (
               <div className="dash-rank-grid">
                 {lowStockItems.map((item) => (

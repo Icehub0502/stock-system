@@ -231,14 +231,14 @@ export default function AppointmentsPage() {
                   }}
                   title={q.printed_at ? `พิมพ์แล้วเมื่อ ${new Date(q.printed_at).toLocaleString('th-TH')}` : 'ยังไม่ได้พิมพ์'}
                 >
-                  {q.printed_at ? 'พิมพ์แล้ว' : 'พิมพ์'}
+                  {q.printed_at ? '🖨️ พิมพ์ซ้ำ' : '🖨️ พิมพ์'}
                 </button>
                 <button
                   className="btn-icon-small"
                   onClick={() => setSchedulingQuotation(q)}
                   disabled={actioningId === q.id}
                 >
-                  วันที่
+                  ตั้ง/เลื่อนวันนัด
                 </button>
                 {q.status === 'no_date' && (
                   <button

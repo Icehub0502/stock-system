@@ -18,6 +18,9 @@ import useVehicleGeneration from '../hooks/useVehicleGeneration';
 import { useAuth } from '../context/AuthContext';
 import { hasRole } from '../utils/roles';
 
+// quotation status as staff say it
+const QUOTATION_STATUS_TH = { pending: 'รอลูกค้าตอบ', approved: 'อนุมัติแล้ว', no_date: 'อนุมัติ รอนัดวัน', declined: 'ลูกค้าไม่ทำ' };
+
 /**
  * รายละเอียดงาน 1 คัน — ข้อมูลรถ/ลูกค้า, รายการอะไหล่/ใบเสนอราคา, ประวัติสถานะ
  * ส่วนสถานะ/ช่องยก (เปลี่ยนไปมา, ย้อนกลับ) ย้ายไปอยู่หน้าการ์ดที่ JobBoardPage.jsx
@@ -985,7 +988,6 @@ export default function JobDetailPage() {
       <div className="dashboard-header">
         <h2>{job.job_no} <span className="dashboard-header-sub">— คิว {job.queue_no || '-'}</span></h2>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button type="button" className="btn-danger" onClick={() => setShowDeleteConfirm(true)}>ลบงานนี้</button>
           <button type="button" onClick={() => navigate('/jobs')}>← กลับรายการงาน</button>
         </div>
       </div>
@@ -1055,7 +1057,7 @@ export default function JobDetailPage() {
             <p><strong>เลขไมล์:</strong> {job.mileage_in ?? '-'}</p>
             <p><strong>อาการที่แจ้ง:</strong> {job.symptom || '-'}</p>
             {job.note && <p><strong>หมายเหตุ:</strong> {job.note}</p>}
-            <p style={{ fontSize: 13, color: '#6b7280' }}>ดูสถานะ/เปลี่ยนสถานะ/ช่องยกได้ที่การ์ดในหน้ารายการงานวันนี้</p>
+            <p style={{ fontSize: 13, color: '#6b7280' }}>ดูหรือเปลี่ยนสถานะรถได้ที่การ์ดในหน้า <Link to="/jobs">คิวรถวันนี้</Link></p>
           </>
         )}
       </div>
@@ -1073,7 +1075,7 @@ export default function JobDetailPage() {
               </div>
               <div className="modal-actions">
                 <button type="button" className="btn-primary" disabled={busy || !customerSigned} onClick={handleApprove}>
-                  อนุมัติ
+                  {customerSigned ? 'อนุมัติ (ลูกค้าตกลงทำ)' : 'อนุมัติ — ต้องเซ็นเอกสารก่อน'}
                 </button>
                 <button type="button" disabled={busy} onClick={() => setShowSchedule(true)}>
                   นัดวันมาทำ
@@ -1081,8 +1083,8 @@ export default function JobDetailPage() {
                 <button type="button" disabled={busy} onClick={() => { setError(''); setShowDeposit(true); }}>
                   มัดจำ
                 </button>
-                <button type="button" className="btn-danger" disabled={busy} onClick={() => setShowDecline(true)}>
-                  ไม่ทำ
+                <button type="button" disabled={busy} onClick={() => setShowDecline(true)}>
+                  ลูกค้าไม่ทำ
                 </button>
               </div>
               {!customerSigned && (
@@ -1106,7 +1108,7 @@ export default function JobDetailPage() {
         </div>
         {job.quotation_id && (
           <p className="jdp-quotation-meta">
-            เลขที่ <strong>{job.quotation_no}</strong> — สถานะ {job.quotation_status}
+            เลขที่ <strong>{job.quotation_no}</strong> — สถานะ: {QUOTATION_STATUS_TH[job.quotation_status] || job.quotation_status}
             {' '}(<Link to="/quotations">ไปหน้าใบเสนอราคา / พิมพ์</Link>)
           </p>
         )}
@@ -1193,7 +1195,7 @@ export default function JobDetailPage() {
                         aria-label={isEnabled ? 'ปิดการมองเห็น (ไม่นับราคา)' : 'เปิดการมองเห็น (นับราคา)'}
                         title={isEnabled ? 'ปิดการมองเห็น (ไม่นับราคา)' : 'เปิดการมองเห็น (นับราคา)'}
                       >
-                        {isEnabled ? '👁️' : '🚫'}
+                        {isEnabled ? 'นับราคา' : 'ไม่นับ'}
                       </button>
                       <div className="jdp-selected-qty">
                         <button type="button" onClick={() => changePartQty(key, -1)} aria-label="ลดจำนวน">−</button>
@@ -1212,7 +1214,7 @@ export default function JobDetailPage() {
                         />
                       </label>
                       <button type="button" className="jdp-selected-remove" onClick={() => removeSelected(key)} aria-label="ลบรายการ">
-                        ✕
+                        ลบ
                       </button>
                     </div>
                     {renderPriceExtra(key, item)}
@@ -1375,6 +1377,12 @@ export default function JobDetailPage() {
         <p style={{ fontSize: 12, color: '#9ca3af', marginTop: 6 }}>
           ดูรายละเอียด/พิมพ์บิลเหล่านี้ได้ที่ <Link to="/quotations">หน้าใบเสนอราคา</Link>
         </p>
+      </div>
+
+      {/* deleting the whole job is rare and cannot be undone: kept at the very end, away from the back button */}
+      <div className="jdp-danger-zone">
+        <span>เปิดงานผิดคัน/ซ้ำ ต้องการลบทิ้งทั้งงาน</span>
+        <button type="button" className="btn-danger-outline" onClick={() => setShowDeleteConfirm(true)}>ลบงานนี้ทั้งงาน</button>
       </div>
 
       {showExtraBillModal && (

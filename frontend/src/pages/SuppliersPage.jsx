@@ -23,12 +23,12 @@ function SupplierRow({ supplier, onChanged, onError }) {
     <div className={`sc-row ${supplier.is_active ? '' : 'sc-row-off'}`}>
       <div className="sc-row-main">
         <input type="text" value={name} maxLength={150} onChange={(e) => setName(e.target.value)} aria-label="ชื่อร้าน" />
-        <input type="text" value={guide} maxLength={255} placeholder="หมวดที่มักซื้อ เช่น แร็ค,ปีกนก" onChange={(e) => setGuide(e.target.value)} aria-label="หมวดที่มักซื้อ" />
-        <span className="sc-muted">{supplier.bills} บิล{supplier.is_active ? '' : ' · ซ่อนอยู่'}</span>
+        <input type="text" value={guide} maxLength={255} placeholder="สินค้าที่ซื้อบ่อย เช่น แร็ค,ปีกนก" title="สินค้าที่ซื้อบ่อยจากร้านนี้" onChange={(e) => setGuide(e.target.value)} aria-label="หมวดที่มักซื้อ" />
+        <span className="sc-muted">{supplier.bills} บิล{supplier.is_active ? '' : ' · เลิกใช้แล้ว (ไม่ขึ้นในรายการให้เลือก)'}</span>
       </div>
       <div className="sc-row-side">
         <button type="button" className="btn btn-primary" disabled={!dirty} onClick={() => save({ name, guide_categories: guide })}>บันทึก</button>
-        <button type="button" className="btn btn-secondary" onClick={() => save({ is_active: !supplier.is_active })}>{supplier.is_active ? 'ซ่อน' : 'แสดงอีกครั้ง'}</button>
+        <button type="button" className="btn btn-secondary" onClick={() => save({ is_active: !supplier.is_active })}>{supplier.is_active ? 'เลิกใช้ร้านนี้' : 'กลับมาใช้ร้านนี้'}</button>
       </div>
     </div>
   );
@@ -65,7 +65,7 @@ export default function SuppliersPage() {
       <div className="quotation-header">
         <div>
           <h1>ร้านอะไหล่</h1>
-          <p className="subtitle">ร้านที่สั่งของเข้าสต็อก พนักงานเลือกตอนเปิดบิลรับเข้า (พิมพ์ร้านใหม่ได้เอง) ร้านเดียวซื้อได้หลายหมวด หมวดที่ระบุเป็นแค่คำแนะนำ</p>
+          <p className="subtitle">ร้านที่สั่งของเข้าสต๊อก พนักงานเลือกตอนเปิดบิลรับเข้า (พิมพ์ร้านใหม่ได้เอง) ร้านเดียวซื้อได้หลายหมวด หมวดที่ระบุเป็นแค่คำแนะนำ</p>
         </div>
       </div>
       {error && <div className="error-message">{error}</div>}

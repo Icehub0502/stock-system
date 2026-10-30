@@ -1,6 +1,6 @@
 const express = require('express');
 const pool = require('../db/pool');
-const { authenticate, requireRole, requireManager } = require('../middleware/auth');
+const { authenticate, roleRank } = require('../middleware/auth');
 const { emitStockEvent, emitStockTxEvent } = require('../realtime');
 const { positionsFor, positionLabel } = require('../utils/stockPositions');
 const { resolveTransactionDate } = require('../utils/resolveTransactionDate');
@@ -9,12 +9,14 @@ const { resolveTransactionDate } = require('../utils/resolveTransactionDate');
 // ตัดได้หลายตำแหน่งของชิ้นเดียวกันในครั้งเดียว (เช่น ปีกนกซ้าย+ขวาเป็นคู่) — ทั้งหมดอยู่ใน
 // ทรานแซกชันเดียว ตำแหน่งไหนสต๊อกไม่พอ = ไม่ตัดเลยสักตำแหน่ง ตัดเกินยอด/ติดลบไม่ได้
 // สร้างรายการตัดเปิดให้ทุก role ที่ล็อกอิน (ช่างจ่ายของออกที่หน้าสแกนได้เหมือนระบบเดิม)
-// ส่วนยกเลิกรายการที่ตัดไปแล้ว (คืนสต๊อก) เฉพาะ office
+// ส่วนยกเลิกรายการที่ตัดไปแล้ว (คืนสต๊อก): ผู้จัดการขึ้นไป หรือคนที่จ่ายออกเองภายใน UNDO_MINUTES นาที (สแกนผิด)
 const router = express.Router();
 router.use(authenticate);
 
 const MAX_QTY = 1000000;
 const MAX_LINES = 8;
+// how long the person who paid a part out may cancel it themselves (a wrong scan); after that a manager does it
+const UNDO_MINUTES = 30;
 
 function parseId(value) {
   const n = Number(value);
@@ -151,7 +153,7 @@ router.post('/', async (req, res) => {
 
 // ยกเลิกรายการตัดสต๊อก (ตัดผิด) — คืนยอดให้ตำแหน่งนั้น แถวเดิมไม่ลบ แค่ตีตรา voided_at และเพิ่มแถว
 // ปรับยอดให้ประวัติของชิ้นนั้นเดินต่อเนื่อง ย้อนซ้ำไม่ได้
-router.delete('/movements/:id', requireManager, async (req, res) => {
+router.delete('/movements/:id', async (req, res) => {
   const id = parseId(req.params.id);
   if (!id) return res.status(400).json({ error: 'ข้อมูลไม่ถูกต้อง' });
   let conn;
@@ -159,7 +161,8 @@ router.delete('/movements/:id', requireManager, async (req, res) => {
     conn = await pool.getConnection();
     await conn.beginTransaction();
     const [[mv]] = await conn.execute(
-      `SELECT m.id, m.item_id, m.position, m.qty_before, m.qty_after
+      `SELECT m.id, m.item_id, m.position, m.qty_before, m.qty_after, m.user_id,
+              m.created_at >= NOW() - INTERVAL ${UNDO_MINUTES} MINUTE AS recent
        FROM stock_item_movements m JOIN stock_items i ON i.id = m.item_id
        WHERE m.id = ? AND i.shop_id = ? AND m.reason = 'deduct' AND m.voided_at IS NULL FOR UPDATE`,
       [id, req.shopId]
@@ -167,6 +170,13 @@ router.delete('/movements/:id', requireManager, async (req, res) => {
     if (!mv) {
       await conn.rollback();
       return res.status(404).json({ error: 'ไม่พบรายการนี้ (อาจถูกยกเลิกไปแล้ว)' });
+    }
+    const ownRecent = mv.user_id === req.user.id && Number(mv.recent) === 1;
+    if (roleRank(req.user.role) < roleRank('manager') && !ownRecent) {
+      await conn.rollback();
+      return res.status(403).json({
+        error: `ยกเลิกเองได้เฉพาะรายการที่คุณจ่ายออกภายใน ${UNDO_MINUTES} นาที — เกินนั้นให้ผู้จัดการยกเลิกให้`,
+      });
     }
     const [[item]] = await conn.execute('SELECT id, description, stock_qty FROM stock_items WHERE id = ? AND shop_id = ? FOR UPDATE', [mv.item_id, req.shopId]);
     if (!item) {

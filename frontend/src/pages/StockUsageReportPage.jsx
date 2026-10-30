@@ -3,6 +3,8 @@ import client from '../api/client';
 import { todayStr, formatDbTime } from '../utils/format';
 import { formatDateTh } from '../utils/dateGroups';
 import useRealtimeEvent from '../hooks/useRealtimeEvent';
+import { useAuth } from '../context/AuthContext';
+import { hasRole } from '../utils/roles';
 
 const CURRENT_YEAR = new Date().getFullYear();
 const YEAR_OPTIONS = Array.from({ length: 6 }, (_, i) => CURRENT_YEAR - i);
@@ -46,7 +48,7 @@ function loadCustomFilters() {
 // เท่าไหร่) tx_date มาจาก created_at จริง ตรงกับวันที่ที่เลือกตอนตัด แม้เป็นการ
 // ตัดย้อนหลังผ่านช่อง "วันที่ตัดสต๊อก" ในหน้าตัดสต๊อกก็ตาม — แต่ละแถวคือ
 // transaction จริง 1 รายการ (ไม่รวมยอดแล้วเหมือนก่อนหน้านี้) เพื่อให้มีปุ่มลบ
-// รายตัวได้ (เรียก DELETE /transactions/:id เดิมที่คืนสต็อกให้ถูกต้องอยู่แล้ว)
+// รายตัวได้ (เรียก DELETE /transactions/:id เดิมที่คืนสต๊อกให้ถูกต้องอยู่แล้ว)
 // ประเภทที่แสดง: ของสต๊อกรวมใช้ชื่อหมวด ของระบบเก่าใช้ แร็ค/ปีกนก
 function kindLabel(row) {
   if (row.source === 'stock_item') return row.category_name || 'สต๊อกรวม';
@@ -59,6 +61,8 @@ function rowKey(row) {
 }
 
 export default function StockUsageReportPage() {
+  const { user } = useAuth();
+  const canDelete = hasRole(user, 'manager'); // cancelling a deduction gives stock back: managers only from here
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -83,6 +87,7 @@ export default function StockUsageReportPage() {
   const load = async ({ silent } = {}) => {
     try {
       if (!silent) setLoading(true);
+      setError('');
       const params = {};
       if (from) params.from = from;
       if (to) params.to = to;
@@ -140,7 +145,7 @@ export default function StockUsageReportPage() {
   }
 
   async function handleDelete(row) {
-    if (!window.confirm('ลบรายการนี้และคืนสต็อกกลับหรือไม่?')) return;
+    if (!window.confirm(`ยกเลิกการตัด "${row.part_name}" ${row.qty} ชิ้น?\nของจะถูกคืนเข้าสต๊อก และรายการนี้จะหายจากประวัติ`)) return;
     const id = rowKey(row);
     setDeletingId(id);
     try {
@@ -284,14 +289,14 @@ export default function StockUsageReportPage() {
         )}
 
         <button type="button" onClick={() => setShowAddFilter(true)} style={{ fontSize: '13px' }}>
-          + เพิ่มตัวกรอง
+          + สร้างปุ่มกรองเอง
         </button>
       </div>
 
       {showAddFilter && (
         <div className="modal-backdrop" onClick={() => setShowAddFilter(false)}>
           <div className="modal-card" style={{ maxWidth: 360 }} onClick={(e) => e.stopPropagation()}>
-            <h3 className="modal-title">+ เพิ่มตัวกรอง</h3>
+            <h3 className="modal-title">สร้างปุ่มกรองเอง</h3>
             <div className="modal-form">
               <label>ชื่อปุ่ม</label>
               <input type="text" placeholder="เช่น ลูกหมาก" value={newFilterLabel} onChange={(e) => setNewFilterLabel(e.target.value)} />
@@ -343,14 +348,16 @@ export default function StockUsageReportPage() {
                       <td data-label="จำนวนที่ตัดออก">{Number(r.qty).toLocaleString('en-US')}</td>
                       <td data-label="เวลา">{formatDbTime(r.created_at)}</td>
                       <td data-label="">
-                        <button
-                          type="button"
-                          className="btn-danger"
-                          disabled={deletingId === rowKey(r)}
-                          onClick={() => handleDelete(r)}
-                        >
-                          {deletingId === rowKey(r) ? '...' : '🗑️ ลบ'}
-                        </button>
+                        {canDelete && (
+                          <button
+                            type="button"
+                            className="btn-danger"
+                            disabled={deletingId === rowKey(r)}
+                            onClick={() => handleDelete(r)}
+                          >
+                            {deletingId === rowKey(r) ? '...' : 'ยกเลิกการตัด (คืนของเข้าสต๊อก)'}
+                          </button>
+                        )}
                       </td>
                     </tr>
                   ))}

@@ -824,7 +824,7 @@ export default function ReceiptFormModal({ onClose, onSuccess, receiptId }) {
           <div className={`receipt-preview-pane ${showMobilePreview ? '' : 'preview-collapsed-mobile'}`}>
             <div className="receipt-preview-header">
               <div>
-                <strong>Live Preview</strong>
+                <strong>ตัวอย่างใบเสร็จ</strong>
                 <p className="preview-subtitle">ดูตัวอย่างใบเสร็จทันที</p>
               </div>
             </div>

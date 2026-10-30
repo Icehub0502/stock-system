@@ -11,15 +11,15 @@ export default function ConfirmStockModal({ rack, mode, onConfirm, onCancel, loa
   return (
     <div className="modal-backdrop">
       <div className={`modal-card ${isOut ? 'modal-warning' : ''}`}>
-        <h3>{isOut ? '⚠️ ยืนยันการจ่ายแร็คออกจากสต็อก' : 'ยืนยันรับแร็คเข้าสต็อก'}</h3>
+        <h3>{isOut ? '⚠️ ยืนยันการจ่ายแร็คออกจากสต๊อก' : 'ยืนยันรับแร็คเข้าสต๊อก'}</h3>
 
         <div className="modal-rack-info">
           <p><strong>รหัสรุ่น:</strong> {rack.model_code}</p>
           <p><strong>รายการ:</strong> {rack.name}</p>
-          <p><strong>สต็อกคงเหลือ:</strong> {rack.stock_qty}</p>
+          <p><strong>สต๊อกคงเหลือ:</strong> {rack.stock_qty}</p>
         </div>
 
-        {outOfStock && <p className="error-text">สต็อกหมดแล้ว ไม่สามารถจ่ายออกได้</p>}
+        {outOfStock && <p className="error-text">สต๊อกหมดแล้ว ไม่สามารถจ่ายออกได้</p>}
 
         <label>จำนวนที่จะ{isOut ? 'จ่ายออก' : 'รับเข้า'}</label>
         <input

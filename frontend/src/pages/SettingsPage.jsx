@@ -18,11 +18,12 @@ export default function SettingsPage() {
           <p className="subtitle">จัดการบัญชีผู้ใช้ (เจ้าของร้านขึ้นไป) ช่าง เหตุผลที่ลูกค้าไม่ทำ และบอทไลน์ — เห็นเฉพาะผู้จัดการขึ้นไป</p>
         </div>
       </div>
+      {/* the other setting pages first, so the document header is found without scrolling a long page */}
+      <QuickLinksSection />
       {hasRole(user, 'owner') && <UsersSection />}
       <TechniciansSection />
       <DeclineReasonsSection />
       <LineBotSection />
-      <QuickLinksSection />
     </div>
   );
 }
@@ -120,7 +121,7 @@ function UsersSection() {
           <table className="quotation-table">
             <thead>
               <tr>
-                <th>Username</th>
+                <th>ชื่อผู้ใช้ (ใช้ล็อกอิน)</th>
                 <th>ชื่อ</th>
                 <th>สิทธิ์</th>
                 <th>จัดการ</th>
@@ -162,7 +163,7 @@ function UsersSection() {
             <form onSubmit={save} className="modal-form">
               {!editing && (
                 <div className="form-group">
-                  <label>Username</label>
+                  <label>ชื่อผู้ใช้ (ใช้ล็อกอิน)</label>
                   <input
                     type="text"
                     value={form.username}
@@ -592,11 +593,11 @@ function LineBotSection() {
 function QuickLinksSection() {
   return (
     <div className="dash-panel">
-      <div className="dash-panel-title">ลิงก์ด่วน</div>
+      <div className="dash-panel-title">ตั้งค่าอื่น ๆ</div>
       <div className="modal-actions" style={{ flexWrap: 'wrap' }}>
-        <Link to="/service-items" className="btn btn-secondary">รายการสินค้า/บริการ</Link>
+        <Link to="/doc-header" className="btn btn-secondary">🧾 หัวกระดาษเอกสาร (ชื่อร้าน/ที่อยู่/โลโก้บนบิล)</Link>
+        <Link to="/service-items" className="btn btn-secondary">รายการขาย/บริการ</Link>
         <Link to="/model-prices" className="btn btn-secondary">ราคามาตรฐานตามรุ่นรถ</Link>
-        <Link to="/doc-header" className="btn btn-secondary">หัวกระดาษเอกสาร</Link>
         <Link to="/warranties" className="btn btn-secondary">การรับประกัน</Link>
       </div>
     </div>

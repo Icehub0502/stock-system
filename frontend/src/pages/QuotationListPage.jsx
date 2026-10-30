@@ -333,7 +333,7 @@ export default function QuotationListPage() {
           className={`btn-tab ${viewMode === 'active' ? 'btn-tab-active' : ''}`}
           onClick={() => setViewMode('active')}
         >
-          รายการหลัก
+          ใบเสนอราคาทั้งหมด
         </button>
         <button
           className={`btn-tab ${viewMode === 'declined' ? 'btn-tab-active' : ''}`}
@@ -448,7 +448,7 @@ export default function QuotationListPage() {
                           }}
                           title={q.printed_at ? `พิมพ์แล้วเมื่อ ${new Date(q.printed_at).toLocaleString('th-TH')}` : 'ยังไม่ได้พิมพ์'}
                         >
-                          {q.printed_at ? 'พิมพ์แล้ว' : 'พิมพ์'}
+                          {q.printed_at ? '🖨️ พิมพ์ซ้ำ' : '🖨️ พิมพ์'}
                         </button>
                         {q.status === 'declined' && (
                           <button

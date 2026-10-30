@@ -49,7 +49,7 @@ function SingleForm({ form, setForm }) {
     <div className="pcp-single-form">
       <div className="pcp-form-row-2">
         <div className="pcp-form-field">
-          <label>No.</label>
+          <label>ลำดับ</label>
           <input
             type="number"
             value={form.no}
@@ -59,17 +59,17 @@ function SingleForm({ form, setForm }) {
           />
         </div>
         <div className="pcp-form-field">
-          <label>Parts *</label>
+          <label>รหัสอะไหล่ *</label>
           <input value={form.parts} onChange={f("parts")} placeholder="รหัสอะไหล่" />
         </div>
       </div>
       <div className="pcp-form-field">
-        <label>Description *</label>
+        <label>รายละเอียด *</label>
         <input value={form.description} onChange={f("description")} placeholder="รายละเอียดสินค้า" />
       </div>
       <div className="pcp-form-row-2">
         <div className="pcp-form-field">
-          <label>Brand</label>
+          <label>ยี่ห้อ</label>
           <input value={form.brand} onChange={f("brand")} placeholder="แบรนด์" />
         </div>
         <div className="pcp-form-field">
@@ -156,7 +156,7 @@ function ProductModal({ mode, initial, nextNo, onClose, onSave, onDelete }) {
                   <div className="pcp-preview-scroll">
                     <table className="pcp-preview-table">
                       <thead>
-                        <tr><th>No</th><th>Parts</th><th>Description</th><th>Brand</th><th>ราคา</th></tr>
+                        <tr><th>ลำดับ</th><th>รหัสอะไหล่</th><th>รายละเอียด</th><th>ยี่ห้อ</th><th>ราคา</th></tr>
                       </thead>
                       <tbody>
                         {bulkItems.slice(0, 10).map((it, i) => (
@@ -580,7 +580,7 @@ export default function ProductCostPage() {
             className={`pcp-btn-select-mode ${selectionMode ? "active" : ""}`}
             onClick={() => selectionMode ? exitSelectionMode() : setSelectionMode(true)}
           >
-            {selectionMode ? "ยกเลิกการเลือก" : "เลือกรายการ"}
+            {selectionMode ? "เลิกเลือก" : "เลือกหลายรายการ (พิมพ์/ลบ)"}
           </button>
           <button
             className="pcp-btn-add"
@@ -600,7 +600,7 @@ export default function ProductCostPage() {
             </svg>
           </span>
           <input
-            placeholder="ค้นหา parts, description, brand..."
+            placeholder="ค้นหารหัส ชื่อ หรือยี่ห้อ..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -688,12 +688,12 @@ export default function ProductCostPage() {
             <thead>
               <tr>
                 {selectionMode && <th className="pcp-col-cb"></th>}
-                <th className="pcp-col-no">No.</th>
-                <th className="pcp-col-parts">Parts</th>
-                <th className="pcp-col-desc">Description</th>
+                <th className="pcp-col-no">ลำดับ</th>
+                <th className="pcp-col-parts">รหัสอะไหล่</th>
+                <th className="pcp-col-desc">รายละเอียด</th>
                 <th className="pcp-col-cat">หมวดหมู่</th>
                 <th className="pcp-col-carbrand">ยี่ห้อรถ</th>
-                <th className="pcp-col-brand">Brand</th>
+                <th className="pcp-col-brand">ยี่ห้อ</th>
                 <th className="pcp-col-price">ต้นทุน</th>
                 <th className="pcp-col-action">จัดการ</th>
               </tr>
@@ -711,18 +711,18 @@ export default function ProductCostPage() {
                       />
                     </td>
                   )}
-                  <td className="pcp-col-no" data-label="No.">{(page - 1) * PAGE_SIZE + index + 1}</td>
-                  <td className="pcp-col-parts" data-label="Parts">
+                  <td className="pcp-col-no" data-label="ลำดับ">{(page - 1) * PAGE_SIZE + index + 1}</td>
+                  <td className="pcp-col-parts" data-label="รหัสอะไหล่">
                     <span className="pcp-parts-badge">{p.parts}</span>
                   </td>
-                  <td className="pcp-col-desc" data-label="Description">{p.description}</td>
+                  <td className="pcp-col-desc" data-label="รายละเอียด">{p.description}</td>
                   <td className="pcp-col-cat" data-label="หมวดหมู่">
                     <span className="pcp-cat-chip">{detectCategory(p.description)}</span>
                   </td>
                   <td className="pcp-col-carbrand" data-label="ยี่ห้อรถ">
                     <span className="pcp-car-chip">{detectBrand(p.description)}</span>
                   </td>
-                  <td className="pcp-col-brand" data-label="Brand">{p.brand || "-"}</td>
+                  <td className="pcp-col-brand" data-label="ยี่ห้อ">{p.brand || "-"}</td>
                   <td className="pcp-col-price" data-label="ต้นทุน">
                     {p.price != null
                       ? <span className="pcp-price-val">฿{fmt(p.price)}</span>

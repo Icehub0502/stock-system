@@ -8,8 +8,8 @@ const KIND_LABEL = { create: 'เพิ่ม', update: 'แก้ไข', delet
 const ROLE_LABEL = { technician: 'ช่าง', office: 'ออฟฟิศ', manager: 'ผู้จัดการ', owner: 'เจ้าของ', dev: 'แอดมิน' };
 const ENTITIES = [
   ['customers', 'ลูกค้า'], ['vehicles', 'รถ'], ['quotations', 'ใบเสนอราคา'], ['receipts', 'ใบเสร็จ'], ['jobs', 'งาน/คิว'],
-  ['claims', 'เคลม'], ['warranties', 'การรับประกัน'], ['service-items', 'รายการสินค้า/บริการ'], ['stock-items', 'สต็อก'],
-  ['stock-receive', 'รับเข้าสต็อก'], ['stock-deductions', 'ตัดสต็อก'], ['users', 'บัญชีผู้ใช้'], ['technicians', 'ช่าง'],
+  ['claims', 'เคลม'], ['warranties', 'การรับประกัน'], ['service-items', 'รายการสินค้า/บริการ'], ['stock-items', 'สต๊อก'],
+  ['stock-receive', 'รับเข้าสต๊อก'], ['stock-deductions', 'ตัดสต๊อก'], ['users', 'บัญชีผู้ใช้'], ['technicians', 'ช่าง'],
   ['doc-settings', 'หัวกระดาษ'], ['model-prices', 'ราคามาตรฐาน'], ['settings', 'ตั้งค่า'], ['auth', 'บัญชี/เข้าสู่ระบบ'],
 ];
 // records the administrator can bring back from the trash

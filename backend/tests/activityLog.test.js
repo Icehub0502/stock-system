@@ -23,6 +23,9 @@ async function waitForEntries(where, params, expected = 1) {
 }
 
 beforeAll(async () => {
+  // the per-user summary shows the 100 busiest users of the day: entries left by earlier runs of the whole
+  // suite (each makes its own shops and users) would push this test's user out of it
+  await pool.query('DELETE FROM activity_log WHERE shop_id IS NULL OR shop_id <> 1');
   shop = await createShop();
   devToken = await getDevToken();
 });

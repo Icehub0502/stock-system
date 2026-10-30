@@ -148,7 +148,7 @@ export default function OwnerDashboardPage() {
       <div className="dash-panel">
         <div className="dash-panel-title">กำไรและต้นทุน (เดือนนี้)</div>
         {!cost.available ? (
-          <p className="od-muted">ยังไม่มีข้อมูลต้นทุนอะไหล่ จึงยังคำนวณกำไรไม่ได้ จะแสดงเมื่อพนักงานกรอกต้นทุนตอนรับของเข้าสต็อก</p>
+          <p className="od-muted">ยังไม่มีข้อมูลต้นทุนอะไหล่ จึงยังคำนวณกำไรไม่ได้ จะแสดงเมื่อพนักงานกรอกต้นทุนตอนรับของเข้าสต๊อก</p>
         ) : (
           <>
             {cost.deduct_coverage_pct !== null && cost.deduct_coverage_pct < 100 && (
@@ -156,10 +156,10 @@ export default function OwnerDashboardPage() {
             )}
             <div className="od-line"><span>กำไรขั้นต้น</span><strong>{baht(cost.gross_profit_month)}{cost.margin_pct !== null ? ` (${cost.margin_pct}%)` : ''}</strong></div>
             <div className="od-line"><span>ต้นทุนอะไหล่ที่ใช้</span><strong>{baht(cost.cogs_month)}</strong></div>
-            <div className="od-line"><span>มูลค่าสต็อกคงเหลือ</span><strong>{baht(cost.stock_value)}</strong></div>
+            <div className="od-line"><span>มูลค่าสต๊อกคงเหลือ</span><strong>{baht(cost.stock_value)}</strong></div>
             <div className="od-line"><span>ของไม่เคลื่อนไหวเกิน 90 วัน ({count(cost.slow_count)} รายการ)</span><strong>{baht(cost.slow_value)}</strong></div>
-            {cost.items_without_cost > 0 && <p className="od-muted">ยังไม่มีต้นทุน {count(cost.items_without_cost)} รายการในสต็อก (ไม่นับในมูลค่าสต็อก)</p>}
-            <p className="od-muted">กำไรคิดทั้งเดือน = รายได้ − ต้นทุนของอะไหล่ที่ตัดออกจากสต็อก ไม่ใช่รายบิล</p>
+            {cost.items_without_cost > 0 && <p className="od-muted">ยังไม่มีต้นทุน {count(cost.items_without_cost)} รายการในสต๊อก (ไม่นับในมูลค่าสต๊อก)</p>}
+            <p className="od-muted">กำไรคิดทั้งเดือน = รายได้ − ต้นทุนของอะไหล่ที่ตัดออกจากสต๊อก ไม่ใช่รายบิล</p>
           </>
         )}
       </div>
@@ -309,7 +309,7 @@ export default function OwnerDashboardPage() {
             </tbody>
           </table>
         </div>
-        <Link to="/owner/overview" className="btn btn-secondary">เทียบรายวันแยกเงินสด/โอน</Link>
+        <Link to="/owner/overview" className="btn btn-secondary">ดูยอดรายวัน แยกเงินสด/โอน</Link>
       </div>
 
       <div className="dash-panel">
@@ -328,7 +328,7 @@ export default function OwnerDashboardPage() {
           ))}
         </details>
         <details>
-          <summary>ปรับสต็อกด้วยมือ {count(unusual.stock_adjustments.length)} ครั้ง</summary>
+          <summary>ปรับสต๊อกด้วยมือ {count(unusual.stock_adjustments.length)} ครั้ง</summary>
           {unusual.stock_adjustments.map((a, i) => (
             <div key={i} className="od-line"><span>{a.oem_code} · {a.at} · {a.full_name}</span><strong>{a.qty_before} → {a.qty_after}</strong></div>
           ))}

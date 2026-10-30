@@ -322,9 +322,9 @@ describe('stock (combined stock is per shop)', () => {
     expect(search.body.matches.every((m) => m.item_id === itemB)).toBe(true);
 
     // receipt sessions (bills for receiving stock)
-    const sessionA = await request(app).post('/api/transactions/receipt-session').set(as(tokenA)).send({ invoice_no: 'ISO2-INV-A' });
+    const sessionA = await request(app).post('/api/transactions/receipt-session').set(as(tokenA)).send({ invoice_no: `ISO2-INV-A-${Date.now().toString(36)}` });
     expect(sessionA.status).toBe(201);
-    const sessionB = await request(app).post('/api/transactions/receipt-session').set(as(tokenB)).send({ invoice_no: 'ISO2-INV-B' });
+    const sessionB = await request(app).post('/api/transactions/receipt-session').set(as(tokenB)).send({ invoice_no: `ISO2-INV-B-${Date.now().toString(36)}` });
     const sessionsB = await request(app).get('/api/transactions/receipt-sessions').set(as(tokenB));
     expect(sessionsB.body.map((s) => s.id)).toEqual([sessionB.body.id]);
     expect((await request(app).get(`/api/transactions/receipt-sessions/${sessionA.body.id}`).set(as(tokenB))).status).toBe(404);

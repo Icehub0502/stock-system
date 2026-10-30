@@ -207,7 +207,7 @@ export default function StockDeductionPage() {
       <div className="search-bar">
         <input
           type="text"
-          placeholder={activeCategory ? `ค้นหาในหมวด ${activeCategory.name} (รหัส OEM / รายละเอียด)...` : 'ค้นหาในทุกหมวด (รหัส OEM / รายละเอียด)...'}
+          placeholder={activeCategory ? `ค้นหาในหมวด ${activeCategory.name} (รหัสอะไหล่ / รายละเอียด)...` : 'ค้นหาในทุกหมวด (รหัสอะไหล่ / รายละเอียด)...'}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
@@ -224,7 +224,7 @@ export default function StockDeductionPage() {
             <thead>
               <tr>
                 {activeTab === ALL_TAB && <th>หมวด</th>}
-                <th>รหัส OEM</th>
+                <th>รหัสอะไหล่</th>
                 <th>รายละเอียด</th>
                 <th>คงเหลือ</th>
                 <th></th>
@@ -234,7 +234,7 @@ export default function StockDeductionPage() {
               {filtered.map((it) => (
                 <tr key={it.id} className="clickable-row" onClick={() => selectItem(it)}>
                   {activeTab === ALL_TAB && <td data-label="หมวด">{it.category_name}</td>}
-                  <td data-label="รหัส OEM">
+                  <td data-label="รหัสอะไหล่">
                     {it.positions.length === 0 ? <strong>{it.oem_code}</strong> : it.positions.map((p) => (
                       <div key={p.position} className="stock-all-pos-row">
                         <PositionChip position={p.position} />
@@ -251,7 +251,7 @@ export default function StockDeductionPage() {
                       </div>
                     ))}
                   </td>
-                  <td data-label=""><button type="button" className="btn-primary">เลือก</button></td>
+                  <td data-label=""><button type="button" className="btn-primary">ตัดออก</button></td>
                 </tr>
               ))}
               {filtered.length === 0 && (
@@ -273,7 +273,7 @@ export default function StockDeductionPage() {
             <h3 className="modal-title">📦 ตัดสต๊อก: {selected.description || selected.oem_code}</h3>
             <p style={{ margin: '0 0 12px', color: '#6b7280', fontSize: 13 }}>{selected.category_name}</p>
 
-            <form onSubmit={handleSubmit} className="modal-form">
+            <form onSubmit={handleSubmit} className="modal-form" noValidate>
               {selected.positions.length === 0 ? (
                 <>
                   <p style={{ margin: 0 }}><strong>รหัส:</strong> {selected.oem_code} · <strong>คงเหลือ:</strong> {selected.stock_qty}</p>

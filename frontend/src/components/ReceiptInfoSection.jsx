@@ -14,7 +14,7 @@ export default function ReceiptInfoSection({ receiptNo, receiptDate, pic, onDate
           <input type="date" value={receiptDate} onChange={(e) => onDateChange(e.target.value)} required />
         </div>
         <div className="form-group">
-          <label>PIC</label>
+          <label>ผู้รับผิดชอบ</label>
           <input type="text" value={pic} onChange={(e) => onPicChange(e.target.value)} placeholder="ผู้รับผิดชอบ" />
         </div>
       </div>

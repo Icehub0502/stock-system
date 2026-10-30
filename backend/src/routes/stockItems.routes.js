@@ -417,6 +417,11 @@ router.patch('/:id/qty', async (req, res) => {
     return res.status(400).json({ error: 'ยอดต้องเป็นเลขจำนวนเต็มตั้งแต่ 0 ขึ้นไป' });
   }
   const note = cleanText(req.body?.note, 255) || null;
+  // the quantity the editing form showed: if it changed meanwhile (a scan or deduction from another device),
+  // setting a fixed number would silently undo that change
+  const hasExpected = req.body?.expected_qty !== undefined;
+  const expected = hasExpected ? parseQty(req.body.expected_qty) : null;
+  if (hasExpected && expected === null) return res.status(400).json({ error: 'ข้อมูลไม่ถูกต้อง' });
 
   let conn;
   try {
@@ -445,6 +450,12 @@ router.patch('/:id/qty', async (req, res) => {
         [id, position]
       );
       before = row ? row.qty : 0;
+    }
+    if (hasExpected && before !== expected) {
+      await conn.rollback();
+      return res.status(409).json({
+        error: `ยอดของรายการนี้เพิ่งเปลี่ยนเป็น ${before} (มีการรับเข้า/ตัดสต๊อกระหว่างที่แก้) — ปิดแล้วเปิดรายการใหม่ก่อนแก้ยอด`,
+      });
     }
     const after = hasDelta ? before + delta : setTo;
     if (after < 0 || after > MAX_QTY) {

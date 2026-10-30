@@ -6,6 +6,7 @@ const { resolveTransactionDate } = require('../utils/resolveTransactionDate');
 const { emitStockEvent, emitStockTxEvent, emitReceiptSessionEvent } = require('../realtime');
 const { voidReceiveMovement } = require('./stockReceive.routes');
 const { findOrCreateSupplier } = require('./suppliers.routes');
+const { recomputeItemCost } = require('../utils/stockCost');
 
 const { positionLabel } = require('../utils/stockPositions');
 
@@ -17,9 +18,12 @@ router.use(authenticate);
 const DATE_ONLY_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 router.post('/receipt-session', async (req, res) => {
-  const { invoice_no, bill_date = null, supplier_name = null } = req.body || {};
-  if (!invoice_no) {
+  const { invoice_no, bill_date = null, supplier_name = null, allow_duplicate = false } = req.body || {};
+  if (typeof invoice_no !== 'string' || !invoice_no.trim()) {
     return res.status(400).json({ error: 'กรุณากรอกรหัสบิล' });
+  }
+  if (invoice_no.trim().length > 100) {
+    return res.status(400).json({ error: 'เลขบิลยาวเกินไป (ไม่เกิน 100 ตัวอักษร)' });
   }
   if (bill_date && !DATE_ONLY_RE.test(bill_date)) {
     return res.status(400).json({ error: 'รูปแบบวันที่ไม่ถูกต้อง' });
@@ -30,6 +34,19 @@ router.post('/receipt-session', async (req, res) => {
     if (supplier_name && String(supplier_name).trim()) {
       supplier = await findOrCreateSupplier(pool, req.shopId, supplier_name);
       if (supplier.error) return res.status(400).json({ error: supplier.error });
+    }
+    // the same bill number from the same supplier is most likely the same paper bill keyed twice
+    if (allow_duplicate !== true) {
+      const [[same]] = await pool.execute(
+        `SELECT id, invoice_no, supplier_name, DATE_FORMAT(bill_date, '%Y-%m-%d') AS bill_date
+         FROM receipt_sessions
+         WHERE shop_id = ? AND LOWER(TRIM(invoice_no)) = LOWER(?) AND supplier_id <=> ?
+         ORDER BY id DESC LIMIT 1`,
+        [req.shopId, invoice_no.trim(), supplier.id]
+      );
+      if (same) {
+        return res.status(409).json({ error: 'มีบิลเลขนี้ของร้านนี้อยู่แล้ว', code: 'DUPLICATE_BILL', existing: same });
+      }
     }
     const [result] = await pool.execute(
       'INSERT INTO receipt_sessions (shop_id, invoice_no, user_id, bill_date, supplier_id, supplier_name) VALUES (?, ?, ?, COALESCE(?, CURDATE()), ?, ?)',
@@ -125,7 +142,7 @@ router.get('/receipt-sessions/:id', requireRole('office'), async (req, res) => {
     // รายการที่สแกนไว้แล้วแต่ยังไม่กดเสร็จสิ้น (ยังไม่บวกสต๊อก) — source='pending_line' ให้หน้าเว็บ
     // แสดงป้าย "รอยืนยัน" และลบผ่าน /stock-receive/lines/:id
     const [pendingLines] = await pool.execute(
-      `SELECT l.id, l.qty, l.created_at, l.position,
+      `SELECT l.id, l.qty, l.unit_cost, l.created_at, l.position,
               COALESCE(p.oem_code, i.oem_code) AS model_code,
               i.description AS rack_name, c.name AS category_name
        FROM stock_receive_lines l
@@ -207,17 +224,21 @@ router.delete('/receipt-sessions/:id', requireManager, async (req, res) => {
        WHERE i.shop_id = ? AND m.receipt_session_id = ? AND m.reason = 'receive' AND m.voided_at IS NULL`,
       [req.shopId, req.params.id]
     );
+    const costItems = new Set();
     for (const mv of stockMovements) {
       const result = await voidReceiveMovement(conn, mv.id, req.user.id, req.shopId);
       if (result.error) {
         await conn.rollback();
         return res.status(result.status).json({ error: result.error });
       }
+      costItems.add(result.itemId);
     }
     // แถวประวัติของบิลนี้ยังอยู่ (เก็บไว้ตรวจย้อนหลัง) แค่ตัดการผูกกับบิลที่กำลังจะถูกลบ
     await conn.query('UPDATE stock_item_movements SET receipt_session_id = NULL WHERE receipt_session_id = ?', [req.params.id]);
     await conn.query(`DELETE FROM transactions WHERE receipt_session_id = ? AND type = 'IN'`, [req.params.id]);
     await conn.query('DELETE FROM receipt_sessions WHERE id = ? AND shop_id = ?', [req.params.id, req.shopId]);
+    // the bill's lines went with it (ON DELETE CASCADE): the cost of what it held no longer includes them
+    for (const itemId of costItems) await recomputeItemCost(conn, itemId, req.shopId);
     await conn.commit();
 
     emitStockEvent('stock:item-updated', { shopId: req.shopId, entityType: null, entityId: null, actorId: req.user.id });

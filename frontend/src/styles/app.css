@@ -6789,3 +6789,55 @@ a.mg-row:hover { border-color: #111111; }
   /* last list rows must scroll clear of the floating "+" button */
   body:has(.bottom-nav) .container { padding-bottom: 140px; }
 }
+
+/* ── Ease-of-use fixes: touch sizes, readable labels, delete set apart ── */
+/* close (✕) buttons of every dialog: a 44px target instead of the bare glyph */
+.btn-close, .pcp-modal-close {
+  min-width: 44px; min-height: 44px;
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 0; border-radius: 10px;
+}
+.btn-close:hover, .pcp-modal-close:hover { background: rgba(0, 0, 0, 0.06); }
+.bottom-nav-label { font-size: 0.75rem; }
+
+@media (max-width: 640px) {
+  /* card rows: the history link is as tall as the buttons beside it */
+  .quotation-table td.actions a.btn-icon-small {
+    min-height: 44px; width: 100%; box-sizing: border-box;
+    display: flex; align-items: center; justify-content: center;
+  }
+  /* delete: outlined and set apart, so it is not mistaken for the edit button above it */
+  .quotation-table td.actions button.btn-danger {
+    margin-top: 12px; background: transparent; color: #dc2626; border: 1px solid #fca5a5;
+  }
+  /* every field in a dialog is the same comfortable height */
+  .modal-form select, .modal-content select, .modal-card select { min-height: 44px; }
+}
+
+/* delete buttons: outlined red with readable words (the global .btn-danger fill is !important), and kept
+   apart from the edit button beside them */
+.actions .btn-danger, .quotation-table td.actions button.btn-danger, .btn-danger-outline {
+  background: #fff !important; color: #dc2626 !important; border: 1px solid #fca5a5 !important;
+}
+.actions .btn-danger:hover, .btn-danger-outline:hover { background: #fee2e2 !important; }
+.actions .btn-danger { margin-left: 14px; }
+@media (max-width: 640px) {
+  .actions .btn-danger { margin-left: 0; }
+}
+.btn-danger-outline { padding: 10px 16px; border-radius: 10px; font-weight: 600; cursor: pointer; min-height: 44px; }
+.jdp-danger-zone {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px;
+  margin-top: 28px; padding: 14px 16px; border: 1px dashed #fca5a5; border-radius: 12px; color: #6b7280; font-size: 0.9rem;
+}
+/* job items: the count/visibility toggle and remove are words, not symbols */
+.jdp-selected-toggle, .jdp-selected-remove { width: auto !important; padding: 0 10px; font-size: 0.8rem; font-weight: 600; white-space: nowrap; }
+.jdp-selected-remove { margin-left: 8px; }
+
+/* the floating create button says what it creates (was a bare + circle) */
+@media (max-width: 1024px), (hover: none) and (pointer: coarse) {
+  .btn-fab-mobile {
+    width: auto; height: 52px; padding: 0 20px; border-radius: 26px;
+    font-size: 0.95rem; font-weight: 700; gap: 6px; white-space: nowrap;
+  }
+  .btn-fab-mobile::before { content: none; }
+}
