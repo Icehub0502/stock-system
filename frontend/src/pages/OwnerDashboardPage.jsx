@@ -66,6 +66,7 @@ export default function OwnerDashboardPage() {
   const [error, setError] = useState('');
   const [shopId, setShopId] = useState('');
   const [range, setRange] = useState('month');
+  const [reload, setReload] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -74,7 +75,16 @@ export default function OwnerDashboardPage() {
       .then((res) => { if (!cancelled) setData(res.data.data); })
       .catch((err) => { if (!cancelled) setError(err.response?.data?.error || 'โหลดไม่สำเร็จ'); });
     return () => { cancelled = true; };
-  }, [shopId]);
+  }, [shopId, reload]);
+
+  // accounting categories that are not shop expenses (e.g. buying parts is already the cost of goods)
+  const toggleExcluded = (category) => {
+    const current = data.expenses.excluded || [];
+    const next = current.includes(category) ? current.filter((c) => c !== category) : [...current, category];
+    client.put('/owner-stats/expense-settings', { excluded: next })
+      .then(() => setReload((n) => n + 1))
+      .catch((err) => setError(err.response?.data?.error || 'บันทึกไม่สำเร็จ'));
+  };
 
   const bars = useMemo(() => {
     if (!data) return [];
@@ -87,8 +97,18 @@ export default function OwnerDashboardPage() {
     return <div className="quotation-page">{error ? <div className="error-message">{error}</div> : <div className="loading">กำลังโหลด...</div>}</div>;
   }
 
-  const { periods, forecast, sales, customers, branches, unusual } = data;
+  const { periods, forecast, sales, customers, branches, unusual, cost, expenses } = data;
   const currentMonth = forecast.months[0];
+  // every category seen in the last 12 months (so one can be left out even in a month without it), this month's total beside it
+  const expenseRows = expenses.available
+    ? expenses.all_categories
+      .map((name) => ({
+        category: name,
+        total: (expenses.by_category.find((c) => c.category === name) || { total: 0 }).total,
+        excluded: expenses.excluded.includes(name),
+      }))
+      .sort((a, b) => b.total - a.total || a.category.localeCompare(b.category, 'th'))
+    : [];
   // a trend that has fallen to nothing is not a forecast worth showing
   const notEnough = forecast.confidence === 'none' || forecast.months.every((m) => m.likely === 0);
   const decline = sales.month.decline_reasons;
@@ -126,8 +146,54 @@ export default function OwnerDashboardPage() {
       </div>
 
       <div className="dash-panel">
-        <div className="dash-panel-title">กำไรและต้นทุน</div>
-        <p className="od-muted">ยังไม่มีข้อมูลต้นทุนอะไหล่ จึงยังคำนวณกำไรไม่ได้ จะแสดงเมื่อกรอกต้นทุนรับเข้าสต็อกแล้ว</p>
+        <div className="dash-panel-title">กำไรและต้นทุน (เดือนนี้)</div>
+        {!cost.available ? (
+          <p className="od-muted">ยังไม่มีข้อมูลต้นทุนอะไหล่ จึงยังคำนวณกำไรไม่ได้ จะแสดงเมื่อพนักงานกรอกต้นทุนตอนรับของเข้าสต็อก</p>
+        ) : (
+          <>
+            {cost.deduct_coverage_pct !== null && cost.deduct_coverage_pct < 100 && (
+              <p className="od-warn">⚠️ ต้นทุนครอบคลุมแค่ {cost.deduct_coverage_pct}% ของอะไหล่ที่ใช้เดือนนี้ กำไรจึงอาจสูงกว่าความจริง ให้กรอกต้นทุนที่ยังขาด</p>
+            )}
+            <div className="od-line"><span>กำไรขั้นต้น</span><strong>{baht(cost.gross_profit_month)}{cost.margin_pct !== null ? ` (${cost.margin_pct}%)` : ''}</strong></div>
+            <div className="od-line"><span>ต้นทุนอะไหล่ที่ใช้</span><strong>{baht(cost.cogs_month)}</strong></div>
+            <div className="od-line"><span>มูลค่าสต็อกคงเหลือ</span><strong>{baht(cost.stock_value)}</strong></div>
+            <div className="od-line"><span>ของไม่เคลื่อนไหวเกิน 90 วัน ({count(cost.slow_count)} รายการ)</span><strong>{baht(cost.slow_value)}</strong></div>
+            {cost.items_without_cost > 0 && <p className="od-muted">ยังไม่มีต้นทุน {count(cost.items_without_cost)} รายการในสต็อก (ไม่นับในมูลค่าสต็อก)</p>}
+            <p className="od-muted">กำไรคิดทั้งเดือน = รายได้ − ต้นทุนของอะไหล่ที่ตัดออกจากสต็อก ไม่ใช่รายบิล</p>
+          </>
+        )}
+      </div>
+
+      <div className="dash-panel">
+        <div className="dash-panel-title">ค่าใช้จ่ายร้าน (จากโปรแกรมบัญชี)</div>
+        {!expenses.available ? (
+          <p className="od-muted">
+            {expenses.reason === 'not_configured'
+              ? 'ยังไม่ได้เชื่อมกับโปรแกรมบัญชี'
+              : 'อ่านข้อมูลจากโปรแกรมบัญชีไม่ได้ในขณะนี้ ลองใหม่ภายหลัง'}
+          </p>
+        ) : (
+          <>
+            <p className="od-big">เดือนนี้ใช้จ่าย <strong>{baht(expenses.month_total)}</strong></p>
+            <div className="od-deltas"><Delta now={expenses.month_total} before={expenses.previous_month_same_days_total} label="เทียบเดือนก่อน (วันเดียวกัน)" /></div>
+            {expenses.net_profit_month !== null && (
+              <div className="od-line">
+                <span>กำไรสุทธิเดือนนี้ (กำไรขั้นต้น − ค่าใช้จ่าย)</span>
+                <strong className={expenses.net_profit_month < 0 ? 'od-neg' : ''}>{baht(expenses.net_profit_month)}</strong>
+              </div>
+            )}
+            <div className="od-subtitle">หมวดค่าใช้จ่าย ยอดเดือนนี้ (ติ๊ก "ไม่นับ" ถ้าไม่ใช่ค่าใช้จ่ายร้าน เช่น ซื้ออะไหล่ ที่นับเป็นต้นทุนอะไหล่แล้ว)</div>
+            {expenseRows.length === 0 ? <div className="empty-message">ยังไม่มีรายการค่าใช้จ่าย</div> : expenseRows.map((c) => (
+              <label key={c.category} className={`od-line od-check ${c.excluded ? 'od-off' : ''}`}>
+                <span><input type="checkbox" checked={c.excluded} onChange={() => toggleExcluded(c.category)} /> ไม่นับ · {c.category}</span>
+                <strong>{baht(c.total)}</strong>
+              </label>
+            ))}
+            <div className="od-subtitle">ค่าใช้จ่าย 12 เดือน</div>
+            <Bars rows={expenses.series.map((r) => ({ key: r.month, revenue: r.total }))} labelOf={(r) => monthLabel(r.key)} />
+            <p className="od-muted">ยอดนี้เป็นของทั้งธุรกิจตามที่บันทึกในโปรแกรมบัญชี ไม่แยกสาขา</p>
+          </>
+        )}
       </div>
 
       <div className="dash-panel">

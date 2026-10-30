@@ -3,11 +3,14 @@
 //                            monthly / yearly series, sales forecast, close rate, customer channels, repeat customers,
 //                            claims, top items and brands, unusual events, and the branch comparison.
 // Only shops of the owner's own group are ever read (the shop list comes from the database; ?shops only narrows it).
-// Cost / profit figures are not here yet: nothing stores what the parts cost.
+// Cost: what an item costs comes from the bills it was received on (stock_items.avg_cost, see utils/stockCost.js).
+// Cost of goods of a period = the pieces taken out of stock (the stock deductions) at that cost. Deductions are not tied
+// to a receipt, so profit is worked out for the period as a whole, and how much of it is covered by a known cost is given.
 const express = require('express');
 const pool = require('../db/pool');
 const { authenticate, requireOwner } = require('../middleware/auth');
 const { resolveGroupId } = require('./owner.routes');
+const { loadExpenseRows } = require('../utils/accountingDb');
 
 const router = express.Router();
 router.use(authenticate, requireOwner);
@@ -105,6 +108,58 @@ function buildForecast({ monthly, today, monthToDate, yearToDate }) {
   return out;
 }
 
+// ── expenses from the accounting program ────────────────────────────────────
+
+// Accounting categories the owner does not want counted as shop expenses (for instance "ซื้ออะไหล่", because the cost of
+// the parts is already counted as the cost of goods): kept per owner in app_settings as a JSON list of names.
+const EXCLUDED_KEY = 'accounting_excluded_categories';
+
+async function readExcluded(shopId) {
+  const [[row]] = await pool.query('SELECT value FROM app_settings WHERE shop_id = ? AND `key` = ?', [shopId, EXCLUDED_KEY]);
+  try {
+    const list = JSON.parse(row ? row.value : '[]');
+    return Array.isArray(list) ? list.filter((x) => typeof x === 'string') : [];
+  } catch (err) {
+    return [];
+  }
+}
+
+// rows from loadExpenseRows → what the owner page shows. The accounting program has no branches: the figures are for
+// the whole business, whichever branch is selected.
+function buildExpenses(loaded, excluded, today, grossProfitMonth) {
+  if (!loaded.available) return { available: false, reason: loaded.reason };
+  const skip = new Set(excluded);
+  const [ty, tm] = parts(today);
+  const nowKey = monthKey(ty, tm);
+  const [py, pm] = parts(monthStart(today, -1));
+  const prevKey = monthKey(py, pm);
+  const kept = loaded.rows.filter((r) => !skip.has(r.category));
+  const sumOf = (rows, field = 'total') => Math.round(rows.reduce((n, r) => n + r[field], 0));
+  const byMonth = new Map();
+  kept.forEach((r) => byMonth.set(r.month, (byMonth.get(r.month) || 0) + r.total));
+  const series = [];
+  for (let start = monthStart(today, -11); start <= today; start = monthStart(start, 1)) {
+    const [y, m] = parts(start);
+    series.push({ month: monthKey(y, m), total: Math.round(byMonth.get(monthKey(y, m)) || 0) });
+  }
+  const monthTotal = sumOf(kept.filter((r) => r.month === nowKey));
+  return {
+    available: true,
+    month_total: monthTotal,
+    previous_month_total: sumOf(kept.filter((r) => r.month === prevKey)),
+    previous_month_same_days_total: sumOf(kept.filter((r) => r.month === prevKey), 'upto_total'),
+    by_category: loaded.rows
+      .filter((r) => r.month === nowKey)
+      .map((r) => ({ category: r.category, total: Math.round(r.total), excluded: skip.has(r.category) }))
+      .sort((a, b) => b.total - a.total),
+    all_categories: [...new Set(loaded.rows.map((r) => r.category))].sort(),
+    excluded: [...skip],
+    series,
+    // gross profit of the month less the shop expenses of the month (only when the cost of the parts is known)
+    net_profit_month: grossProfitMonth === null ? null : Math.round(grossProfitMonth - monthTotal),
+  };
+}
+
 // ── queries ─────────────────────────────────────────────────────────────────
 
 async function sumRange(shopIds, from, to) {
@@ -176,6 +231,47 @@ async function loadCloseRate(shopIds, from, to) {
   };
 }
 
+async function loadCost(shopIds, from, to, revenue) {
+  const [[stock]] = await pool.query(
+    `SELECT COUNT(*) AS items, SUM(avg_cost IS NOT NULL) AS costed,
+            COALESCE(SUM(stock_qty * avg_cost), 0) AS value
+     FROM stock_items WHERE shop_id IN (?) AND is_active = 1 AND stock_qty > 0`,
+    [shopIds]
+  );
+  const [[anyCost]] = await pool.query('SELECT COUNT(*) AS n FROM stock_items WHERE shop_id IN (?) AND avg_cost IS NOT NULL', [shopIds]);
+  const [[goods]] = await pool.query(
+    `SELECT COALESCE(SUM((m.qty_before - m.qty_after) * COALESCE(i.avg_cost, 0)), 0) AS cogs,
+            COALESCE(SUM(m.qty_before - m.qty_after), 0) AS qty,
+            COALESCE(SUM(CASE WHEN i.avg_cost IS NOT NULL THEN m.qty_before - m.qty_after ELSE 0 END), 0) AS costed_qty
+     FROM stock_item_movements m JOIN stock_items i ON i.id = m.item_id
+     WHERE i.shop_id IN (?) AND m.reason = 'deduct' AND m.voided_at IS NULL
+       AND COALESCE(m.moved_at, m.created_at) >= ? AND COALESCE(m.moved_at, m.created_at) < DATE_ADD(?, INTERVAL 1 DAY)`,
+    [shopIds, `${from} 00:00:00`, to]
+  );
+  const [[slow]] = await pool.query(
+    `SELECT COUNT(*) AS n, COALESCE(SUM(i.stock_qty * i.avg_cost), 0) AS value
+     FROM stock_items i
+     WHERE i.shop_id IN (?) AND i.is_active = 1 AND i.stock_qty > 0 AND i.avg_cost IS NOT NULL
+       AND NOT EXISTS (SELECT 1 FROM stock_item_movements m WHERE m.item_id = i.id AND m.reason = 'deduct' AND m.voided_at IS NULL
+                         AND COALESCE(m.moved_at, m.created_at) >= DATE_SUB(CURDATE(), INTERVAL 90 DAY))`,
+    [shopIds]
+  );
+  const qty = Number(goods.qty);
+  const cogs = Math.round(Number(goods.cogs));
+  return {
+    available: Number(anyCost.n) > 0,
+    cogs_month: cogs,
+    gross_profit_month: Math.round(revenue - cogs),
+    margin_pct: revenue > 0 ? Math.round(((revenue - cogs) / revenue) * 1000) / 10 : null,
+    deduct_coverage_pct: qty > 0 ? Math.round((Number(goods.costed_qty) / qty) * 100) : null,
+    stock_value: Math.round(Number(stock.value)),
+    stock_cost_coverage_pct: Number(stock.items) > 0 ? Math.round((Number(stock.costed) / Number(stock.items)) * 100) : null,
+    items_without_cost: Number(stock.items) - Number(stock.costed || 0),
+    slow_count: Number(slow.n),
+    slow_value: Math.round(Number(slow.value)),
+  };
+}
+
 router.get('/summary', async (req, res) => {
   try {
     const groupId = await resolveGroupId(req);
@@ -198,6 +294,7 @@ router.get('/summary', async (req, res) => {
     const lastYearFrom = ymd(ty - 1, 1, 1);
     const lastYearSameDay = ymd(ty - 1, tm, Math.min(parts(today)[2], daysInMonth(ty - 1, tm)));
 
+    const cost = await loadCost(shopIds, monthFrom, today, (await sumRange(shopIds, monthFrom, today)).revenue);
     const [
       todaySum, yesterdaySum, monthSum, lastMonthSum, lastYearMonthSum, yearSum, lastYearSum,
       daily, monthly, yearlyRows, closeNow, closePrev,
@@ -345,7 +442,13 @@ router.get('/summary', async (req, res) => {
           stock_adjustments: stockAdjust,
         },
         branches,
-        cost: { available: false },
+        cost,
+        expenses: buildExpenses(
+          await loadExpenseRows({ from: monthStart(today, -11), to: today, uptoDay: parts(today)[2] }),
+          await readExcluded(Number(req.user.home_shop_id) || req.shopId),
+          today,
+          cost.available ? cost.gross_profit_month : null
+        ),
       },
     });
   } catch (err) {
@@ -354,5 +457,25 @@ router.get('/summary', async (req, res) => {
   }
 });
 
+// Which accounting categories do not count as shop expenses (owner)
+router.put('/expense-settings', async (req, res) => {
+  try {
+    const list = req.body && req.body.excluded;
+    if (!Array.isArray(list) || list.length > 100 || list.some((x) => typeof x !== 'string' || x.length > 100)) {
+      return res.status(400).json({ error: 'ข้อมูลไม่ถูกต้อง' });
+    }
+    const names = [...new Set(list.map((x) => x.trim()).filter(Boolean))];
+    await pool.query(
+      'INSERT INTO app_settings (shop_id, `key`, value) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE value = VALUES(value)',
+      [Number(req.user.home_shop_id) || req.shopId, EXCLUDED_KEY, JSON.stringify(names)]
+    );
+    res.json({ success: true, excluded: names });
+  } catch (err) {
+    console.error('Error saving expense settings:', err);
+    res.status(500).json({ error: 'บันทึกไม่สำเร็จ' });
+  }
+});
+
 module.exports = router;
 module.exports.buildForecast = buildForecast; // unit tests
+module.exports.buildExpenses = buildExpenses; // unit tests

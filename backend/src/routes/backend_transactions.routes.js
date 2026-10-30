@@ -5,6 +5,7 @@ const { vehicleModelFromRackName } = require('../utils/vehicleModelFromName');
 const { resolveTransactionDate } = require('../utils/resolveTransactionDate');
 const { emitStockEvent, emitStockTxEvent, emitReceiptSessionEvent } = require('../realtime');
 const { voidReceiveMovement } = require('./stockReceive.routes');
+const { findOrCreateSupplier } = require('./suppliers.routes');
 
 const { positionLabel } = require('../utils/stockPositions');
 
@@ -16,7 +17,7 @@ router.use(authenticate);
 const DATE_ONLY_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 router.post('/receipt-session', async (req, res) => {
-  const { invoice_no, bill_date = null } = req.body || {};
+  const { invoice_no, bill_date = null, supplier_name = null } = req.body || {};
   if (!invoice_no) {
     return res.status(400).json({ error: 'กรุณากรอกรหัสบิล' });
   }
@@ -24,9 +25,15 @@ router.post('/receipt-session', async (req, res) => {
     return res.status(400).json({ error: 'รูปแบบวันที่ไม่ถูกต้อง' });
   }
   try {
+    // the shop the parts came from (one bill = one supplier): picked from the list or typed, a new name is added to it
+    let supplier = { id: null, name: null };
+    if (supplier_name && String(supplier_name).trim()) {
+      supplier = await findOrCreateSupplier(pool, req.shopId, supplier_name);
+      if (supplier.error) return res.status(400).json({ error: supplier.error });
+    }
     const [result] = await pool.execute(
-      'INSERT INTO receipt_sessions (shop_id, invoice_no, user_id, bill_date) VALUES (?, ?, ?, COALESCE(?, CURDATE()))',
-      [req.shopId, invoice_no.trim(), req.user.id, bill_date]
+      'INSERT INTO receipt_sessions (shop_id, invoice_no, user_id, bill_date, supplier_id, supplier_name) VALUES (?, ?, ?, COALESCE(?, CURDATE()), ?, ?)',
+      [req.shopId, invoice_no.trim(), req.user.id, bill_date, supplier.id, supplier.name]
     );
     const [rows] = await pool.execute(
       `SELECT s.*, u.full_name FROM receipt_sessions s
@@ -54,7 +61,7 @@ router.get('/receipt-sessions', requireRole('office'), async (req, res) => {
   try {
     const [rows] = await pool.execute(`
       SELECT
-        s.id, s.invoice_no, s.created_at, s.bill_date,
+        s.id, s.invoice_no, s.created_at, s.bill_date, s.supplier_name,
         u.full_name,
         (SELECT COUNT(*) FROM transactions t WHERE t.receipt_session_id = s.id AND t.type = 'IN')
           + (SELECT COUNT(*) FROM stock_item_movements m

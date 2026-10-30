@@ -4,6 +4,7 @@ const pool = require('../db/pool');
 const { authenticate, requireRole, requireManager } = require('../middleware/auth');
 const { emitStockEvent, emitStockTxEvent } = require('../realtime');
 const { positionsFor, positionLabel } = require('../utils/stockPositions');
+const { recomputeItemCost, parseUnitCost } = require('../utils/stockCost');
 
 // รับเข้าสต๊อกรวมตามบิล (หน้าสแกน /scan โหมดรับเข้า) + พิมพ์ QR ของสต๊อกรวม
 //
@@ -125,7 +126,7 @@ async function loadOwnedSession(conn, sessionId, user, shopId, { lock = false } 
 }
 
 function lineSelect(where) {
-  return `SELECT l.id, l.receipt_session_id, l.item_id, l.position, l.qty, l.created_at,
+  return `SELECT l.id, l.receipt_session_id, l.item_id, l.position, l.qty, l.unit_cost, l.created_at,
                  i.description, i.stock_qty, c.name AS category_name,
                  COALESCE(p.oem_code, i.oem_code) AS code,
                  COALESCE(p.qty, i.stock_qty) AS current_qty
@@ -143,6 +144,7 @@ function shapeLine(row) {
     position: row.position,
     position_label: positionLabel(row.position),
     qty: row.qty,
+    unit_cost: row.unit_cost === null || row.unit_cost === undefined ? null : Number(row.unit_cost),
     code: row.code,
     description: row.description,
     category_name: row.category_name,
@@ -162,6 +164,8 @@ router.post('/lines', async (req, res) => {
       || (position !== null && typeof position !== 'string')) {
     return res.status(400).json({ error: 'ข้อมูลไม่ถูกต้อง' });
   }
+  const cost = parseUnitCost(req.body?.unit_cost);
+  if (cost.error) return res.status(400).json({ error: cost.error });
 
   let conn;
   try {
@@ -204,13 +208,13 @@ router.post('/lines', async (req, res) => {
         await conn.rollback();
         return res.status(400).json({ error: 'จำนวนรวมสูงเกินไป' });
       }
-      await conn.execute('UPDATE stock_receive_lines SET qty = ? WHERE id = ?', [lineQty, existing.id]);
+      await conn.execute('UPDATE stock_receive_lines SET qty = ?, unit_cost = COALESCE(?, unit_cost) WHERE id = ?', [lineQty, cost.value, existing.id]);
       lineId = existing.id;
       merged = true;
     } else {
       const [ins] = await conn.execute(
-        'INSERT INTO stock_receive_lines (receipt_session_id, item_id, position, qty, user_id) VALUES (?, ?, ?, ?, ?)',
-        [sessionId, itemId, position, qty, req.user.id]
+        'INSERT INTO stock_receive_lines (receipt_session_id, item_id, position, qty, user_id, unit_cost) VALUES (?, ?, ?, ?, ?, ?)',
+        [sessionId, itemId, position, qty, req.user.id, cost.value]
       );
       lineId = ins.insertId;
       lineQty = qty;
@@ -260,8 +264,12 @@ async function loadOwnedPendingLine(conn, lineId, user, shopId) {
 // แก้จำนวนของรายการรอยืนยัน (พนักงานกรอกผิด)
 router.patch('/lines/:id', async (req, res) => {
   const lineId = parseId(req.params.id);
+  const hasCost = req.body && Object.prototype.hasOwnProperty.call(req.body, 'unit_cost');
+  const hasQty = req.body && req.body.qty !== undefined;
   const qty = Number(req.body?.qty);
-  if (!lineId || !Number.isInteger(qty) || qty <= 0 || qty > MAX_QTY) {
+  const cost = parseUnitCost(req.body?.unit_cost);
+  if (cost.error) return res.status(400).json({ error: cost.error });
+  if (!lineId || (!hasCost && !hasQty) || (hasQty && (!Number.isInteger(qty) || qty <= 0 || qty > MAX_QTY))) {
     return res.status(400).json({ error: 'จำนวนต้องเป็นเลขจำนวนเต็มตั้งแต่ 1 ขึ้นไป' });
   }
   let conn;
@@ -273,9 +281,10 @@ router.patch('/lines/:id', async (req, res) => {
       await conn.rollback();
       return res.status(found.status).json({ error: found.error });
     }
-    await conn.execute('UPDATE stock_receive_lines SET qty = ? WHERE id = ?', [qty, lineId]);
+    if (hasQty) await conn.execute('UPDATE stock_receive_lines SET qty = ? WHERE id = ?', [qty, lineId]);
+    if (hasCost) await conn.execute('UPDATE stock_receive_lines SET unit_cost = ? WHERE id = ?', [cost.value, lineId]);
     await conn.commit();
-    res.json({ success: true, qty });
+    res.json({ success: true, qty: hasQty ? qty : undefined, unit_cost: hasCost ? cost.value : undefined });
   } catch (err) {
     if (conn) await conn.rollback().catch(() => {});
     console.error('Error updating stock receive line:', err);
@@ -387,6 +396,7 @@ router.post('/sessions/:id/commit', async (req, res) => {
       itemIds.add(result.itemId);
       totalQty += line.qty;
     }
+    for (const itemId of itemIds) await recomputeItemCost(conn, itemId, req.shopId);
     await conn.commit();
 
     itemIds.forEach((itemId) => {
@@ -506,6 +516,92 @@ router.get('/qrcodes', requireRole('office'), async (req, res) => {
   } catch (err) {
     console.error('Error building stock QR labels:', err);
     res.status(500).json({ error: 'สร้าง QR code ไม่สำเร็จ' });
+  }
+});
+
+// ── costs ──────────────────────────────────────────────────────────────
+
+// What still has no cost: closed bill lines without a price, and stock on the shelf that has no cost at all
+router.get('/costs/missing', requireRole('office'), async (req, res) => {
+  try {
+    const [lines] = await pool.query(
+      `SELECT l.id, l.qty, l.position, i.id AS item_id, i.description, i.oem_code, c.name AS category_name,
+              s.invoice_no, s.supplier_name, DATE_FORMAT(COALESCE(s.bill_date, DATE(s.created_at)), '%Y-%m-%d') AS bill_date
+       FROM stock_receive_lines l
+       JOIN receipt_sessions s ON s.id = l.receipt_session_id
+       JOIN stock_items i ON i.id = l.item_id JOIN stock_categories c ON c.id = i.category_id
+       WHERE s.shop_id = ? AND i.shop_id = ? AND l.applied_at IS NOT NULL AND l.unit_cost IS NULL
+       ORDER BY l.id DESC LIMIT 300`,
+      [req.shopId, req.shopId]
+    );
+    const [items] = await pool.query(
+      `SELECT i.id, i.description, i.oem_code, i.stock_qty, c.name AS category_name
+       FROM stock_items i JOIN stock_categories c ON c.id = i.category_id
+       WHERE i.shop_id = ? AND i.is_active = 1 AND i.stock_qty > 0 AND i.avg_cost IS NULL
+       ORDER BY c.name, i.description LIMIT 300`,
+      [req.shopId]
+    );
+    res.json({ success: true, data: { lines, items } });
+  } catch (err) {
+    console.error('Error loading missing costs:', err);
+    res.status(500).json({ error: 'โหลดรายการที่ยังไม่มีต้นทุนไม่สำเร็จ' });
+  }
+});
+
+// Price per piece of a line on a bill that is already closed (forgotten at the time)
+router.put('/costs/lines/:id', requireRole('office'), async (req, res) => {
+  const lineId = parseId(req.params.id);
+  const cost = parseUnitCost(req.body?.unit_cost);
+  if (!lineId || cost.error || cost.value === null) return res.status(400).json({ error: cost.error || 'กรุณากรอกต้นทุนต่อชิ้น' });
+  let conn;
+  try {
+    conn = await pool.getConnection();
+    await conn.beginTransaction();
+    const [[line]] = await conn.execute(
+      `SELECT l.id, l.item_id, l.applied_at FROM stock_receive_lines l JOIN receipt_sessions s ON s.id = l.receipt_session_id
+       WHERE l.id = ? AND s.shop_id = ? FOR UPDATE`,
+      [lineId, req.shopId]
+    );
+    if (!line) {
+      await conn.rollback();
+      return res.status(404).json({ error: 'ไม่พบรายการ' });
+    }
+    await conn.execute('UPDATE stock_receive_lines SET unit_cost = ? WHERE id = ?', [cost.value, lineId]);
+    if (line.applied_at) await recomputeItemCost(conn, line.item_id, req.shopId);
+    await conn.commit();
+    res.json({ success: true });
+  } catch (err) {
+    if (conn) await conn.rollback().catch(() => {});
+    console.error('Error saving line cost:', err);
+    res.status(500).json({ error: 'บันทึกต้นทุนไม่สำเร็จ' });
+  } finally {
+    if (conn) conn.release();
+  }
+});
+
+// Cost typed by hand for stock bought before costs were recorded (used until a bill line with a cost exists)
+router.put('/costs/items/:id', requireManager, async (req, res) => {
+  const itemId = parseId(req.params.id);
+  const cost = parseUnitCost(req.body?.manual_cost);
+  if (!itemId || cost.error) return res.status(400).json({ error: cost.error || 'ข้อมูลไม่ถูกต้อง' });
+  let conn;
+  try {
+    conn = await pool.getConnection();
+    await conn.beginTransaction();
+    const [result] = await conn.execute('UPDATE stock_items SET manual_cost = ? WHERE id = ? AND shop_id = ?', [cost.value, itemId, req.shopId]);
+    if (result.affectedRows === 0) {
+      await conn.rollback();
+      return res.status(404).json({ error: 'ไม่พบรายการนี้ในสต๊อก' });
+    }
+    await recomputeItemCost(conn, itemId, req.shopId);
+    await conn.commit();
+    res.json({ success: true });
+  } catch (err) {
+    if (conn) await conn.rollback().catch(() => {});
+    console.error('Error saving item cost:', err);
+    res.status(500).json({ error: 'บันทึกต้นทุนไม่สำเร็จ' });
+  } finally {
+    if (conn) conn.release();
   }
 });
 

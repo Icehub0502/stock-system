@@ -56,6 +56,7 @@ const devCatalogRoutes = require('./routes/devCatalog.routes');
 const ownerRoutes = require('./routes/owner.routes');
 const ownerStatsRoutes = require('./routes/ownerStats.routes');
 const devActivityRoutes = require('./routes/devActivity.routes');
+const suppliersRoutes = require('./routes/suppliers.routes');
 const { activityLogger } = require('./middleware/activityLogger');
 
 const { UPLOADS_DIR } = require('./utils/photoStorage');
@@ -178,6 +179,7 @@ function createApp() {
   app.use('/api/dev', devCatalogRoutes);
   app.use('/api/owner', ownerRoutes);
   app.use('/api/owner-stats', ownerStatsRoutes);
+  app.use('/api/suppliers', suppliersRoutes);
 
   app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
   app.get('/api/landing-images', (req, res) => {

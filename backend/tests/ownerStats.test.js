@@ -102,6 +102,36 @@ describe('forecast maths', () => {
   });
 });
 
+describe('owner stats: cost', () => {
+  test('cost of goods from the pieces taken out of stock, stock value, slow movers, and how much is covered', async () => {
+    const [cat] = await pool.query('INSERT INTO stock_categories (name) VALUES (?)', [`OwnCat ${unique}`]);
+    const mk = async (code, qty, cost) => (await pool.query(
+      'INSERT INTO stock_items (shop_id, category_id, oem_code, description, stock_qty, min_stock, avg_cost) VALUES (?, ?, ?, ?, ?, 1, ?)',
+      [shopA.shopId, cat.insertId, code, code, qty, cost]
+    ))[0].insertId;
+    const sold = await mk(`OC1${unique}`, 8, 100); // 2 taken out this month at 100
+    const unknown = await mk(`OC2${unique}`, 3, null); // taken out, but no cost known
+    const slow = await mk(`OC3${unique}`, 5, 40); // on the shelf, never taken out: 200 of slow stock
+    await pool.query("INSERT INTO stock_item_movements (item_id, qty_before, qty_after, reason, user_id) VALUES (?, 10, 8, 'deduct', ?)", [sold, shopA.userId]);
+    await pool.query("INSERT INTO stock_item_movements (item_id, qty_before, qty_after, reason, user_id) VALUES (?, 4, 3, 'deduct', ?)", [unknown, shopA.userId]);
+
+    const { body } = await request(app).get('/api/owner-stats/summary').set(as(shopA.ownerToken));
+    const c = body.data.cost;
+    expect(c.available).toBe(true);
+    expect(c.cogs_month).toBe(200); // 2 pieces x 100 (the piece without a cost counts as 0 and lowers the coverage)
+    expect(c.gross_profit_month).toBe(body.data.periods.month.revenue - 200);
+    expect(c.deduct_coverage_pct).toBe(67); // 2 of 3 pieces have a cost
+    expect(c.stock_value).toBe(8 * 100 + 5 * 40);
+    expect(c.items_without_cost).toBe(1);
+    expect(c.slow_count).toBe(1);
+    expect(c.slow_value).toBe(200);
+
+    await pool.query('DELETE FROM stock_item_movements WHERE item_id IN (?, ?, ?)', [sold, unknown, slow]);
+    await pool.query('DELETE FROM stock_items WHERE shop_id = ?', [shopA.shopId]);
+    await pool.query('DELETE FROM stock_categories WHERE id = ?', [cat.insertId]);
+  });
+});
+
 describe('owner stats', () => {
   test('owners only', async () => {
     for (const t of [shopA.token, shopA.managerToken]) {
@@ -124,7 +154,7 @@ describe('owner stats', () => {
     expect(d.forecast.months_used).toBeGreaterThanOrEqual(3);
     expect(d.forecast.months).toHaveLength(7);
     expect(d.forecast.year_end.low).toBeLessThanOrEqual(d.forecast.year_end.high);
-    expect(d.cost).toEqual({ available: false });
+    expect(d.cost.available).toBe(false); // no item has a cost yet
   });
 
   test('close rate by value, decline reasons, channels, discounts, top items and brands', async () => {

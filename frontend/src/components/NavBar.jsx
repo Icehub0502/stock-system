@@ -16,6 +16,8 @@ const NAV_CATEGORIES = [
       { to: "/service-items", label: "รายการสินค้า/บริการ" },
       { to: "/receipts", label: "บิลรับเข้า" },
       { to: "/product-costs", label: "ต้นทุนสินค้า", min: "manager" },
+      { to: "/stock-costs", label: "กรอกต้นทุนที่ยังขาด" },
+      { to: "/suppliers", label: "ร้านอะไหล่", min: "manager" },
     ],
   },
   {

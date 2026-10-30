@@ -110,9 +110,10 @@ function kindLabel(type) {
 // ─────────────────────────────────────────
 function ConfirmSheet({ item, mode, onConfirm, onCancel, loading, deferred = false }) {
   const [qty, setQty] = useState(1);
+  const [cost, setCost] = useState('');
   const isIN = mode === 'IN';
 
-  useEffect(() => { setQty(1); }, [item]);
+  useEffect(() => { setQty(1); setCost(''); }, [item]);
 
   if (!item) return null;
 
@@ -159,6 +160,13 @@ function ConfirmSheet({ item, mode, onConfirm, onCancel, loading, deferred = fal
           <button type="button" className="scan-stepper-btn" onClick={() => setQty((q) => Math.min(100000, q + 1))} aria-label="เพิ่มจำนวน">+</button>
         </div>
 
+{isIN && deferred && (
+        <div className="scan-cost">
+          <label className="scan-label" htmlFor="scan-cost">ต้นทุนต่อชิ้น (บาท) — ยังไม่ทราบ ใส่ทีหลังได้</label>
+          <input id="scan-cost" className="scan-input" type="number" inputMode="decimal" min="0" step="0.01" placeholder="เช่น 850" value={cost} onChange={(e) => setCost(e.target.value)} />
+        </div>
+
+)}
         <p className="scan-confirm-result">
           {deferred
             ? <>รับเข้า <b>{qty}</b> ชิ้น → จะเป็น <b>{stockAfter}</b> ชิ้น หลังกดเสร็จสิ้น</>
@@ -168,7 +176,7 @@ function ConfirmSheet({ item, mode, onConfirm, onCancel, loading, deferred = fal
         <button
           type="button"
           className={`scan-btn scan-btn--block scan-btn--lg ${isIN ? 'scan-btn--in' : 'scan-btn--out'}`}
-          onClick={() => onConfirm(qty)}
+          onClick={() => onConfirm(qty, cost)}
           disabled={loading}
         >
           {loading ? 'กำลังบันทึก...' : <><IconCheck /> {deferred ? 'เพิ่มเข้ารายการรับเข้า' : `ยืนยัน${isIN ? 'รับเข้า' : 'จ่ายออก'}`}</>}
@@ -184,8 +192,10 @@ function ConfirmSheet({ item, mode, onConfirm, onCancel, loading, deferred = fal
 // ─────────────────────────────────────────
 function EditQtySheet({ order, onSave, onDelete, onCancel, loading }) {
   const [qty, setQty] = useState(order.qty);
+  const startCost = order.unitCost === null || order.unitCost === undefined ? '' : String(order.unitCost);
+  const [cost, setCost] = useState(startCost);
 
-  useEffect(() => { setQty(order.qty); }, [order]);
+  useEffect(() => { setQty(order.qty); setCost(startCost); }, [order]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const setQtyFromInput = (value) => {
     const n = Math.floor(Number(value));
@@ -221,13 +231,18 @@ function EditQtySheet({ order, onSave, onDelete, onCancel, loading }) {
           <button type="button" className="scan-stepper-btn" onClick={() => setQty((q) => Math.min(100000, q + 1))} aria-label="เพิ่มจำนวน">+</button>
         </div>
 
+        <div className="scan-cost">
+          <label className="scan-label" htmlFor="scan-edit-cost">ต้นทุนต่อชิ้น (บาท) — ยังไม่ทราบ ใส่ทีหลังได้</label>
+          <input id="scan-edit-cost" className="scan-input" type="number" inputMode="decimal" min="0" step="0.01" placeholder="เช่น 850" value={cost} onChange={(e) => setCost(e.target.value)} />
+        </div>
+
         <p className="scan-confirm-result">จำนวนที่จะรับเข้า <b>{qty}</b> ชิ้น (ยังไม่บวกสต๊อกจนกว่าจะกดเสร็จสิ้น)</p>
 
         <button
           type="button"
           className="scan-btn scan-btn--block scan-btn--lg scan-btn--in"
-          onClick={() => onSave(qty)}
-          disabled={loading || qty === order.qty}
+          onClick={() => onSave(qty, cost)}
+          disabled={loading || (qty === order.qty && cost === startCost)}
         >
           {loading ? 'กำลังบันทึก...' : <><IconCheck /> บันทึกจำนวน</>}
         </button>
@@ -284,6 +299,9 @@ function OrderRow({ item, index, mode, onEdit, onDelete, busy }) {
           {item.pending && <span className="scan-pending-chip">รอยืนยัน</span>}
         </div>
         <p className="scan-row-name">{item.name || item.model_name}</p>
+        {item.pending && isIN && (
+          <p className="scan-cost-note">{item.unitCost !== null && item.unitCost !== undefined ? `ต้นทุน ฿${item.unitCost}/ชิ้น` : 'ยังไม่ใส่ต้นทุน'}</p>
+        )}
       </div>
       <span className={`scan-qty ${item.pending ? 'is-pending' : isIN ? 'is-in' : 'is-out'}`}>
         {isIN ? '+' : '−'}{item.qty}
@@ -450,6 +468,12 @@ export default function TechnicianScanPage() {
   const [invoice, setInvoice]     = useState('');
   const [billDate, setBillDate]   = useState(todayStr());     // วันของบิล (คีย์ย้อนหลังได้)
   const [invoiceErr, setInvoiceErr] = useState('');
+  const [supplier, setSupplier] = useState('');            // the shop the parts came from (one bill = one shop)
+  const [supplierErr, setSupplierErr] = useState('');
+  const [suppliers, setSuppliers] = useState([]);
+  useEffect(() => {
+    client.get('/suppliers').then((res) => setSuppliers(res.data.data || [])).catch(() => {});
+  }, []);
   const [session, setSession]     = useState(null);           // { id, invoice_no }
   const [starting, setStarting]   = useState(false);
 
@@ -511,11 +535,14 @@ export default function TechnicianScanPage() {
 
   // ── เปิด session บิล (IN) ──
   const startSession = async () => {
+    if (!supplier.trim()) { setSupplierErr('กรุณาเลือกหรือพิมพ์ชื่อร้านอะไหล่'); return; }
+    setSupplierErr('');
     if (!invoice.trim()) { setInvoiceErr('กรุณากรอกเลขบิล'); return; }
     setStarting(true); setInvoiceErr('');
     try {
       const res = await client.post('/transactions/receipt-session', {
         invoice_no: invoice.trim(),
+        supplier_name: supplier.trim(),
         bill_date: billDate || undefined,
       });
       setSession(res.data);
@@ -563,12 +590,13 @@ export default function TechnicianScanPage() {
   };
 
   // แก้จำนวนของรายการรอยืนยัน (พนักงานกรอกผิด)
-  const handleSaveQty = async (qty) => {
+  const handleSaveQty = async (qty, cost) => {
     if (!editingOrder?.lineId) return;
     setSavingQty(true);
     try {
-      await client.patch(`/stock-receive/lines/${editingOrder.lineId}`, { qty });
-      setOrders((prev) => prev.map((o) => (o.key === editingOrder.key ? { ...o, qty } : o)));
+      const unitCost = cost === '' || cost === undefined ? null : Number(cost);
+      await client.patch(`/stock-receive/lines/${editingOrder.lineId}`, { qty, unit_cost: unitCost });
+      setOrders((prev) => prev.map((o) => (o.key === editingOrder.key ? { ...o, qty, unitCost } : o)));
       setToast({ ok: true, title: 'แก้จำนวนแล้ว', body: `${editingOrder.name} → ${qty} ชิ้น` });
       setEditingOrder(null);
     } catch (err) {
@@ -638,7 +666,7 @@ export default function TechnicianScanPage() {
   }, [mode]);
 
   // ── ยืนยันจำนวน ──
-  const handleConfirm = async (qty) => {
+  const handleConfirm = async (qty, unitCost) => {
     if (!scannedItem) return;
     setConfirmLoading(true);
     try {
@@ -649,6 +677,7 @@ export default function TechnicianScanPage() {
           item_id: scannedItem.item_id,
           position: scannedItem.position || undefined,
           qty,
+          unit_cost: unitCost === '' || unitCost === undefined ? undefined : unitCost,
           receipt_session_id: session ? session.id : undefined,
         });
         const line = res.data.line;
@@ -659,6 +688,7 @@ export default function TechnicianScanPage() {
           qty: line.qty,
           txId: null,
           lineId: line.id,
+          unitCost: line.unit_cost,
           pending: true,
           type: 'stock_item',
           position: line.position,
@@ -792,6 +822,22 @@ export default function TechnicianScanPage() {
                 onKeyDown={(e) => e.key === 'Enter' && startSession()}
               />
               {invoiceErr && <p className="scan-error">{invoiceErr}</p>}
+
+              <label className="scan-label" htmlFor="scan-supplier">ร้านอะไหล่ที่ซื้อ (ไม่มีในรายการ พิมพ์ชื่อร้านใหม่ได้เลย)</label>
+              <input
+                id="scan-supplier"
+                type="text"
+                list="scan-suppliers"
+                className={`scan-input${supplierErr ? ' has-error' : ''}`}
+                placeholder="เลือกหรือพิมพ์ชื่อร้าน"
+                value={supplier}
+                onChange={(e) => setSupplier(e.target.value)}
+                autoComplete="off"
+              />
+              <datalist id="scan-suppliers">
+                {suppliers.map((sp) => <option key={sp.id} value={sp.name} />)}
+              </datalist>
+              {supplierErr && <p className="scan-error">{supplierErr}</p>}
 
               <label className="scan-label" htmlFor="scan-bill-date">วันที่ของบิล</label>
               <input

@@ -6753,3 +6753,20 @@ a.mg-row:hover { border-color: #111111; }
 .od-bar-col { background: none; border: 0; padding: 0; font: inherit; cursor: pointer; }
 .od-bar-col.picked .od-bar { background: #b91c1c; }
 .od-bar-label { font-size: 0.65rem; }
+
+/* stock costs / suppliers pages, receive form */
+.sc-row { display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; padding: 10px 0; border-bottom: 1px solid #f3f4f6; flex-wrap: wrap; }
+.sc-row-off { opacity: 0.55; }
+.sc-row-main { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1 1 260px; overflow-wrap: anywhere; }
+.sc-row-main input { width: 100%; box-sizing: border-box; }
+.sc-row-side { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.sc-row-side input { width: 110px; }
+.sc-muted { color: #6b7280; font-size: 0.85rem; }
+.sc-error { color: #b91c1c; font-size: 0.85rem; }
+.sc-add { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+.sc-add input { flex: 1 1 220px; }
+.scan-cost { margin: 10px 0; }
+.scan-cost-note { margin: 2px 0 0; font-size: 0.8rem; color: #6b7280; }
+.od-neg { color: #b91c1c; }
+.od-check { cursor: pointer; align-items: center; }
+.od-off { opacity: 0.55; text-decoration: line-through; }
