@@ -132,4 +132,15 @@ describe('doc header settings', () => {
     await put(shopA, 'quotation', { copy_logo_from: 'receipt' });
     expect((await get(shopA)).body.data.quotation.logo_path).toBe('');
   });
+
+  test('line breaks typed in the address are kept (trimmed, empty lines dropped); other fields stay on one line', async () => {
+    const res = await request(app).put('/api/doc-settings/quotation').set(as(shopA.managerToken)).send({
+      address: '  99/9 ถนนตัวอย่าง  \r\n\r\n  ต.ตัวอย่าง อ.เมือง\n  จ.สมุทรปราการ 10270 ',
+      company_name: 'ชื่อ\nสอง',
+    });
+    expect(res.status).toBe(200);
+    const header = (await request(app).get('/api/doc-settings').set(as(shopA.managerToken))).body.data.quotation;
+    expect(header.address).toBe('99/9 ถนนตัวอย่าง\nต.ตัวอย่าง อ.เมือง\nจ.สมุทรปราการ 10270');
+    expect(header.company_name).toBe('ชื่อ สอง');
+  });
 });

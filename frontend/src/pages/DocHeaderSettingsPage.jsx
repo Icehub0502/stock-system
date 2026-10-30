@@ -16,7 +16,7 @@ const DOC_TABS = [
 
 const TEXT_FIELDS = [
   { key: 'company_name', label: 'ชื่อบริษัท / ร้าน (แสดงสูงสุด 2 บรรทัด)', max: 120 },
-  { key: 'address', label: 'ที่อยู่ (แสดงสูงสุด 3 บรรทัด)', max: 300, multiline: true },
+  { key: 'address', label: 'ที่อยู่ (กด Enter เพื่อขึ้นบรรทัดใหม่ · แสดงสูงสุด 3 บรรทัด)', max: 300, multiline: true },
   { key: 'phone', label: 'เบอร์โทร', max: 50 },
   { key: 'line_id', label: 'LINE', max: 50 },
   { key: 'tax_id', label: 'เลขประจำตัวผู้เสียภาษี (ไม่กรอก = ไม่แสดง)', max: 60 },

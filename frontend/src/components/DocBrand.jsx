@@ -15,7 +15,11 @@ export default function DocBrand({ header }) {
       {src && <img className="doc-logo-big" src={src} style={{ width: header.logo_width || 130 }} alt={header.company_name || 'logo'} />}
       <div className="doc-brand-info">
         {header.company_name && <div className="doc-brand-name">{header.company_name}</div>}
-        {header.address && <div className="doc-brand-addr">ที่อยู่ : {header.address}</div>}
+        {header.address && (
+          <div className="doc-brand-addr doc-brand-addr-hang">
+            <span className="doc-addr-label">ที่อยู่ :</span>{header.address}
+          </div>
+        )}
         {(header.phone || header.line_id) && (
           <div className="doc-brand-addr">
             {[header.phone && `โทร : ${header.phone}`, header.line_id && `LINE : ${header.line_id}`].filter(Boolean).join('  ·  ')}

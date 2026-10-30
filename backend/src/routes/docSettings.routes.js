@@ -29,9 +29,14 @@ function serverError(res, err, message) {
   return res.status(500).json({ error: message });
 }
 
-function cleanText(value) {
+function cleanText(value, keepLines = false) {
   // strip control characters; the column limits are applied by the caller
-  return String(value ?? '').replace(/[\u0000-\u001f\u007f]/g, ' ').trim();
+  const text = String(value ?? '');
+  if (!keepLines) return text.replace(/[\u0000-\u001f\u007f]/g, ' ').trim();
+  // multi-line field (the address): line breaks typed by the manager are kept, each line trimmed, empty lines dropped
+  return text.replace(/\r\n?/g, '\n').split('\n')
+    .map((line) => line.replace(/[\u0000-\u001f\u007f]/g, ' ').trim())
+    .filter(Boolean).join('\n');
 }
 
 // What a shop without a saved row prints: its own name only, no address / logo of another shop
@@ -126,7 +131,7 @@ router.put('/:docType', requireManager, async (req, res) => {
   const values = {};
   for (const [field, limit] of Object.entries(TEXT_LIMITS)) {
     if (!Object.prototype.hasOwnProperty.call(body, field)) continue;
-    const text = cleanText(body[field]);
+    const text = cleanText(body[field], field === 'address');
     if (text.length > limit) return res.status(400).json({ error: `ข้อความยาวเกินไป (ไม่เกิน ${limit} ตัวอักษร)` });
     values[field] = text || null;
   }
