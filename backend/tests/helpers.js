@@ -47,7 +47,7 @@ async function createCustomerWithVehicle({ namePrefix = 'Test Customer' } = {}) 
   const suffix = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
   const customerCode = `TST-${suffix}`.slice(0, 20);
   const [customerResult] = await pool.execute(
-    'INSERT INTO customers (customer_code, customer_name, phone) VALUES (?, ?, ?)',
+    "INSERT INTO customers (customer_code, customer_name, phone, found_via) VALUES (?, ?, ?, 'returning')",
     [customerCode, `${namePrefix} ${suffix}`, '0800000000']
   );
   const customerId = customerResult.insertId;

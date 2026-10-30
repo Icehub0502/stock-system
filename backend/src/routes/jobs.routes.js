@@ -10,6 +10,7 @@ const {
 } = require('../utils/jobStatusFlow');
 const { ALIGN_BAY, isValidBay } = require('../utils/workBays');
 const { generateJobNo } = require('../utils/generateJobNo');
+const { foundViaProblem } = require('../utils/foundVia');
 const { emitJobEvent, emitQuotationEvent, emitReceiptEvent } = require('../realtime');
 const { saveDataUrlToFile, deleteUploadedFile } = require('../utils/photoStorage');
 const { ownsRow } = require('../utils/tenant');
@@ -240,6 +241,7 @@ router.post('/', async (req, res) => {
     job_date = null, mileage_in = null, symptom = '', note = '',
     technician = null, bay = null, est_minutes = null, photos = [],
     quotation_id: explicitQuotationId = null,
+    found_via = null, found_via_note = null,
   } = req.body || {};
   let quotation_id = explicitQuotationId;
 
@@ -258,6 +260,29 @@ router.post('/', async (req, res) => {
       || (quotation_id && !(await ownsRow(conn, 'quotations', quotation_id, req.shopId)))) {
       await conn.rollback();
       return res.status(404).json({ error: 'ไม่พบรถ/ลูกค้า/ใบเสนอราคาที่เลือก' });
+    }
+
+    // How the customer found the shop is required: kept on the customer the first time it is told, and a customer
+    // that already has one is never asked again by the API (the form still shows the field)
+    const [[carOwner]] = await conn.query(
+      `SELECT c.id, c.found_via FROM vehicles v JOIN customers c ON c.id = v.customer_id
+       WHERE v.id = ? AND v.shop_id = ? AND c.shop_id = ?`,
+      [vehicle_id, req.shopId, req.shopId]
+    );
+    const channelOwnerId = customer_id || carOwner?.id || null;
+    const [[channelCustomer]] = channelOwnerId
+      ? await conn.query('SELECT id, found_via FROM customers WHERE id = ? AND shop_id = ?', [channelOwnerId, req.shopId])
+      : [[null]];
+    if (channelCustomer && !channelCustomer.found_via) {
+      const problem = foundViaProblem(found_via, found_via_note);
+      if (problem) {
+        await conn.rollback();
+        return res.status(400).json({ error: problem });
+      }
+      await conn.execute(
+        'UPDATE customers SET found_via = ?, found_via_note = ? WHERE id = ? AND shop_id = ?',
+        [found_via, found_via === 'other' ? String(found_via_note).trim() : null, channelCustomer.id, req.shopId]
+      );
     }
 
     if (bay) {

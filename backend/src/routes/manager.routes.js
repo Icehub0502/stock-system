@@ -10,6 +10,17 @@ const { loadMethodBreakdown } = require('./receipts.routes');
 const router = express.Router();
 router.use(authenticate, requireManager);
 
+// The page counts only cars, quotations and deposits that started on or after the shop's cutoff date
+// (app_settings 'manager_page_since'), so old leftovers from before the page existed do not show up. A shop that has
+// none yet starts today.
+async function loadSince(shopId) {
+  const [[row]] = await pool.query("SELECT value FROM app_settings WHERE shop_id = ? AND `key` = 'manager_page_since'", [shopId]);
+  if (row && /^\d{4}-\d{2}-\d{2}$/.test(row.value)) return row.value;
+  const [[{ today }]] = await pool.query("SELECT DATE_FORMAT(CURDATE(), '%Y-%m-%d') AS today");
+  await pool.query("INSERT IGNORE INTO app_settings (shop_id, `key`, value) VALUES (?, 'manager_page_since', ?)", [shopId, today]);
+  return today;
+}
+
 // A car in the shop longer than this many days is "stuck" and shown in red
 const STUCK_DAYS = 3;
 // Quotations this old (days) are no longer chased from this page
@@ -31,6 +42,7 @@ router.get('/today', async (req, res) => {
   try {
     const shopId = req.shopId;
     const [[{ today }]] = await pool.query("SELECT DATE_FORMAT(CURDATE(), '%Y-%m-%d') AS today");
+    const since = await loadSince(shopId);
 
     const [jobRows] = await pool.query(
       `SELECT j.id, j.job_no, j.queue_no, j.status, j.bay, j.technician, j.symptom,
@@ -41,9 +53,9 @@ router.get('/today', async (req, res) => {
        LEFT JOIN vehicles v ON v.id = j.vehicle_id
        LEFT JOIN customers c ON c.id = j.customer_id
        LEFT JOIN quotations q ON q.id = j.quotation_id
-       WHERE j.shop_id = ? AND j.status IN (?)
+       WHERE j.shop_id = ? AND j.status IN (?) AND j.job_date >= ?
        ORDER BY j.id DESC LIMIT 300`,
-      [shopId, STATUS_GROUPS.flatMap((g) => g.statuses)]
+      [shopId, STATUS_GROUPS.flatMap((g) => g.statuses), since]
     );
     const groups = STATUS_GROUPS.map((g) => ({ key: g.key, label: g.label, cars: [] }));
     const groupOf = new Map(STATUS_GROUPS.flatMap((g, i) => g.statuses.map((s) => [s, i])));
@@ -73,10 +85,10 @@ router.get('/today', async (req, res) => {
        LEFT JOIN vehicles v ON v.id = q.vehicle_id
        LEFT JOIN decline_reasons dr ON dr.id = q.decline_reason
        WHERE q.shop_id = ? AND q.converted_receipt_id IS NULL
-         AND q.quotation_date >= DATE_SUB(CURDATE(), INTERVAL ? DAY)
+         AND q.quotation_date >= DATE_SUB(CURDATE(), INTERVAL ? DAY) AND q.quotation_date >= ?
          AND (q.status IN ('pending', 'no_date') OR (q.status = 'declined' AND dr.label IN (?)))
        ORDER BY q.total_amount DESC LIMIT 100`,
-      [shopId, CHASE_WINDOW_DAYS, WIN_BACK_REASONS]
+      [shopId, CHASE_WINDOW_DAYS, since, WIN_BACK_REASONS]
     );
     const chase = chaseRows.map((q) => ({
       ...q, total_amount: Number(q.total_amount), age_days: Number(q.age_days) || 0,
@@ -97,9 +109,9 @@ router.get('/today', async (req, res) => {
        LEFT JOIN customers c ON c.id = q.customer_id
        LEFT JOIN vehicles v ON v.id = q.vehicle_id
        WHERE q.shop_id = ? AND q.deposit_amount > 0 AND q.closed_at IS NULL
-         AND q.status <> 'declined' AND q.converted_receipt_id IS NULL
+         AND q.status <> 'declined' AND q.converted_receipt_id IS NULL AND q.quotation_date >= ?
        ORDER BY q.deposit_date DESC, q.id DESC LIMIT 50`,
-      [shopId]
+      [shopId, since]
     );
 
     const [[lowCount]] = await pool.query(
@@ -118,8 +130,10 @@ router.get('/today', async (req, res) => {
       success: true,
       data: {
         today,
+        since,
         stuck_days: STUCK_DAYS,
-        cars: { groups, total: jobRows.length, overdue_count: overdueCount },
+        // in_shop leaves out the cars booked for a later day (they wait elsewhere); total is every row shown
+        cars: { groups, total: jobRows.length, in_shop: jobRows.filter((j) => j.status !== 'scheduled').length, overdue_count: overdueCount },
         chase: { items: chase, total_value: chase.reduce((s, q) => s + q.total_amount, 0) },
         money: { bill_count: Number(todayTotals.bill_count), total: Number(todayTotals.total), by_method: byMethod },
         deposits: {

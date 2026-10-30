@@ -5,6 +5,7 @@ import { formatDateTh } from '../utils/dateGroups';
 import { resizePhotos, describePhotoFailures, IMAGE_ACCEPT } from '../utils/resizeImage';
 import ProvinceSelect from './ProvinceSelect';
 import ComboInput from './ComboInput';
+import { FOUND_VIA_CHANNELS, foundViaLabel } from '../utils/foundViaChannels';
 
 // ยี่ห้อ/รุ่นรถ: ช่องค้นหา (ComboInput) — พิมพ์แล้วกรองจากสมุดรุ่นรถ ต้องเลือกยี่ห้อก่อนถึงจะกรอกรุ่น
 // ได้ ถ้าหาไม่เจอพิมพ์เองได้ (รถรุ่นใหม่) ค่าที่พิมพ์เองจะเข้าสมุดแบบ "รอตรวจ" ต้องให้ dev อนุมัติ
@@ -35,6 +36,8 @@ function newCar(overrides = {}) {
     key: carKeySeq,
     plate: '', province: '', customerName: '', phone: '', brand: '', model: '', color: '',
     year: '', mileage: '', symptom: '', photos: [], photosBusy: false,
+    // how the customer found the shop: required unless the customer already has one saved
+    foundVia: '', foundViaNote: '',
     // ใบเสนอราคาเดิมที่ค้างของรถคันนี้ (ทุกใบ) + id ใบที่พนักงานเลือกดึงเข้าคิว
     openQuotations: [], pullInId: null,
     ...overrides,
@@ -59,6 +62,11 @@ function findVehicle(vehicles, plate, province) {
   return candidates.length === 1 ? candidates[0] : null;
 }
 
+// the channel already saved for the car's customer (matched car or the quotation the form was opened from), if any
+function knownChannel(matchedVehicle, prefill) {
+  return matchedVehicle?.found_via || prefill?.found_via || '';
+}
+
 // ฟอร์มของรถหนึ่งคัน (controlled — state อยู่ที่ AddJobModal) มี effect ค้นข้อมูลรถเดิม/ใบเสนอราคาค้างของตัวเอง
 function CarForm({
   car, index, total, vehicles, brands, prefill, onChange, onRemove,
@@ -67,6 +75,7 @@ function CarForm({
   const [models, setModels] = useState([]);
   const matchedVehicle = useMemo(() => findVehicle(vehicles, car.plate, car.province), [vehicles, car.plate, car.province]);
   const plateAmbiguous = !car.province.trim() && plateCandidates(vehicles, car.plate).length > 1;
+  const savedChannel = knownChannel(matchedVehicle, prefill);
 
   useEffect(() => {
     if (!car.brand.trim()) { setModels([]); return; }
@@ -222,6 +231,23 @@ function CarForm({
         </div>
       </div>
 
+      <div className="ajm-field">
+        <label>ลูกค้าเจอเราจากช่องทางไหน {!savedChannel && <span style={{ color: '#b91c1c' }}>* จำเป็น</span>}</label>
+        {savedChannel ? (
+          <p className="ajm-note ajm-note-ok">{foundViaLabel(savedChannel)} (บันทึกไว้แล้ว)</p>
+        ) : (
+          <>
+            <select value={car.foundVia} onChange={(e) => onChange({ foundVia: e.target.value })} required>
+              <option value="">-- เลือกช่องทาง --</option>
+              {FOUND_VIA_CHANNELS.map((c) => <option key={c.value} value={c.value}>{c.icon} {c.label}</option>)}
+            </select>
+            {car.foundVia === 'other' && (
+              <input type="text" placeholder="ระบุช่องทาง" value={car.foundViaNote} onChange={(e) => onChange({ foundViaNote: e.target.value })} required />
+            )}
+          </>
+        )}
+      </div>
+
       <h4 className="ajm-section">ข้อมูลรถ</h4>
       <div className="ajm-grid-2">
         <div className="ajm-field">
@@ -340,7 +366,7 @@ export default function AddJobModal({ onClose, onCreated, prefill = null }) {
   const addCar = () => {
     setCars((prev) => {
       const last = prev[prev.length - 1];
-      return [...prev, newCar({ customerName: last.customerName, phone: last.phone })];
+      return [...prev, newCar({ customerName: last.customerName, phone: last.phone, foundVia: last.foundVia, foundViaNote: last.foundViaNote })];
     });
   };
 
@@ -415,6 +441,7 @@ export default function AddJobModal({ onClose, onCreated, prefill = null }) {
       symptom: car.symptom.trim(),
       photos: car.photos,
       quotation_id: car.pullInId || (isFirst ? prefill?.quotation_id || null : null),
+      ...(knownChannel(matchedVehicle, prefill) ? {} : { found_via: car.foundVia, found_via_note: car.foundViaNote.trim() }),
     });
     return res.data.id;
   }
@@ -434,6 +461,10 @@ export default function AddJobModal({ onClose, onCreated, prefill = null }) {
       if (seenPlates.has(plate)) return setError(`${label}ทะเบียน ${c.plate.trim().toUpperCase()} ซ้ำกับคันก่อนหน้าในรอบนี้`);
       seenPlates.add(plate);
       if (!c.brand.trim() || !c.model.trim()) return setError(`${label}กรุณากรอกยี่ห้อและรุ่นรถ`);
+      if (!knownChannel(findVehicle(vehicles, c.plate, c.province), i === 0 ? prefill : null)) {
+        if (!c.foundVia) return setError(`${label}กรุณาเลือกช่องทางที่ลูกค้าเจอเรา`);
+        if (c.foundVia === 'other' && !c.foundViaNote.trim()) return setError(`${label}กรุณาระบุช่องทางที่ลูกค้าเจอเรา`);
+      }
     }
 
     setSubmitting(true);

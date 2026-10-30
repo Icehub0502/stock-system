@@ -14,6 +14,8 @@ function normalizePhone(phone) {
   return digitsOnly ? formatPhone(digitsOnly) : phone;
 }
 
+const { foundViaProblem } = require('../utils/foundVia');
+
 const router = express.Router();
 router.use(authenticate);
 router.use(requireRole('office'));
@@ -203,15 +205,6 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-// ชุดช่องทางคงที่ที่เลือกได้ (mirror กับ FOUND_VIA_CHANNELS ใน
-// frontend/src/utils/foundViaChannels.js — ต้องแก้ทั้งคู่พร้อมกันถ้าจะเพิ่ม/ลดตัวเลือก)
-// จำกัดเป็นค่าคงที่แทนข้อความอิสระ เพื่อให้หน้าสรุปสถิติจัดกลุ่มได้ถูกต้องแม่นยำ
-// ⚠️ ห้ามแก้/ลบ 4 ค่าแรก มีข้อมูลลูกค้าที่บันทึกไว้ด้วยค่าพวกนี้อยู่แล้วในฐานข้อมูล
-const FOUND_VIA_VALUES = [
-  'google_map', 'facebook', 'friend', 'other',
-  'google_search', 'tiktok', 'line', 'pass_by', 'shop_referral', 'returning',
-];
-
 // บันทึกว่าลูกค้าคนนี้เจอร้านจากช่องทางไหน — เก็บไว้ประกอบการตัดสินใจยิงโฆษณา (หน้า
 // CustomerChannelPage.jsx) แยก endpoint ต่างหากจาก PUT /:id ด้านบน (ไม่ต้องพ่วง
 // customer_name/phone มาด้วยทุกครั้ง และไม่ต้องยิง push อัปเดตเข้าไลน์เหมือน PUT)
@@ -219,12 +212,8 @@ router.patch('/:id/found-via', async (req, res) => {
   const { id } = req.params;
   const { channel, note } = req.body || {};
 
-  if (!FOUND_VIA_VALUES.includes(channel)) {
-    return res.status(400).json({ error: 'กรุณาเลือกช่องทางที่ลูกค้าเจอร้าน' });
-  }
-  if (channel === 'other' && !note?.trim()) {
-    return res.status(400).json({ error: 'กรุณาระบุรายละเอียดช่องทาง' });
-  }
+  const problem = foundViaProblem(channel, note);
+  if (problem) return res.status(400).json({ error: problem });
 
   try {
     const [result] = await pool.execute(

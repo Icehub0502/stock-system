@@ -162,7 +162,7 @@ describe('receipt: restoring brings back the items and re-links the quotation', 
 describe('job: photos stay on disk while the copy exists', () => {
   test('delete a job with a photo, the file remains, restore brings the job and the photo row back', async () => {
     const { customerId, vehicleId } = await makeCustomerAndVehicle('TrashJ');
-    const created = await request(app).post('/api/jobs').set(as(token)).send({ vehicle_id: vehicleId, customer_id: customerId });
+    const created = await request(app).post('/api/jobs').set(as(token)).send({ vehicle_id: vehicleId, customer_id: customerId, found_via: 'returning' });
     expect(created.status).toBe(201);
     const jobId = created.body.id;
 

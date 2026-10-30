@@ -21,7 +21,8 @@ export default function QuotationListPage() {
   const [quotations, setQuotations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [search, setSearch] = useState("");
+  // ?q=<quotation no> opens the list already searched (links from the manager page)
+  const [search, setSearch] = useState(() => new URLSearchParams(window.location.search).get("q") || "");
   const [actioningId, setActioningId] = useState(null);
   const [justApprovedId, setJustApprovedId] = useState(null);
   // 'active' = รายการหลัก (ซ่อนใบที่ลูกค้าไม่ได้ทำ), 'declined' = เฉพาะใบที่กด

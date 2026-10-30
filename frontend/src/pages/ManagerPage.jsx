@@ -18,6 +18,9 @@ function Phone({ phone }) {
   return <a className="mg-phone" href={`tel:${phone}`}>โทร {phone}</a>;
 }
 
+// "วันนี้" instead of "0 วันที่แล้ว"
+const ageText = (days) => (days === 0 ? 'วันนี้' : `${days} วันที่แล้ว`);
+
 function CarRow({ car, stuckDays }) {
   return (
     <Link to={`/jobs/${car.id}`} className={`mg-row ${car.overdue ? 'mg-row-red' : ''}`}>
@@ -74,13 +77,13 @@ export default function ManagerPage() {
         <div className={`mg-tile ${cars.overdue_count > 0 ? 'mg-tile-red' : ''}`}>
           <span className="mg-tile-num">{cars.overdue_count}</span><span>คันเกินเวลา</span>
         </div>
-        <div className="mg-tile"><span className="mg-tile-num">{cars.total}</span><span>รถในอู่</span></div>
+        <div className="mg-tile"><span className="mg-tile-num">{cars.in_shop}</span><span>รถในอู่</span></div>
         <div className="mg-tile"><span className="mg-tile-num">฿{formatMoney(money.total)}</span><span>ปิดบิลวันนี้ ({money.bill_count} ใบ)</span></div>
         <div className="mg-tile"><span className="mg-tile-num">฿{formatMoney(chase.total_value)}</span><span>รอตามขาย ({chase.items.length} ใบ)</span></div>
       </div>
 
       <div className="dash-panel">
-        <div className="dash-panel-title">รถในอู่ตอนนี้ ({cars.total} คัน)</div>
+        <div className="dash-panel-title">รถในอู่ตอนนี้ ({cars.in_shop} คัน{cars.total > cars.in_shop ? ` + นัดมาทำ ${cars.total - cars.in_shop}` : ''})</div>
         {cars.total === 0 ? <div className="empty-message">ไม่มีรถในอู่</div> : cars.groups.filter((g) => g.cars.length > 0).map((g) => (
           <div key={g.key} className="mg-group">
             <div className="mg-group-title">{g.label} <span className="mg-count">{g.cars.length}</span></div>
@@ -100,11 +103,12 @@ export default function ManagerPage() {
                   <div key={q.id} className="mg-row">
                     <div className="mg-row-main">
                       <strong>{carTitle(q)}</strong>
-                      <span className="mg-muted">{q.customer_name || '-'} · {q.quotation_no} · {q.age_days} วันที่แล้ว{q.decline_label ? ` · ${q.decline_label}` : ''}</span>
+                      <span className="mg-muted">{q.customer_name || '-'} · {q.quotation_no} · {ageText(q.age_days)}{q.decline_label ? ` · ${q.decline_label}` : ''}</span>
                     </div>
                     <div className="mg-row-side">
                       <strong>฿{formatMoney(q.total_amount)}</strong>
                       <Phone phone={q.phone} />
+                      <Link className="mg-open" to={q.kind === 'later' ? '/quotations/declined-summary' : `/quotations?q=${encodeURIComponent(q.quotation_no)}`}>เปิดดู</Link>
                     </div>
                   </div>
                 ))}
@@ -130,7 +134,11 @@ export default function ManagerPage() {
               <strong>{carTitle(d)}</strong>
               <span className="mg-muted">{d.customer_name || '-'} · {d.quotation_no}{d.deposit_date ? ` · รับ ${formatDateTh(d.deposit_date)}` : ''}</span>
             </div>
-            <div className="mg-row-side"><strong>฿{formatMoney(d.deposit_amount)}</strong><Phone phone={d.phone} /></div>
+            <div className="mg-row-side">
+              <strong>฿{formatMoney(d.deposit_amount)}</strong>
+              <Phone phone={d.phone} />
+              <Link className="mg-open" to={`/quotations?q=${encodeURIComponent(d.quotation_no)}`}>เปิดดู</Link>
+            </div>
           </div>
         ))}
       </div>
@@ -150,7 +158,6 @@ export default function ManagerPage() {
         )}
       </div>
 
-      <p className="mg-muted">ยังไม่มีในหน้านี้: เคลมที่ยังเปิดอยู่, ของที่สั่งแล้วรอเข้า / ยืมสาขาอื่น และฟอร์ม KPI (กำลังเพิ่มทีละส่วน)</p>
     </div>
   );
 }

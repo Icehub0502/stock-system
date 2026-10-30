@@ -21,7 +21,7 @@ const quotationIds = [];
 beforeAll(async () => {
   shop = await createShop();
   modelId = (await pool.query("INSERT INTO vehicle_models (brand, model, year_range, status) VALUES (?, 'Beta', '2015-2020', 'approved')", [BRAND]))[0].insertId;
-  customerId = (await pool.query('INSERT INTO customers (shop_id, customer_name, phone) VALUES (?, ?, NULL)', [shop.shopId, `Job price ${unique}`]))[0].insertId;
+  customerId = (await pool.query("INSERT INTO customers (shop_id, customer_name, phone, found_via) VALUES (?, ?, NULL, 'returning')", [shop.shopId, `Job price ${unique}`]))[0].insertId;
   vehicleId = (await pool.query('INSERT INTO vehicles (shop_id, customer_id, brand, model, license_plate) VALUES (?, ?, ?, ?, ?)', [shop.shopId, customerId, BRAND, 'Beta', `JP${unique}`.slice(0, 15)]))[0].insertId;
   const job = await request(app).post('/api/jobs').set(as(shop.token)).send({ vehicle_id: vehicleId, customer_id: customerId, job_date: todayStr() });
   expect(job.status).toBe(201);

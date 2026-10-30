@@ -185,7 +185,7 @@ describe('jobs (queue)', () => {
   let fxB;
 
   test('each shop queues its own cars; job numbers and queue numbers are per shop', async () => {
-    const a = await request(app).post('/api/jobs').set(as(tokenA)).send({ vehicle_id: fxA.vehicleId, customer_id: fxA.customerId });
+    const a = await request(app).post('/api/jobs').set(as(tokenA)).send({ vehicle_id: fxA.vehicleId, customer_id: fxA.customerId, found_via: 'returning' });
     expect(a.status).toBe(201);
     jobA = a.body;
     cleanupA.jobs.push(jobA.id);
@@ -193,7 +193,7 @@ describe('jobs (queue)', () => {
     const cust = await request(app).post('/api/customers').set(as(tokenB)).send({ customer_name: 'Iso2 JB' });
     const veh = await request(app).post('/api/vehicles').set(as(tokenB)).send({ customer_id: cust.body.data.id, brand: 'Mazda', model: '2' });
     fxB = { customerId: cust.body.data.id, vehicleId: veh.body.data.id };
-    const b = await request(app).post('/api/jobs').set(as(tokenB)).send({ vehicle_id: fxB.vehicleId, customer_id: fxB.customerId });
+    const b = await request(app).post('/api/jobs').set(as(tokenB)).send({ vehicle_id: fxB.vehicleId, customer_id: fxB.customerId, found_via: 'returning' });
     expect(b.status).toBe(201);
     jobB = b.body;
     expect(jobB.job_no).toMatch(/001$/);
@@ -226,7 +226,7 @@ describe('jobs (queue)', () => {
   });
 
   test('a job cannot be created for another shop vehicle', async () => {
-    const res = await request(app).post('/api/jobs').set(as(tokenB)).send({ vehicle_id: fxA.vehicleId, customer_id: fxA.customerId });
+    const res = await request(app).post('/api/jobs').set(as(tokenB)).send({ vehicle_id: fxA.vehicleId, customer_id: fxA.customerId, found_via: 'returning' });
     expect(res.status).toBe(404);
   });
 

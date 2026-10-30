@@ -1186,6 +1186,10 @@ async function initDatabase() {
   // print header per branch (logo, company details, colour) — see docSettingsSchema.js
   await require('./docSettingsSchema').migrateDocSettings(conn);
 
+  // Manager page starts from zero on 2026-10-30: only cars / quotations / deposits from that day on are counted
+  // (INSERT IGNORE: a cutoff that is already stored is never moved)
+  await conn.query("INSERT IGNORE INTO app_settings (shop_id, `key`, value) SELECT id, 'manager_page_since', '2026-10-30' FROM shops");
+
   await conn.end();
 
   console.log(`[init-db] Database "${DB_NAME}" ready`);

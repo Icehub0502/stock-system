@@ -22,7 +22,7 @@ const INVALID_PROVINCE = { error: 'จังหวัดไม่ถูกต้
 router.get('/', requireRole('office'), async (req, res) => {
   try {
     const [rows] = await pool.execute(
-      `SELECT v.*, c.customer_name, c.customer_code
+      `SELECT v.*, c.customer_name, c.customer_code, c.found_via
        FROM vehicles v
        JOIN customers c ON v.customer_id = c.id
        WHERE v.shop_id = ?

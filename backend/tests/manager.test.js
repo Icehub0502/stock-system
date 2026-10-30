@@ -38,6 +38,8 @@ beforeAll(async () => {
   shopB = await createShop();
   customerId = (await pool.query('INSERT INTO customers (shop_id, customer_name, phone) VALUES (?, ?, ?)', [shopA.shopId, `Mgr ${unique}`, '0812345678']))[0].insertId;
   vehicleId = (await pool.query('INSERT INTO vehicles (shop_id, customer_id, brand, model, license_plate) VALUES (?, ?, ?, ?, ?)', [shopA.shopId, customerId, 'Toyota', 'Vios', `MG${unique}`.slice(0, 15)]))[0].insertId;
+  // the page counts from this day on; the fixtures below are all newer
+  await pool.query("INSERT INTO app_settings (shop_id, `key`, value) VALUES (?, 'manager_page_since', ?)", [shopA.shopId, daysAgo(30)]);
   categoryId = (await pool.query('INSERT INTO stock_categories (name) VALUES (?)', [`MgrCat ${unique}`]))[0].insertId;
 
   await addJob('inspecting', 5); // stuck
@@ -47,6 +49,9 @@ beforeAll(async () => {
   await addQuotation('declined', 6, { declineLabel: 'นำรถมาทำวันอื่น' });
   await addQuotation('declined', 6, { declineLabel: 'ราคาสูงไป' }); // lost for good: not chased
   await addQuotation('scheduled', 2, { deposit: 500 });
+  // started before the page's start day: left out of everything
+  await addJob('inspecting', 40);
+  await addQuotation('pending', 45);
   await pool.query(
     'INSERT INTO receipts (shop_id, receipt_no, receipt_date, customer_id, vehicle_id, total_amount, payment_method) VALUES (?, ?, CURDATE(), ?, ?, 1200, ?)',
     [shopA.shopId, `MR${unique}`.slice(0, 30), customerId, vehicleId, 'เงินสด']
