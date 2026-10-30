@@ -6770,3 +6770,22 @@ a.mg-row:hover { border-color: #111111; }
 .od-neg { color: #b91c1c; }
 .od-check { cursor: pointer; align-items: center; }
 .od-off { opacity: 0.55; text-decoration: line-through; }
+
+/* ── Responsive audit fixes ── */
+.vh-chip { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+
+@media (max-width: 1024px), (hover: none) and (pointer: coarse) {
+  /* drawer: one scrolling column (no wrapping into a 2nd column off-screen) with room above the bottom nav */
+  .navbar-links { flex-wrap: nowrap; padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px)); }
+  .navbar-links > * { flex-shrink: 0; }
+  .navbar-user-row { flex-wrap: wrap; row-gap: 8px; }
+  .navbar-user-row .btn-logout { min-height: 44px; }
+}
+
+@media (max-width: 640px) {
+  /* page shell sat inside .container padding, losing ~80px of width on phones */
+  .quotation-page { padding: 12px 0; }
+  .quotation-header { padding: 16px; margin-bottom: 16px; }
+  /* last list rows must scroll clear of the floating "+" button */
+  body:has(.bottom-nav) .container { padding-bottom: 140px; }
+}

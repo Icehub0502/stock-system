@@ -470,6 +470,7 @@ export default function TechnicianScanPage() {
   const [invoiceErr, setInvoiceErr] = useState('');
   const [supplier, setSupplier] = useState('');            // the shop the parts came from (one bill = one shop)
   const [supplierErr, setSupplierErr] = useState('');
+  const [supplierOther, setSupplierOther] = useState(false); // true = the shop is not in the list, name typed by hand
   const [suppliers, setSuppliers] = useState([]);
   useEffect(() => {
     client.get('/suppliers').then((res) => setSuppliers(res.data.data || [])).catch(() => {});
@@ -823,20 +824,32 @@ export default function TechnicianScanPage() {
               />
               {invoiceErr && <p className="scan-error">{invoiceErr}</p>}
 
-              <label className="scan-label" htmlFor="scan-supplier">ร้านอะไหล่ที่ซื้อ (ไม่มีในรายการ พิมพ์ชื่อร้านใหม่ได้เลย)</label>
-              <input
+              <label className="scan-label" htmlFor="scan-supplier">ร้านอะไหล่ที่ซื้อ</label>
+              <select
                 id="scan-supplier"
-                type="text"
-                list="scan-suppliers"
                 className={`scan-input${supplierErr ? ' has-error' : ''}`}
-                placeholder="เลือกหรือพิมพ์ชื่อร้าน"
-                value={supplier}
-                onChange={(e) => setSupplier(e.target.value)}
-                autoComplete="off"
-              />
-              <datalist id="scan-suppliers">
-                {suppliers.map((sp) => <option key={sp.id} value={sp.name} />)}
-              </datalist>
+                value={supplierOther ? '__other__' : supplier}
+                onChange={(e) => {
+                  if (e.target.value === '__other__') { setSupplierOther(true); setSupplier(''); }
+                  else { setSupplierOther(false); setSupplier(e.target.value); }
+                  setSupplierErr('');
+                }}
+              >
+                <option value="">-- เลือกร้านอะไหล่ --</option>
+                {suppliers.map((sp) => <option key={sp.id} value={sp.name}>{sp.name}</option>)}
+                <option value="__other__">+ ร้านอื่น (พิมพ์ชื่อเอง)</option>
+              </select>
+              {supplierOther && (
+                <input
+                  type="text"
+                  className={`scan-input${supplierErr ? ' has-error' : ''}`}
+                  placeholder="พิมพ์ชื่อร้านอะไหล่"
+                  value={supplier}
+                  onChange={(e) => { setSupplier(e.target.value); setSupplierErr(''); }}
+                  autoComplete="off"
+                  autoFocus
+                />
+              )}
               {supplierErr && <p className="scan-error">{supplierErr}</p>}
 
               <label className="scan-label" htmlFor="scan-bill-date">วันที่ของบิล</label>

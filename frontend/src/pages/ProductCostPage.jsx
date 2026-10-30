@@ -716,13 +716,13 @@ export default function ProductCostPage() {
                     <span className="pcp-parts-badge">{p.parts}</span>
                   </td>
                   <td className="pcp-col-desc" data-label="Description">{p.description}</td>
-                  <td data-label="หมวดหมู่">
+                  <td className="pcp-col-cat" data-label="หมวดหมู่">
                     <span className="pcp-cat-chip">{detectCategory(p.description)}</span>
                   </td>
-                  <td data-label="ยี่ห้อรถ">
+                  <td className="pcp-col-carbrand" data-label="ยี่ห้อรถ">
                     <span className="pcp-car-chip">{detectBrand(p.description)}</span>
                   </td>
-                  <td data-label="Brand">{p.brand || "-"}</td>
+                  <td className="pcp-col-brand" data-label="Brand">{p.brand || "-"}</td>
                   <td className="pcp-col-price" data-label="ต้นทุน">
                     {p.price != null
                       ? <span className="pcp-price-val">฿{fmt(p.price)}</span>

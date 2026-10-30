@@ -564,9 +564,9 @@ function LineBotSection() {
           </summary>
           {data.messages[botKey].map((m) => (
             <div className="form-group" key={m.key}>
-              <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
-                <span>{m.label}</span>
-                <button type="button" onClick={() => setValues((prev) => ({ ...prev, [m.key]: m.default }))}>
+              <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <span style={{ flex: '1 1 180px', minWidth: 0 }}>{m.label}</span>
+                <button type="button" style={{ whiteSpace: 'nowrap', flex: '0 0 auto' }} onClick={() => setValues((prev) => ({ ...prev, [m.key]: m.default }))}>
                   คืนค่าเริ่มต้น
                 </button>
               </label>
