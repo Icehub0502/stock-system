@@ -11,7 +11,7 @@ export default function VisitTimeline({ visits }) {
   const [lightboxSrc, setLightboxSrc] = useState(null);
 
   if (!visits || visits.length === 0) {
-    return <div className="empty-message">ยังไม่มีประวัติการเข้ารับบริการ</div>;
+    return <div className="empty-message">ยังไม่มีการเข้าร้านจากคิวรับรถ — ใบเสร็จเก่าดูได้ที่ "ดูประวัติเต็ม" ของรถแต่ละคัน</div>;
   }
 
   return (

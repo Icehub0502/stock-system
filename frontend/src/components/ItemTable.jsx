@@ -139,8 +139,8 @@ export default function ItemTable({
                   >
                     +
                   </button>
-                  <button type="button" className="btn-remove" onClick={() => handleRemoveItem(idx)}>
-                    ✕
+                  <button type="button" className="btn-remove" onClick={() => handleRemoveItem(idx)} aria-label="ลบรายการนี้">
+                    ลบ
                   </button>
                 </td>
               </tr>

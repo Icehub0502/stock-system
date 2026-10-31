@@ -24,16 +24,18 @@ const SNAPSHOT_COLUMNS = { users: 'id, username, full_name, role, shop_id, is_ac
 
 const ENTITY_LABEL = {
   customers: 'ลูกค้า', vehicles: 'รถ', quotations: 'ใบเสนอราคา', receipts: 'ใบเสร็จ', jobs: 'งาน/คิว', claims: 'เคลม',
-  warranties: 'การรับประกัน', 'service-items': 'รายการสินค้า/บริการ', 'stock-items': 'สต็อก', 'stock-receive': 'รับเข้าสต็อก',
-  'stock-deductions': 'ตัดสต็อก', users: 'บัญชีผู้ใช้', technicians: 'ช่าง', 'doc-settings': 'หัวกระดาษ',
+  warranties: 'การรับประกัน', 'service-items': 'รายการสินค้า/บริการ', 'stock-items': 'สต๊อก', 'stock-receive': 'รับเข้าสต๊อก',
+  'stock-deductions': 'ตัดสต๊อก', users: 'บัญชีผู้ใช้', technicians: 'ช่าง', 'doc-settings': 'หัวกระดาษ',
   'model-prices': 'ราคามาตรฐาน', settings: 'ตั้งค่า', 'vehicle-models': 'รุ่นรถ', 'product-costs': 'ต้นทุนสินค้า',
-  auth: 'บัญชี', dev: 'ผู้ดูแลระบบ', 'quotation-customers': 'ลูกค้าใบเสนอราคา', transactions: 'รายการสต็อก', line: 'LINE',
+  auth: 'บัญชี', dev: 'ผู้ดูแลระบบ', 'quotation-customers': 'ลูกค้าใบเสนอราคา', transactions: 'บิลรับเข้า', suppliers: 'ร้านอะไหล่', 'owner-stats': 'หน้าเจ้าของ', line: 'LINE',
 };
 const SUB_ACTION_LABEL = {
   approve: 'อนุมัติ', schedule: 'นัดวัน', deposit: 'รับมัดจำ', decline: 'ลูกค้าไม่ทำ', 'quote-draft': 'ร่างใบเสนอราคา',
   status: 'เปลี่ยนสถานะ', photos: 'รูป', 'part-photos': 'รูปอะไหล่', restore: 'กู้คืน', 'reset-password': 'รีเซ็ตรหัสผ่าน',
   'found-via': 'ช่องทางลูกค้า', 'change-password': 'เปลี่ยนรหัสผ่าน', move: 'ย้ายวัน', 'attach-vehicle': 'ผูกรุ่นรถ',
   signature: 'ลายเซ็น', quotation: 'ใบเสนอราคา', print: 'พิมพ์', purge: 'ล้าง',
+  'receipt-session': 'เปิดบิล', 'receipt-sessions': 'บิล', lines: 'รายการในบิล', sessions: 'บิล', commit: 'บันทึกบิล',
+  movements: 'ยกเลิกรายการ', qty: 'ปรับจำนวน', costs: 'ต้นทุน', categories: 'หมวดหมู่', 'expense-settings': 'ตั้งค่าค่าใช้จ่าย',
 };
 
 // routes that are written all the time: no body / snapshot, and at most one entry a minute per user and path

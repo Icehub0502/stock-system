@@ -13,7 +13,9 @@ client.interceptors.request.use((config) => {
 client.interceptors.response.use(
   (res) => res,
   (err) => {
-    if (err.response && err.response.status === 401) {
+    // a 401 from the login form means a wrong name or password, not an expired session
+    const isLoginRequest = /\/auth\/login$/.test(String(err.config?.url || ''));
+    if (err.response && err.response.status === 401 && !isLoginRequest) {
       localStorage.removeItem('token');
       localStorage.removeItem('user');
       window.location.href = '/login';

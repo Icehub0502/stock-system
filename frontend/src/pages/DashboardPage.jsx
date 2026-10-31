@@ -50,8 +50,8 @@ function buildTrendDays(dailyRows, days = 14) {
 }
 
 const QUICK_LINKS = [
-  { to: "/receipt-list", label: "+ สร้างบิลใหม่" },
-  { to: "/quotations", label: "+ สร้างใบเสนอราคา" },
+  { to: "/receipt-list", label: "+ สร้างบิลใหม่", state: { openNew: true } },
+  { to: "/quotations", label: "+ สร้างใบเสนอราคา", state: { openNew: true } },
   { to: "/stock-all", label: "สต๊อกรวม" },
   { to: "/daily-summary", label: "สรุปยอดขายรายวัน", min: "manager" },
 ];
@@ -149,6 +149,18 @@ export default function DashboardPage() {
         <div className="loading">กำลังโหลด...</div>
       ) : (
         <>
+          {/* ── Quick links: the things staff come here to do, first ── */}
+          <div className="dash-panel">
+            <div className="dash-panel-title">ทางลัด</div>
+            <div className="dash-quicklinks">
+              {QUICK_LINKS.filter((l) => !l.min || hasRole(user, l.min)).map((l) => (
+                <Link key={l.to} to={l.to} state={l.state} className="dash-quicklink-btn">
+                  {l.label}
+                </Link>
+              ))}
+            </div>
+          </div>
+
           {/* ── Stat cards ── */}
           <div className="dash-stat-grid">
             <div className="dash-stat-card">
@@ -165,10 +177,10 @@ export default function DashboardPage() {
                 <div className="dash-stat-value">฿{formatBaht(todaySummary.total_revenue)}</div>
               </div>
             )}
-            <div className="dash-stat-card">
-              <div className="dash-stat-label">สต๊อกใกล้หมด/หมด</div>
+            <Link to="/stock-all" state={{ stockFilter: 'low' }} className="dash-stat-card dash-stat-link" title="กดเพื่อดูรายการที่ใกล้หมด">
+              <div className="dash-stat-label">สต๊อกใกล้หมด/หมด ›</div>
               <div className="dash-stat-value">{lowStockCount.toLocaleString('en-US')}</div>
-            </div>
+            </Link>
           </div>
 
           {canSeeSales && <PaymentBreakdown title="ยอดวันนี้ แยกตามช่องทางชำระ" items={todayMethods} />}
@@ -352,17 +364,6 @@ export default function DashboardPage() {
             )}
           </div>
 
-          {/* ── Quick links ── */}
-          <div className="dash-panel">
-            <div className="dash-panel-title">ทางลัด</div>
-            <div className="dash-quicklinks">
-              {QUICK_LINKS.filter((l) => !l.min || hasRole(user, l.min)).map((l) => (
-                <Link key={l.to} to={l.to} className="dash-quicklink-btn">
-                  {l.label}
-                </Link>
-              ))}
-            </div>
-          </div>
         </>
       )}
     </div>

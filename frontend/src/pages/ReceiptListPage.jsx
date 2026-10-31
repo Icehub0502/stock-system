@@ -4,6 +4,9 @@ import ReceiptFormModal from "../components/ReceiptFormModal";
 import ReceiptPrintModal from "../components/ReceiptPrintModal";
 import { buildArchiveGroups, formatDateTh, formatMonthTh, formatYearTh } from "../utils/dateGroups";
 import useRealtimeEvent from "../hooks/useRealtimeEvent";
+import { useLocation, useNavigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
+import { hasRole } from "../utils/roles";
 
 export default function ReceiptListPage() {
   const [receipts, setReceipts] = useState([]);
@@ -12,6 +15,15 @@ export default function ReceiptListPage() {
   const [search, setSearch] = useState("");
   const [dateFilter, setDateFilter] = useState("");
   const [showFormModal, setShowFormModal] = useState(false);
+  const { user } = useAuth();
+  const canDelete = hasRole(user, 'manager'); // deleting a receipt is a manager's call (enforced by the server)
+  const location = useLocation();
+  const navigateTo = useNavigate();
+  useEffect(() => {
+    if (!location.state?.openNew) return;
+    navigateTo(location.pathname, { replace: true, state: {} });
+    setShowFormModal(true);
+  }, [location.state]); // eslint-disable-line react-hooks/exhaustive-deps
   const [editingReceiptId, setEditingReceiptId] = useState(null);
   const [selectedReceiptForPrint, setSelectedReceiptForPrint] = useState(null);
 
@@ -242,12 +254,14 @@ export default function ReceiptListPage() {
                             >
                               {receipt.printed_at ? '🖨️ พิมพ์ซ้ำ' : '🖨️ พิมพ์'}
                             </button>
+                            {canDelete && (
                             <button
                               className="btn-icon-small btn-danger"
                               onClick={() => handleDelete(receipt.id)}
                             >
                               ลบ
                             </button>
+                            )}
                           </td>
                         </tr>
                                   );

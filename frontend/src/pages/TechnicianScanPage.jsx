@@ -176,7 +176,7 @@ function ConfirmSheet({ item, mode, onConfirm, onCancel, loading, deferred = fal
         {qtyValid && !notEnough && (
           <p className="scan-confirm-result">
             {deferred
-              ? <>รับเข้า <b>{qtyNum}</b> ชิ้น → จะเป็น <b>{stockAfter}</b> ชิ้น หลังกดเสร็จสิ้น</>
+              ? <>รับเข้า <b>{qtyNum}</b> ชิ้น → จะเป็น <b>{stockAfter}</b> ชิ้น หลังกดบันทึก</>
               : <>{isIN ? 'รับเข้า' : 'จ่ายออก'} <b>{qtyNum}</b> ชิ้น → คงเหลือ <b>{stockAfter}</b> ชิ้น</>}
           </p>
         )}
@@ -243,7 +243,7 @@ function EditQtySheet({ order, onSave, onDelete, onCancel, loading }) {
           <input id="scan-edit-cost" className="scan-input" type="number" inputMode="decimal" min="0" step="0.01" placeholder="เช่น 850" value={cost} onChange={(e) => setCost(e.target.value)} />
         </div>
 
-        <p className="scan-confirm-result">จำนวนที่จะรับเข้า <b>{qtyNum}</b> ชิ้น (ยังไม่บวกสต๊อกจนกว่าจะกดเสร็จสิ้น)</p>
+        <p className="scan-confirm-result">จำนวนที่จะรับเข้า <b>{qtyNum}</b> ชิ้น (ยังไม่บวกสต๊อกจนกว่าจะกดบันทึก)</p>
 
         <button
           type="button"
@@ -323,8 +323,8 @@ function OrderRow({ item, index, mode, onEdit, onDelete, busy }) {
           )}
           {onDelete && (
             <button type="button" className="scan-del" onClick={() => onDelete(item)} disabled={busy}
-              aria-label={`ลบ ${item.name}`}>
-              <IconTrash />
+              aria-label={`${isIN || item.pending ? 'ลบ' : 'คืนของ'} ${item.name}`}>
+              <IconTrash /> <span>{isIN || item.pending ? 'ลบ' : 'คืนของ'}</span>
             </button>
           )}
         </div>
@@ -484,6 +484,7 @@ export default function TechnicianScanPage() {
   }, []);
   const [session, setSession]     = useState(null);           // { id, invoice_no }
   const [starting, setStarting]   = useState(false);
+  const [dupBill, setDupBill]     = useState(null);           // a bill with the same number from the same supplier already exists
 
   const [scanning, setScanning]   = useState(false);          // กล้องเปิด/ปิด
   const [manualOpen, setManualOpen] = useState(false);        // แผงกรอกเอง (QR เสีย)
@@ -548,11 +549,22 @@ export default function TechnicianScanPage() {
   const selectMode = (m) => {
     setMode(m);
     setOrders([]);
+    if (m === 'OUT') {
+      client.get('/stock-deductions/mine/recent')
+        .then((res) => setOrders((prev) => (prev.length > 0 ? prev : (res.data.data || []).map((d) => ({
+          key: `deduct-${d.id}`, sku: d.code, name: d.name, qty: d.qty, txId: d.id, type: 'stock_item', position: d.position,
+        })))))
+        .catch(() => {});
+    }
     setSession(null);
     setScannedItem(null);
     setBillDate(todayStr());
     setStep(m === 'IN' ? STEP.INVOICE : STEP.SCAN);
   };
+
+  useEffect(() => {
+    if (!isOffice && step === STEP.MODE) selectMode('OUT');
+  }, [isOffice, step]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── เปิด session บิล (IN) ──
   const startSession = async (allowDuplicate = false) => {
@@ -575,12 +587,7 @@ export default function TechnicianScanPage() {
     } catch (err) {
       const data = err?.response?.data;
       if (data?.code === 'DUPLICATE_BILL' && data.existing) {
-        const ex = data.existing;
-        if (window.confirm(`บิลเลข "${ex.invoice_no}" ของร้าน ${ex.supplier_name || '-'} (วันที่ ${ex.bill_date || '-'}) มีอยู่แล้ว\n\nกด OK = เปิดบิลเดิมแล้วสแกนต่อ\nกด ยกเลิก = ไม่เปิดบิลเดิม`)) {
-          resumeSession(ex);
-        } else if (window.confirm('สร้างบิลใหม่เลขซ้ำกันจริงใช่ไหม? (เช่น ร้านใช้เลขบิลเดิมกับของคนละรอบ)')) {
-          await startSession(true);
-        }
+        setDupBill(data.existing);
         return;
       }
       setInvoiceErr(data?.error || 'เปิดบิลไม่สำเร็จ');
@@ -600,6 +607,9 @@ export default function TechnicianScanPage() {
   // รายการรอยืนยัน (ยังไม่บวกสต๊อก) ลบได้เลยไม่มีอะไรต้องคืน ส่วนรายการที่บวกสต๊อกไปแล้วหรือของระบบเดิม
   // backend คืนสต๊อกให้เองในทรานแซกชันเดียว (ติดลบไม่ได้)
   const handleDeleteOrder = async (order) => {
+    if (!order.pending && !window.confirm(mode === 'OUT'
+      ? `คืน "${order.name}" ${order.qty} ชิ้น กลับเข้าสต๊อก?`
+      : `ลบ "${order.name}" ออกจากบิลนี้ และหักสต๊อกคืน?`)) return;
     const ref = order.pending ? order.lineId : order.txId;
     if (!ref) {
       setToast({ ok: false, title: 'ลบไม่ได้', body: 'ไม่พบเลขรายการอ้างอิง' });
@@ -733,8 +743,8 @@ export default function TechnicianScanPage() {
           ok: true,
           title: `เพิ่มเข้ารายการแล้ว — ${pendingOrder.name.slice(0, 22)}`,
           body: res.data.merged
-            ? `รวมเป็น ${line.qty} ชิ้น · ยังไม่บวกสต๊อก (กด “เสร็จสิ้น” เพื่อบวก)`
-            : `จำนวน ${line.qty} ชิ้น · ยังไม่บวกสต๊อก (กด “เสร็จสิ้น” เพื่อบวก)`,
+            ? `รวมเป็น ${line.qty} ชิ้น · ยังไม่บวกสต๊อก (กด “บันทึก” เพื่อบวก)`
+            : `จำนวน ${line.qty} ชิ้น · ยังไม่บวกสต๊อก (กด “บันทึก” เพื่อบวก)`,
         });
       } else {
         // จ่ายออก: ตัดสต๊อกรวมทันที (ติดลบ/เกินยอดไม่ได้) ยกเลิกได้จากหน้าสรุป
@@ -916,12 +926,35 @@ export default function TechnicianScanPage() {
         </div>
       )}
 
+      {/* same bill number from the same supplier: one dialog, three clear choices */}
+      {dupBill && step === STEP.INVOICE && (
+        <div className="scan-sheet-backdrop">
+          <div className="scan-sheet" role="dialog" aria-modal="true" aria-label="มีบิลเลขนี้อยู่แล้ว">
+            <div className="scan-sheet-handle" />
+            <h2 className="scan-sheet-title">มีบิลเลขนี้อยู่แล้ว</h2>
+            <p className="scan-hint">
+              บิล <b>{dupBill.invoice_no}</b> ของร้าน {dupBill.supplier_name || '-'} (วันที่ {dupBill.bill_date || '-'}) เปิดไว้แล้ว
+              ถ้าเป็นบิลใบเดียวกัน ให้สแกนต่อในบิลเดิม จะได้ไม่บวกสต๊อกซ้ำ
+            </p>
+            <button type="button" className="scan-btn scan-btn--primary scan-btn--block scan-btn--lg"
+              onClick={() => { const ex = dupBill; setDupBill(null); resumeSession(ex); }}>
+              สแกนต่อในบิลเดิม
+            </button>
+            <button type="button" className="scan-btn scan-btn--ghost scan-btn--block" style={{ marginTop: 10 }}
+              onClick={() => { setDupBill(null); startSession(true); }}>
+              เปิดบิลใหม่ (คนละรอบ ใช้เลขซ้ำ)
+            </button>
+            <button type="button" className="scan-sheet-cancel" onClick={() => setDupBill(null)}>ย้อนกลับไปแก้เลขบิล</button>
+          </div>
+        </div>
+      )}
+
       {/* ════════════ STEP 3 — สแกน + รายการ ════════════ */}
       {step === STEP.SCAN && (
         <div className="scan-shell scan-shell--wide scan-shell--has-dock">
 
           <header className="scan-topbar">
-            <button type="button" className="scan-icon-btn" onClick={() => confirmLeave(resetAll)} aria-label="ย้อนกลับ ออกจากหน้านี้"><IconArrowLeft /></button>
+            {isOffice && <button type="button" className="scan-icon-btn" onClick={() => confirmLeave(resetAll)} aria-label="ย้อนกลับ ออกจากหน้านี้"><IconArrowLeft /></button>}
             <div className="scan-topbar-text">
               <strong>{isIN ? 'รับเข้าสต๊อก' : 'จ่ายออกจากสต๊อก'}</strong>
               <small>{isIN ? 'สแกน QR เพื่อรับของเข้าบิลนี้' : 'สแกน QR เพื่อจ่ายของออก'}</small>
@@ -936,11 +969,11 @@ export default function TechnicianScanPage() {
             </div>
             <div className="scan-stats">
               <div><b>{orders.length}</b><span>รายการ</span></div>
-              <div><b>{sign}{totalQty}</b><span>ชิ้น</span></div>
+              <div><b>{totalQty > 0 ? sign : ""}{totalQty}</b><span>ชิ้น</span></div>
             </div>
             {isIN && pendingOrders.length > 0 && (
               <p className="scan-pending-note">
-                ⏳ มี {pendingOrders.length} รายการ (+{pendingQty} ชิ้น) ที่ยังไม่บวกสต๊อก — กด “ตรวจและบันทึก” ด้านล่างเพื่อบวกสต๊อก
+                ⏳ มี {pendingOrders.length} รายการ (+{pendingQty} ชิ้น) ที่ยังไม่บวกสต๊อก — กด “บันทึก” ด้านล่างเพื่อตรวจและบวกสต๊อก
               </p>
             )}
             {isIN && session && (
@@ -993,7 +1026,7 @@ export default function TechnicianScanPage() {
                 disabled={orders.length === 0}
               >
                 <IconCheck />
-                <span>{isIN ? 'ตรวจและบันทึก' : 'สรุป'}</span>
+                <span>{isIN ? 'บันทึก' : 'สรุป'}</span>
               </button>
             </div>
           </div>
@@ -1053,7 +1086,7 @@ export default function TechnicianScanPage() {
             </div>
             <div className="scan-summary-tile scan-summary-tile--accent">
               <span>รวมจำนวน</span>
-              <b>{sign}{totalQty}<small> ชิ้น</small></b>
+              <b>{totalQty > 0 ? sign : ""}{totalQty}<small> ชิ้น</small></b>
             </div>
           </section>
 
@@ -1062,7 +1095,7 @@ export default function TechnicianScanPage() {
               ? 'ตรวจทานก่อนยืนยัน — แก้จำนวนหรือลบรายการที่กรอกผิดได้ สต๊อกจะบวกเมื่อกด “ยืนยันบวกสต๊อก”'
               : isIN
                 ? 'ตรวจทานก่อนปิดงาน'
-                : 'ตรวจทานก่อนปิดงาน — จ่ายผิดกดถังขยะเพื่อคืนสต๊อกได้ภายใน 30 นาที เกินนั้นให้ผู้จัดการยกเลิก'}
+                : 'ตรวจทานก่อนปิดงาน — จ่ายผิดกดปุ่ม "คืนของ" เพื่อคืนสต๊อกได้ภายใน 30 นาที เกินนั้นให้ผู้จัดการยกเลิก'}
           </p>
 
           <section className="scan-list" aria-label="สรุปรายการ">

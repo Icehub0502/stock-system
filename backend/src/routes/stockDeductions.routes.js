@@ -36,6 +36,39 @@ function todayLocal() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+// What the caller paid out themselves in the last UNDO_MINUTES minutes, newest first: the scan page lists these
+// after a refresh so a wrong part can still be given back
+router.get('/mine/recent', async (req, res) => {
+  try {
+    const [rows] = await pool.execute(
+      `SELECT m.id, m.position, (m.qty_before - m.qty_after) AS qty, COALESCE(p.oem_code, i.oem_code) AS code,
+              i.description, c.name AS category_name
+       FROM stock_item_movements m
+       JOIN stock_items i ON i.id = m.item_id
+       JOIN stock_categories c ON c.id = i.category_id
+       LEFT JOIN stock_item_positions p ON p.item_id = m.item_id AND p.position = m.position
+       WHERE i.shop_id = ? AND m.user_id = ? AND m.reason = 'deduct' AND m.voided_at IS NULL
+         AND m.created_at >= NOW() - INTERVAL ${UNDO_MINUTES} MINUTE
+       ORDER BY m.id DESC LIMIT 50`,
+      [req.shopId, req.user.id]
+    );
+    res.json({
+      success: true,
+      data: rows.map((r) => ({
+        id: r.id,
+        position: r.position,
+        position_label: positionLabel(r.position),
+        qty: Number(r.qty),
+        code: r.code,
+        name: `${r.category_name} · ${r.description || r.code}${r.position ? ` (${positionLabel(r.position)})` : ''}`,
+      })),
+    });
+  } catch (err) {
+    console.error('Error loading recent deductions:', err);
+    res.status(500).json({ error: 'โหลดรายการที่จ่ายออกล่าสุดไม่สำเร็จ' });
+  }
+});
+
 // body: { item_id, lines: [{ position, qty }], vehicle_model?, deduction_date?, note? }
 // ของธรรมดา (ไม่แยกตำแหน่ง) ส่ง lines เป็น [{ qty }] (position ว่าง)
 router.post('/', async (req, res) => {

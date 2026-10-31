@@ -49,7 +49,7 @@ router.post('/login', loginLimiter, async (req, res) => {
     const user = rows[0];
     const passwordMatches = bcrypt.compareSync(password, user ? user.password_hash : DUMMY_HASH);
     if (!user || !passwordMatches) {
-      return res.status(401).json({ error: 'username หรือ password ไม่ถูกต้อง' });
+      return res.status(401).json({ error: 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง' });
     }
     const payload = {
       id: user.id,

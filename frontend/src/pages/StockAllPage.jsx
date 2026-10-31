@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import client from '../api/client';
 import useRealtimeEvent from '../hooks/useRealtimeEvent';
 import { positionsFor, positionLabel, POSITION_COLOR, NEUTRAL_POSITION_COLOR } from '../utils/stockPositions';
@@ -30,7 +31,7 @@ function formatFitment(f) {
   return `${f.brand} ${f.model}${years ? ` ${years}` : ''}`;
 }
 
-const REASON_LABEL = { create: 'เพิ่มรายการ', adjust: 'ปรับ +/−', set: 'ตั้งยอด' };
+const REASON_LABEL = { create: 'เพิ่มรายการ', adjust: 'ปรับ +/−', set: 'ตั้งยอด', deduct: 'ตัดสต๊อก', receive: 'รับเข้า' };
 
 // จำนวนคงเหลือ: ตัวเลขสีปกติ (ไม่ใช้สีบอกสถานะที่ตัวเลข) ส่วนของใกล้หมด/หมดมีไอคอนเตือนข้างตัวเลข
 // ⚠ สามเหลี่ยม = ใกล้หมด (จำนวน ≤ ค่าแจ้งเตือน) · ⊘ วงกลมกากบาท = หมดแล้ว (0)
@@ -78,7 +79,9 @@ export default function StockAllPage() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState(ALL_TAB);
   const [searchTerm, setSearchTerm] = useState('');
-  const [stockFilter, setStockFilter] = useState(''); // '' | 'low' | 'out'
+  const location = useLocation();
+  // the dashboard's low-stock card opens this page already filtered
+  const [stockFilter, setStockFilter] = useState(() => (location.state?.stockFilter === 'low' ? 'low' : '')); // '' | 'low' | 'out'
   const [errorMsg, setErrorMsg] = useState('');
   const [loadError, setLoadError] = useState(''); // list loading only: a background refresh never clears a form error
 

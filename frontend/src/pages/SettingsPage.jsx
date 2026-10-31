@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Link } from 'react-router-dom';
 import client from '../api/client';
 import { useAuth } from '../context/AuthContext';
@@ -23,7 +24,10 @@ export default function SettingsPage() {
       {hasRole(user, 'owner') && <UsersSection />}
       <TechniciansSection />
       <DeclineReasonsSection />
-      <LineBotSection />
+      <details className="settings-advanced">
+        <summary>บอทไลน์และข้อความตอบกลับอัตโนมัติ (ขั้นสูง — กดเพื่อเปิด)</summary>
+        <LineBotSection />
+      </details>
     </div>
   );
 }
@@ -130,7 +134,7 @@ function UsersSection() {
             <tbody>
               {users.map((u) => (
                 <tr key={u.id}>
-                  <td data-label="Username">{u.username}</td>
+                  <td data-label="ชื่อผู้ใช้ (ใช้ล็อกอิน)">{u.username}</td>
                   <td data-label="ชื่อ">{u.full_name || '-'}</td>
                   <td data-label="สิทธิ์">{ROLE_LABEL[u.role] || u.role}</td>
                   <td className="actions" data-label="จัดการ">
@@ -152,7 +156,9 @@ function UsersSection() {
         </div>
       )}
 
-      {showModal && (
+      {/* rendered on <body>: the card around this section is animated on phones, which would otherwise
+          pin the dialog to the card instead of the screen */}
+      {showModal && createPortal(
         <div className="modal-backdrop" onClick={closeModal}>
           <div className="modal-card medium" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
@@ -204,7 +210,8 @@ function UsersSection() {
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

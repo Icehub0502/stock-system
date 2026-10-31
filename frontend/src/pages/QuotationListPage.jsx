@@ -7,7 +7,7 @@ import ScheduleDateDialog from "../components/ScheduleDateDialog";
 import ClosePaymentDialog from "../components/ClosePaymentDialog";
 import DeclineReasonModal from "../components/DeclineReasonModal";
 import AddJobModal from "../components/AddJobModal";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { plateWithProvince } from "../utils/thaiProvinces";
 import StatusBadge from "../components/StatusBadge";
 import { formatMoney } from "../utils/format";
@@ -34,6 +34,14 @@ export default function QuotationListPage() {
   const [showPrintModal, setShowPrintModal] = useState(false);
   const [selectedQuotation, setSelectedQuotation] = useState(null);
   const [editingQuotation, setEditingQuotation] = useState(null);
+  const location = useLocation();
+  const navigateTo = useNavigate();
+  useEffect(() => {
+    if (!location.state?.openNew) return;
+    navigateTo(location.pathname, { replace: true, state: {} });
+    setEditingQuotation(null);
+    setShowFormModal(true);
+  }, [location.state]); // eslint-disable-line react-hooks/exhaustive-deps
   const [schedulingQuotation, setSchedulingQuotation] = useState(null);
   const [closingQuotation, setClosingQuotation] = useState(null);
   const [decliningQuotation, setDecliningQuotation] = useState(null);

@@ -143,6 +143,22 @@ describe('/api/stock-deductions — ตัดสต๊อกของสต๊�
     expect((await asOffice(request(app).delete(`/api/stock-deductions/movements/${old}`))).status).toBe(200);
     expect((await getItem(`DU-${suffix}`)).stock_qty).toBe(5);
   });
+
+  test('หลังรีเฟรช ช่างเห็นรายการที่ตัวเองจ่ายใน 30 นาทีล่าสุดเท่านั้น', async () => {
+    const id = await createItem({ oem_code: `DR-${suffix}`, stock_qty: 6 });
+    const mine = (await deduct(asTech, { item_id: id, lines: [{ qty: 1 }] })).body.movement_ids[0];
+    const office = (await deduct(asOffice, { item_id: id, lines: [{ qty: 1 }] })).body.movement_ids[0];
+    const old = (await deduct(asTech, { item_id: id, lines: [{ qty: 1 }] })).body.movement_ids[0];
+    await pool.query('UPDATE stock_item_movements SET created_at = NOW() - INTERVAL 31 MINUTE WHERE id = ?', [old]);
+
+    const res = await asTech(request(app).get('/api/stock-deductions/mine/recent'));
+    expect(res.status).toBe(200);
+    const ids = res.body.data.map((d) => d.id);
+    expect(ids).toContain(mine);
+    expect(ids).not.toContain(office);
+    expect(ids).not.toContain(old);
+    expect(res.body.data.find((d) => d.id === mine)).toMatchObject({ qty: 1, code: `DR-${suffix}` });
+  });
 });
 
 describe('scripts/sync-legacy-deductions — ซิงก์การตัดสต๊อกเก่าเข้าสต๊อกรวม', () => {

@@ -19,7 +19,10 @@ import { useAuth } from '../context/AuthContext';
 import { hasRole } from '../utils/roles';
 
 // quotation status as staff say it
-const QUOTATION_STATUS_TH = { pending: 'รอลูกค้าตอบ', approved: 'อนุมัติแล้ว', no_date: 'อนุมัติ รอนัดวัน', declined: 'ลูกค้าไม่ทำ' };
+const QUOTATION_STATUS_TH = {
+  pending: 'รอลูกค้าตอบ', approved: 'อนุมัติแล้ว', no_date: 'อนุมัติ รอนัดวัน', declined: 'ลูกค้าไม่ทำ', scheduled: 'นัดแล้ว',
+  arrived: 'ของมาถึงแล้ว', completed: 'เสร็จแล้ว', cancelled: 'ยกเลิก',
+};
 
 /**
  * รายละเอียดงาน 1 คัน — ข้อมูลรถ/ลูกค้า, รายการอะไหล่/ใบเสนอราคา, ประวัติสถานะ
@@ -976,6 +979,8 @@ export default function JobDetailPage() {
   const hasQuoteData = Boolean(job.quotation_id) || (job.quote_draft?.items?.length > 0);
   // ลายเซ็นลูกค้า: อ่านจากใบเสนอราคาจริงถ้ามีแล้ว ไม่งั้นอ่านจากร่าง
   const customerSigned = job.quotation_id ? Boolean(job.customer_signature) : Boolean(job.quote_draft?.customer_signature);
+  // older jobs can still show "quoted" while their quotation was approved elsewhere
+  const quotationApproved = ['approved', 'no_date', 'scheduled'].includes(job.quotation_status);
 
   const intakePhotos = (job.photos || []).filter((p) => p.photo_type !== 'part');
   const partPhotos = (job.photos || []).filter((p) => p.photo_type === 'part');
@@ -1074,9 +1079,11 @@ export default function JobDetailPage() {
                 </button>
               </div>
               <div className="modal-actions">
-                <button type="button" className="btn-primary" disabled={busy || !customerSigned} onClick={handleApprove}>
-                  {customerSigned ? 'อนุมัติ (ลูกค้าตกลงทำ)' : 'อนุมัติ — ต้องเซ็นเอกสารก่อน'}
-                </button>
+                {!quotationApproved && (
+                  <button type="button" className="btn-primary" disabled={busy || !customerSigned} onClick={handleApprove}>
+                    {customerSigned ? 'อนุมัติ (ลูกค้าตกลงทำ)' : 'อนุมัติ — ต้องเซ็นเอกสารก่อน'}
+                  </button>
+                )}
                 <button type="button" disabled={busy} onClick={() => setShowSchedule(true)}>
                   นัดวันมาทำ
                 </button>
@@ -1087,7 +1094,10 @@ export default function JobDetailPage() {
                   ลูกค้าไม่ทำ
                 </button>
               </div>
-              {!customerSigned && (
+              {quotationApproved && (
+                <p style={{ color: '#166534', fontSize: 12.5, marginTop: 6 }}>ใบเสนอราคานี้อนุมัติแล้ว — เปลี่ยนสถานะรถได้ที่การ์ดในหน้า <Link to="/jobs">คิวรถวันนี้</Link></p>
+              )}
+              {!quotationApproved && !customerSigned && (
                 <p style={{ color: '#92400e', fontSize: 12.5, marginTop: 6 }}>กรุณาเซ็นเอกสารก่อนกดอนุมัติ</p>
               )}
             </>
@@ -1195,7 +1205,7 @@ export default function JobDetailPage() {
                         aria-label={isEnabled ? 'ปิดการมองเห็น (ไม่นับราคา)' : 'เปิดการมองเห็น (นับราคา)'}
                         title={isEnabled ? 'ปิดการมองเห็น (ไม่นับราคา)' : 'เปิดการมองเห็น (นับราคา)'}
                       >
-                        {isEnabled ? 'นับราคา' : 'ไม่นับ'}
+                        {isEnabled ? '✓ นับในราคา' : '✗ ไม่นับ'}
                       </button>
                       <div className="jdp-selected-qty">
                         <button type="button" onClick={() => changePartQty(key, -1)} aria-label="ลดจำนวน">−</button>
@@ -1366,7 +1376,7 @@ export default function JobDetailPage() {
               {siblingQuotations.map((q) => (
                 <tr key={q.id}>
                   <td>{q.quotation_no}</td>
-                  <td>{q.status}{q.scheduled_date && ` — นัด ${new Date(q.scheduled_date).toLocaleDateString('th-TH')}`}</td>
+                  <td>{QUOTATION_STATUS_TH[q.status] || q.status}{q.scheduled_date && ` — นัด ${new Date(q.scheduled_date).toLocaleDateString('th-TH')}`}</td>
                   <td>฿{Number(q.total_amount).toLocaleString('th-TH')}</td>
                   <td>{q.deposit_amount > 0 ? `฿${Number(q.deposit_amount).toLocaleString('th-TH')}` : '-'}</td>
                 </tr>

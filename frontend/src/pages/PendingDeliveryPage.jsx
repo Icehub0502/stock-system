@@ -113,7 +113,7 @@ export default function PendingDeliveryPage() {
     <div className="quotation-page">
       <div className="quotation-header">
         <div>
-          <h1>รถที่ยังไม่ได้ส่งรถ</h1>
+          <h1>รถที่รอส่งมอบ</h1>
           <p className="subtitle">แยกเป็นแฟ้มรายวัน — วันไหนที่ทุกคันส่งครบแล้วจะไม่ขึ้นในนี้อีก กดวันที่เพื่อดูรายละเอียด</p>
         </div>
       </div>

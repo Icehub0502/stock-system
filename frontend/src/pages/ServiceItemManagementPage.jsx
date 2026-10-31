@@ -154,7 +154,7 @@ export default function ServiceItemManagementPage() {
     <div className="quotation-page">
       <div className="quotation-header">
         <div>
-          <h1>จัดการรายการสินค้า/บริการ</h1>
+          <h1>รายการขาย/บริการ (ใช้ทำใบเสนอราคา)</h1>
           <p className="subtitle">เพิ่ม แก้ไข และจัดการรายการบริการพร้อมการรับประกัน หรือจัดชุดสินค้าหลายรายการย่อย</p>
         </div>
         <div className="quotation-actions">

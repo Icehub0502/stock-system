@@ -204,7 +204,7 @@ export default function ReceiptSessionPage() {
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: '#111111' }}>
             <IconDoc />
-            <h1 style={{ margin: 0 }}>บิลรับเข้า</h1>
+            <h1 style={{ margin: 0 }}>บิลรับของเข้า</h1>
           </div>
           <p className="subtitle">ของที่รับเข้าสต๊อกจากร้านอะไหล่ · กดที่บิลเพื่อดูรายการข้างใน</p>
         </div>

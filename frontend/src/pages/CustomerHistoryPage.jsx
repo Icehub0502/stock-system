@@ -39,10 +39,10 @@ export default function CustomerHistoryPage() {
 
       {data.vehicles.length > 0 && (
         <div className="dash-panel">
-          <div className="dash-panel-title">รถของลูกค้า ({data.vehicles.length} คัน)</div>
+          <div className="dash-panel-title">รถของลูกค้า ({data.vehicles.length} คัน) — กดที่รถเพื่อดูใบเสร็จ ประกัน และเคลมทั้งหมด</div>
           <div className="history-vehicle-chips">
             {data.vehicles.map((v) => (
-              <Link key={v.id} to={`/vehicles/${v.id}/history`} className="history-vehicle-chip">
+              <Link key={v.id} to={`/vehicle-history/${v.id}`} className="history-vehicle-chip">
                 {v.license_plate || '-'} · {v.brand} {v.model}
               </Link>
             ))}
@@ -51,7 +51,8 @@ export default function CustomerHistoryPage() {
       )}
 
       <div className="dash-panel">
-        <div className="dash-panel-title">ประวัติการเข้ารับบริการ ({data.visits.length} ครั้ง)</div>
+        <div className="dash-panel-title">การเข้าร้านจากคิวรับรถ พร้อมรูป ({data.visits.length} ครั้ง)</div>
+        <p className="vh-muted">นับเฉพาะครั้งที่เปิดคิวรับรถ ใบเสร็จเก่าก่อนมีระบบคิวดูได้ที่ประวัติของรถแต่ละคันด้านบน</p>
         <VisitTimeline visits={data.visits} />
       </div>
     </div>

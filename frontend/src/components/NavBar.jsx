@@ -13,7 +13,6 @@ const NAV_CATEGORIES = [
     items: [
       { to: "/stock-all", label: "สต๊อกรวม" },
       { to: "/stock-deduction", label: "ตัดสต๊อก" },
-      { to: "/service-items", label: "รายการขาย/บริการ (ใช้ทำใบเสนอราคา)" },
       { to: "/receipts", label: "บิลรับของเข้า" },
       { to: "/product-costs", label: "ต้นทุนสินค้า", min: "manager" },
       { to: "/stock-costs", label: "กรอกต้นทุนที่ยังขาด" },
@@ -49,8 +48,8 @@ const NAV_CATEGORIES = [
       { to: "/vehicle-history", label: "ประวัติรถ" },
       { to: "/appointments", label: "ลูกค้าที่นัดหมาย" },
       { to: "/quotations/declined-summary", label: "ลูกค้าที่ไม่ได้ทำ (สรุปเหตุผล)" },
+      { to: "/service-items", label: "รายการขาย/บริการ (ใช้ทำใบเสนอราคา)" },
       { to: "/model-prices", label: "ราคามาตรฐานตามรุ่นรถ", min: "manager" },
-      { to: "/daily-summary", label: "สรุปยอดขายรายวัน", min: "manager" },
     ],
   },
   {
@@ -59,6 +58,7 @@ const NAV_CATEGORIES = [
     items: [
       { to: "/history", label: "ประวัติรับ-จ่ายสต๊อกทั้งหมด" },
       { to: "/stock-usage-report", label: "ประวัติการตัดสต๊อก" },
+      { to: "/daily-summary", label: "สรุปยอดขายรายวัน", min: "manager" },
     ],
   },
 ];

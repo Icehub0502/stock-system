@@ -176,7 +176,7 @@ export default function VehicleManagementPage() {
                   <td data-label="ทะเบียน">{plateWithProvince(vehicle.license_plate, vehicle.province) || '-'}</td>
                   <td data-label="ไมล์">{vehicle.mileage ?? 0}</td>
                   <td className="actions" data-label="จัดการ">
-                    <Link to={`/vehicles/${vehicle.id}/history`} className="btn-icon-small">ดูประวัติ</Link>
+                    <Link to={`/vehicle-history/${vehicle.id}`} className="btn-icon-small">ดูประวัติ</Link>
                     <button onClick={() => openEdit(vehicle)}>แก้ไข</button>
                     <button className="btn-danger" onClick={() => deleteVehicle(vehicle.id)}>
                       ลบ

@@ -41,11 +41,15 @@ export default function VehicleHistoryPage() {
             เจ้าของ: <Link to={`/customers/${vehicle.customer_id}/history`}>{vehicle.customer_name} ({vehicle.customer_code})</Link>
           </p>
         </div>
-        <button type="button" onClick={() => navigate('/vehicles')}>← กลับรายการรถ</button>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <Link to={`/vehicle-history/${vehicle.id}`} className="btn btn-primary">ดูประวัติเต็ม (ใบเสร็จ/ประกัน/เคลม)</Link>
+          <button type="button" onClick={() => navigate('/vehicles')}>← กลับรายการรถ</button>
+        </div>
       </div>
 
       <div className="dash-panel">
-        <div className="dash-panel-title">ประวัติการเข้ารับบริการ ({visits.length} ครั้ง)</div>
+        <div className="dash-panel-title">การเข้าร้านจากคิวรับรถ พร้อมรูป ({visits.length} ครั้ง)</div>
+        <p className="vh-muted">นับเฉพาะครั้งที่เปิดคิวรับรถ ใบเสร็จและประกันทั้งหมดอยู่ที่ "ดูประวัติเต็ม"</p>
         <VisitTimeline visits={visits} />
       </div>
     </div>

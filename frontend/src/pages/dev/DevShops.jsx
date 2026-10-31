@@ -299,7 +299,7 @@ export function DevUsers() {
             {users.map((u) => (
               <tr key={u.id}>
                 <td data-label="ร้าน">{u.shop_name}</td>
-                <td data-label="Username">{u.username}</td>
+                <td data-label="ชื่อผู้ใช้">{u.username}</td>
                 <td data-label="ชื่อ">{u.full_name || '-'}</td>
                 <td data-label="สิทธิ์">
                   <select value={u.role} disabled={u.id === me.id} onChange={(e) => changeRole(u, e.target.value)}>
