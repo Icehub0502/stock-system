@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import client from '../api/client';
 import ComboInput from './ComboInput';
 
-// Brand → model (with its years, "Vios ปี '07-13") searched from the vehicle book, typing a new one is allowed
+// Brand → model (with its generation and years, "Vios G2 (ปี 2007-2013)") searched from the vehicle book, typing a new one is allowed
 function BrandModelFields({ newVehicle, onFieldChange }) {
   const [brands, setBrands] = useState([]);
   const [models, setModels] = useState([]);

@@ -38,7 +38,7 @@ export default function ModelPricesPage() {
   );
 }
 
-// brand + generation pickers: the brand is searched, then its generations ("Vios ปี '13-22'") are searched
+// brand + generation pickers: the brand is searched, then its generations ("Vios G2 (ปี 2007-2013)") are searched
 function useBrandModels(brandText) {
   const [brands, setBrands] = useState([]);
   const [models, setModels] = useState([]);

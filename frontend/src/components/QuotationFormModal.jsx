@@ -803,7 +803,7 @@ export default function QuotationFormModal({ quotation, onClose, onSuccess, onDe
         vehicle_model_id: vehicleModel ? vehicleModel.id : null,
         newVehicle: vehicleMode === 'new' ? {
           brand: vehicleModel ? vehicleModel.brand : newVehicle.brand.trim(),
-          // a new car whose generation is known is saved under its full name ("Vios ปี '07-13'")
+          // a new car whose generation is known is saved under its full name ("Vios G2 (ปี 2007-2013)")
           model: vehicleModel ? vehicleModel.display_name : newVehicle.model.trim(),
           color: newVehicle.color.trim() || null,
           license_plate: newVehicle.license_plate.trim() || null,

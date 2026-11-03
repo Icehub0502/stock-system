@@ -2,7 +2,7 @@ const express = require('express');
 const pool = require('../db/pool');
 const { authenticate, requireRole } = require('../middleware/auth');
 const { normalizeName } = require('../utils/normalizeName');
-const { displayModelName } = require('../utils/modelDisplay');
+const { displayModelName, legacyDisplayModelName } = require('../utils/modelDisplay');
 
 const router = express.Router();
 router.use(authenticate);
@@ -83,7 +83,8 @@ router.post('/', async (req, res) => {
     const typed = normalizeName(modelInput);
     const existing = modelRows.find((r) => normalizeName(r.model) === typed
       || normalizeName(r.year_range ? `${r.model} (${r.year_range})` : r.model) === typed
-      || normalizeName(displayModelName(r.model, r.year_range)) === typed);
+      || normalizeName(displayModelName(r.model, r.year_range)) === typed
+      || normalizeName(legacyDisplayModelName(r.model, r.year_range)) === typed);
     if (existing) {
       return res.json({ success: true, data: { brand, model: displayModelName(existing.model, existing.year_range), existed: true } });
     }

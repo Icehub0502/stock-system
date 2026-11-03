@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import client from '../api/client';
 
-// The vehicle generation ("Vios ปี '13-22'") of a customer's car, which decides the standard prices that apply
+// The vehicle generation ("Vios G2 (ปี 2007-2013)") of a customer's car, which decides the standard prices that apply
 // (see backend/src/routes/modelPrices.routes.js). Looks the generation up from the car's stored generation or from
 // its brand + model text: exactly one match = known, several = the staff choose (modelChoices), none = the staff
 // search the book. A generation that is found or chosen is saved on the car, so it is asked only once.

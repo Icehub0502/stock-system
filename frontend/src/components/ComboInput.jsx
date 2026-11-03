@@ -37,7 +37,7 @@ export default function ComboInput({
 
   const typed = normalizeName(value);
   const filtered = useMemo(() => {
-    // every word typed must appear in the entry ("vios 07" finds "Vios ปี '02-07'")
+    // every word typed must appear in the entry ("vios g2" or "crv 2007" finds "CRV G3 (ปี 2006-2011)"; a dash typed or not counts the same)
     const words = String(value || '').toLowerCase().split(/\s+/).map(normalizeName).filter(Boolean);
     const list = words.length ? options.filter((o) => { const name = normalizeName(o.label || o.value); return words.every((w) => name.includes(w)); }) : options;
     return list.slice(0, MAX_SHOWN);

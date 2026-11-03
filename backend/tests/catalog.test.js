@@ -67,7 +67,7 @@ describe('adding and renaming models', () => {
     const [[after]] = await pool.query('SELECT model, year_range FROM vehicle_models WHERE id = ?', [model.id]);
     expect(after).toMatchObject({ model: 'Alpha Plus', year_range: '2020-2024' });
     const listed = (await dev.get(`/models?brand=${encodeURIComponent(BRAND)}`)).body.data;
-    expect(listed.find((m) => m.id === model.id).display_name).toBe("Alpha Plus ปี '20-24'");
+    expect(listed.find((m) => m.id === model.id).display_name).toBe('Alpha Plus (ปี 2020-2024)');
   });
 });
 
@@ -118,14 +118,14 @@ describe('models typed in by staff', () => {
     expect(again.body.data).toMatchObject({ existed: true, model: 'Zeta GT', brand: PBRAND });
 
     const camry = await request(app).post('/api/vehicle-models').set(as(shopB.token)).send({ brand: PBRAND, model: 'CAMRY' });
-    // an existing generation comes back under the name staff see and save: model + short year range
-    expect(camry.body.data).toMatchObject({ existed: true, model: "Camry ปี '12-18'" });
+    // an existing generation comes back under the name staff see and save: model + its years
+    expect(camry.body.data).toMatchObject({ existed: true, model: 'Camry (ปี 2012-2018)' });
     // typing that very display name (what the picker fills in) is recognised too, so it never becomes a pending model
     const typedDisplay = await request(app).post('/api/vehicle-models').set(as(shopA.token)).send({ brand: PBRAND, model: "camry ปี 12-18" });
-    expect(typedDisplay.body.data).toMatchObject({ existed: true, model: "Camry ปี '12-18'" });
+    expect(typedDisplay.body.data).toMatchObject({ existed: true, model: 'Camry (ปี 2012-2018)' });
 
     const listed = (await request(app).get('/api/vehicle-models/models').query({ brand: PBRAND }).set(as(shopA.token))).body.data;
-    expect(listed.find((m) => m.model === 'Camry')).toMatchObject({ label: 'Camry (2012-2018)', display_name: "Camry ปี '12-18'" });
+    expect(listed.find((m) => m.model === 'Camry')).toMatchObject({ label: 'Camry (2012-2018)', display_name: 'Camry (ปี 2012-2018)' });
     expect(listed.find((m) => m.model === 'Zeta GT').display_name).toBe('Zeta GT');
 
     const [rows] = await pool.query('SELECT COUNT(*) AS n FROM vehicle_models WHERE brand = ?', [PBRAND]);
@@ -170,7 +170,7 @@ describe('models typed in by staff', () => {
 
     const [[carB]] = await pool.query('SELECT model FROM vehicles WHERE id = ?', [vehicleB]);
     const [[carA]] = await pool.query('SELECT model FROM vehicles WHERE id = ?', [vehicleA]);
-    expect(carB.model).toBe("Camry ปี '12-18'");
+    expect(carB.model).toBe('Camry (ปี 2012-2018)');
     expect(carA.model).toBe('Camry Hybrid');
     // the merged car is linked to the generation, the other shop's car is untouched
     const [[linkB]] = await pool.query('SELECT vehicle_model_id FROM vehicles WHERE id = ?', [vehicleB]);

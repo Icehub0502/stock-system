@@ -6,7 +6,7 @@ const express = require('express');
 const pool = require('../db/pool');
 const { authenticate, requireRole, requireManager } = require('../middleware/auth');
 const { normalizeName } = require('../utils/normalizeName');
-const { displayModelName } = require('../utils/modelDisplay');
+const { displayModelName, legacyDisplayModelName } = require('../utils/modelDisplay');
 const { groupIdOf, itemKey, parsePrice, withDisplay, approvedModel } = require('../utils/modelPrices');
 
 const router = express.Router();
@@ -31,7 +31,7 @@ async function requireGroup(req, res) {
 // → { matches: [{ id, brand, model, year_range, display_name }] }. One match = the generation is known; several =
 // the typed name fits more than one generation (e.g. plain "Vios" also fits "Vios / Yaris Ativ": a model name that
 // starts with the typed text counts), the staff pick; none = nothing in the book fits. A full name with its years
-// ("Vios ปี '07-13") names exactly one generation.
+// ("Vios G2 (ปี 2007-2013)", or the older "Vios ปี '07-13") names exactly one generation.
 router.get('/resolve', async (req, res) => {
   try {
     if (req.query.vehicle_model_id) {
@@ -47,7 +47,8 @@ router.get('/resolve', async (req, res) => {
     );
     const matches = rows.filter((r) => (typed.length >= 2 && normalizeName(r.model).startsWith(typed))
       || normalizeName(r.year_range ? `${r.model} (${r.year_range})` : r.model) === typed
-      || normalizeName(displayModelName(r.model, r.year_range)) === typed).map(withDisplay);
+      || normalizeName(displayModelName(r.model, r.year_range)) === typed
+      || normalizeName(legacyDisplayModelName(r.model, r.year_range)) === typed).map(withDisplay);
     res.json({ success: true, data: { matches } });
   } catch (err) {
     serverError(res, err, 'ค้นหารุ่นรถไม่สำเร็จ');

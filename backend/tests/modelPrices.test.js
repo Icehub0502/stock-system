@@ -84,14 +84,14 @@ describe('which generation a car is', () => {
     expect((await resolve({ brand: BRAND, model: 'Alpha Hybrid' })).body.data.matches.map((m) => m.id)).toEqual([genHybrid]);
     expect((await resolve({ brand: BRAND, model: 'A' })).body.data.matches).toEqual([]);
 
-    for (const typed of ["Alpha ปี '13-22'", "alpha ปี 13-22", 'Alpha (2013-2022)', 'ALPHA ปี 13-22']) {
+    for (const typed of ['Alpha (ปี 2013-2022)', "Alpha ปี '13-22'", 'alpha ปี 13-22', 'Alpha (2013-2022)', 'ALPHA ปี 13-22']) {
       const res = await resolve({ brand: BRAND, model: typed });
       expect(res.body.data.matches.map((m) => m.id)).toEqual([gen1]);
     }
     expect((await resolve({ brand: BRAND, model: "Alpha ปี '22-ปัจจุบัน'" })).body.data.matches.map((m) => m.id)).toEqual([gen2]);
     expect((await resolve({ brand: BRAND, model: 'Nothing' })).body.data.matches).toEqual([]);
     expect((await resolve({ brand: BRAND, model: 'Pending car' })).body.data.matches).toEqual([]);
-    expect((await resolve({ vehicle_model_id: gen1 })).body.data.matches[0]).toMatchObject({ id: gen1, display_name: "Alpha ปี '13-22'" });
+    expect((await resolve({ vehicle_model_id: gen1 })).body.data.matches[0]).toMatchObject({ id: gen1, display_name: 'Alpha (ปี 2013-2022)' });
     expect((await resolve({ vehicle_model_id: pendingId })).body.data.matches).toEqual([]);
   });
 });
@@ -101,7 +101,7 @@ describe('model lists for the pickers', () => {
     const res = await request(app).get('/api/vehicle-models/models').query({ brand: BRAND }).set(as(shopA1.token));
     res.body.data = res.body.data.filter((m) => !m.pending); // the shop's own pending model is listed too
     expect(res.body.data.map((m) => m.label)).toEqual(['Alpha (2013-2022)', 'Alpha (2022-ปัจจุบัน)', 'Alpha Hybrid (2020-2024)']);
-    expect(res.body.data.map((m) => m.display_name)).toEqual(["Alpha ปี '13-22'", "Alpha ปี '22-ปัจจุบัน'", "Alpha Hybrid ปี '20-24'"]);
+    expect(res.body.data.map((m) => m.display_name)).toEqual(['Alpha (ปี 2013-2022)', 'Alpha (ปี 2022-ปัจจุบัน)', 'Alpha Hybrid (ปี 2020-2024)']);
   });
 });
 
@@ -225,7 +225,7 @@ describe('prices typed on quotations are remembered', () => {
     let res = await suggestions(shopA1);
     let shock = res.body.data.find((r) => r.item_name === 'โช๊คหลัง');
     expect(shock).toMatchObject({ vehicle_model_id: gen2, times: 2, last_price: 1800, stable: false, standard_price: null });
-    expect(shock.model_name).toBe("Alpha ปี '22-ปัจจุบัน'");
+    expect(shock.model_name).toBe('Alpha (ปี 2022-ปัจจุบัน)');
 
     await quote(shopA1, { vehicleId, items: [{ product_name: 'โช๊คหลัง', quantity: 1, unit_price: 1800 }] });
     res = await suggestions(shopA1);

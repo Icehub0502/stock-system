@@ -3,7 +3,7 @@ import client from '../api/client';
 import ComboInput from './ComboInput';
 
 /**
- * Pick the generation of a customer's car (brand → "Vios ปี '13-22'") so its standard prices can be looked up.
+ * Pick the generation of a customer's car (brand → "Vios G2 (ปี 2007-2013)") so its standard prices can be looked up.
  * Shown when the car's saved model text does not say which generation it is. With `choices` (the typed name fits
  * several generations) only those are offered; otherwise the brand and its generations are searched.
  * onPick({ id, brand, display_name }) is called once a generation is chosen.

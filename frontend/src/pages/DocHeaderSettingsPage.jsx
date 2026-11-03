@@ -42,7 +42,7 @@ const normalizeColor = (value) => {
 // made-up document so the preview shows every part of the header
 function sampleData(docType) {
   const customer = { customer_name: 'คุณตัวอย่าง ใจดี', phone: '081-234-5678', customer_code: 'C-0001' };
-  const vehicle = { brand: 'Toyota', model: "Vios ปี '13-22", license_plate: '1กก 1234', mileage: 85000, color: 'ขาว' };
+  const vehicle = { brand: 'Toyota', model: 'Vios G2 (ปี 2007-2013)', license_plate: '1กก 1234', mileage: 85000, color: 'ขาว' };
   if (docType === 'quotation') {
     return {
       quotation_no: 'QT-0001', quotation_date: today(), queue_no: 'A001', symptom: 'ช่วงล่างมีเสียงดัง', customer, vehicle,

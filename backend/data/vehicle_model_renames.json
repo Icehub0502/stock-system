@@ -1,0 +1,716 @@
+[
+  {
+    "brand": "Chevrolet",
+    "model": "Colorado",
+    "year_range": "2004-2011",
+    "new_model": "Colorado G1"
+  },
+  {
+    "brand": "Chevrolet",
+    "model": "Colorado",
+    "year_range": "2011-2020",
+    "new_model": "Colorado G2"
+  },
+  {
+    "brand": "Ford",
+    "model": "Focus",
+    "year_range": "2005-2011",
+    "new_model": "Focus Mk2"
+  },
+  {
+    "brand": "Ford",
+    "model": "Focus",
+    "year_range": "2012-2018",
+    "new_model": "Focus Mk3"
+  },
+  {
+    "brand": "Ford",
+    "model": "Mustang",
+    "year_range": "2015-2023",
+    "new_model": "Mustang S550"
+  },
+  {
+    "brand": "Ford",
+    "model": "Mustang",
+    "year_range": "2024-ปัจจุบัน",
+    "new_model": "Mustang S650"
+  },
+  {
+    "brand": "Ford",
+    "model": "Ranger",
+    "year_range": "1998-2006",
+    "new_model": "Ranger G1"
+  },
+  {
+    "brand": "Ford",
+    "model": "Ranger",
+    "year_range": "2006-2011",
+    "new_model": "Ranger G2"
+  },
+  {
+    "brand": "Ford",
+    "model": "Ranger Wildtrak",
+    "year_range": "2012-2022",
+    "new_model": "Ranger Wildtrak G3"
+  },
+  {
+    "brand": "Ford",
+    "model": "Ranger Wildtrak",
+    "year_range": "2022-ปัจจุบัน",
+    "new_model": "Ranger Wildtrak G4"
+  },
+  {
+    "brand": "Honda",
+    "model": "Accord",
+    "year_range": "1998-2003",
+    "new_model": "Accord G6"
+  },
+  {
+    "brand": "Honda",
+    "model": "Accord",
+    "year_range": "2003-2007",
+    "new_model": "Accord G7"
+  },
+  {
+    "brand": "Honda",
+    "model": "Accord",
+    "year_range": "2007-2013",
+    "new_model": "Accord G8"
+  },
+  {
+    "brand": "Honda",
+    "model": "Accord",
+    "year_range": "2013-2018",
+    "new_model": "Accord G9"
+  },
+  {
+    "brand": "Honda",
+    "model": "Accord",
+    "year_range": "2018-2023",
+    "new_model": "Accord G10"
+  },
+  {
+    "brand": "Honda",
+    "model": "Accord",
+    "year_range": "2023-ปัจจุบัน",
+    "new_model": "Accord G11"
+  },
+  {
+    "brand": "Honda",
+    "model": "BR-V",
+    "year_range": "2016-ปัจจุบัน",
+    "new_model": "BRV"
+  },
+  {
+    "brand": "Honda",
+    "model": "City",
+    "year_range": "1996-2002",
+    "new_model": "City Type Z"
+  },
+  {
+    "brand": "Honda",
+    "model": "City",
+    "year_range": "2002-2008",
+    "new_model": "City GD"
+  },
+  {
+    "brand": "Honda",
+    "model": "City",
+    "year_range": "2008-2014",
+    "new_model": "City GM2"
+  },
+  {
+    "brand": "Honda",
+    "model": "City",
+    "year_range": "2014-2019",
+    "new_model": "City GM6"
+  },
+  {
+    "brand": "Honda",
+    "model": "City",
+    "year_range": "2019-ปัจจุบัน",
+    "new_model": "City GN"
+  },
+  {
+    "brand": "Honda",
+    "model": "Civic Hatchback",
+    "year_range": "2017-2021",
+    "new_model": "Civic Hatchback FK"
+  },
+  {
+    "brand": "Honda",
+    "model": "Civic Type R",
+    "year_range": "2017-2021",
+    "new_model": "Civic Type R FK8"
+  },
+  {
+    "brand": "Honda",
+    "model": "Civic Type R",
+    "year_range": "2023-ปัจจุบัน",
+    "new_model": "Civic Type R FL5"
+  },
+  {
+    "brand": "Honda",
+    "model": "CR-V",
+    "year_range": "1996-2001",
+    "new_model": "CRV G1"
+  },
+  {
+    "brand": "Honda",
+    "model": "CR-V",
+    "year_range": "2001-2006",
+    "new_model": "CRV G2"
+  },
+  {
+    "brand": "Honda",
+    "model": "CR-V",
+    "year_range": "2006-2011",
+    "new_model": "CRV G3"
+  },
+  {
+    "brand": "Honda",
+    "model": "CR-V",
+    "year_range": "2012-2016",
+    "new_model": "CRV G4"
+  },
+  {
+    "brand": "Honda",
+    "model": "CR-V",
+    "year_range": "2017-2023",
+    "new_model": "CRV G5"
+  },
+  {
+    "brand": "Honda",
+    "model": "CR-V",
+    "year_range": "2023-ปัจจุบัน",
+    "new_model": "CRV G6"
+  },
+  {
+    "brand": "Honda",
+    "model": "CR-V e:HEV RS",
+    "year_range": "2023-ปัจจุบัน",
+    "new_model": "CRV e:HEV RS"
+  },
+  {
+    "brand": "Honda",
+    "model": "HR-V",
+    "year_range": "2014-2021",
+    "new_model": "HRV RU"
+  },
+  {
+    "brand": "Honda",
+    "model": "HR-V",
+    "year_range": "2021-ปัจจุบัน",
+    "new_model": "HRV RV"
+  },
+  {
+    "brand": "Honda",
+    "model": "HR-V RS / e:HEV RS",
+    "year_range": "2021-ปัจจุบัน",
+    "new_model": "HRV RS / e:HEV RS"
+  },
+  {
+    "brand": "Honda",
+    "model": "Jazz",
+    "year_range": "2003-2008",
+    "new_model": "Jazz GD"
+  },
+  {
+    "brand": "Honda",
+    "model": "Jazz",
+    "year_range": "2008-2014",
+    "new_model": "Jazz GE"
+  },
+  {
+    "brand": "Honda",
+    "model": "Jazz",
+    "year_range": "2014-2022",
+    "new_model": "Jazz GK"
+  },
+  {
+    "brand": "Honda",
+    "model": "Odyssey",
+    "year_range": "2000-2003",
+    "new_model": "Odyssey RA6"
+  },
+  {
+    "brand": "Honda",
+    "model": "Odyssey",
+    "year_range": "2003-2008",
+    "new_model": "Odyssey RB1"
+  },
+  {
+    "brand": "Honda",
+    "model": "Odyssey",
+    "year_range": "2009-2013",
+    "new_model": "Odyssey RB3"
+  },
+  {
+    "brand": "Honda",
+    "model": "Odyssey",
+    "year_range": "2014-2021",
+    "new_model": "Odyssey RC1"
+  },
+  {
+    "brand": "Honda",
+    "model": "Stream",
+    "year_range": "2001-2006",
+    "new_model": "Stream G1"
+  },
+  {
+    "brand": "Honda",
+    "model": "Stream",
+    "year_range": "2006-2013",
+    "new_model": "Stream G2"
+  },
+  {
+    "brand": "Honda",
+    "model": "WR-V",
+    "year_range": "2022-ปัจจุบัน",
+    "new_model": "WRV"
+  },
+  {
+    "brand": "Isuzu",
+    "model": "D-Max (เจน 1)",
+    "year_range": "2002-2011",
+    "new_model": "DMAX (เจน 1)"
+  },
+  {
+    "brand": "Isuzu",
+    "model": "D-Max (เจน 2)",
+    "year_range": "2011-2019",
+    "new_model": "DMAX (เจน 2)"
+  },
+  {
+    "brand": "Isuzu",
+    "model": "D-Max (เจน 3)",
+    "year_range": "2019-ปัจจุบัน",
+    "new_model": "DMAX (เจน 3)"
+  },
+  {
+    "brand": "Isuzu",
+    "model": "D-Max Hi-Lander (แค็บ)",
+    "year_range": "2019-ปัจจุบัน",
+    "new_model": "DMAX Hi-Lander (แค็บ)"
+  },
+  {
+    "brand": "Isuzu",
+    "model": "D-Max Spark (ตอนเดียว)",
+    "year_range": "2019-ปัจจุบัน",
+    "new_model": "DMAX Spark (ตอนเดียว)"
+  },
+  {
+    "brand": "Isuzu",
+    "model": "D-Max V-Cross",
+    "year_range": "2012-2019",
+    "new_model": "DMAX V-Cross G2"
+  },
+  {
+    "brand": "Isuzu",
+    "model": "D-Max V-Cross",
+    "year_range": "2019-ปัจจุบัน",
+    "new_model": "DMAX V-Cross G3"
+  },
+  {
+    "brand": "Isuzu",
+    "model": "D-Max X-Series",
+    "year_range": "2016-2019",
+    "new_model": "DMAX X-Series G2"
+  },
+  {
+    "brand": "Isuzu",
+    "model": "D-Max X-Series",
+    "year_range": "2019-ปัจจุบัน",
+    "new_model": "DMAX X-Series G3"
+  },
+  {
+    "brand": "Isuzu",
+    "model": "MU-7",
+    "year_range": "2004-2013",
+    "new_model": "MU7"
+  },
+  {
+    "brand": "Isuzu",
+    "model": "MU-X (เจน 1)",
+    "year_range": "2013-2020",
+    "new_model": "MUX (เจน 1)"
+  },
+  {
+    "brand": "Isuzu",
+    "model": "MU-X (เจน 2)",
+    "year_range": "2021-ปัจจุบัน",
+    "new_model": "MUX (เจน 2)"
+  },
+  {
+    "brand": "Mazda",
+    "model": "626",
+    "year_range": "1992-1997",
+    "new_model": "626 GE"
+  },
+  {
+    "brand": "Mazda",
+    "model": "626",
+    "year_range": "1997-2002",
+    "new_model": "626 GF"
+  },
+  {
+    "brand": "Mazda",
+    "model": "BT-50 (เจน 1)",
+    "year_range": "2006-2011",
+    "new_model": "BT50 (เจน 1)"
+  },
+  {
+    "brand": "Mazda",
+    "model": "BT-50 (เจน 3)",
+    "year_range": "2021-ปัจจุบัน",
+    "new_model": "BT50 (เจน 3)"
+  },
+  {
+    "brand": "Mazda",
+    "model": "BT-50 Pro",
+    "year_range": "2012-2020",
+    "new_model": "BT50 Pro"
+  },
+  {
+    "brand": "Mazda",
+    "model": "CX-3",
+    "year_range": "2016-ปัจจุบัน",
+    "new_model": "CX3"
+  },
+  {
+    "brand": "Mazda",
+    "model": "CX-30",
+    "year_range": "2020-ปัจจุบัน",
+    "new_model": "CX30"
+  },
+  {
+    "brand": "Mazda",
+    "model": "CX-5",
+    "year_range": "2013-2017",
+    "new_model": "CX5 KE"
+  },
+  {
+    "brand": "Mazda",
+    "model": "CX-5",
+    "year_range": "2017-ปัจจุบัน",
+    "new_model": "CX5 KF"
+  },
+  {
+    "brand": "Mazda",
+    "model": "CX-60",
+    "year_range": "2023-ปัจจุบัน",
+    "new_model": "CX60"
+  },
+  {
+    "brand": "Mazda",
+    "model": "CX-8",
+    "year_range": "2019-ปัจจุบัน",
+    "new_model": "CX8"
+  },
+  {
+    "brand": "Mazda",
+    "model": "Mazda3",
+    "year_range": "2004-2011",
+    "new_model": "Mazda3 BK"
+  },
+  {
+    "brand": "Mazda",
+    "model": "Mazda3",
+    "year_range": "2011-2014",
+    "new_model": "Mazda3 BL"
+  },
+  {
+    "brand": "Mazda",
+    "model": "Mazda6",
+    "year_range": "2003-2008",
+    "new_model": "Mazda6 GG"
+  },
+  {
+    "brand": "Mazda",
+    "model": "Mazda6",
+    "year_range": "2008-2012",
+    "new_model": "Mazda6 GH"
+  },
+  {
+    "brand": "Mazda",
+    "model": "Mazda6",
+    "year_range": "2012-2018",
+    "new_model": "Mazda6 GJ"
+  },
+  {
+    "brand": "Mazda",
+    "model": "MX-5",
+    "year_range": "1998-2005",
+    "new_model": "MX5 NB"
+  },
+  {
+    "brand": "Mazda",
+    "model": "MX-5",
+    "year_range": "2005-2015",
+    "new_model": "MX5 NC"
+  },
+  {
+    "brand": "Mazda",
+    "model": "MX-5",
+    "year_range": "2015-ปัจจุบัน",
+    "new_model": "MX5 ND"
+  },
+  {
+    "brand": "Nissan",
+    "model": "Cefiro",
+    "year_range": "1995-1998",
+    "new_model": "Cefiro A32"
+  },
+  {
+    "brand": "Nissan",
+    "model": "Cefiro",
+    "year_range": "1998-2003",
+    "new_model": "Cefiro A33"
+  },
+  {
+    "brand": "Nissan",
+    "model": "Teana",
+    "year_range": "2004-2008",
+    "new_model": "Teana J31"
+  },
+  {
+    "brand": "Nissan",
+    "model": "Teana",
+    "year_range": "2008-2013",
+    "new_model": "Teana J32"
+  },
+  {
+    "brand": "Nissan",
+    "model": "Teana",
+    "year_range": "2013-2020",
+    "new_model": "Teana L33"
+  },
+  {
+    "brand": "Nissan",
+    "model": "Urvan",
+    "year_range": "2001-2012",
+    "new_model": "Urvan E25"
+  },
+  {
+    "brand": "Nissan",
+    "model": "Urvan",
+    "year_range": "2012-ปัจจุบัน",
+    "new_model": "Urvan NV350"
+  },
+  {
+    "brand": "Nissan",
+    "model": "X-Trail",
+    "year_range": "2001-2007",
+    "new_model": "XTrail T30"
+  },
+  {
+    "brand": "Nissan",
+    "model": "X-Trail",
+    "year_range": "2007-2013",
+    "new_model": "XTrail T31"
+  },
+  {
+    "brand": "Nissan",
+    "model": "X-Trail e-Power (เจน 4)",
+    "year_range": "2023-ปัจจุบัน",
+    "new_model": "XTrail e-Power (เจน 4)"
+  },
+  {
+    "brand": "Subaru",
+    "model": "BRZ",
+    "year_range": "2012-2020",
+    "new_model": "BRZ G1"
+  },
+  {
+    "brand": "Subaru",
+    "model": "BRZ",
+    "year_range": "2021-ปัจจุบัน",
+    "new_model": "BRZ G2"
+  },
+  {
+    "brand": "Subaru",
+    "model": "Forester",
+    "year_range": "2002-2008",
+    "new_model": "Forester SG"
+  },
+  {
+    "brand": "Subaru",
+    "model": "Forester",
+    "year_range": "2008-2012",
+    "new_model": "Forester SH"
+  },
+  {
+    "brand": "Subaru",
+    "model": "Forester",
+    "year_range": "2012-2018",
+    "new_model": "Forester SJ"
+  },
+  {
+    "brand": "Subaru",
+    "model": "WRX",
+    "year_range": "2014-2021",
+    "new_model": "WRX VA"
+  },
+  {
+    "brand": "Subaru",
+    "model": "WRX",
+    "year_range": "2021-ปัจจุบัน",
+    "new_model": "WRX VB"
+  },
+  {
+    "brand": "Subaru",
+    "model": "XV / Crosstrek",
+    "year_range": "2012-2017",
+    "new_model": "XV / Crosstrek G1"
+  },
+  {
+    "brand": "Subaru",
+    "model": "XV / Crosstrek",
+    "year_range": "2017-2023",
+    "new_model": "XV / Crosstrek G2"
+  },
+  {
+    "brand": "Toyota",
+    "model": "Alphard",
+    "year_range": "2008-2015",
+    "new_model": "Alphard G2"
+  },
+  {
+    "brand": "Toyota",
+    "model": "Alphard",
+    "year_range": "2015-2023",
+    "new_model": "Alphard G3"
+  },
+  {
+    "brand": "Toyota",
+    "model": "Alphard",
+    "year_range": "2023-ปัจจุบัน",
+    "new_model": "Alphard G4"
+  },
+  {
+    "brand": "Toyota",
+    "model": "Avanza",
+    "year_range": "2004-2011",
+    "new_model": "Avanza G1"
+  },
+  {
+    "brand": "Toyota",
+    "model": "Avanza",
+    "year_range": "2011-2022",
+    "new_model": "Avanza G2"
+  },
+  {
+    "brand": "Toyota",
+    "model": "C-HR",
+    "year_range": "2018-ปัจจุบัน",
+    "new_model": "CHR"
+  },
+  {
+    "brand": "Toyota",
+    "model": "Commuter",
+    "year_range": "2005-2019",
+    "new_model": "Commuter H200"
+  },
+  {
+    "brand": "Toyota",
+    "model": "Commuter",
+    "year_range": "2019-ปัจจุบัน",
+    "new_model": "Commuter H300"
+  },
+  {
+    "brand": "Toyota",
+    "model": "Corolla Altis",
+    "year_range": "2001-2008",
+    "new_model": "Corolla Altis G1"
+  },
+  {
+    "brand": "Toyota",
+    "model": "Corolla Altis",
+    "year_range": "2008-2014",
+    "new_model": "Corolla Altis G2"
+  },
+  {
+    "brand": "Toyota",
+    "model": "Corolla Altis",
+    "year_range": "2014-2019",
+    "new_model": "Corolla Altis G3"
+  },
+  {
+    "brand": "Toyota",
+    "model": "Corolla Altis",
+    "year_range": "2019-ปัจจุบัน",
+    "new_model": "Corolla Altis G4"
+  },
+  {
+    "brand": "Toyota",
+    "model": "Fortuner",
+    "year_range": "2005-2015",
+    "new_model": "Fortuner G1"
+  },
+  {
+    "brand": "Toyota",
+    "model": "Fortuner",
+    "year_range": "2015-ปัจจุบัน",
+    "new_model": "Fortuner G2"
+  },
+  {
+    "brand": "Toyota",
+    "model": "Innova",
+    "year_range": "2005-2016",
+    "new_model": "Innova G1"
+  },
+  {
+    "brand": "Toyota",
+    "model": "Innova",
+    "year_range": "2016-2022",
+    "new_model": "Innova G2"
+  },
+  {
+    "brand": "Toyota",
+    "model": "Land Cruiser Prado",
+    "year_range": "2003-2009",
+    "new_model": "Land Cruiser Prado J120"
+  },
+  {
+    "brand": "Toyota",
+    "model": "Land Cruiser Prado",
+    "year_range": "2009-2024",
+    "new_model": "Land Cruiser Prado J150"
+  },
+  {
+    "brand": "Toyota",
+    "model": "Land Cruiser Prado",
+    "year_range": "2024-ปัจจุบัน",
+    "new_model": "Land Cruiser Prado J250"
+  },
+  {
+    "brand": "Toyota",
+    "model": "Vios",
+    "year_range": "2002-2007",
+    "new_model": "Vios G1"
+  },
+  {
+    "brand": "Toyota",
+    "model": "Vios",
+    "year_range": "2007-2013",
+    "new_model": "Vios G2"
+  },
+  {
+    "brand": "Toyota",
+    "model": "Vios / Yaris Ativ",
+    "year_range": "2013-2022",
+    "new_model": "Vios / Yaris Ativ G3"
+  },
+  {
+    "brand": "Toyota",
+    "model": "Wish",
+    "year_range": "2003-2009",
+    "new_model": "Wish G1"
+  },
+  {
+    "brand": "Toyota",
+    "model": "Wish",
+    "year_range": "2009-2012",
+    "new_model": "Wish G2"
+  }
+]
