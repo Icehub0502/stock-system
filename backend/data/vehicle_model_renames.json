@@ -638,6 +638,12 @@
   {
     "brand": "Toyota",
     "model": "Corolla Altis",
+    "year_range": "2015-2019",
+    "new_model": "Corolla Altis G3"
+  },
+  {
+    "brand": "Toyota",
+    "model": "Corolla Altis",
     "year_range": "2019-ปัจจุบัน",
     "new_model": "Corolla Altis G4"
   },
