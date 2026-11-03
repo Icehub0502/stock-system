@@ -5,6 +5,7 @@ import QRScanner from '../components/QRScanner';
 import { useAuth } from '../context/AuthContext';
 import { hasRole } from '../utils/roles';
 import { positionLabel, POSITION_COLOR, NEUTRAL_POSITION_COLOR } from '../utils/stockPositions';
+import ScanNewItemSheet from '../components/ScanNewItemSheet';
 
 // ─────────────────────────────────────────
 //  ICONS
@@ -359,6 +360,34 @@ function Toast({ msg, onDone }) {
 //  สต๊อกรวม (โหมดรับเข้า) — ผลค้นหา/สแกนจาก /stock-receive หนึ่งแถว = หนึ่งตำแหน่งของหนึ่งรายการ
 // ─────────────────────────────────────────
 
+// a pending bill line from /stock-receive → a row of the bill list on this page
+function lineToOrder(line) {
+  return {
+    key: `line-${line.id}`,
+    sku: line.code,
+    name: `${line.category_name} · ${line.description || line.code}${line.position_label ? ` (${line.position_label})` : ''}`,
+    qty: line.qty,
+    txId: null,
+    lineId: line.id,
+    unitCost: line.unit_cost,
+    pending: true,
+    type: 'stock_item',
+    position: line.position,
+  };
+}
+
+// a scanned label is the bare code, or JSON on the old wing-arm labels ({"sku": ...}) — the code to prefill
+function scannedCodeText(raw) {
+  const text = String(raw ?? '').trim();
+  if (!text.startsWith('{')) return text;
+  try {
+    const parsed = JSON.parse(text);
+    return String(parsed.sku ?? parsed.model_code ?? parsed.code ?? '').trim();
+  } catch {
+    return text;
+  }
+}
+
 // แปลงผลจาก /stock-receive เป็นรูปแบบเดียวกับ item ที่ ConfirmSheet/OrderRow ใช้อยู่
 function matchToItem(m) {
   const where = m.position_label ? ` (${m.position_label})` : '';
@@ -408,9 +437,9 @@ function MatchPickSheet({ matches, onPick, onCancel }) {
   );
 }
 
-// ค้นเองในสต๊อกรวมตอน QR เสีย (รหัส / รายละเอียด / ยี่ห้อ-รุ่นรถ) — รายการใหม่ที่ยังไม่มีในระบบ
-// ให้ไปเพิ่มที่หน้า "สต๊อกรวม" ก่อน แล้วค่อยกลับมารับเข้า
-function StockSearchSheet({ onPick, onCancel }) {
+// ค้นเองในสต๊อกรวมตอน QR เสีย (รหัส / รายละเอียด / ยี่ห้อ-รุ่นรถ) — โหมดรับเข้า (onAddNew) ของที่ยังไม่มี
+// ในระบบกดเพิ่มเป็นรายการใหม่เข้าบิลได้เลย ส่วนโหมดจ่ายออกต้องมีในสต๊อกรวมอยู่แล้ว
+function StockSearchSheet({ onPick, onCancel, onAddNew }) {
   const [query, setQuery] = useState('');
   const [matches, setMatches] = useState([]);
   const [searching, setSearching] = useState(false);
@@ -451,11 +480,16 @@ function StockSearchSheet({ onPick, onCancel }) {
           {term.length < 2 && <p className="scan-sheet-empty">พิมพ์อย่างน้อย 2 ตัวอักษร</p>}
           {term.length >= 2 && matches.length === 0 && !searching && (
             <p className="scan-sheet-empty">
-              ไม่พบรายการ "{query}" — ถ้าเป็นของใหม่ ให้เพิ่มที่หน้า "สต๊อกรวม" ก่อน
+              {onAddNew ? `ไม่พบรายการ "${query}" ในสต๊อกรวม` : `ไม่พบรายการ "${query}" — ถ้าเป็นของใหม่ ให้เพิ่มที่หน้า "สต๊อกรวม" ก่อน`}
             </p>
           )}
           {matches.map((m) => <MatchRow key={`${m.item_id}-${m.position || 'one'}`} match={m} onPick={onPick} />)}
         </div>
+        {onAddNew && term.length >= 2 && !searching && (
+          <button type="button" className="scan-btn scan-btn--primary scan-btn--block scan-add-new" onClick={() => onAddNew(term)}>
+            + เพิ่ม “{term}” เป็นรายการใหม่
+          </button>
+        )}
         <button type="button" className="scan-sheet-cancel" onClick={onCancel}>ยกเลิก</button>
       </div>
     </div>
@@ -491,6 +525,7 @@ export default function TechnicianScanPage() {
   const [scannedItem, setScannedItem] = useState(null);       // item ที่รอยืนยัน
   const [scannedType, setScannedType] = useState(null);       // 'rack' | 'wing-arm' | 'stock_item'
   const [pickMatches, setPickMatches] = useState(null);       // สแกนเจอหลายรายการ (โหมดรับเข้า) รอเลือก
+  const [newItemCode, setNewItemCode] = useState(null);       // รหัสที่ไม่มีในสต๊อกรวม (โหมดรับเข้า) กำลังกรอกเป็นรายการใหม่
   const [confirmLoading, setConfirmLoading] = useState(false);
   const [deletingId, setDeletingId] = useState(null);
   const [editingOrder, setEditingOrder] = useState(null);     // รายการรอยืนยันที่กำลังแก้จำนวน/ลบ
@@ -700,6 +735,9 @@ export default function TechnicianScanPage() {
         handleStockPick(found[0]);
       } else if (found.length > 1) {
         setPickMatches(found);
+      } else if (mode === 'IN' && session) {
+        // ของใหม่ที่ยังไม่เคยมีในสต๊อกรวม — กรอกรายละเอียดแล้วเพิ่มเข้าบิลได้เลย
+        setNewItemCode(scannedCodeText(code));
       } else {
         setToast({ ok: false, title: 'ไม่พบรหัสนี้ในสต๊อกรวม', body: 'ตรวจสอบว่า QR ถูกต้อง หรือเพิ่มรายการที่หน้าสต๊อกรวมก่อน' });
         setScanning(true);
@@ -708,7 +746,29 @@ export default function TechnicianScanPage() {
       setToast({ ok: false, title: 'ค้นหารหัสไม่สำเร็จ', body: err?.response?.data?.error || '' });
       setScanning(true);
     }
-  }, [mode]);
+  }, [mode, session]);
+
+  // a new code was created and its quantity put on the bill (pending, like a scanned line)
+  const handleNewItemCreated = (data) => {
+    const added = (data.lines || []).map(lineToOrder);
+    setOrders((prev) => [...added.reverse(), ...prev]);
+    const totalQty = added.reduce((sum, o) => sum + Number(o.qty || 0), 0);
+    setToast({
+      ok: true,
+      title: `สร้างรายการใหม่แล้ว — ${(added[0]?.name || '').slice(0, 22)}`,
+      body: `+${totalQty} ชิ้นเข้าบิล · ยังไม่บวกสต๊อก (กด “บันทึก” เพื่อบวก)`,
+    });
+    setNewItemCode(null);
+    setScanning(fromCameraRef.current);
+  };
+
+  // the code typed in the form is already in สต๊อกรวม: pick that item instead of creating a second one
+  const handleNewItemExists = (matches) => {
+    setNewItemCode(null);
+    setToast({ ok: false, title: 'รหัสนี้มีในสต๊อกรวมแล้ว', body: 'เลือกรายการเดิมเพื่อรับเข้า' });
+    if (matches.length === 1) handleStockPick(matches[0]);
+    else setPickMatches(matches);
+  };
 
   // ── ยืนยันจำนวน ──
   const handleConfirm = async (qty, unitCost) => {
@@ -726,18 +786,7 @@ export default function TechnicianScanPage() {
           receipt_session_id: session ? session.id : undefined,
         });
         const line = res.data.line;
-        const pendingOrder = {
-          key: `line-${line.id}`,
-          sku: line.code,
-          name: `${line.category_name} · ${line.description || line.code}${line.position_label ? ` (${line.position_label})` : ''}`,
-          qty: line.qty,
-          txId: null,
-          lineId: line.id,
-          unitCost: line.unit_cost,
-          pending: true,
-          type: 'stock_item',
-          position: line.position,
-        };
+        const pendingOrder = lineToOrder(line);
         setOrders((prev) => [pendingOrder, ...prev.filter((o) => o.key !== pendingOrder.key)]);
         setToast({
           ok: true,
@@ -786,7 +835,7 @@ export default function TechnicianScanPage() {
     setSupplier(''); setSupplierOther(false); setSupplierErr('');
     setBillDate(todayStr());
     setScannedItem(null); setScannedType(null); setScanning(false);
-    setManualOpen(false); setPickMatches(null);
+    setManualOpen(false); setPickMatches(null); setNewItemCode(null);
   };
 
   const isIN = mode === 'IN';
@@ -1041,7 +1090,21 @@ export default function TechnicianScanPage() {
           )}
 
           {manualOpen && (
-            <StockSearchSheet onPick={(m) => { fromCameraRef.current = false; handleStockPick(m); }} onCancel={() => setManualOpen(false)} />
+            <StockSearchSheet
+              onPick={(m) => { fromCameraRef.current = false; handleStockPick(m); }}
+              onCancel={() => setManualOpen(false)}
+              onAddNew={isIN && session ? (term) => { fromCameraRef.current = false; setManualOpen(false); setNewItemCode(term); } : undefined}
+            />
+          )}
+
+          {newItemCode !== null && session && (
+            <ScanNewItemSheet
+              code={newItemCode}
+              sessionId={session.id}
+              onCreated={handleNewItemCreated}
+              onPickExisting={handleNewItemExists}
+              onCancel={() => { setNewItemCode(null); setScanning(fromCameraRef.current); }}
+            />
           )}
 
           {pickMatches && (

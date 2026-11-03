@@ -6767,6 +6767,32 @@ a.mg-row:hover { border-color: #111111; }
 .sc-add { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
 .sc-add input { flex: 1 1 220px; }
 .scan-cost { margin: 10px 0; }
+
+/* ── scan page: a code not in สต๊อกรวม yet, added to the bill as a new item ── */
+.scan-add-new { margin-top: 10px; }
+.scan-new-item .scan-label:first-of-type { margin-top: 4px; }
+.scan-new-item-gap { margin-top: 8px; }
+.scan-new-item-checks { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 12px; font-size: 14px; color: #374151; }
+.scan-new-item-checks label { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; cursor: pointer; }
+.scan-new-item-checks input { width: 18px; height: 18px; }
+.scan-new-item-row2 { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); gap: 10px; }
+.scan-new-item-positions { display: grid; gap: 8px; margin-top: 14px; }
+.scan-new-item-pos-head,
+.scan-new-item-pos-row { display: grid; grid-template-columns: 84px minmax(0, 1fr) 76px; gap: 8px; align-items: center; }
+.scan-new-item-pos-head { font-size: 12px; font-weight: 700; color: #6b7280; }
+.scan-new-item-pos-row .scan-chip { justify-self: start; }
+.scan-new-item-fit { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 76px 76px 36px; gap: 6px; margin-bottom: 8px; }
+.scan-new-item-fit .scan-input { height: 42px; padding: 0 10px; font-size: 14px; }
+.scan-new-item-fit-del {
+  min-height: 0; height: 42px; border: none; border-radius: 10px; background: #fee2e2; color: #b91c1c;
+  font-family: inherit; font-size: 15px; cursor: pointer;
+}
+.scan-new-item-error { margin-top: 12px; }
+.scan-new-item-submit { margin-top: 16px; }
+@media (max-width: 480px) {
+  .scan-new-item-fit { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 36px; }
+  .scan-new-item-fit input[type="number"] { grid-row: 2; }
+}
 .scan-cost-note { margin: 2px 0 0; font-size: 0.8rem; color: #6b7280; }
 .od-neg { color: #b91c1c; }
 .od-check { cursor: pointer; align-items: center; }

@@ -239,4 +239,96 @@ describe('/api/stock-receive — รับเข้าสต๊อกรวม�
     expect((await asTech(request(app).get('/api/stock-receive/qrcodes')).query({ ids: String(itemId) })).status).toBe(403);
     expect((await asOffice(request(app).get('/api/stock-receive/qrcodes')).query({ ids: '' })).status).toBe(400);
   });
+
+  // a code that is not in สต๊อกรวม yet, typed in on the scan page
+  const newItem = async (as, body) => {
+    const res = await as(request(app).post('/api/stock-receive/new-item')).send({ category_id: categoryId, description: 'ของใหม่จากหน้าสแกน', ...body });
+    if (res.body.item_id) itemIds.push(res.body.item_id);
+    return res;
+  };
+  const lookup = async (code) => (await asOffice(request(app).get('/api/stock-receive/lookup')).query({ code })).body.matches;
+  const isActive = async (id) => (await pool.query('SELECT is_active FROM stock_items WHERE id = ?', [id]))[0][0].is_active;
+
+  test('new-item: creates the code at 0 and puts the quantity on the bill; confirming the bill adds it', async () => {
+    const sessionId = await openSession();
+    const res = await newItem(asOffice, { oem_code: `NEW-${suffix}`, qty: 3, unit_cost: 450, receipt_session_id: sessionId,
+      fitments: [{ brand: 'Toyota', model: 'Vios', year_from: 2007, year_to: 2013 }] });
+    expect(res.status).toBe(201);
+    expect(res.body.lines).toHaveLength(1);
+    expect(res.body.lines[0]).toMatchObject({ code: `NEW-${suffix}`, qty: 3, unit_cost: 450, position: null });
+    expect((await getItem(`NEW-${suffix}`)).stock_qty).toBe(0); // nothing in stock until the bill is confirmed
+    expect(await lookup(`NEW-${suffix}`)).toHaveLength(1); // scanning it now finds it
+
+    expect((await commit(asOffice, sessionId)).status).toBe(200);
+    const item = await getItem(`NEW-${suffix}`);
+    expect(item.stock_qty).toBe(3);
+    expect(item.fitments).toEqual([{ brand: 'Toyota', model: 'Vios', year_from: 2007, year_to: 2013 }]);
+    const [[mv]] = await pool.query("SELECT reason, receipt_session_id FROM stock_item_movements WHERE item_id = ?", [res.body.item_id]);
+    expect(mv).toEqual({ reason: 'receive', receipt_session_id: sessionId });
+  });
+
+  test('new-item split by position: one bill line per position with a quantity', async () => {
+    const sessionId = await openSession();
+    const res = await newItem(asOffice, {
+      has_sides: true, codes: { left: `NL-${suffix}`, right: `NR-${suffix}` }, qtys: { left: 2, right: 0 }, receipt_session_id: sessionId,
+    });
+    expect(res.status).toBe(201);
+    expect(res.body.lines.map((l) => [l.position, l.qty, l.code])).toEqual([['left', 2, `NL-${suffix}`]]);
+    await commit(asOffice, sessionId);
+    const item = await getItem(`NL-${suffix}`);
+    expect(item.positions.map((p) => [p.position, p.qty])).toEqual([['left', 2], ['right', 0]]);
+  });
+
+  test('new-item refuses a code that is already in stock (any category, any position) and creates nothing', async () => {
+    await createItem({ has_sides: true, codes: { left: `EX-L-${suffix}`, right: '' }, stocks: { left: 1, right: 0 } });
+    const sessionId = await openSession();
+    const res = await newItem(asOffice, { oem_code: `EX-L-${suffix}`, qty: 1, receipt_session_id: sessionId });
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe('CODE_EXISTS');
+    expect(res.body.matches[0]).toMatchObject({ code: `EX-L-${suffix}`, position: 'left' });
+    const [[count]] = await pool.query('SELECT COUNT(*) AS c FROM stock_receive_lines WHERE receipt_session_id = ?', [sessionId]);
+    expect(count.c).toBe(0);
+  });
+
+  test('new-item validation and roles', async () => {
+    const sessionId = await openSession();
+    expect((await newItem(asOffice, { oem_code: `NV-${suffix}`, receipt_session_id: sessionId })).status).toBe(400); // no qty
+    expect((await newItem(asOffice, { oem_code: `NV-${suffix}`, qty: 0, receipt_session_id: sessionId })).status).toBe(400);
+    expect((await newItem(asOffice, { qty: 1, receipt_session_id: sessionId })).status).toBe(400); // no code
+    expect((await newItem(asOffice, { has_sides: true, codes: { left: `NV-${suffix}` }, qtys: { left: 0 }, receipt_session_id: sessionId })).status).toBe(400);
+    expect((await newItem(asOffice, { oem_code: `NV-${suffix}`, qty: 1 })).status).toBe(400); // no bill
+    expect((await newItem(asOffice, { oem_code: `NV-${suffix}`, qty: 1, unit_cost: -5, receipt_session_id: sessionId })).status).toBe(400);
+    expect((await newItem(asOffice, { oem_code: `NV-${suffix}`, qty: 1, category_id: 99999999, receipt_session_id: sessionId })).status).toBe(404);
+    expect((await newItem(asTech, { oem_code: `NV-${suffix}`, qty: 1, receipt_session_id: sessionId })).status).toBe(403);
+    expect(await lookup(`NV-${suffix}`)).toHaveLength(0);
+  });
+
+  test('removing the only bill line of a new code hides it again; typing it again brings the same item back', async () => {
+    const sessionId = await openSession();
+    const res = await newItem(asOffice, { oem_code: `HID-${suffix}`, qty: 1, receipt_session_id: sessionId });
+    const del = await asOffice(request(app).delete(`/api/stock-receive/lines/${res.body.lines[0].id}`));
+    expect(del.body.item_hidden).toBe(true);
+    expect(await isActive(res.body.item_id)).toBe(0);
+    expect(await lookup(`HID-${suffix}`)).toHaveLength(0);
+
+    const again = await newItem(asOffice, { oem_code: `HID-${suffix}`, qty: 2, receipt_session_id: sessionId });
+    expect(again.status).toBe(201);
+    expect(again.body.item_id).toBe(res.body.item_id);
+  });
+
+  test('an item made on the สต๊อกรวม page is never hidden by removing a bill line', async () => {
+    const itemId = await createItem({ oem_code: `KEEP-${suffix}`, stock_qty: 0 });
+    const sessionId = await openSession();
+    const line = await addLine(asOffice, { item_id: itemId, qty: 1, receipt_session_id: sessionId });
+    const del = await asOffice(request(app).delete(`/api/stock-receive/lines/${line.body.line.id}`));
+    expect(del.body.item_hidden).toBe(false);
+    expect(await isActive(itemId)).toBe(1);
+  });
+
+  test('deleting a bill hides the new codes that only had a pending line on it', async () => {
+    const sessionId = await openSession();
+    const fresh = await newItem(asOffice, { oem_code: `BILL-${suffix}`, qty: 1, receipt_session_id: sessionId });
+    expect((await asOffice(request(app).delete(`/api/transactions/receipt-sessions/${sessionId}`))).status).toBe(200);
+    expect(await isActive(fresh.body.item_id)).toBe(0);
+  });
 });

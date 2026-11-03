@@ -5,6 +5,7 @@ const { authenticate, requireRole, requireManager, roleRank } = require('../midd
 const { emitStockEvent, emitStockTxEvent } = require('../realtime');
 const { positionsFor, positionLabel } = require('../utils/stockPositions');
 const { recomputeItemCost, parseUnitCost } = require('../utils/stockCost');
+const { parseQty, parseNewStockItem, insertStockItem, hideUnusedScanItem } = require('../utils/stockItemCreate');
 
 // รับเข้าสต๊อกรวมตามบิล (หน้าสแกน /scan โหมดรับเข้า) + พิมพ์ QR ของสต๊อกรวม
 //
@@ -234,6 +235,98 @@ router.post('/lines', async (req, res) => {
   }
 });
 
+// A code that is not in สต๊อกรวม yet, typed in on the scan page: creates the item (opening stock 0) and
+// puts the received quantity on the bill as pending lines in one transaction. The stock is added when the
+// bill is confirmed, like any scanned line, so cost and history stay tied to the bill.
+// Body: the new-item fields of POST /stock-items (category_id, oem_code / codes, description, has_*,
+// min_stock, fitments) + receipt_session_id, unit_cost, and qty (plain item) or qtys ({ position: qty }).
+router.post('/new-item', requireRole('office'), async (req, res) => {
+  const body = req.body || {};
+  const sessionId = parseId(body.receipt_session_id);
+  if (!sessionId) return res.status(400).json({ error: 'ข้อมูลไม่ถูกต้อง' });
+  const cost = parseUnitCost(body.unit_cost);
+  if (cost.error) return res.status(400).json({ error: cost.error });
+  // opening stock is always 0 here: what arrives goes through the bill
+  const parsed = parseNewStockItem({ ...body, stocks: undefined, stock_qty: 0 });
+  if (parsed.error) return res.status(400).json({ error: parsed.error });
+  const { item } = parsed;
+
+  // [position, qty] of each bill line to add (position null = an item not split by position)
+  let receive;
+  if (item.positions.length > 0) {
+    receive = [];
+    for (const position of item.positions) {
+      const raw = body.qtys ? body.qtys[position] : undefined;
+      const qty = raw === undefined || raw === '' ? 0 : parseQty(raw);
+      if (qty === null) return res.status(400).json({ error: 'จำนวนต้องเป็นเลขจำนวนเต็มตั้งแต่ 0 ขึ้นไป' });
+      if (qty > 0) receive.push([position, qty]);
+    }
+    if (receive.length === 0) return res.status(400).json({ error: 'กรุณาใส่จำนวนที่รับเข้าอย่างน้อยหนึ่งตำแหน่ง' });
+  } else {
+    const qty = parseQty(body.qty, 1);
+    if (qty === null) return res.status(400).json({ error: 'กรุณาใส่จำนวนที่รับเข้าตั้งแต่ 1 ชิ้นขึ้นไป' });
+    receive = [[null, qty]];
+  }
+
+  let conn;
+  try {
+    // a code typed here may already be in stock (another category, or a position code of another item):
+    // send those back so the user picks the existing item instead of creating a second one
+    const typedCodes = [...new Set([item.oemCode, ...Object.values(item.codes)].filter(Boolean))];
+    const [existing] = await pool.query(
+      `${MATCH_SELECT}
+       WHERE i.shop_id = ? AND i.is_active = 1
+         AND ((p.item_id IS NOT NULL AND p.oem_code IN (?)) OR (p.item_id IS NULL AND i.oem_code IN (?)))
+       ORDER BY i.id, p.position
+       LIMIT 20`,
+      [req.shopId, typedCodes, typedCodes]
+    );
+    if (existing.length > 0) {
+      return res.status(409).json({
+        code: 'CODE_EXISTS',
+        error: 'รหัสนี้มีอยู่ในสต๊อกรวมแล้ว — เลือกรายการเดิมแทน',
+        matches: existing.map(shapeMatch),
+      });
+    }
+
+    conn = await pool.getConnection();
+    await conn.beginTransaction();
+    const owned = await loadOwnedSession(conn, sessionId, req.user, req.shopId, { lock: true });
+    if (owned.error) {
+      await conn.rollback();
+      return res.status(owned.status).json({ error: owned.error });
+    }
+    const created = await insertStockItem(conn, {
+      shopId: req.shopId, userId: req.user.id, item, createdInSessionId: sessionId,
+    });
+    if (created.error) {
+      await conn.rollback();
+      return res.status(created.status).json({ error: created.error });
+    }
+    const lineIds = [];
+    for (const [position, qty] of receive) {
+      const [ins] = await conn.execute(
+        'INSERT INTO stock_receive_lines (receipt_session_id, item_id, position, qty, user_id, unit_cost) VALUES (?, ?, ?, ?, ?, ?)',
+        [sessionId, created.itemId, position, qty, req.user.id, cost.value]
+      );
+      lineIds.push(ins.insertId);
+    }
+    const [lines] = await conn.query(`${lineSelect('l.id IN (?)')} ORDER BY l.id`, [req.shopId, lineIds]);
+    await conn.commit();
+    emitStockEvent('stock:item-created', { shopId: req.shopId, entityType: 'stock_item', entityId: created.itemId, actorId: req.user.id });
+    res.status(201).json({ success: true, item_id: created.itemId, lines: lines.map(shapeLine) });
+  } catch (err) {
+    if (conn) await conn.rollback().catch(() => {});
+    if (err.code === 'ER_DUP_ENTRY') {
+      return res.status(409).json({ error: 'รหัส OEM นี้มีอยู่ในหมวดนี้แล้ว' });
+    }
+    console.error('Error creating stock item from receive:', err);
+    res.status(500).json({ error: 'เพิ่มรายการใหม่ไม่สำเร็จ' });
+  } finally {
+    if (conn) conn.release();
+  }
+});
+
 // รายการรอยืนยันของบิล (ใช้ตอนเปิดบิลเดิมต่อ)
 router.get('/sessions/:id/lines', async (req, res) => {
   const sessionId = parseId(req.params.id);
@@ -311,8 +404,11 @@ router.delete('/lines/:id', async (req, res) => {
       return res.status(found.status).json({ error: found.error });
     }
     await conn.execute('DELETE FROM stock_receive_lines WHERE id = ?', [lineId]);
+    // a code created from this bill that never held anything goes back out of สต๊อกรวม
+    const hidden = await hideUnusedScanItem(conn, found.line.item_id, req.shopId);
     await conn.commit();
-    res.json({ success: true });
+    if (hidden) emitStockEvent('stock:item-updated', { shopId: req.shopId, entityType: 'stock_item', entityId: found.line.item_id, actorId: req.user.id });
+    res.json({ success: true, item_hidden: hidden });
   } catch (err) {
     if (conn) await conn.rollback().catch(() => {});
     console.error('Error deleting stock receive line:', err);

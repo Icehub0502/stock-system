@@ -1026,6 +1026,10 @@ async function initDatabase() {
   // หน้า/หลังได้ — ตำแหน่ง = หน้า/หลัง → บน/ล่าง → ซ้าย/ขวา (ดู utils/stockPositions.js)
   await conn.query(`ALTER TABLE stock_items ADD COLUMN has_levels TINYINT(1) NOT NULL DEFAULT 0`).catch(ignoreIfAlreadyApplied);
   await conn.query(`ALTER TABLE stock_items ADD COLUMN oem_code_right VARCHAR(100) DEFAULT NULL`).catch(ignoreIfAlreadyApplied);
+  // The receipt bill an item was created from on the scan page (a code not in stock yet), NULL for items
+  // made on the สต๊อกรวม page. Such an item is hidden again if its bill line is removed before anything
+  // was ever received (see hideUnusedScanItem in utils/stockItemCreate.js).
+  await conn.query(`ALTER TABLE stock_items ADD COLUMN created_in_session_id INT DEFAULT NULL`).catch(ignoreIfAlreadyApplied);
 
   // position: left | right | front | rear | front_left | front_right | rear_left | rear_right
   await conn.query(`

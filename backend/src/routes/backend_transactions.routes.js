@@ -7,6 +7,7 @@ const { emitStockEvent, emitStockTxEvent, emitReceiptSessionEvent } = require('.
 const { voidReceiveMovement } = require('./stockReceive.routes');
 const { findOrCreateSupplier } = require('./suppliers.routes');
 const { recomputeItemCost } = require('../utils/stockCost');
+const { hideUnusedScanItem } = require('../utils/stockItemCreate');
 
 const { positionLabel } = require('../utils/stockPositions');
 
@@ -235,8 +236,12 @@ router.delete('/receipt-sessions/:id', requireManager, async (req, res) => {
     }
     // แถวประวัติของบิลนี้ยังอยู่ (เก็บไว้ตรวจย้อนหลัง) แค่ตัดการผูกกับบิลที่กำลังจะถูกลบ
     await conn.query('UPDATE stock_item_movements SET receipt_session_id = NULL WHERE receipt_session_id = ?', [req.params.id]);
+    // items of the bill's lines, read before the lines go with the bill (ON DELETE CASCADE)
+    const [lineItems] = await conn.query('SELECT DISTINCT item_id FROM stock_receive_lines WHERE receipt_session_id = ?', [req.params.id]);
     await conn.query(`DELETE FROM transactions WHERE receipt_session_id = ? AND type = 'IN'`, [req.params.id]);
     await conn.query('DELETE FROM receipt_sessions WHERE id = ? AND shop_id = ?', [req.params.id, req.shopId]);
+    // codes created from this bill on the scan page that never held anything go back out of สต๊อกรวม
+    for (const { item_id: itemId } of lineItems) await hideUnusedScanItem(conn, itemId, req.shopId);
     // the bill's lines went with it (ON DELETE CASCADE): the cost of what it held no longer includes them
     for (const itemId of costItems) await recomputeItemCost(conn, itemId, req.shopId);
     await conn.commit();
