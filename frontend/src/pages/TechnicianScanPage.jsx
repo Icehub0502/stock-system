@@ -439,8 +439,8 @@ function MatchPickSheet({ matches, onPick, onCancel }) {
 
 // ค้นเองในสต๊อกรวมตอน QR เสีย (รหัส / รายละเอียด / ยี่ห้อ-รุ่นรถ) — โหมดรับเข้า (onAddNew) ของที่ยังไม่มี
 // ในระบบกดเพิ่มเป็นรายการใหม่เข้าบิลได้เลย ส่วนโหมดจ่ายออกต้องมีในสต๊อกรวมอยู่แล้ว
-function StockSearchSheet({ onPick, onCancel, onAddNew }) {
-  const [query, setQuery] = useState('');
+function StockSearchSheet({ onPick, onCancel, onAddNew, initialQuery = '' }) {
+  const [query, setQuery] = useState(initialQuery);
   const [matches, setMatches] = useState([]);
   const [searching, setSearching] = useState(false);
 
@@ -522,6 +522,9 @@ export default function TechnicianScanPage() {
 
   const [scanning, setScanning]   = useState(false);          // กล้องเปิด/ปิด
   const [manualOpen, setManualOpen] = useState(false);        // แผงกรอกเอง (QR เสีย)
+  const [manualQuery, setManualQuery] = useState('');         // คำค้นที่เปิดแผงค้นหามาให้แล้ว (จากช่องพิมพ์รหัส)
+  const [codeText, setCodeText] = useState('');               // ช่องพิมพ์รหัสบนหน้าสแกน
+  const [codeLooking, setCodeLooking] = useState(false);
   const [scannedItem, setScannedItem] = useState(null);       // item ที่รอยืนยัน
   const [scannedType, setScannedType] = useState(null);       // 'rack' | 'wing-arm' | 'stock_item'
   const [pickMatches, setPickMatches] = useState(null);       // สแกนเจอหลายรายการ (โหมดรับเข้า) รอเลือก
@@ -747,6 +750,41 @@ export default function TechnicianScanPage() {
       setScanning(true);
     }
   }, [mode, session]);
+
+  // ── พิมพ์รหัสเอง (ช่องบนหน้าสแกน / เครื่องยิงบาร์โค้ดที่พิมพ์แล้วกด Enter) ──
+  // ตรงรหัสพอดี = ไปใส่จำนวนเลย, ไม่ตรงแต่ใกล้เคียง = เปิดผลค้นหาให้เลือก (มีปุ่มเพิ่มเป็นของใหม่),
+  // ไม่เจออะไรเลย = รับเข้า: เปิดฟอร์มเพิ่มรหัสใหม่ทันที / จ่ายออก: แจ้งว่าไม่มีในสต๊อกรวม
+  const handleCodeEntry = async (e) => {
+    e.preventDefault();
+    const code = codeText.trim();
+    if (!code || codeLooking) return;
+    fromCameraRef.current = false;
+    setCodeLooking(true);
+    try {
+      const exact = (await client.get('/stock-receive/lookup', { params: { code } })).data.matches || [];
+      if (exact.length === 1) handleStockPick(exact[0]);
+      else if (exact.length > 1) setPickMatches(exact);
+      else {
+        const near = code.length >= 2
+          ? (await client.get('/stock-receive/search', { params: { q: code } })).data.matches || []
+          : [];
+        if (near.length > 0) {
+          setManualQuery(code);
+          setManualOpen(true);
+        } else if (mode === 'IN' && session) {
+          setNewItemCode(code);
+        } else {
+          setToast({ ok: false, title: `ไม่พบ "${code}" ในสต๊อกรวม`, body: 'ตรวจสอบรหัสอีกครั้ง' });
+          return; // keep the text so it can be corrected
+        }
+      }
+      setCodeText('');
+    } catch (err) {
+      setToast({ ok: false, title: 'ค้นหารหัสไม่สำเร็จ', body: err?.response?.data?.error || '' });
+    } finally {
+      setCodeLooking(false);
+    }
+  };
 
   // a new code was created and its quantity put on the bill (pending, like a scanned line)
   const handleNewItemCreated = (data) => {
@@ -1036,12 +1074,33 @@ export default function TechnicianScanPage() {
             )}
           </section>
 
+          <form className="scan-code-entry" onSubmit={handleCodeEntry}>
+            <label className="scan-label" htmlFor="scan-code-entry">พิมพ์รหัสอะไหล่ หรือกดสแกน QR ด้านล่าง</label>
+            <div className="scan-code-entry-row">
+              <input
+                id="scan-code-entry"
+                className="scan-input scan-input--mono"
+                placeholder="เช่น 45510-0K010"
+                value={codeText}
+                maxLength={100}
+                autoComplete="off"
+                autoCapitalize="characters"
+                enterKeyHint="search"
+                onChange={(e) => setCodeText(e.target.value)}
+              />
+              <button type="submit" className="scan-btn scan-btn--primary" disabled={codeLooking || !codeText.trim()}>
+                {codeLooking ? '...' : 'ตกลง'}
+              </button>
+            </div>
+            {isIN && <p className="scan-code-entry-hint">มีในสต๊อกรวม = ใส่จำนวนได้เลย · ยังไม่มี = กรอกเป็นรหัสใหม่เข้าบิลได้ทันที</p>}
+          </form>
+
           <section className="scan-list" aria-label="รายการที่สแกน">
             {orders.length === 0 ? (
               <div className="scan-empty">
                 <span className="scan-empty-icon"><IconQR /></span>
                 <p>ยังไม่มีรายการ</p>
-                <small>กดปุ่ม "สแกน QR" ด้านล่างเพื่อเริ่ม</small>
+                <small>พิมพ์รหัสด้านบน หรือกดปุ่ม "สแกน QR" ด้านล่างเพื่อเริ่ม</small>
               </div>
             ) : (
               orders.map((o, i) => (
@@ -1059,7 +1118,7 @@ export default function TechnicianScanPage() {
           {/* แถบปุ่มล่าง — กรอกเอง / สแกน / เสร็จสิ้น (วางเหนือเมนูล่างบนมือถือ ไม่ถูกบัง) */}
           <div className="scan-dock">
             <div className="scan-dock-inner">
-              <button type="button" className="scan-dock-btn scan-dock-btn--side" onClick={() => setManualOpen(true)}>
+              <button type="button" className="scan-dock-btn scan-dock-btn--side" onClick={() => { setManualQuery(''); setManualOpen(true); }}>
                 <IconSearch />
                 <span>ค้นหาเอง</span>
               </button>
@@ -1091,6 +1150,7 @@ export default function TechnicianScanPage() {
 
           {manualOpen && (
             <StockSearchSheet
+              initialQuery={manualQuery}
               onPick={(m) => { fromCameraRef.current = false; handleStockPick(m); }}
               onCancel={() => setManualOpen(false)}
               onAddNew={isIN && session ? (term) => { fromCameraRef.current = false; setManualOpen(false); setNewItemCode(term); } : undefined}
@@ -1111,7 +1171,7 @@ export default function TechnicianScanPage() {
             <MatchPickSheet
               matches={pickMatches}
               onPick={handleStockPick}
-              onCancel={() => { setPickMatches(null); setScanning(true); }}
+              onCancel={() => { setPickMatches(null); setScanning(fromCameraRef.current); }}
             />
           )}
 

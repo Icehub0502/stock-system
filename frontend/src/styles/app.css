@@ -6768,6 +6768,13 @@ a.mg-row:hover { border-color: #111111; }
 .sc-add input { flex: 1 1 220px; }
 .scan-cost { margin: 10px 0; }
 
+/* ── scan page: type a code (or a USB barcode reader) instead of scanning ── */
+.scan-code-entry { margin: 0 0 12px; padding: 12px 14px 10px; border-radius: 16px; background: #fff; border: 1px solid #e5e7eb; }
+.scan-code-entry .scan-label { margin-top: 0; }
+.scan-code-entry-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+.scan-code-entry-row .scan-btn { height: 48px; padding: 0 20px; }
+.scan-code-entry-hint { margin: 8px 0 0; font-size: 12px; line-height: 1.5; color: #6b7280; }
+
 /* ── scan page: a code not in สต๊อกรวม yet, added to the bill as a new item ── */
 .scan-add-new { margin-top: 10px; }
 .scan-new-item .scan-label:first-of-type { margin-top: 4px; }
