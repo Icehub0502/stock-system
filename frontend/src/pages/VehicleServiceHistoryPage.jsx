@@ -3,8 +3,10 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import client from '../api/client';
 import { formatMoney } from '../utils/format';
 import { formatDateTh } from '../utils/dateGroups';
+import { CASE_STATUS, CASE_TYPE_LABEL, OUTCOME_LABEL, REPORT_RESULT_LABEL } from '../utils/claimCases';
 
-// "ประวัติรถ": find a car, then see what was done to it, the warranty each item carries and whether it still runs.
+// "ประวัติรถ": find a car, then see what was done to it, how often it came back and what was claimed, the warranty each
+// item carries and whether it still runs.
 // Data comes from GET /vehicle-history (backend/src/routes/vehicleHistory.routes.js); the page only reads.
 // The photo timeline of the same car stays on /vehicles/:id/history (linked from here).
 
@@ -119,7 +121,10 @@ function VehicleDetail({ vehicleId }) {
     );
   }
 
-  const { vehicle, active_warranties: warranties, changed_items: changed, visits, open_quotations: openQuotations, claims } = data;
+  const {
+    vehicle, active_warranties: warranties, changed_items: changed, visits, open_quotations: openQuotations, claims,
+    visits_without_bill: visitsWithoutBill, summary,
+  } = data;
 
   return (
     <div className="quotation-page">
@@ -137,9 +142,68 @@ function VehicleDetail({ vehicleId }) {
       </div>
 
       <div className="dash-panel">
+        <div className="dash-panel-title">สรุปรถคันนี้</div>
+        <div className="fu-stats">
+          <div><strong>{summary.visit_count}</strong><span>บิลและคิวงาน</span></div>
+          <div><strong>{summary.rework_count}</strong><span>มาแก้งาน</span></div>
+          <div><strong>{summary.parts_claim_count}</strong><span>เคลมอะไหล่</span></div>
+          <div><strong>{summary.open_case_count}</strong><span>เคสที่ยังไม่ปิด</span></div>
+        </div>
+        {summary.claimed_parts.length > 0 && (
+          <div className="fu-claimed">
+            <strong>อะไหล่ที่เคยเคลม:</strong>{' '}
+            {summary.claimed_parts.map((p) => `${p.name} (${p.times} ครั้ง, ล่าสุด ${formatDateTh(p.last_date)})`).join(', ')}
+          </div>
+        )}
+      </div>
+
+      <div className="dash-panel">
+        <div className="dash-panel-title">เคสแก้งาน / เคลม ({claims.length} ครั้ง)</div>
+        {claims.length === 0 ? <p className="vh-muted">ยังไม่มีเคสของรถคันนี้</p> : claims.map((c) => (
+          <div key={c.id} className="visit-card vh-card">
+            <div className="visit-card-header">
+              <span className="visit-card-date">{formatDateTh(c.claim_date)}</span>
+              <span className={`status-badge ${CASE_STATUS[c.status]?.badge || 'status-badge-neutral'}`}>{CASE_STATUS[c.status]?.label || c.status}</span>
+            </div>
+            <div className="visit-card-meta">
+              <span>{CASE_TYPE_LABEL[c.case_type] || 'เคส'}</span>
+              <span>{c.claim_no}</span>
+              {c.outcome && <span>{OUTCOME_LABEL[c.outcome]}</span>}
+            </div>
+            {c.symptom && <p className="visit-card-symptom">อาการ: {c.symptom}</p>}
+            {c.finding && <p className="visit-card-symptom">ตรวจพบ: {c.finding}</p>}
+            {c.resolution && <p className="visit-card-symptom">วิธีแก้: {c.resolution}</p>}
+            {c.lesson && <p className="visit-card-symptom">แนวทางครั้งหน้า: {c.lesson}</p>}
+            {c.items.length > 0 && (
+              <ul className="visit-item-list">
+                {c.items.map((it, i) => <li key={i}><span>{it.name}{it.qty > 1 ? ` x${it.qty}` : ''}</span></li>)}
+              </ul>
+            )}
+            {c.follow_ups.length > 0 && (
+              <ul className="fu-reports">
+                {c.follow_ups.map((f, i) => (
+                  <li key={i}>
+                    {f.done_at ? (
+                      <>
+                        <strong>{REPORT_RESULT_LABEL[f.result] || f.result}</strong>
+                        <span className="vh-muted"> · {formatDateTh(String(f.done_at).slice(0, 10))}{f.done_by ? ` · ${f.done_by}` : ''}</span>
+                        {f.note && <div>{f.note}</div>}
+                      </>
+                    ) : (
+                      <span className="vh-muted">นัดโทรติดตาม {formatDateTh(f.scheduled_date)}</span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        ))}
+      </div>
+
+      <div className="dash-panel">
         <div className="dash-panel-title">การรับประกันที่ยังอยู่</div>
         {warranties.length === 0 ? (
-          <div className="empty-message">ตอนนี้ไม่มีรายการที่อยู่ในประกัน</div>
+          <p className="vh-muted">ตอนนี้ไม่มีรายการที่อยู่ในประกัน</p>
         ) : warranties.map((g) => (
           <div key={g.label} className="vh-warranty-group">
             <div className="vh-warranty-headline">รถคันนี้มีประกัน {g.label}</div>
@@ -162,7 +226,7 @@ function VehicleDetail({ vehicleId }) {
 
       <div className="dash-panel">
         <div className="dash-panel-title">รายการที่เปลี่ยนไปแล้ว</div>
-        {changed.length === 0 ? <div className="empty-message">ยังไม่มีรายการ</div> : (
+        {changed.length === 0 ? <p className="vh-muted">ยังไม่มีรายการ</p> : (
           <div className="quotation-table-wrap">
             <table className="quotation-table">
               <thead><tr><th>รายการ</th><th>หมวด</th><th>ครั้ง</th><th>ล่าสุด</th><th>ประกัน</th></tr></thead>
@@ -208,7 +272,7 @@ function VehicleDetail({ vehicleId }) {
 
       <div className="dash-panel">
         <div className="dash-panel-title">ประวัติการทำรถ ({visits.length} ครั้ง)</div>
-        {visits.length === 0 ? <div className="empty-message">ยังไม่มีใบเสร็จของรถคันนี้</div> : visits.map((v) => (
+        {visits.length === 0 ? <p className="vh-muted">ยังไม่มีใบเสร็จของรถคันนี้</p> : visits.map((v) => (
           <div key={v.receipt_id} className="visit-card vh-card">
             <div className="visit-card-header">
               <span className="visit-card-date">{formatDateTh(v.date)}</span>
@@ -234,26 +298,22 @@ function VehicleDetail({ vehicleId }) {
         ))}
       </div>
 
-      {claims.length > 0 && (
+      {visitsWithoutBill.length > 0 && (
         <div className="dash-panel">
-          <div className="dash-panel-title">เคลม ({claims.length} ครั้ง)</div>
-          {claims.map((c) => (
-            <div key={c.id} className="visit-card vh-card">
+          <div className="dash-panel-title">เข้าร้านโดยไม่มีใบเสร็จ ({visitsWithoutBill.length} ครั้ง)</div>
+          {visitsWithoutBill.map((v) => (
+            <div key={v.job_id} className="visit-card vh-card">
               <div className="visit-card-header">
-                <span className="visit-card-date">{formatDateTh(c.claim_date)}</span>
-                <span className="status-badge status-badge-warning">เคลม</span>
+                <span className="visit-card-date">{formatDateTh(v.date)}</span>
               </div>
-              <div className="visit-card-meta"><span>{c.claim_no}</span></div>
-              {c.symptom && <p className="visit-card-symptom">อาการ: {c.symptom}</p>}
-              {c.items.length > 0 && (
-                <ul className="visit-item-list">
-                  {c.items.map((it, i) => <li key={i}><span>{it.name}{it.qty > 1 ? ` x${it.qty}` : ''}</span></li>)}
-                </ul>
-              )}
+              <div className="visit-card-meta"><span>เลขงาน {v.job_no}</span></div>
+              {v.symptom && <p className="visit-card-symptom">อาการ: {v.symptom}</p>}
+              {v.mileage > 0 && <p className="visit-card-mileage">เลขไมล์: {Number(v.mileage).toLocaleString('th-TH')}</p>}
             </div>
           ))}
         </div>
       )}
+
     </div>
   );
 }

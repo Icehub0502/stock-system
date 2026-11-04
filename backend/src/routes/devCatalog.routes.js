@@ -221,7 +221,7 @@ router.patch('/catalog/brands', async (req, res) => {
 router.get('/catalog/pending', async (req, res) => {
   try {
     const [rows] = await pool.query(
-      `SELECT v.id, v.brand, v.model, v.submitted_by, v.submitted_at, v.submitted_shop_id, s.name AS shop_name
+      `SELECT v.id, v.brand, v.model, v.year_range, v.submitted_by, v.submitted_at, v.submitted_shop_id, s.name AS shop_name
        FROM vehicle_models v LEFT JOIN shops s ON s.id = v.submitted_shop_id
        WHERE v.status = 'pending'
        ORDER BY v.submitted_at ASC, v.id ASC`

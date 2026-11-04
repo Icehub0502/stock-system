@@ -102,7 +102,7 @@ describe('models typed in by staff', () => {
   test('a new model is pending: only the shop that typed it sees it', async () => {
     await dev.post('/models', { brand: PBRAND, model: 'Camry', year_range: '2012-2018' });
 
-    const added = await request(app).post('/api/vehicle-models').set(as(shopA.token)).send({ brand: PBRAND, model: 'Zeta GT' });
+    const added = await request(app).post('/api/vehicle-models').set(as(shopA.token)).send({ brand: PBRAND, model: 'Zeta GT', year: 2015 });
     expect(added.status).toBe(201);
     expect(added.body.data.pending).toBe(true);
 
@@ -112,10 +112,20 @@ describe('models typed in by staff', () => {
     expect((await seenBy(shopB)).find((m) => m.model === 'Camry')).toMatchObject({ pending: false });
   });
 
+  test('a model that is not in the book must come with the year of the car', async () => {
+    const send = (body) => request(app).post('/api/vehicle-models').set(as(shopA.token)).send({ brand: PBRAND, model: 'No Year Car', ...body });
+    expect((await send({})).status).toBe(400);
+    expect((await send({ year: 'abc' })).status).toBe(400);
+    expect((await send({ year: 1900 })).status).toBe(400);
+    expect((await send({ year: new Date().getFullYear() + 5 })).status).toBe(400);
+    const [rows] = await pool.query("SELECT id FROM vehicle_models WHERE brand = ? AND model = 'No Year Car'", [PBRAND]);
+    expect(rows).toHaveLength(0);
+  });
+
   test('a name that is already in the book (any spelling) is not added again', async () => {
     const again = await request(app).post('/api/vehicle-models').set(as(shopA.token)).send({ brand: PBRAND.toLowerCase(), model: 'zeta-gt' });
     expect(again.status).toBe(200);
-    expect(again.body.data).toMatchObject({ existed: true, model: 'Zeta GT', brand: PBRAND });
+    expect(again.body.data).toMatchObject({ existed: true, model: 'Zeta GT (ปี 2015)', brand: PBRAND });
 
     const camry = await request(app).post('/api/vehicle-models').set(as(shopB.token)).send({ brand: PBRAND, model: 'CAMRY' });
     // an existing generation comes back under the name staff see and save: model + its years
@@ -126,7 +136,7 @@ describe('models typed in by staff', () => {
 
     const listed = (await request(app).get('/api/vehicle-models/models').query({ brand: PBRAND }).set(as(shopA.token))).body.data;
     expect(listed.find((m) => m.model === 'Camry')).toMatchObject({ label: 'Camry (2012-2018)', display_name: 'Camry (ปี 2012-2018)' });
-    expect(listed.find((m) => m.model === 'Zeta GT').display_name).toBe('Zeta GT');
+    expect(listed.find((m) => m.model === 'Zeta GT').display_name).toBe('Zeta GT (ปี 2015)');
 
     const [rows] = await pool.query('SELECT COUNT(*) AS n FROM vehicle_models WHERE brand = ?', [PBRAND]);
     expect(rows[0].n).toBe(2);
@@ -136,7 +146,7 @@ describe('models typed in by staff', () => {
   });
 
   test('the dev sees the pending model with the shop and a look-alike hint', async () => {
-    await request(app).post('/api/vehicle-models').set(as(shopB.token)).send({ brand: PBRAND, model: 'Camry Hybrid' });
+    await request(app).post('/api/vehicle-models').set(as(shopB.token)).send({ brand: PBRAND, model: 'Camry Hybrid', year: 2015 });
     const list = (await dev.get('/pending')).body.data.filter((r) => r.brand === PBRAND);
     expect(list.map((r) => r.model).sort()).toEqual(['Camry Hybrid', 'Zeta GT']);
     const hybrid = list.find((r) => r.model === 'Camry Hybrid');
@@ -180,14 +190,14 @@ describe('models typed in by staff', () => {
     const [[gone]] = await pool.query('SELECT COUNT(*) AS n FROM vehicle_models WHERE id = ?', [hybrid.id]);
     expect(gone.n).toBe(0);
 
-    await request(app).post('/api/vehicle-models').set(as(shopA.token)).send({ brand: PBRAND, model: 'Typo Car' });
+    await request(app).post('/api/vehicle-models').set(as(shopA.token)).send({ brand: PBRAND, model: 'Typo Car', year: 2015 });
     const [[typo]] = await pool.query("SELECT id FROM vehicle_models WHERE brand = ? AND model = 'Typo Car'", [PBRAND]);
     expect((await dev.del(`/pending/${typo.id}`)).status).toBe(200);
     expect((await dev.del(`/pending/${typo.id}`)).status).toBe(404);
   });
 
   test('approving a name that is already in the book is refused and points at merging', async () => {
-    await request(app).post('/api/vehicle-models').set(as(shopA.token)).send({ brand: PBRAND, model: 'Sigma' });
+    await request(app).post('/api/vehicle-models').set(as(shopA.token)).send({ brand: PBRAND, model: 'Sigma', year: 2015 });
     // the same model gets approved by hand meanwhile
     await dev.post('/models', { brand: PBRAND, model: 'SIGMA' });
     const [[sigma]] = await pool.query("SELECT id FROM vehicle_models WHERE brand = ? AND model = 'Sigma' AND status = 'pending'", [PBRAND]);

@@ -1,7 +1,8 @@
 // Vehicle history (read only), mounted at /api/vehicle-history:
 //   GET /search?search=   find cars (plate / brand / model / customer name / phone / customer code)
-//   GET /:id              everything done to one car: receipts with their items, open quotations, claims, the
-//                         warranty each sold item carries (and whether it still runs) and the list of parts changed
+//   GET /:id              everything done to one car: receipts with their items, visits without a bill, open quotations,
+//                         cases (come-backs and claims, with their fix and follow-up calls), the warranty each sold item
+//                         carries (and whether it still runs), the list of parts changed and how often the car came back
 // Warranty comes from the receipt item as it was sold; when that was never stored (jobs promoted from a draft save no
 // warranty on their items) it is looked up from the item's configured warranty by service item id, then by name.
 const express = require('express');
@@ -144,7 +145,8 @@ router.get('/:id', async (req, res) => {
       [vehicleId, shopId]
     );
     const [jobs] = await pool.query(
-      'SELECT id, job_no, quotation_id, symptom, status FROM jobs WHERE vehicle_id = ? AND shop_id = ? ORDER BY id DESC LIMIT 200',
+      `SELECT id, job_no, quotation_id, symptom, status, DATE_FORMAT(job_date, '%Y-%m-%d') AS job_date, mileage_in
+       FROM jobs WHERE vehicle_id = ? AND shop_id = ? ORDER BY id DESC LIMIT 200`,
       [vehicleId, shopId]
     );
     const openQuotations = quotations.filter((q) => !q.converted_receipt_id && OPEN_QUOTATION_STATUSES.includes(q.status));
@@ -154,12 +156,18 @@ router.get('/:id', async (req, res) => {
     ) : [[]];
 
     const [claims] = await pool.query(
-      `SELECT id, claim_no, DATE_FORMAT(claim_date, '%Y-%m-%d') AS claim_date, symptom, remark
+      `SELECT id, claim_no, DATE_FORMAT(claim_date, '%Y-%m-%d') AS claim_date, symptom, remark,
+              case_type, status, source_receipt_id, finding, resolution, outcome, lesson
        FROM claims WHERE vehicle_id = ? AND shop_id = ? ORDER BY claim_date DESC, id DESC LIMIT 100`,
       [vehicleId, shopId]
     );
     const [claimItems] = claims.length ? await pool.query(
       'SELECT claim_id, product_name AS name, quantity AS qty FROM claim_items WHERE claim_id IN (?) ORDER BY id',
+      [claims.map((c) => c.id)]
+    ) : [[]];
+    const [claimFollowUps] = claims.length ? await pool.query(
+      `SELECT claim_id, scheduled_date, done_at, done_by, result, note
+       FROM claim_follow_ups WHERE claim_id IN (?) ORDER BY scheduled_date, id`,
       [claims.map((c) => c.id)]
     ) : [[]];
 
@@ -211,6 +219,23 @@ router.get('/:id', async (req, res) => {
     });
     const active_warranties = [...groups.values()].sort((a, b) => (b.year * 12 + b.month) - (a.year * 12 + a.month) || b.km - a.km);
 
+    // queue jobs that never became a bill: the car still came in, so they stay in the history
+    const billedQuotationIds = new Set(quotations.filter((q) => q.converted_receipt_id).map((q) => Number(q.id)));
+    const visitsWithoutBill = jobs
+      .filter((j) => !j.quotation_id || !billedQuotationIds.has(Number(j.quotation_id)))
+      .map((j) => ({ job_id: j.id, job_no: j.job_no, date: j.job_date, status: j.status, symptom: j.symptom, mileage: j.mileage_in }));
+
+    // which parts were claimed on this car, how many times
+    const claimedParts = new Map();
+    claims.forEach((c) => {
+      claimItems.filter((i) => i.claim_id === c.id).forEach((i) => {
+        const row = claimedParts.get(i.name) || { name: i.name, times: 0, qty: 0, last_date: c.claim_date };
+        row.times += 1;
+        row.qty += Number(i.qty) || 0;
+        claimedParts.set(i.name, row);
+      });
+    });
+
     res.json({
       success: true,
       data: {
@@ -223,7 +248,19 @@ router.get('/:id', async (req, res) => {
           total_amount: Number(q.total_amount), job_no: jobOfQuotation.get(Number(q.id))?.job_no || null,
           items: openItems.filter((i) => i.quotation_id === q.id).map((i) => ({ name: i.name, qty: i.qty, price: Number(i.price) })),
         })),
-        claims: claims.map((c) => ({ ...c, items: claimItems.filter((i) => i.claim_id === c.id).map((i) => ({ name: i.name, qty: i.qty })) })),
+        claims: claims.map((c) => ({
+          ...c,
+          items: claimItems.filter((i) => i.claim_id === c.id).map((i) => ({ name: i.name, qty: i.qty })),
+          follow_ups: claimFollowUps.filter((f) => f.claim_id === c.id).map(({ claim_id: _claimId, ...f }) => f),
+        })),
+        visits_without_bill: visitsWithoutBill,
+        summary: {
+          visit_count: visits.length + visitsWithoutBill.length,
+          rework_count: claims.filter((c) => c.case_type === 'rework').length,
+          parts_claim_count: claims.filter((c) => c.case_type !== 'rework').length,
+          open_case_count: claims.filter((c) => c.status !== 'closed').length,
+          claimed_parts: [...claimedParts.values()],
+        },
       },
     });
   } catch (err) {

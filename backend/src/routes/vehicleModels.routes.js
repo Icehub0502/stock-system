@@ -58,8 +58,8 @@ router.get('/models', async (req, res) => {
   }
 });
 
-// POST /vehicle-models — a model that is not in the catalogue, typed in by staff while filling in a job.
-// It is NOT added to the shared catalogue: it is stored as 'pending' for this shop only, until the
+// POST /vehicle-models — a model that is not in the catalogue, typed in by staff while filling in a job, with the year
+// of the car. It is NOT added to the shared catalogue: it is stored as 'pending' for this shop only, until the
 // administrator approves it. If the typed name matches a model this shop can already see (ignoring case /
 // spaces / punctuation) nothing is added and the existing spelling is returned, so a car that is in the
 // book but was not found by searching does not get a second entry.
@@ -89,10 +89,15 @@ router.post('/', async (req, res) => {
       return res.json({ success: true, data: { brand, model: displayModelName(existing.model, existing.year_range), existed: true } });
     }
 
+    // a new model must say which year it is, so the book never again fills up with names that have no generation
+    const year = Number(req.body.year);
+    if (!Number.isInteger(year) || year < 1950 || year > new Date().getFullYear() + 1) {
+      return res.status(400).json({ error: 'รุ่นที่ไม่มีในรายการต้องกรอกปีรถ' });
+    }
     await pool.execute(
       `INSERT INTO vehicle_models (brand, model, year_range, status, submitted_shop_id, submitted_by, submitted_at)
-       VALUES (?, ?, NULL, 'pending', ?, ?, NOW())`,
-      [brand, modelInput, req.shopId, String(req.user.full_name || req.user.username || '').slice(0, 100) || null]
+       VALUES (?, ?, ?, 'pending', ?, ?, NOW())`,
+      [brand, modelInput, String(year), req.shopId, String(req.user.full_name || req.user.username || '').slice(0, 100) || null]
     );
     res.status(201).json({ success: true, data: { brand, model: modelInput, pending: true } });
   } catch (err) {

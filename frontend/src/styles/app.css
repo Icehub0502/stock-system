@@ -6666,6 +6666,32 @@ td.stock-all-actions button { padding: 8px 14px; font-size: 0.85em; min-height: 
 .vh-search { width: 100%; box-sizing: border-box; }
 .vh-nowrap { white-space: nowrap; }
 
+/* follow-up page and customer cases */
+.fu-car { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
+.fu-plate { font-weight: 700; font-size: 1.05rem; color: inherit; }
+.fu-customer { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 6px; font-weight: 600; }
+.fu-call { text-decoration: none; min-height: 40px; display: inline-flex; align-items: center; }
+.fu-edit { margin-top: 10px; }
+.fu-closed { margin-bottom: 12px; padding: 8px 10px; background: #f3f4f6; border-radius: 8px; font-size: 0.9rem; overflow-wrap: anywhere; }
+.fu-line { margin: 6px 0 0; font-size: 0.9rem; overflow-wrap: anywhere; }
+.fu-reports { list-style: none; margin: 10px 0 0; padding: 8px 10px; background: #f9fafb; border-radius: 8px; display: grid; gap: 8px; font-size: 0.9rem; overflow-wrap: anywhere; }
+.fu-form { display: grid; gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px solid #e5e7eb; }
+.fu-form textarea, .fu-form input[type="date"] { width: 100%; box-sizing: border-box; }
+.fu-form > .btn-primary { justify-self: start; }
+.fu-due { font-weight: 600; color: #b45309; margin-top: 8px; }
+.fu-form .fu-due { margin-top: 0; }
+.fu-label { font-size: 0.85rem; font-weight: 600; }
+.fu-choices { display: flex; flex-wrap: wrap; gap: 6px; }
+.fu-choices .btn { min-height: 40px; }
+.fu-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(90px, 1fr)); gap: 10px; }
+.fu-stats div { display: grid; gap: 2px; text-align: center; padding: 10px 6px; background: #f9fafb; border-radius: 8px; }
+.fu-stats strong { font-size: 1.4rem; font-variant-numeric: tabular-nums; }
+.fu-stats span { font-size: 0.8rem; color: #6b7280; }
+.fu-claimed { margin-top: 10px; font-size: 0.9rem; overflow-wrap: anywhere; }
+.fu-similar { margin-bottom: 12px; padding: 8px 10px; background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; font-size: 0.9rem; }
+.fu-similar summary { cursor: pointer; font-weight: 600; }
+.fu-similar-item { margin-top: 8px; padding-top: 8px; border-top: 1px solid #fde68a; overflow-wrap: anywhere; }
+
 /* manager page */
 .mg-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 16px; }
 .mg-tile { background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; gap: 2px; font-size: 0.85rem; color: #6b7280; }

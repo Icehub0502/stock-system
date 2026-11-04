@@ -121,7 +121,7 @@ function PendingTab({ onChanged }) {
               {rows.map((r) => (
                 <tr key={r.id}>
                   <td data-label="ยี่ห้อ">{r.brand}</td>
-                  <td data-label="รุ่นที่พิมพ์"><strong>{r.model}</strong></td>
+                  <td data-label="รุ่นที่พิมพ์"><strong>{r.model}</strong>{r.year_range && <div className="dev-detail">ปี {r.year_range}</div>}</td>
                   <td data-label="ร้าน">{r.shop_name || '-'}<div className="dev-detail">{r.submitted_by || ''}</div></td>
                   <td data-label="ส่งเมื่อ">{formatDateTime(r.submitted_at)}</td>
                   <td data-label="รุ่นใกล้เคียงในสมุด">

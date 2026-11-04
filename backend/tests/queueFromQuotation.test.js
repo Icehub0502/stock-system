@@ -161,6 +161,35 @@ describe('สร้างคิวจากใบเสนอราคาที�
     });
   });
 
+  test('รายการรถส่งเบอร์ลูกค้ามาด้วย เพื่อเติมในฟอร์มเพิ่มคิวเมื่อเจอทะเบียนเดิม', async () => {
+    await pool.execute('UPDATE customers SET phone = ? WHERE id = ?', ['0812345678', fixture.customerId]);
+    const res = await request(app).get('/api/vehicles').set(auth());
+    expect(res.status).toBe(200);
+    expect(res.body.data.find((v) => v.id === fixture.vehicleId).phone).toBe('0812345678');
+  });
+
+  test('แก้ข้อมูลรถโดยไม่ส่งเลขไมล์ ไมล์เดิมต้องไม่หาย และส่งไมล์ใหม่แล้วเปลี่ยนตาม', async () => {
+    await pool.execute('UPDATE vehicles SET mileage = 80000 WHERE id = ?', [fixture.vehicleId]);
+    const put = (body) => request(app).put(`/api/vehicles/${fixture.vehicleId}`).set(auth()).send({ brand: 'Toyota', model: 'Vios', ...body });
+    const mileageNow = async () => Number((await pool.query('SELECT mileage FROM vehicles WHERE id = ?', [fixture.vehicleId]))[0][0].mileage);
+    expect((await put({ color: 'แดง' })).status).toBe(200);
+    expect(await mileageNow()).toBe(80000);
+    expect((await put({ mileage: 81000 })).status).toBe(200);
+    expect(await mileageNow()).toBe(81000);
+  });
+
+  test('ฟอร์มที่ไม่มีช่องปีรถแก้ข้อมูลรถแล้ว ปีเดิมต้องไม่หาย', async () => {
+    await pool.execute('UPDATE vehicles SET year = 2015 WHERE id = ?', [fixture.vehicleId]);
+    const put = (body) => request(app).put(`/api/vehicles/${fixture.vehicleId}`).set(auth()).send({ brand: 'Toyota', model: 'Vios', ...body });
+    const yearNow = async () => (await pool.query('SELECT year FROM vehicles WHERE id = ?', [fixture.vehicleId]))[0][0].year;
+    expect((await put({})).status).toBe(200);
+    expect(await yearNow()).toBe(2015);
+    expect((await put({ year: 2018 })).status).toBe(200);
+    expect(await yearNow()).toBe(2018);
+    expect((await put({ year: null })).status).toBe(200);
+    expect(await yearNow()).toBeNull();
+  });
+
   test('จังหวัด: บันทึกตอนสร้าง/แก้รถ และตัดช่องว่าง (ว่าง = null)', async () => {
     const create = await request(app)
       .post('/api/vehicles').set(auth())

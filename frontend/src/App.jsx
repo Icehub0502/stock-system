@@ -43,6 +43,7 @@ const ModelPricesPage = lazy(() => import("./pages/ModelPricesPage"));
 const DocHeaderSettingsPage = lazy(() => import("./pages/DocHeaderSettingsPage"));
 const DailySalesSummaryPage = lazy(() => import("./pages/DailySalesSummaryPage"));
 const VehicleServiceHistoryPage = lazy(() => import("./pages/VehicleServiceHistoryPage"));
+const FollowUpPage = lazy(() => import("./pages/FollowUpPage"));
 const StockDeductionPage = lazy(() => import("./pages/StockDeductionPage"));
 const StockUsageReportPage = lazy(() => import("./pages/StockUsageReportPage"));
 const SettingsPage = lazy(() => import("./pages/SettingsPage"));
@@ -197,6 +198,14 @@ function AppRoutes() {
             element={
               <ProtectedRoute roles={["office"]}>
                 <ClaimManagementPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/follow-ups"
+            element={
+              <ProtectedRoute roles={["office"]}>
+                <FollowUpPage />
               </ProtectedRoute>
             }
           />

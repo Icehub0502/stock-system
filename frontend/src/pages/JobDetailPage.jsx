@@ -390,6 +390,12 @@ export default function JobDetailPage() {
       .finally(() => setItemsLoading(false));
   }, [job?.quotation_id]);
 
+  // A model typed here that is not in the book needs the year of the car. The name the car already carries does not
+  // count as new, so an old typed name never goes back into the book when other fields are edited.
+  const typedNewModel = Boolean(job && form?.brand?.trim() && form?.model?.trim())
+    && (form.brand.trim() !== (job.brand || '').trim() || form.model.trim() !== (job.model || '').trim())
+    && !(brands.includes(form.brand.trim()) && models.some((m) => m.model === form.model.trim() || m.display_name === form.model.trim()));
+
   function startEdit() {
     setForm({
       customer_name: job.customer_name || '',
@@ -402,6 +408,7 @@ export default function JobDetailPage() {
       mileage_in: job.mileage_in ?? '',
       queue_no: job.queue_no || '',
       symptom: job.symptom || '',
+      year: '',
     });
     if (brands.length === 0) client.get('/vehicle-models/brands').then((res) => setBrands(res.data.data || []));
     setEditing(true);
@@ -412,19 +419,24 @@ export default function JobDetailPage() {
   // ครอบคุมทั้ง 3 endpoint เพราะเป็นการแก้ไขข้อมูลอ้างอิง (ไม่ใช่ตัดสต๊อก/เงิน) ถ้า
   // ล้มเหลวกลางทางแค่กด "บันทึก" ซ้ำได้ ไม่มีผลข้างเคียงที่ต้อง rollback
   async function saveEdit() {
+    if (typedNewModel && !Number(form.year)) {
+      setError(`รุ่น ${form.model.trim()} ไม่มีในรายการ กรุณากรอกปีรถ`);
+      return;
+    }
     setSaving(true);
     setError('');
     try {
-      const brandKnown = brands.includes(form.brand.trim());
-      const modelKnown = models.some((m) => m.model === form.model.trim() || m.display_name === form.model.trim());
-      if (form.brand.trim() && form.model.trim() && (!brandKnown || !modelKnown)) {
-        await client.post('/vehicle-models', { brand: form.brand.trim(), model: form.model.trim() }).catch(() => {});
+      if (typedNewModel) {
+        await client.post('/vehicle-models', { brand: form.brand.trim(), model: form.model.trim(), year: Number(form.year) }).catch(() => {});
       }
 
       await client.put(`/customers/${job.customer_id}`, { customer_name: form.customer_name.trim(), phone: form.phone.trim() });
       await client.put(`/vehicles/${job.vehicle_id}`, {
         brand: form.brand.trim(), model: form.model.trim(), color: form.color.trim(),
-        license_plate: form.license_plate.trim().toUpperCase(), province: form.province.trim(), mileage: Number(form.mileage_in) || 0,
+        license_plate: form.license_plate.trim().toUpperCase(), province: form.province.trim(),
+        // an empty mileage on this job says nothing about the car, so the car keeps its last reading
+        ...(Number(form.mileage_in) > 0 ? { mileage: Number(form.mileage_in) } : {}),
+        ...(typedNewModel ? { year: Number(form.year) } : {}),
       });
       await client.patch(`/jobs/${id}`, {
         queue_no: form.queue_no, mileage_in: Number(form.mileage_in) || null, symptom: form.symptom,
@@ -1036,6 +1048,13 @@ export default function JobDetailPage() {
               placeholder={form.brand.trim() ? 'พิมพ์ค้นหารุ่นรถ' : 'เลือกยี่ห้อก่อน'}
               onChange={(model) => setForm((f) => ({ ...f, model }))}
             />
+
+            {typedNewModel && (
+              <>
+                <label>ปีรถ <span style={{ color: '#b91c1c' }}>* จำเป็น เพราะเป็นรุ่นใหม่</span></label>
+                <input type="number" min="1950" placeholder="เช่น 2015" value={form.year} onChange={(e) => setForm({ ...form, year: e.target.value })} />
+              </>
+            )}
 
             <label>สีรถ</label>
             <input type="text" value={form.color} onChange={(e) => setForm({ ...form, color: e.target.value })} />

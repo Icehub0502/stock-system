@@ -1,0 +1,656 @@
+{
+  "comment": "Plan for scripts/clean_vehicle_models.js. Review copy: catalog-drafts/vehicle-model-cleanup-review.xlsx",
+  "pickups": [
+    {
+      "brand": "Toyota",
+      "model": "Hilux Tiger",
+      "year_range": "1998-2004",
+      "variants": [
+        "ตัวเตี้ย 2WD",
+        "ตัวสูง 2WD",
+        "ตัวสูง 4WD"
+      ],
+      "replaces": [
+        {
+          "model": "Hilux Tiger",
+          "year_range": "1998-2004"
+        }
+      ]
+    },
+    {
+      "brand": "Toyota",
+      "model": "Hilux Vigo",
+      "year_range": "2004-2011",
+      "variants": [
+        "ตัวเตี้ย 2WD",
+        "ตัวสูง 2WD",
+        "ตัวสูง 4WD"
+      ],
+      "replaces": [
+        {
+          "model": "Hilux Vigo",
+          "year_range": "2004-2011"
+        }
+      ]
+    },
+    {
+      "brand": "Toyota",
+      "model": "Hilux Vigo Champ",
+      "year_range": "2011-2015",
+      "variants": [
+        "ตัวเตี้ย 2WD",
+        "ตัวสูง 2WD",
+        "ตัวสูง 4WD"
+      ],
+      "replaces": [
+        {
+          "model": "Hilux Vigo Champ",
+          "year_range": "2011-2015"
+        }
+      ]
+    },
+    {
+      "brand": "Toyota",
+      "model": "Hilux Revo G1",
+      "year_range": "2015-2020",
+      "variants": [
+        "ตัวเตี้ย 2WD",
+        "ตัวสูง 2WD",
+        "ตัวสูง 4WD"
+      ],
+      "replaces": [
+        {
+          "model": "Hilux Revo",
+          "year_range": "2015-2020"
+        }
+      ]
+    },
+    {
+      "brand": "Toyota",
+      "model": "Hilux Revo G2",
+      "year_range": "2020-2025",
+      "variants": [
+        "ตัวเตี้ย 2WD",
+        "ตัวสูง 2WD",
+        "ตัวสูง 4WD"
+      ],
+      "replaces": [
+        {
+          "model": "Hilux Revo",
+          "year_range": "2020-2025"
+        }
+      ]
+    },
+    {
+      "brand": "Toyota",
+      "model": "Hilux Revo G3",
+      "year_range": "2025-ปัจจุบัน",
+      "variants": [
+        "ตัวเตี้ย 2WD"
+      ],
+      "replaces": []
+    },
+    {
+      "brand": "Toyota",
+      "model": "Hilux Travo",
+      "year_range": "2025-ปัจจุบัน",
+      "variants": [
+        "ตัวสูง 2WD",
+        "ตัวสูง 4WD"
+      ],
+      "replaces": [
+        {
+          "model": "Hilux Travo",
+          "year_range": "2025-ปัจจุบัน"
+        }
+      ]
+    },
+    {
+      "brand": "Isuzu",
+      "model": "DMAX G1",
+      "year_range": "2002-2011",
+      "variants": [
+        "ตัวเตี้ย 2WD",
+        "ตัวสูง 2WD",
+        "ตัวสูง 4WD"
+      ],
+      "replaces": [
+        {
+          "model": "DMAX (เจน 1)",
+          "year_range": "2002-2011"
+        }
+      ]
+    },
+    {
+      "brand": "Isuzu",
+      "model": "DMAX G2",
+      "year_range": "2011-2019",
+      "variants": [
+        "ตัวเตี้ย 2WD",
+        "ตัวสูง 2WD",
+        "ตัวสูง 4WD"
+      ],
+      "replaces": [
+        {
+          "model": "DMAX (เจน 2)",
+          "year_range": "2011-2019"
+        }
+      ]
+    },
+    {
+      "brand": "Isuzu",
+      "model": "DMAX G3",
+      "year_range": "2019-ปัจจุบัน",
+      "variants": [
+        "ตัวเตี้ย 2WD",
+        "ตัวสูง 2WD",
+        "ตัวสูง 4WD"
+      ],
+      "replaces": [
+        {
+          "model": "DMAX (เจน 3)",
+          "year_range": "2019-ปัจจุบัน"
+        }
+      ]
+    },
+    {
+      "brand": "Ford",
+      "model": "Ranger G1",
+      "year_range": "1998-2006",
+      "variants": [
+        "ตัวเตี้ย 2WD",
+        "ตัวสูง 2WD",
+        "ตัวสูง 4WD"
+      ],
+      "replaces": [
+        {
+          "model": "Ranger G1",
+          "year_range": "1998-2006"
+        }
+      ]
+    },
+    {
+      "brand": "Ford",
+      "model": "Ranger G2",
+      "year_range": "2006-2011",
+      "variants": [
+        "ตัวเตี้ย 2WD",
+        "ตัวสูง 2WD",
+        "ตัวสูง 4WD"
+      ],
+      "replaces": [
+        {
+          "model": "Ranger G2",
+          "year_range": "2006-2011"
+        }
+      ]
+    },
+    {
+      "brand": "Ford",
+      "model": "Ranger G3",
+      "year_range": "2012-2022",
+      "variants": [
+        "ตัวเตี้ย 2WD",
+        "ตัวสูง 2WD",
+        "ตัวสูง 4WD"
+      ],
+      "replaces": [
+        {
+          "model": "Ranger T6",
+          "year_range": "2012-2018"
+        }
+      ]
+    },
+    {
+      "brand": "Ford",
+      "model": "Ranger G4",
+      "year_range": "2022-ปัจจุบัน",
+      "variants": [
+        "ตัวเตี้ย 2WD",
+        "ตัวสูง 2WD",
+        "ตัวสูง 4WD"
+      ],
+      "replaces": [
+        {
+          "model": "Ranger (เจน 3/T6.2)",
+          "year_range": "2022-ปัจจุบัน"
+        }
+      ]
+    },
+    {
+      "brand": "Mitsubishi",
+      "model": "Triton G1",
+      "year_range": "2005-2014",
+      "variants": [
+        "ตัวเตี้ย 2WD",
+        "ตัวสูง 2WD",
+        "ตัวสูง 4WD"
+      ],
+      "replaces": [
+        {
+          "model": "Triton (เจน 1-2)",
+          "year_range": "2005-2014"
+        }
+      ]
+    },
+    {
+      "brand": "Mitsubishi",
+      "model": "Triton G2",
+      "year_range": "2015-2023",
+      "variants": [
+        "ตัวเตี้ย 2WD",
+        "ตัวสูง 2WD",
+        "ตัวสูง 4WD"
+      ],
+      "replaces": [
+        {
+          "model": "Triton (เจน 3)",
+          "year_range": "2015-2023"
+        }
+      ]
+    },
+    {
+      "brand": "Mitsubishi",
+      "model": "Triton G3",
+      "year_range": "2024-ปัจจุบัน",
+      "variants": [
+        "ตัวเตี้ย 2WD",
+        "ตัวสูง 2WD",
+        "ตัวสูง 4WD"
+      ],
+      "replaces": [
+        {
+          "model": "Triton (เจน 4)",
+          "year_range": "2024-ปัจจุบัน"
+        }
+      ]
+    },
+    {
+      "brand": "Nissan",
+      "model": "Navara D22",
+      "year_range": "1997-2007",
+      "variants": [
+        "ตัวเตี้ย 2WD",
+        "ตัวสูง 2WD",
+        "ตัวสูง 4WD"
+      ],
+      "replaces": [
+        {
+          "model": "Frontier / Navara D22",
+          "year_range": "1997-2007"
+        }
+      ]
+    },
+    {
+      "brand": "Nissan",
+      "model": "Navara D40",
+      "year_range": "2007-2014",
+      "variants": [
+        "ตัวเตี้ย 2WD",
+        "ตัวสูง 2WD",
+        "ตัวสูง 4WD"
+      ],
+      "replaces": [
+        {
+          "model": "Navara D40",
+          "year_range": "2007-2014"
+        }
+      ]
+    },
+    {
+      "brand": "Nissan",
+      "model": "Navara NP300",
+      "year_range": "2014-2021",
+      "variants": [
+        "ตัวเตี้ย 2WD",
+        "ตัวสูง 2WD",
+        "ตัวสูง 4WD"
+      ],
+      "replaces": [
+        {
+          "model": "Navara NP300",
+          "year_range": "2014-2021"
+        }
+      ]
+    },
+    {
+      "brand": "Nissan",
+      "model": "Navara G4",
+      "year_range": "2021-ปัจจุบัน",
+      "variants": [
+        "ตัวเตี้ย 2WD",
+        "ตัวสูง 2WD",
+        "ตัวสูง 4WD"
+      ],
+      "replaces": [
+        {
+          "model": "Navara (โฉมปัจจุบัน)",
+          "year_range": "2021-ปัจจุบัน"
+        }
+      ]
+    },
+    {
+      "brand": "Mazda",
+      "model": "BT50 G1",
+      "year_range": "2006-2011",
+      "variants": [
+        "ตัวเตี้ย 2WD",
+        "ตัวสูง 2WD",
+        "ตัวสูง 4WD"
+      ],
+      "replaces": [
+        {
+          "model": "BT50 (เจน 1)",
+          "year_range": "2006-2011"
+        }
+      ]
+    },
+    {
+      "brand": "Mazda",
+      "model": "BT50 G2",
+      "year_range": "2012-2020",
+      "variants": [
+        "ตัวเตี้ย 2WD",
+        "ตัวสูง 2WD",
+        "ตัวสูง 4WD"
+      ],
+      "replaces": [
+        {
+          "model": "BT50 Pro",
+          "year_range": "2012-2020"
+        }
+      ]
+    },
+    {
+      "brand": "Mazda",
+      "model": "BT50 G3",
+      "year_range": "2021-ปัจจุบัน",
+      "variants": [
+        "ตัวเตี้ย 2WD",
+        "ตัวสูง 2WD",
+        "ตัวสูง 4WD"
+      ],
+      "replaces": [
+        {
+          "model": "BT50 (เจน 3)",
+          "year_range": "2021-ปัจจุบัน"
+        }
+      ]
+    },
+    {
+      "brand": "Chevrolet",
+      "model": "Colorado G1",
+      "year_range": "2004-2011",
+      "variants": [
+        "ตัวเตี้ย 2WD",
+        "ตัวสูง 2WD",
+        "ตัวสูง 4WD"
+      ],
+      "replaces": [
+        {
+          "model": "Colorado G1",
+          "year_range": "2004-2011"
+        }
+      ]
+    },
+    {
+      "brand": "Chevrolet",
+      "model": "Colorado G2",
+      "year_range": "2011-2020",
+      "variants": [
+        "ตัวเตี้ย 2WD",
+        "ตัวสูง 2WD",
+        "ตัวสูง 4WD"
+      ],
+      "replaces": [
+        {
+          "model": "Colorado G2",
+          "year_range": "2011-2020"
+        }
+      ]
+    }
+  ],
+  "renames": [
+    {
+      "brand": "Ford",
+      "model": "Escape",
+      "year_range": "2003-2008",
+      "new_model": "Escape G1"
+    },
+    {
+      "brand": "Ford",
+      "model": "Escape",
+      "year_range": "2008-2012",
+      "new_model": "Escape G2"
+    },
+    {
+      "brand": "Ford",
+      "model": "Everest (เจน 1)",
+      "year_range": "2003-2015",
+      "new_model": "Everest G1"
+    },
+    {
+      "brand": "Ford",
+      "model": "Everest (เจน 2)",
+      "year_range": "2015-2022",
+      "new_model": "Everest G2"
+    },
+    {
+      "brand": "Ford",
+      "model": "Everest (เจน 3)",
+      "year_range": "2022-ปัจจุบัน",
+      "new_model": "Everest G3"
+    },
+    {
+      "brand": "Ford",
+      "model": "Laser",
+      "year_range": "1990-1994",
+      "new_model": "Laser G1"
+    },
+    {
+      "brand": "Ford",
+      "model": "Laser",
+      "year_range": "1994-1999",
+      "new_model": "Laser G2"
+    },
+    {
+      "brand": "Ford",
+      "model": "Laser",
+      "year_range": "1999-2002",
+      "new_model": "Laser G3"
+    },
+    {
+      "brand": "Isuzu",
+      "model": "MUX (เจน 1)",
+      "year_range": "2013-2020",
+      "new_model": "MUX G1"
+    },
+    {
+      "brand": "Isuzu",
+      "model": "MUX (เจน 2)",
+      "year_range": "2021-ปัจจุบัน",
+      "new_model": "MUX G2"
+    },
+    {
+      "brand": "Mazda",
+      "model": "Mazda2 (เจน 1)",
+      "year_range": "2007-2014",
+      "new_model": "Mazda2 G1"
+    },
+    {
+      "brand": "Mazda",
+      "model": "Mazda2 (เจน 2/Skyactiv)",
+      "year_range": "2014-ปัจจุบัน",
+      "new_model": "Mazda2 G2"
+    },
+    {
+      "brand": "Mazda",
+      "model": "Mazda3 (เจน 3)",
+      "year_range": "2014-2019",
+      "new_model": "Mazda3 G3"
+    },
+    {
+      "brand": "Mazda",
+      "model": "Mazda3 (เจน 4/Skyactiv)",
+      "year_range": "2019-ปัจจุบัน",
+      "new_model": "Mazda3 G4"
+    },
+    {
+      "brand": "Mitsubishi",
+      "model": "Attrage (เจน 1)",
+      "year_range": "2013-2019",
+      "new_model": "Attrage G1"
+    },
+    {
+      "brand": "Mitsubishi",
+      "model": "Attrage (เจน 2)",
+      "year_range": "2020-ปัจจุบัน",
+      "new_model": "Attrage G2"
+    },
+    {
+      "brand": "Mitsubishi",
+      "model": "Mirage (เจน 1)",
+      "year_range": "2012-2019",
+      "new_model": "Mirage G1"
+    },
+    {
+      "brand": "Mitsubishi",
+      "model": "Mirage (เจน 2)",
+      "year_range": "2020-ปัจจุบัน",
+      "new_model": "Mirage G2"
+    },
+    {
+      "brand": "Mitsubishi",
+      "model": "Pajero Sport (เจน 1)",
+      "year_range": "2008-2015",
+      "new_model": "Pajero Sport G1"
+    },
+    {
+      "brand": "Mitsubishi",
+      "model": "Pajero Sport (เจน 2)",
+      "year_range": "2015-ปัจจุบัน",
+      "new_model": "Pajero Sport G2"
+    },
+    {
+      "brand": "Mitsubishi",
+      "model": "Space Wagon",
+      "year_range": "1991-1998",
+      "new_model": "Space Wagon G1"
+    },
+    {
+      "brand": "Mitsubishi",
+      "model": "Space Wagon",
+      "year_range": "1998-2004",
+      "new_model": "Space Wagon G2"
+    },
+    {
+      "brand": "Nissan",
+      "model": "Almera (เจน 1)",
+      "year_range": "2011-2019",
+      "new_model": "Almera G1"
+    },
+    {
+      "brand": "Nissan",
+      "model": "Almera (เจน 2 เทอร์โบ)",
+      "year_range": "2019-ปัจจุบัน",
+      "new_model": "Almera G2"
+    },
+    {
+      "brand": "Nissan",
+      "model": "XTrail e-Power (เจน 4)",
+      "year_range": "2023-ปัจจุบัน",
+      "new_model": "XTrail e-Power G4"
+    },
+    {
+      "brand": "Toyota",
+      "model": "Yaris",
+      "year_range": "2006-2013",
+      "new_model": "Yaris G1"
+    },
+    {
+      "brand": "Toyota",
+      "model": "Yaris",
+      "year_range": "2013-ปัจจุบัน",
+      "new_model": "Yaris G2"
+    }
+  ],
+  "moves": [
+    {
+      "brand": "Honda",
+      "model": "Accord G9",
+      "year_range": null,
+      "to_model": "Accord G9",
+      "to_year_range": "2013-2018"
+    },
+    {
+      "brand": "Honda",
+      "model": "CR-V G3",
+      "year_range": null,
+      "to_model": "CRV G3",
+      "to_year_range": "2006-2011"
+    },
+    {
+      "brand": "Toyota",
+      "model": "Altis 08",
+      "year_range": null,
+      "to_model": "Corolla Altis G2",
+      "to_year_range": "2008-2014"
+    },
+    {
+      "brand": "Toyota",
+      "model": "Camry ACV50",
+      "year_range": null,
+      "to_model": "Camry ASV50",
+      "to_year_range": "2012-2018"
+    },
+    {
+      "brand": "Toyota",
+      "model": "Vios 08",
+      "year_range": null,
+      "to_model": "Vios G2",
+      "to_year_range": "2007-2013"
+    },
+    {
+      "brand": "Toyota",
+      "model": "Vios14",
+      "year_range": null,
+      "to_model": "Vios / Yaris Ativ G3",
+      "to_year_range": "2013-2022"
+    },
+    {
+      "brand": "Isuzu",
+      "model": "D-max 2022 เตี้ย",
+      "year_range": null,
+      "to_model": "DMAX G3 ตัวเตี้ย 2WD",
+      "to_year_range": "2019-ปัจจุบัน"
+    },
+    {
+      "brand": "Toyota",
+      "model": "Corolla Altis 08",
+      "year_range": "2008-2013",
+      "to_model": "Corolla Altis G2",
+      "to_year_range": "2008-2014"
+    },
+    {
+      "brand": "Toyota",
+      "model": "Corolla Altis 2013",
+      "year_range": "2008-2013",
+      "to_model": "Corolla Altis G2",
+      "to_year_range": "2008-2014"
+    },
+    {
+      "brand": "Toyota",
+      "model": "Corolla Altis 14",
+      "year_range": "2015-2019",
+      "to_model": "Corolla Altis G3",
+      "to_year_range": "2015-2019"
+    },
+    {
+      "brand": "Toyota",
+      "model": "Corolla Altis 2017",
+      "year_range": "2014-2019",
+      "to_model": "Corolla Altis G3",
+      "to_year_range": "2015-2019"
+    }
+  ]
+}

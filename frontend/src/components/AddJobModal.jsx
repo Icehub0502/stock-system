@@ -76,6 +76,9 @@ function CarForm({
   const matchedVehicle = useMemo(() => findVehicle(vehicles, car.plate, car.province), [vehicles, car.plate, car.province]);
   const plateAmbiguous = !car.province.trim() && plateCandidates(vehicles, car.plate).length > 1;
   const savedChannel = knownChannel(matchedVehicle, prefill);
+  // a model that is not in the book needs the year of the car (see POST /vehicle-models)
+  const modelIsNew = !matchedVehicle && !(prefill && index === 0) && Boolean(car.brand.trim()) && Boolean(car.model.trim())
+    && !models.some((m) => m.model === car.model.trim() || m.display_name === car.model.trim());
 
   useEffect(() => {
     if (!car.brand.trim()) { setModels([]); return; }
@@ -88,6 +91,7 @@ function CarForm({
     if (!matchedVehicle) return;
     onChange({
       customerName: matchedVehicle.customer_name || '',
+      phone: matchedVehicle.phone || '',
       brand: matchedVehicle.brand || '',
       model: matchedVehicle.model || '',
       color: matchedVehicle.color || '',
@@ -274,7 +278,7 @@ function CarForm({
           <input type="text" value={car.color} onChange={(e) => onChange({ color: e.target.value })} />
         </div>
         <div className="ajm-field">
-          <label>ปีรถ <small>(ไม่บังคับ)</small></label>
+          <label>ปีรถ {modelIsNew ? <span style={{ color: '#b91c1c' }}>* จำเป็น เพราะเป็นรุ่นใหม่</span> : <small>(ไม่บังคับ)</small>}</label>
           <input type="number" min="1990" max="2100" placeholder="เช่น 2015" value={car.year} onChange={(e) => onChange({ year: e.target.value })} />
         </div>
         <div className="ajm-field">
@@ -372,6 +376,16 @@ export default function AddJobModal({ onClose, onCreated, prefill = null }) {
 
   const removeCar = (key) => setCars((prev) => prev.filter((c) => c.key !== key));
 
+  const isSavedCar = (car, isFirst) => Boolean(findVehicle(vehicles, car.plate, car.province))
+    || Boolean(isFirst && prefill && car.plate.trim().toUpperCase() === (prefill.license_plate || '').trim().toUpperCase());
+
+  // false only when the book answered and does not list this model (a failed lookup must not block the queue)
+  async function modelInBook(brand, model) {
+    if (!brands.includes(brand)) return false;
+    const res = await client.get('/vehicle-models/models', { params: { brand } }).catch(() => null);
+    return res ? (res.data.data || []).some((m) => m.model === model || m.display_name === model) : true;
+  }
+
   // สร้างลูกค้า/รถ (ถ้ายังไม่มี) แล้วสร้างคิวของรถหนึ่งคัน — คืน id ของงานที่สร้าง
   // customerCache: ลูกค้าที่สร้างไปแล้วในรอบเดียวกัน (ชื่อ+เบอร์ตรงกัน) ใช้ซ้ำ ไม่สร้างลูกค้าซ้ำ
   async function createOneJob(car, isFirst, customerCache) {
@@ -402,14 +416,8 @@ export default function AddJobModal({ onClose, onCreated, prefill = null }) {
       // ยังสร้างรถ/รับเข้าคิวต่อได้ปกติ แค่ครั้งหน้าจะไม่เด้งเป็นตัวเลือกให้)
       const brand = car.brand.trim();
       const model = car.model.trim();
-      const brandKnown = brands.includes(brand);
-      let modelKnown = false;
-      if (brandKnown) {
-        const res = await client.get('/vehicle-models/models', { params: { brand } }).catch(() => null);
-        modelKnown = !!res?.data?.data?.some((m) => m.model === model || m.display_name === model);
-      }
-      if (!brandKnown || !modelKnown) {
-        await client.post('/vehicle-models', { brand, model }).catch(() => {});
+      if (!(await modelInBook(brand, model))) {
+        await client.post('/vehicle-models', { brand, model, year: Number(car.year) }).catch(() => {});
       }
 
       const vehRes = await client.post('/vehicles', {
@@ -426,8 +434,9 @@ export default function AddJobModal({ onClose, onCreated, prefill = null }) {
         province,
       }).catch(() => {});
     }
-    if (hadVehicle && name !== (matchedVehicle?.customer_name ?? prefill?.customer_name)) {
-      // แก้ชื่อลูกค้าตรงนี้ก่อนบันทึก (พิมพ์ทับค่าที่เติมมาให้อัตโนมัติ) — อัปเดต
+    const savedPhone = ((matchedVehicle ? matchedVehicle.phone : prefill?.phone) || '').trim();
+    if (hadVehicle && (name !== (matchedVehicle?.customer_name ?? prefill?.customer_name) || phone !== savedPhone)) {
+      // แก้ชื่อหรือเบอร์ลูกค้าตรงนี้ก่อนบันทึก (พิมพ์ทับค่าที่เติมมาให้อัตโนมัติ) — อัปเดต
       // ลูกค้าเดิมไปด้วยเลย กันข้อมูลไม่ตรงกันระหว่างตารางลูกค้ากับที่กรอกจริง
       await client.put(`/customers/${customerId}`, { customer_name: name, phone }).catch(() => {});
     }
@@ -461,6 +470,9 @@ export default function AddJobModal({ onClose, onCreated, prefill = null }) {
       if (seenPlates.has(plate)) return setError(`${label}ทะเบียน ${c.plate.trim().toUpperCase()} ซ้ำกับคันก่อนหน้าในรอบนี้`);
       seenPlates.add(plate);
       if (!c.brand.trim() || !c.model.trim()) return setError(`${label}กรุณากรอกยี่ห้อและรุ่นรถ`);
+      if (!Number(c.year) && !isSavedCar(c, i === 0) && !(await modelInBook(c.brand.trim(), c.model.trim()))) {
+        return setError(`${label}รุ่น ${c.model.trim()} ไม่มีในรายการ กรุณากรอกปีรถ`);
+      }
       if (!knownChannel(findVehicle(vehicles, c.plate, c.province), i === 0 ? prefill : null)) {
         if (!c.foundVia) return setError(`${label}กรุณาเลือกช่องทางที่ลูกค้าเจอเรา`);
         if (c.foundVia === 'other' && !c.foundViaNote.trim()) return setError(`${label}กรุณาระบุช่องทางที่ลูกค้าเจอเรา`);

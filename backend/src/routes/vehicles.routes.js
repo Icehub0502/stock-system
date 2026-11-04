@@ -22,7 +22,7 @@ const INVALID_PROVINCE = { error: 'จังหวัดไม่ถูกต้
 router.get('/', requireRole('office'), async (req, res) => {
   try {
     const [rows] = await pool.execute(
-      `SELECT v.*, c.customer_name, c.customer_code, c.found_via
+      `SELECT v.*, c.customer_name, c.customer_code, c.phone, c.found_via
        FROM vehicles v
        JOIN customers c ON v.customer_id = c.id
        WHERE v.shop_id = ?
@@ -153,8 +153,16 @@ router.put('/:id', requireRole('office'), async (req, res) => {
   if (cleanProvince(province) === undefined) return res.status(400).json(INVALID_PROVINCE);
   try {
     const [result] = await pool.execute(
-      `UPDATE vehicles SET brand = ?, model = ?, color = ?, license_plate = ?, province = ?, mileage = ?, year = ? WHERE id = ? AND shop_id = ?`,
-      [brand, model, color || null, license_plate || null, cleanProvince(province), Number(mileage) || 0, Number(year) || null, req.params.id, req.shopId]
+      // a form that does not send the year or the mileage leaves them as they are on the car
+      `UPDATE vehicles SET brand = ?, model = ?, color = ?, license_plate = ?, province = ?,
+         mileage = ${mileage === undefined ? 'mileage' : '?'}, year = ${year === undefined ? 'year' : '?'}
+       WHERE id = ? AND shop_id = ?`,
+      [
+        brand, model, color || null, license_plate || null, cleanProvince(province),
+        ...(mileage === undefined ? [] : [Number(mileage) || 0]),
+        ...(year === undefined ? [] : [Number(year) || null]),
+        req.params.id, req.shopId,
+      ]
     );
     if (result.affectedRows === 0) {
       return res.status(404).json({ error: 'ไม่พบรถ' });

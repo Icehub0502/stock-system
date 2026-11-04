@@ -1196,6 +1196,9 @@ async function initDatabase() {
   // parts suppliers and the cost of what is received (see supplierSchema.js)
   await require('./supplierSchema').migrateSuppliers(conn);
 
+  // customer cases on top of claims: type, status, how it was fixed, follow-up calls (see claimCaseSchema.js)
+  await require('./claimCaseSchema').migrateClaimCases(conn);
+
   // Manager page starts from zero on 2026-10-30: only cars / quotations / deposits from that day on are counted
   // (INSERT IGNORE: a cutoff that is already stored is never moved)
   await conn.query("INSERT IGNORE INTO app_settings (shop_id, `key`, value) SELECT id, 'manager_page_since', '2026-10-30' FROM shops");

@@ -1,13 +1,22 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import client from '../api/client';
+import { todayStr } from '../utils/format';
+import { formatDateTh } from '../utils/dateGroups';
+import { CASE_TYPE_LABEL, OUTCOME_LABEL, addDays, addOneMonth } from '../utils/claimCases';
 
-// ฟอร์มเคลม — บันทึกอิสระ ไม่ผูกกับใบเสร็จ/ใบเสนอราคาเดิม (เจ้าของร้านยืนยันแล้ว)
-// แค่เลือกลูกค้า+รถที่มีอยู่แล้วในระบบ (รถที่เคยซ่อมมาก่อน ไม่ใช่รถใหม่ จึงไม่มี
-// โหมด "เพิ่มลูกค้า/รถใหม่" แบบ AddJobModal.jsx) แล้วบันทึกอาการที่เคลม + รายการ
-// อะไหล่ที่เปลี่ยน — 2 ขั้นตอนในโมดัลเดียว มิเรอร์ step state ของ RepairNoticePage.jsx
-// (ค้นหารถ → กรอกรายละเอียด) แต่เป็น modal ไม่ใช่หน้าเต็ม
+// ฟอร์มเคส (มาแก้งาน/เคลมอะไหล่) — เลือกลูกค้า+รถที่มีอยู่แล้วในระบบ (รถที่เคยซ่อมมาก่อน
+// ไม่ใช่รถใหม่ จึงไม่มีโหมด "เพิ่มลูกค้า/รถใหม่" แบบ AddJobModal.jsx) แล้วบันทึกอาการ สิ่งที่
+// ตรวจพบ วิธีแก้ และอะไหล่ที่เปลี่ยน มาแก้งานเฉย ๆ ไม่มีอะไหล่ก็บันทึกได้ บิลต้นเหตุเลือกหรือ
+// ไม่เลือกก็ได้ ตั้งวันติดตามผลได้เมื่อกรอกวิธีแก้แล้ว — 2 ขั้นตอนในโมดัลเดียว มิเรอร์ step state
+// ของ RepairNoticePage.jsx (ค้นหารถ → กรอกรายละเอียด) แต่เป็น modal ไม่ใช่หน้าเต็ม
 //
 // claim: null = สร้างใหม่, object = แก้ไขเคลมเดิม (มาจาก GET /claims/:id)
+const FOLLOW_UP_CHOICES = [
+  { value: 'week', label: 'อีก 1 สัปดาห์' },
+  { value: 'month', label: 'อีก 1 เดือน' },
+  { value: 'custom', label: 'เลือกวันเอง' },
+];
+
 export default function ClaimFormModal({ claim, onClose, onSaved }) {
   const isEdit = Boolean(claim?.id);
   const [step, setStep] = useState(isEdit ? 'details' : 'vehicle');
@@ -34,9 +43,19 @@ export default function ClaimFormModal({ claim, onClose, onSaved }) {
       : null
   );
 
-  const [claimDate, setClaimDate] = useState(claim?.claim_date ? claim.claim_date.slice(0, 10) : new Date().toISOString().slice(0, 10));
+  const [claimDate, setClaimDate] = useState(claim?.claim_date ? claim.claim_date.slice(0, 10) : todayStr());
   const [symptom, setSymptom] = useState(claim?.symptom || '');
   const [remark, setRemark] = useState(claim?.remark || '');
+  const [caseType, setCaseType] = useState(claim?.case_type || 'rework');
+  const [sourceReceiptId, setSourceReceiptId] = useState(claim?.source_receipt_id ? String(claim.source_receipt_id) : '');
+  const [finding, setFinding] = useState(claim?.finding || '');
+  const [resolution, setResolution] = useState(claim?.resolution || '');
+  const [followUpChoice, setFollowUpChoice] = useState('');
+  const [followUpCustom, setFollowUpCustom] = useState('');
+  const pendingFollowUp = (claim?.follow_ups || []).find((f) => !f.done_at);
+  const isClosed = claim?.status === 'closed';
+  const [carBills, setCarBills] = useState([]);
+  const [similarCases, setSimilarCases] = useState([]);
 
   const [catalogParts, setCatalogParts] = useState([]);
   const [catalogLoading, setCatalogLoading] = useState(false);
@@ -53,6 +72,8 @@ export default function ClaimFormModal({ claim, onClose, onSaved }) {
     });
     return seeded;
   });
+  // a come-back usually has no parts, so the long parts list opens only when it is wanted
+  const [partsWanted, setPartsWanted] = useState(false);
   const [showAddCustom, setShowAddCustom] = useState(false);
   const [customName, setCustomName] = useState('');
 
@@ -65,6 +86,18 @@ export default function ClaimFormModal({ claim, onClose, onSaved }) {
       .catch(() => {})
       .finally(() => setCatalogLoading(false));
   }, []);
+
+  // บิลของรถคันนี้ (ให้เลือกบิลต้นเหตุ) และเคสเก่าของรุ่นเดียวกันที่เคยแก้ไว้ (เป็นแนวทาง)
+  const selectedVehicleId = selectedVehicle?.vehicle_id;
+  useEffect(() => {
+    if (!selectedVehicleId) return;
+    client.get(`/vehicle-history/${selectedVehicleId}`)
+      .then((res) => setCarBills(res.data.data.visits || []))
+      .catch(() => setCarBills([]));
+    client.get('/claims/similar', { params: { vehicle_id: selectedVehicleId, exclude: claim?.id } })
+      .then((res) => setSimilarCases(res.data.data || []))
+      .catch(() => setSimilarCases([]));
+  }, [selectedVehicleId, claim?.id]);
 
   const catalogCategories = useMemo(() => {
     const seen = new Set();
@@ -161,6 +194,20 @@ export default function ClaimFormModal({ claim, onClose, onSaved }) {
       setError('กรุณาเลือกรถก่อน');
       return;
     }
+    let followUpDate = null;
+    if (followUpChoice === 'week') followUpDate = addDays(todayStr(), 7);
+    if (followUpChoice === 'month') followUpDate = addOneMonth(todayStr());
+    if (followUpChoice === 'custom') {
+      if (!followUpCustom) {
+        setError('กรุณาเลือกวันที่ติดตามผล');
+        return;
+      }
+      followUpDate = followUpCustom;
+    }
+    if (followUpDate && !resolution.trim()) {
+      setError('กรุณากรอกวิธีแก้ก่อนตั้งวันติดตามผล');
+      return;
+    }
     setSaving(true);
     setError('');
     try {
@@ -170,6 +217,11 @@ export default function ClaimFormModal({ claim, onClose, onSaved }) {
         claim_date: claimDate,
         symptom: symptom.trim() || null,
         remark: remark.trim() || null,
+        case_type: caseType,
+        source_receipt_id: sourceReceiptId || null,
+        finding: finding.trim() || null,
+        resolution: resolution.trim() || null,
+        ...(followUpDate ? { follow_up_date: followUpDate } : {}),
         items: itemsList.map(([, it]) => ({
           product_name: it.product_name,
           quantity: it.quantity,
@@ -193,13 +245,13 @@ export default function ClaimFormModal({ claim, onClose, onSaved }) {
     <div className="modal-backdrop" onClick={onClose}>
       <div className="modal-card large" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h2>{isEdit ? `แก้ไขเคลม ${claim.claim_no}` : 'เพิ่มเคลมใหม่'}</h2>
+          <h2>{isEdit ? `แก้ไขเคส ${claim.claim_no}` : 'เปิดเคสใหม่'}</h2>
           <button className="btn-close" onClick={onClose}>✕</button>
         </div>
 
         {step === 'vehicle' ? (
           <div className="modal-form">
-            <p className="subtitle">ค้นหารถของลูกค้าที่มาเคลม (ทะเบียนรถ, ชื่อลูกค้า, หรือเบอร์โทร)</p>
+            <p className="subtitle">ค้นหารถของลูกค้าที่กลับมา (ทะเบียนรถ, ชื่อลูกค้า, หรือเบอร์โทร)</p>
             <input
               autoFocus
               type="text"
@@ -245,19 +297,89 @@ export default function ClaimFormModal({ claim, onClose, onSaved }) {
               )}
             </div>
 
+            {isClosed && (
+              <div className="fu-closed">
+                <strong>เคสนี้ปิดแล้ว</strong>
+                {claim.outcome ? ` · ${OUTCOME_LABEL[claim.outcome]}` : ''}
+                {claim.closed_by ? ` · ปิดโดย ${claim.closed_by}` : ''}
+                {claim.closed_at ? ` · ${formatDateTh(String(claim.closed_at).slice(0, 10))}` : ''}
+                {claim.lesson && <div><strong>แนวทางครั้งหน้า:</strong> {claim.lesson}</div>}
+                <div className="vh-muted">ถ้าปัญหากลับมา ผู้จัดการกด "เปิดเคสใหม่" ในรายการเคสเพื่อทำต่อและตั้งการติดตามผล</div>
+              </div>
+            )}
+
+            {similarCases.length > 0 && (
+              <details className="fu-similar">
+                <summary>เคยมีเคสของรุ่นนี้ {similarCases.length} เคส ดูวิธีแก้เป็นแนวทาง</summary>
+                {similarCases.map((c) => (
+                  <div key={c.id} className="fu-similar-item">
+                    <div className="vh-muted">
+                      {c.claim_no} · {formatDateTh(c.claim_date)}
+                      {c.outcome ? ` · ${OUTCOME_LABEL[c.outcome]}` : ''}
+                    </div>
+                    {c.symptom && <div><strong>อาการ:</strong> {c.symptom}</div>}
+                    {c.finding && <div><strong>ตรวจพบ:</strong> {c.finding}</div>}
+                    <div><strong>วิธีแก้:</strong> {c.resolution}</div>
+                    {c.lesson && <div><strong>แนวทาง:</strong> {c.lesson}</div>}
+                  </div>
+                ))}
+              </details>
+            )}
+
             <div className="form-group">
-              <label>วันที่เคลม</label>
+              <label>ประเภทเคส</label>
+              <select value={caseType} onChange={(e) => setCaseType(e.target.value)}>
+                {Object.entries(CASE_TYPE_LABEL).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+              </select>
+            </div>
+            <div className="form-group">
+              <label>วันที่รถเข้ามา</label>
               <input type="date" value={claimDate} onChange={(e) => setClaimDate(e.target.value)} />
             </div>
             <div className="form-group">
-              <label>อาการ/สิ่งที่เคลม</label>
+              <label>บิลต้นเหตุ (ไม่บังคับ)</label>
+              <select value={sourceReceiptId} onChange={(e) => setSourceReceiptId(e.target.value)}>
+                <option value="">ไม่ระบุ</option>
+                {carBills.map((b) => (
+                  <option key={b.receipt_id} value={b.receipt_id}>{b.receipt_no} · {formatDateTh(b.date)}</option>
+                ))}
+              </select>
+            </div>
+            <div className="form-group">
+              <label>อาการที่ลูกค้าแจ้ง</label>
               <textarea rows={2} value={symptom} onChange={(e) => setSymptom(e.target.value)} placeholder="เช่น แร็คพวงมาลัยมีเสียงหลังเปลี่ยน" />
             </div>
+            <div className="form-group">
+              <label>สิ่งที่ตรวจพบ</label>
+              <textarea rows={2} value={finding} onChange={(e) => setFinding(e.target.value)} placeholder="เช่น น็อตยึดหลวม" />
+            </div>
+            <div className="form-group">
+              <label>วิธีแก้</label>
+              <textarea rows={2} value={resolution} onChange={(e) => setResolution(e.target.value)} placeholder="เช่น ขันน็อตใหม่ตามค่าทอร์ค แล้วลองขับ" />
+            </div>
+            {!isClosed && (
+              <div className="form-group">
+                <label>
+                  ติดตามผล
+                  {pendingFollowUp ? ` (นัดโทร ${formatDateTh(pendingFollowUp.scheduled_date)})` : ''}
+                </label>
+                <select value={followUpChoice} onChange={(e) => setFollowUpChoice(e.target.value)}>
+                  <option value="">{pendingFollowUp ? 'คงวันเดิม' : 'ยังไม่ตั้ง (ยังแก้ไม่เสร็จ)'}</option>
+                  {FOLLOW_UP_CHOICES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
+                </select>
+                {followUpChoice === 'custom' && (
+                  <input type="date" min={todayStr()} value={followUpCustom} onChange={(e) => setFollowUpCustom(e.target.value)} aria-label="วันที่ติดตามผล" />
+                )}
+              </div>
+            )}
             <div className="form-group">
               <label>หมายเหตุ</label>
               <textarea rows={2} value={remark} onChange={(e) => setRemark(e.target.value)} />
             </div>
 
+            {!(partsWanted || caseType === 'parts_claim' || itemsList.length > 0) ? (
+              <button type="button" className="btn btn-secondary" onClick={() => setPartsWanted(true)}>+ มีอะไหล่ที่เปลี่ยน</button>
+            ) : (
             <div className="jdp-part-picker">
               {itemsList.length > 0 && (
                 <div className="jdp-selected-list">
@@ -345,10 +467,11 @@ export default function ClaimFormModal({ claim, onClose, onSaved }) {
                 )}
               </div>
             </div>
+            )}
 
             <div className="modal-actions">
               <button type="button" className="btn btn-primary" onClick={handleSave} disabled={saving}>
-                {saving ? 'กำลังบันทึก...' : isEdit ? 'บันทึกการแก้ไข' : 'บันทึกเคลม'}
+                {saving ? 'กำลังบันทึก...' : isEdit ? 'บันทึกการแก้ไข' : 'บันทึกเคส'}
               </button>
               <button type="button" className="btn btn-secondary" onClick={onClose}>ยกเลิก</button>
             </div>
