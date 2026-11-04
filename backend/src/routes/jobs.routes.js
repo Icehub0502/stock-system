@@ -6,8 +6,10 @@ const { trashDelete } = require('../utils/trash');
 const {
   isValidJobStatus,
   CLOSED_STATUSES,
+  QUOTATION_RELEASED_STATUSES,
   MAIN_PATH,
 } = require('../utils/jobStatusFlow');
+const { closeWaitingJobs } = require('../utils/jobQuotationSync');
 const { ALIGN_BAY, isValidBay } = require('../utils/workBays');
 const { generateJobNo } = require('../utils/generateJobNo');
 const { foundViaProblem } = require('../utils/foundVia');
@@ -325,17 +327,19 @@ router.post('/', async (req, res) => {
         return res.status(400).json({ error: 'ไม่พบใบเสนอราคาที่จะผูก' });
       }
       // บล็อกเฉพาะกรณีที่ยังมีงาน "เปิดอยู่" ผูกใบนี้ค้างอยู่ — ใบที่ลูกค้ามัดจำแล้ว
-      // ขับรถกลับไปก่อน (งานเดิมจบเป็น carout) ต้องรับรถกลับเข้าคิวใหม่ได้เมื่อถึงวันนัด
+      // ขับรถกลับไปก่อน (งานเดิมจบเป็น carout) หรือกด "นัดวันมาทำ" ไว้ (งานเดิมเป็น scheduled)
+      // ต้องรับรถกลับเข้าคิวใหม่ได้เมื่อถึงวันนัด
       const [[existingLink]] = await conn.query(
         `SELECT id FROM jobs
-         WHERE shop_id = ? AND quotation_id = ? AND status NOT IN (${[...CLOSED_STATUSES, 'rejected'].map(() => '?').join(',')})
+         WHERE shop_id = ? AND quotation_id = ? AND status NOT IN (${QUOTATION_RELEASED_STATUSES.map(() => '?').join(',')})
          LIMIT 1`,
-        [req.shopId, quotation_id, ...CLOSED_STATUSES, 'rejected']
+        [req.shopId, quotation_id, ...QUOTATION_RELEASED_STATUSES]
       );
       if (existingLink) {
         await conn.rollback();
         return res.status(400).json({ error: 'ใบเสนอราคานี้มีงานที่กำลังดำเนินการอยู่แล้ว' });
       }
+      await closeWaitingJobs(conn, req.shopId, quotation_id, req.user.id);
       // ลูกค้ามารับงานจริงวันนี้แล้ว — ย้าย quotation_date มาเป็นวันที่รับรถเข้าคิว
       // เหมือนกับ matchedScheduled ใน lineWebhook.routes.js (เหตุผลเดียวกัน: ไม่งั้นใบ
       // จะค้างวันที่เดิม ทำให้จุดอื่นที่ค้นด้วยเลขคิว+วันที่วันนี้ เช่นบอทกลุ่ม "รายการ"

@@ -6,6 +6,7 @@ const { formatPhone } = require('../utils/parseLineQueueMessage');
 const { computeReceiptAmount } = require('./lineWebhook.routes');
 const { emitQuotationEvent, emitReceiptEvent, emitJobEvent } = require('../realtime');
 const { syncJobOnQuotationStatusChange } = require('../utils/jobQuotationSync');
+const { QUOTATION_RELEASED_STATUSES } = require('../utils/jobStatusFlow');
 const { applyReceiptSplits } = require('../utils/paymentMethods');
 const { ownsAll } = require('../utils/tenant');
 const { recordQuotationPrices } = require('../utils/modelPrices');
@@ -310,10 +311,11 @@ router.get('/', async (req, res) => {
               c.customer_name, c.customer_code, c.phone,
               v.brand, v.model, v.color, v.license_plate, v.province,
               -- เฉพาะงานที่ "ยังเปิดอยู่" เท่านั้น — ใบที่ลูกค้ามัดจำแล้วขับรถกลับไป
-              -- (งานเดิมจบเป็น carout) ต้องกด "สร้างคิว" ใหม่ได้อีกตอนกลับมาทำจริง
+              -- (งานเดิมจบเป็น carout) หรือกด "นัดวันมาทำ" ไว้ (งานเดิมเป็น scheduled)
+              -- ต้องกด "สร้างคิว" ใหม่ได้อีกตอนกลับมาทำจริง
               -- ไม่ใช่โดนล็อกให้ไปหน้างานเก่าที่ปิดไปแล้ว
               (SELECT j.id FROM jobs j
-                WHERE j.quotation_id = q.id AND j.status NOT IN ('delivered','carout','rejected')
+                WHERE j.quotation_id = q.id AND j.status NOT IN (${QUOTATION_RELEASED_STATUSES.map((s) => `'${s}'`).join(',')})
                 ORDER BY j.id DESC LIMIT 1) AS linked_job_id
        FROM quotations q
        LEFT JOIN customers c ON q.customer_id = c.id

@@ -3,7 +3,7 @@ const pool = require('../db/pool');
 const { authenticate, requireRole } = require('../middleware/auth');
 const { trashDelete } = require('../utils/trash');
 const { buildVisitHistory } = require('../utils/visitHistory');
-const { CLOSED_STATUSES } = require('../utils/jobStatusFlow');
+const { CLOSED_STATUSES, QUOTATION_RELEASED_STATUSES } = require('../utils/jobStatusFlow');
 const { THAI_PROVINCES } = require('../utils/thaiProvinces');
 const { ownsRow } = require('../utils/tenant');
 
@@ -86,10 +86,10 @@ router.get('/:id/open-quotation', requireRole('office'), async (req, res) => {
        WHERE vehicle_id = ? AND shop_id = ? AND closed_at IS NULL
          AND id NOT IN (
            SELECT quotation_id FROM jobs
-           WHERE quotation_id IS NOT NULL AND shop_id = ? AND status NOT IN (${CLOSED_STATUSES.map(() => '?').join(',')})
+           WHERE quotation_id IS NOT NULL AND shop_id = ? AND status NOT IN (${[...CLOSED_STATUSES, 'scheduled'].map(() => '?').join(',')})
          )
        ORDER BY created_at DESC LIMIT 1`,
-      [req.params.id, req.shopId, req.shopId, ...CLOSED_STATUSES]
+      [req.params.id, req.shopId, req.shopId, ...CLOSED_STATUSES, 'scheduled']
     );
     res.json({ success: true, data: quotation || null });
   } catch (err) {
@@ -111,10 +111,10 @@ router.get('/:id/open-quotations', requireRole('office'), async (req, res) => {
        WHERE vehicle_id = ? AND shop_id = ? AND closed_at IS NULL
          AND id NOT IN (
            SELECT quotation_id FROM jobs
-           WHERE quotation_id IS NOT NULL AND shop_id = ? AND status NOT IN (${[...CLOSED_STATUSES, 'rejected'].map(() => '?').join(',')})
+           WHERE quotation_id IS NOT NULL AND shop_id = ? AND status NOT IN (${QUOTATION_RELEASED_STATUSES.map(() => '?').join(',')})
          )
        ORDER BY created_at DESC LIMIT 10`,
-      [req.params.id, req.shopId, req.shopId, ...CLOSED_STATUSES, 'rejected']
+      [req.params.id, req.shopId, req.shopId, ...QUOTATION_RELEASED_STATUSES]
     );
     res.json({ success: true, data: rows });
   } catch (err) {

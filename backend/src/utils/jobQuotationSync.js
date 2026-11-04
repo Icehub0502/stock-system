@@ -17,8 +17,10 @@ const ELIGIBLE_JOB_STATUSES = ['received', 'inspecting', 'quoted', 'carout'];
 // actorUserId: ผู้ทำรายการ ใช้บันทึก job_status_history
 // คืนค่า { jobId, jobDate, status } ถ้ามีการอัปเดตจริง ไม่งั้นคืน null
 async function syncJobOnQuotationStatusChange(conn, shopId, quotationId, targetJobStatus, actorUserId) {
+  // newest first: a quotation can have an older job that ended when the car went home (carout) and a new
+  // one from when it came back. Only the new one may follow the quotation, the old one stays closed.
   const [[linkedJob]] = await conn.query(
-    'SELECT id, job_date, status FROM jobs WHERE shop_id = ? AND quotation_id = ? LIMIT 1',
+    'SELECT id, job_date, status FROM jobs WHERE shop_id = ? AND quotation_id = ? ORDER BY id DESC LIMIT 1',
     [shopId, quotationId]
   );
   if (!linkedJob || !ELIGIBLE_JOB_STATUSES.includes(linkedJob.status)) {
@@ -37,4 +39,25 @@ async function syncJobOnQuotationStatusChange(conn, shopId, quotationId, targetJ
   return { jobId: linkedJob.id, jobDate: linkedJob.job_date, status: targetJobStatus };
 }
 
-module.exports = { syncJobOnQuotationStatusChange };
+// The car of a "นัดวันมาทำ" job has come back as a new queue: the old job ends as "เอารถลง" and gives up its bay.
+// Runs in the caller's transaction. exceptJobId = the job the car is on now, when that job is already linked.
+async function closeWaitingJobs(conn, shopId, quotationId, actorUserId, { exceptJobId = null } = {}) {
+  const [waiting] = await conn.query(
+    "SELECT id FROM jobs WHERE shop_id = ? AND quotation_id = ? AND status = 'scheduled' FOR UPDATE",
+    [shopId, quotationId]
+  );
+  const closedIds = waiting.map((j) => j.id).filter((id) => id !== exceptJobId);
+  for (const id of closedIds) {
+    await conn.execute(
+      "UPDATE jobs SET status = 'carout', bay = NULL, closed_at = NOW() WHERE id = ? AND shop_id = ?",
+      [id, shopId]
+    );
+    await conn.execute(
+      "INSERT INTO job_status_history (job_id, status, changed_by) VALUES (?, 'carout', ?)",
+      [id, actorUserId]
+    );
+  }
+  return closedIds;
+}
+
+module.exports = { syncJobOnQuotationStatusChange, closeWaitingJobs };

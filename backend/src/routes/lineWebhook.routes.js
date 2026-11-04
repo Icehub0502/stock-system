@@ -17,7 +17,7 @@ const parseLineQueueMessage = require('../utils/parseLineQueueMessage');
 const { parseItemSectionLines } = require('../utils/parseLineQueueMessage');
 const { emitQuotationEvent, emitReceiptEvent, emitJobEvent } = require('../realtime');
 const { generateJobNo } = require('../utils/generateJobNo');
-const { syncJobOnQuotationStatusChange } = require('../utils/jobQuotationSync');
+const { syncJobOnQuotationStatusChange, closeWaitingJobs } = require('../utils/jobQuotationSync');
 const { LINE_MESSAGE_DEFAULTS } = require('../utils/lineMessageDefaults');
 const { applyReceiptSplits, parseSplitsFromText } = require('../utils/paymentMethods');
 const { DEFAULT_SHOP_ID } = require('../middleware/auth');
@@ -854,6 +854,8 @@ async function createQuotationFromQueue(parsed) {
         jobId = jobResult.insertId;
         emitJobEvent('job:created', { shopId: LINE_SHOP_ID, jobId, jobDate: quotationDate, status: 'received', actorId: null });
       }
+      // the customer came on the appointment: a job left waiting from the first visit ends here
+      if (matchedScheduled) await closeWaitingJobs(conn, LINE_SHOP_ID, quotationId, null, { exceptJobId: jobId });
     }
 
     // แก้ไขใบที่อนุมัติไปแล้ว (มีใบเสร็จผูกอยู่) → sync ใบเสร็จให้ตรงกันด้วยเลย

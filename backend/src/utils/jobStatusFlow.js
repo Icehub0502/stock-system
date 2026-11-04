@@ -34,6 +34,10 @@ const BRANCH_ENDS = { scheduled: 'carout', rejected: 'carout' };
 // งานที่ถือว่า "จบแล้ว" — ไม่กินช่องยก และไม่ต้องขึ้นบนจอบอร์ดอีก
 const CLOSED_STATUSES = ['delivered', 'carout'];
 
+// A job in these statuses no longer holds its quotation, so a new queue can be opened from that quotation.
+// 'scheduled' = the customer took the car home until the appointment, the car comes back as a new queue.
+const QUOTATION_RELEASED_STATUSES = [...CLOSED_STATUSES, 'rejected', 'scheduled'];
+
 // จุดตัดสินใจ 3 ทางแยกหลังเสนอราคา (อนุมัติ/นัดวันมาทำ/ไม่อนุมัติ) เชื่อมกับ
 // สถานะใบเสนอราคาจริงผ่าน endpoint เฉพาะของ quotations.routes.js เอง
 // (/approve, /schedule, /decline) ไม่ใช่การ map ค่าตรง ๆ ที่นี่ — เพราะ "อนุมัติ"
@@ -54,6 +58,7 @@ module.exports = {
   DECISION_KEYS,
   BRANCH_ENDS,
   CLOSED_STATUSES,
+  QUOTATION_RELEASED_STATUSES,
   isValidJobStatus,
   jobStatusLabel,
 };

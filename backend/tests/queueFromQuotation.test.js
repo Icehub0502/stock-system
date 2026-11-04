@@ -100,6 +100,67 @@ describe('สร้างคิวจากใบเสนอราคาที�
     expect(second.status).toBe(400);
   });
 
+  describe('รถที่กด "นัดวันมาทำ" จากหน้างาน (รถกลับไปก่อน) พอถึงวันนัด', () => {
+    let waitingJobId;
+    const linkedJobId = async () => (await request(app).get('/api/quotations').set(auth())).body.data
+      .find((q) => q.id === quotationId).linked_job_id;
+
+    beforeEach(async () => {
+      const [jobResult] = await pool.execute(
+        `INSERT INTO jobs (shop_id, job_no, job_date, customer_id, vehicle_id, quotation_id, status, bay)
+         VALUES (1, ?, '2026-07-10', ?, ?, ?, 'scheduled', 'A1')`,
+        [`TESTWAIT-${Date.now()}`, fixture.customerId, fixture.vehicleId, quotationId]
+      );
+      waitingJobId = jobResult.insertId;
+      await pool.execute("UPDATE quotations SET status = 'scheduled', scheduled_date = CURDATE() WHERE id = ?", [quotationId]);
+    });
+
+    test('งานที่รอนัดไม่นับเป็นงานเปิดอยู่: ปุ่มสร้างคิวต้องขึ้น และใบโผล่ตอนเพิ่มคิวของรถคันนี้', async () => {
+      expect(await linkedJobId()).toBeNull();
+      const open = await request(app).get(`/api/vehicles/${fixture.vehicleId}/open-quotations`).set(auth());
+      expect(open.body.data.map((q) => q.id)).toContain(quotationId);
+    });
+
+    test('สร้างคิวใหม่จากใบนัดได้ งานรอนัดเดิมจบเป็น "เอารถลง" และงานใหม่คืองานที่เปิดอยู่', async () => {
+      const res = await request(app)
+        .post('/api/jobs').set(auth())
+        .send({ vehicle_id: fixture.vehicleId, customer_id: fixture.customerId, quotation_id: quotationId });
+      expect(res.status).toBe(201);
+
+      const [[old]] = await pool.query('SELECT status, bay, closed_at FROM jobs WHERE id = ?', [waitingJobId]);
+      expect(old.status).toBe('carout');
+      expect(old.bay).toBeNull();
+      expect(old.closed_at).not.toBeNull();
+      const [[history]] = await pool.query(
+        'SELECT status FROM job_status_history WHERE job_id = ? ORDER BY id DESC LIMIT 1', [waitingJobId]
+      );
+      expect(history.status).toBe('carout');
+
+      const [[q]] = await pool.query('SELECT status, scheduled_date FROM quotations WHERE id = ?', [quotationId]);
+      expect(q.status).toBe('pending');
+      expect(q.scheduled_date).toBeNull();
+      expect(await linkedJobId()).toBe(res.body.id);
+
+      // มีงานเปิดอยู่แล้ว สร้างซ้ำยังต้องไม่ได้
+      const again = await request(app)
+        .post('/api/jobs').set(auth())
+        .send({ vehicle_id: fixture.vehicleId, customer_id: fixture.customerId, quotation_id: quotationId });
+      expect(again.status).toBe(400);
+    });
+
+    test('อนุมัติใบหลังรับรถกลับมา: สถานะไปที่งานใหม่ ไม่ปลุกงานเก่าที่เอารถลงแล้ว', async () => {
+      const created = await request(app)
+        .post('/api/jobs').set(auth())
+        .send({ vehicle_id: fixture.vehicleId, customer_id: fixture.customerId, quotation_id: quotationId });
+      await decline();
+      const [[fresh]] = await pool.query('SELECT status FROM jobs WHERE id = ?', [created.body.id]);
+      const [[old]] = await pool.query('SELECT status, closed_at FROM jobs WHERE id = ?', [waitingJobId]);
+      expect(fresh.status).toBe('rejected');
+      expect(old.status).toBe('carout');
+      expect(old.closed_at).not.toBeNull();
+    });
+  });
+
   test('จังหวัด: บันทึกตอนสร้าง/แก้รถ และตัดช่องว่าง (ว่าง = null)', async () => {
     const create = await request(app)
       .post('/api/vehicles').set(auth())
