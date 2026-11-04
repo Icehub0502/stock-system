@@ -1,7 +1,7 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const rateLimit = require('express-rate-limit');
+const { rateLimit, ipKeyGenerator } = require('express-rate-limit');
 const pool = require('../db/pool');
 const { authenticate, DEFAULT_SHOP_ID } = require('../middleware/auth');
 const { logAudit } = require('../utils/audit');
@@ -16,18 +16,44 @@ const router = express.Router();
 // rate limit กันไว้แล้วก็ตาม แก้ให้ตอบเวลาใกล้เคียงกันทั้งสองกรณีไปเลย
 const DUMMY_HASH = bcrypt.hashSync('dummy-password-for-timing', 10);
 
-// จำกัดการพยายาม login เพื่อกัน brute-force เดารหัสผ่าน
-// 10 ครั้ง/IP ต่อ 15 นาที (นับเฉพาะครั้งที่ล็อกอินไม่สำเร็จ)
-const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 10,
+// จำกัดการพยายาม login เพื่อกัน brute-force เดารหัสผ่าน (นับเฉพาะครั้งที่ล็อกอินไม่สำเร็จ)
+// เดิมนับ 10 ครั้งต่อ IP อย่างเดียว — พนักงานทั้งร้านใช้ wifi/IP เดียวกัน คนหนึ่งพิมพ์รหัสผิดหลายรอบ
+// ทุกคนก็ล็อกอินไม่ได้ไปด้วย 15 นาที จึงแยกเป็น 2 ชั้น:
+//   1) ต่อ IP + ร้าน + ชื่อผู้ใช้ 10 ครั้ง/15 นาที — กันเดารหัสของบัญชีใดบัญชีหนึ่ง คนอื่นไม่โดนลูกหลง
+//   2) ต่อ IP รวมทุกชื่อ 30 ครั้ง/15 นาที — กันไล่ลองหลายชื่อผู้ใช้จากเครื่องเดียว
+const LOGIN_WINDOW_MS = 15 * 60 * 1000;
+
+function loginLimitMessage(req) {
+  const resetAt = req.rateLimit && req.rateLimit.resetTime ? new Date(req.rateLimit.resetTime).getTime() : null;
+  const minutes = resetAt ? Math.max(1, Math.ceil((resetAt - Date.now()) / 60000)) : 15;
+  return { error: `พยายามเข้าสู่ระบบผิดบ่อยเกินไป กรุณารอประมาณ ${minutes} นาทีแล้วลองใหม่` };
+}
+
+const loginAccountLimiter = rateLimit({
+  windowMs: LOGIN_WINDOW_MS,
+  limit: 10,
   standardHeaders: true,
   legacyHeaders: false,
   skipSuccessfulRequests: true,
-  message: { error: 'พยายามเข้าสู่ระบบบ่อยเกินไป กรุณารอสักครู่แล้วลองใหม่' }
+  keyGenerator: (req) => {
+    const body = req.body || {};
+    const shop = String(body.shop_code || '').trim().toLowerCase().slice(0, 50);
+    const name = String(body.username || '').trim().toLowerCase().slice(0, 100);
+    return `${ipKeyGenerator(req.ip)}|${shop}|${name}`;
+  },
+  handler: (req, res) => res.status(429).json(loginLimitMessage(req))
 });
 
-router.post('/login', loginLimiter, async (req, res) => {
+const loginIpLimiter = rateLimit({
+  windowMs: LOGIN_WINDOW_MS,
+  limit: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skipSuccessfulRequests: true,
+  handler: (req, res) => res.status(429).json(loginLimitMessage(req))
+});
+
+router.post('/login', loginIpLimiter, loginAccountLimiter, async (req, res) => {
   const { username, password, shop_code } = req.body || {};
   if (!username || !password) {
     return res.status(400).json({ error: 'กรุณากรอก username และ password' });
