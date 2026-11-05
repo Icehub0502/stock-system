@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useBranchIdentity } from '../hooks/useDocHeader';
 
 /**
  * แถบเมนูของ queue.champ-powerspk.com — ตั้งใจให้ "ดูเหมือนเป็นระบบแยกต่างหาก"
@@ -24,6 +25,7 @@ import { useAuth } from '../context/AuthContext';
  */
 export default function QueueNavBar() {
   const { user, logout } = useAuth();
+  const { shopCode } = useBranchIdentity();
   const navigate = useNavigate();
   const location = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -58,7 +60,7 @@ export default function QueueNavBar() {
             <Link to="/appointments" className={location.pathname === '/appointments' ? 'active' : ''}>
               มัดจำ
             </Link>
-            <a href="/board" target="_blank" rel="noreferrer">จอบอร์ด ↗</a>
+            <a href={shopCode ? `/board?shop=${shopCode}` : '/board'} target="_blank" rel="noreferrer">จอบอร์ด ↗</a>
           </div>
         )}
       </div>

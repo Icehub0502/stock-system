@@ -1,7 +1,8 @@
 const express = require('express');
 const QRCode = require('qrcode');
 const pool = require('../db/pool');
-const { authenticate, requireManager } = require('../middleware/auth');
+const { authenticate, requireManager, DEFAULT_SHOP_ID } = require('../middleware/auth');
+const { repairTimeFrom } = require('../utils/repairTime');
 const { trashDelete } = require('../utils/trash');
 const {
   isValidJobStatus,
@@ -83,7 +84,24 @@ router.get('/', async (req, res) => {
       WHERE j.shop_id = ? AND j.job_date = ?
       ORDER BY CAST(j.queue_no AS UNSIGNED), j.id
     `, [req.shopId, jobDate]);
-    res.json({ success: true, date: jobDate, data: rows });
+
+    const [history] = await pool.execute(`
+      SELECT h.job_id, h.status, h.changed_at, NOW() AS db_now
+      FROM job_status_history h
+      JOIN jobs j ON j.id = h.job_id
+      WHERE j.shop_id = ? AND j.job_date = ?
+      ORDER BY h.changed_at, h.id
+    `, [req.shopId, jobDate]);
+    const historyByJob = new Map();
+    for (const row of history) {
+      if (!historyByJob.has(row.job_id)) historyByJob.set(row.job_id, []);
+      historyByJob.get(row.job_id).push(row);
+    }
+    const data = rows.map((job) => {
+      const jobHistory = historyByJob.get(job.id) || [];
+      return { ...job, ...repairTimeFrom(jobHistory, jobHistory[0]?.db_now) };
+    });
+    res.json({ success: true, date: jobDate, data });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'โหลดรายการงานไม่สำเร็จ' });
@@ -200,7 +218,10 @@ router.get('/:id', async (req, res) => {
 // ไม่ผูกกับงาน/id ไหนอีกต่อไป ย้ายปุ่มมาไว้ที่หน้ารายการงานวันนี้แทนหน้ารายละเอียดงาน
 router.get('/qr/track', async (req, res) => {
   try {
-    const trackingUrl = `${req.protocol}://${req.get('host')}/track`;
+    // /track without a code means the main shop (stickers already printed for it keep working)
+    const [[shop]] = await pool.query('SELECT code FROM shops WHERE id = ?', [req.shopId]);
+    const shopQuery = req.shopId !== DEFAULT_SHOP_ID && shop ? `?shop=${encodeURIComponent(shop.code)}` : '';
+    const trackingUrl = `${req.protocol}://${req.get('host')}/track${shopQuery}`;
     const qrDataUrl = await QRCode.toDataURL(trackingUrl, { margin: 1, width: 300 });
     res.json({ success: true, tracking_url: trackingUrl, qr_data_url: qrDataUrl });
   } catch (err) {

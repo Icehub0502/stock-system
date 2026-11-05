@@ -476,13 +476,100 @@ const BOT_LABELS = {
   bot3: 'บอท 3 — ปิดบิล',
 };
 
+const BIND_POLL_MS = 5000;
+
+// One bot 3 serves every branch: the group a closing message comes from decides the branch. A code made here and typed
+// in the group binds it to this branch.
+function Bot3GroupBinding({ initial }) {
+  const [status, setStatus] = useState(initial);
+  const [bindCode, setBindCode] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+
+  // while a code is showing, watch for the group to be bound so the manager sees it without refreshing
+  useEffect(() => {
+    if (!bindCode) return undefined;
+    const startTail = status.group_tail;
+    const timer = setInterval(async () => {
+      try {
+        const res = await client.get('/settings/line/bot3-group');
+        if (res.data.data.bound && res.data.data.group_tail !== startTail) {
+          setStatus(res.data.data);
+          setBindCode(null);
+          setNotice('ผูกกลุ่มกับสาขานี้แล้ว');
+        }
+      } catch (err) {
+        console.error('Error checking bot3 group:', err);
+      }
+    }, BIND_POLL_MS);
+    const expiry = setTimeout(() => setBindCode(null), bindCode.minutes * 60 * 1000);
+    return () => { clearInterval(timer); clearTimeout(expiry); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bindCode]);
+
+  const createCode = async () => {
+    setBusy(true);
+    setError('');
+    setNotice('');
+    try {
+      const res = await client.post('/settings/line/bot3-bind-code');
+      setBindCode(res.data.data);
+    } catch (err) {
+      setError(err.response?.data?.error || 'สร้างรหัสไม่สำเร็จ');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const unbind = async () => {
+    if (!window.confirm('ยกเลิกการผูกกลุ่มนี้หรือไม่? ระหว่างนี้จะปิดบิลจากกลุ่มไลน์ของสาขานี้ไม่ได้ จนกว่าจะผูกใหม่')) return;
+    setBusy(true);
+    setError('');
+    setNotice('');
+    try {
+      await client.delete('/settings/line/bot3-group');
+      setStatus({ bound: false, group_tail: '' });
+      setBindCode(null);
+      setNotice('ยกเลิกการผูกกลุ่มแล้ว');
+    } catch (err) {
+      setError(err.response?.data?.error || 'ยกเลิกการผูกกลุ่มไม่สำเร็จ');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="form-group">
+      <label>กลุ่มไลน์ปิดบิลของสาขานี้ (บอท 3)</label>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+        <span className={`status-badge ${status.bound ? 'status-badge-success' : 'status-badge-danger'}`}>
+          {status.bound ? `ผูกกลุ่มแล้ว (…${status.group_tail})` : 'ยังไม่ได้ผูกกลุ่ม'}
+        </span>
+        <button type="button" className="btn btn-secondary" disabled={busy} onClick={createCode}>
+          {status.bound ? 'ผูกกลุ่มใหม่' : 'สร้างรหัสผูกกลุ่ม'}
+        </button>
+        {status.bound && <button type="button" className="btn-danger" disabled={busy} onClick={unbind}>ยกเลิกการผูก</button>}
+      </div>
+      {bindCode && (
+        <div className="info-message" role="status" style={{ marginTop: 8 }}>
+          เชิญบอท 3 เข้ากลุ่มปิดบิลของสาขานี้ แล้วพิมพ์ในกลุ่มว่า <strong style={{ userSelect: 'all' }}>ผูกกลุ่มปิดบิล {bindCode.code}</strong> (รหัสใช้ได้ {bindCode.minutes} นาที)
+          {status.bound && <div>เมื่อผูกแล้ว กลุ่มเดิมจะปิดบิลไม่ได้อีก</div>}
+        </div>
+      )}
+      {error && <div className="error-message" role="alert" style={{ marginTop: 8 }}>{error}</div>}
+      {notice && <div className="info-message" role="status" style={{ marginTop: 8 }}>{notice}</div>}
+    </div>
+  );
+}
+
 function LineBotSection() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [groupIds, setGroupIds] = useState({ line_group_id: '', line_group_id_bot2: '', line_group_id_bot3: '' });
+  const [groupIds, setGroupIds] = useState({ line_group_id: '', line_group_id_bot2: '' });
   // ค่าข้อความทุกอันของทั้ง 3 บอท เก็บเป็น map เดียว key -> ข้อความ (ไม่แยกตาม group)
   // เพื่อให้แก้/บันทึกทีละอันง่าย ๆ — โครงสร้าง label/vars/default ยังอ้างจาก data.messages เดิม
   const [values, setValues] = useState({});
@@ -528,45 +615,58 @@ function LineBotSection() {
     );
   }
 
+  if (!data) {
+    return (
+      <div className="dash-panel">
+        <div className="dash-panel-title">บอทไลน์</div>
+        <div className="error-message">{error}</div>
+      </div>
+    );
+  }
+
   return (
     <div className="dash-panel">
       <div className="dash-panel-title">บอทไลน์</div>
-      {error && <div className="error-message">{error}</div>}
-      {success && <p style={{ color: '#15803d', fontSize: 13 }}>{success}</p>}
 
       <p style={{ fontSize: 13, color: '#6b7280', marginBottom: 8 }}>
         Token ของแต่ละบอท (channel secret/access token) เก็บอยู่ในไฟล์ .env บนเซิร์ฟเวอร์ —
         แก้ไขผ่านหน้านี้ไม่ได้ ต้องแก้ที่ไฟล์แล้ว restart เซิร์ฟเวอร์เอง
       </p>
+      {!data?.is_main_shop && <p style={{ fontSize: 13, color: '#6b7280', marginBottom: 8 }}>บอท 1 และบอท 2 ใช้กับสาขาหลักเท่านั้น สาขานี้ใช้บอท 3 ปิดบิล</p>}
       <div className="modal-actions" style={{ marginBottom: 16, flexWrap: 'wrap' }}>
-        <span className={`status-badge ${data?.bots.bot1 ? 'status-badge-success' : 'status-badge-danger'}`}>
-          บอท 1 (รับรถ): {data?.bots.bot1 ? 'ตั้งค่าแล้ว ✅' : 'ยังไม่ได้ตั้งค่า ❌'}
-        </span>
-        <span className={`status-badge ${data?.bots.bot2 ? 'status-badge-success' : 'status-badge-danger'}`}>
-          บอท 2 (รับรายการ): {data?.bots.bot2 ? 'ตั้งค่าแล้ว ✅' : 'ยังไม่ได้ตั้งค่า ❌'}
-        </span>
+        {data?.is_main_shop && (
+          <>
+            <span className={`status-badge ${data?.bots.bot1 ? 'status-badge-success' : 'status-badge-danger'}`}>
+              บอท 1 (รับรถ): {data?.bots.bot1 ? 'ตั้งค่าแล้ว ✅' : 'ยังไม่ได้ตั้งค่า ❌'}
+            </span>
+            <span className={`status-badge ${data?.bots.bot2 ? 'status-badge-success' : 'status-badge-danger'}`}>
+              บอท 2 (รับรายการ): {data?.bots.bot2 ? 'ตั้งค่าแล้ว ✅' : 'ยังไม่ได้ตั้งค่า ❌'}
+            </span>
+          </>
+        )}
         <span className={`status-badge ${data?.bots.bot3 ? 'status-badge-success' : 'status-badge-danger'}`}>
           บอท 3 (ปิดบิล): {data?.bots.bot3 ? 'ตั้งค่าแล้ว ✅' : 'ยังไม่ได้ตั้งค่า ❌'}
         </span>
       </div>
 
-      <div className="form-group">
-        <label>Group ID บอท 1 (รับรถ) — จับอัตโนมัติจากข้อความแรกในกลุ่ม</label>
-        <input type="text" value={groupIds.line_group_id} onChange={(e) => setGroupIds({ ...groupIds, line_group_id: e.target.value })} />
-      </div>
-      <div className="form-group">
-        <label>Group ID บอท 2 (รับรายการ)</label>
-        <input type="text" value={groupIds.line_group_id_bot2} onChange={(e) => setGroupIds({ ...groupIds, line_group_id_bot2: e.target.value })} />
-      </div>
-      <div className="form-group">
-        <label>Group ID บอท 3 (ปิดบิล)</label>
-        <input type="text" value={groupIds.line_group_id_bot3} onChange={(e) => setGroupIds({ ...groupIds, line_group_id_bot3: e.target.value })} />
-      </div>
+      {data?.is_main_shop && (
+        <>
+          <div className="form-group">
+            <label>Group ID บอท 1 (รับรถ) — จับอัตโนมัติจากข้อความแรกในกลุ่ม</label>
+            <input type="text" value={groupIds.line_group_id} onChange={(e) => setGroupIds({ ...groupIds, line_group_id: e.target.value })} />
+          </div>
+          <div className="form-group">
+            <label>Group ID บอท 2 (รับรายการ)</label>
+            <input type="text" value={groupIds.line_group_id_bot2} onChange={(e) => setGroupIds({ ...groupIds, line_group_id_bot2: e.target.value })} />
+          </div>
+        </>
+      )}
+      <Bot3GroupBinding initial={data.bot3_group} />
 
       {/* ข้อความตอบกลับของแต่ละบอท — พับ/กางได้ทีละบอท กันหน้ายาวเกินไป (รวมกัน
           หลายสิบข้อความ) แต่ละอันแก้แยกอิสระ มีปุ่ม "คืนค่าเริ่มต้น" ต่ออัน */}
       {['bot1', 'bot2', 'bot3'].map((botKey) => (
-        <details key={botKey} style={{ marginTop: 16 }} open={botKey === 'bot1'}>
+        <details key={botKey} style={{ marginTop: 16 }} open={botKey === (data.is_main_shop ? 'bot1' : 'bot3')}>
           <summary style={{ cursor: 'pointer', fontWeight: 700, marginBottom: 8 }}>
             {BOT_LABELS[botKey]} — ข้อความตอบกลับ ({data.messages[botKey].length} แบบ)
           </summary>
@@ -590,6 +690,9 @@ function LineBotSection() {
         </details>
       ))}
 
+      {/* the button is at the end of a long page: the result of saving shows right beside it */}
+      {error && <div className="error-message" role="alert" style={{ marginTop: 16 }}>{error}</div>}
+      {success && <div className="info-message" role="status" style={{ marginTop: 16 }}>{success}</div>}
       <button type="button" className="btn btn-primary" style={{ marginTop: 16 }} disabled={saving} onClick={save}>
         {saving ? 'กำลังบันทึก...' : 'บันทึกการตั้งค่า'}
       </button>

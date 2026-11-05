@@ -1071,7 +1071,10 @@ async function deleteQuotationForMessage(info) {
 // ข้อความ (ข้อความสั้นไม่มีฟิลด์นี้) ยอดใบเสร็จยังคงเป็นยอดรวมทั้งบิลของใบเสนอราคา
 // เสมอ (มัดจำ+ยอดค้าง = ยอดรวม — กติกาเดียวกับ createQuotationFromQueue มัดจำเป็นแค่
 // ข้อมูลติดตาม ไม่ลดยอดใบเสร็จ)
-async function closeQuotationByQueue(parsed) {
+//
+// shopId: สาขาที่ปิดบิล (บอท 1 = ร้านที่ 1) exactDate: หาเฉพาะบิลของวันที่ในข้อความ ไม่ค้นย้อนหลัง และเลขคิวของบิลที่มีการ์ด
+// คิวถือเลขบนการ์ดเป็นหลัก เพราะเลขที่พนักงานเห็นคือเลขบนการ์ด ซึ่งแก้ได้โดยเลขในบิลไม่เปลี่ยนตาม (ดู lineWebhookBot3.routes.js)
+async function closeQuotationByQueue(parsed, { shopId = LINE_SHOP_ID, exactDate = false } = {}) {
   let conn;
   let syncedJob = null;
   try {
@@ -1086,25 +1089,43 @@ async function closeQuotationByQueue(parsed) {
     // ค่อย fallback ไปหาในช่วง 14 วันย้อนหลังเหมือนเดิม (เผื่องานที่ค้างข้ามวันจริง ๆ)
     const quotationDate = parsed.quotation_date || todayStr();
     const baseSelect = `SELECT q.id, q.customer_id, q.quotation_no, q.converted_receipt_id, q.status, q.total_amount,
-              q.deposit_amount, q.deposit_date, q.vehicle_id, c.customer_name, c.phone
+              q.deposit_amount, q.deposit_date, q.vehicle_id, c.customer_name, c.phone, v.license_plate
        FROM quotations q
        LEFT JOIN customers c ON q.customer_id = c.id
-       WHERE q.shop_id = ? AND (q.queue_no = ? OR q.requested_queue_no = ?) AND q.closed_at IS NULL
+       LEFT JOIN vehicles v ON q.vehicle_id = v.id
+       WHERE q.shop_id = ? AND q.closed_at IS NULL
          AND q.status IN ('pending', 'approved', 'no_date')`;
-    let [rows] = await conn.execute(
-      `${baseSelect} AND q.quotation_date = ? ORDER BY q.id DESC`,
-      [LINE_SHOP_ID, parsed.queue_no, parsed.queue_no, quotationDate]
-    );
-    if (rows.length === 0) {
+    const queueFilter = 'AND (q.queue_no = ? OR q.requested_queue_no = ?)';
+    let rows;
+    if (exactDate) {
       [rows] = await conn.execute(
-        `${baseSelect} AND q.quotation_date >= DATE_SUB(?, INTERVAL 14 DAY) ORDER BY q.id DESC`,
-        [LINE_SHOP_ID, parsed.queue_no, parsed.queue_no, quotationDate]
+        `${baseSelect} AND q.quotation_date = ?
+           AND (
+             EXISTS (SELECT 1 FROM jobs j WHERE j.quotation_id = q.id AND j.shop_id = q.shop_id AND j.job_date = ? AND j.queue_no = ?)
+             OR (
+               (q.queue_no = ? OR q.requested_queue_no = ?)
+               AND NOT EXISTS (SELECT 1 FROM jobs j WHERE j.quotation_id = q.id AND j.shop_id = q.shop_id AND j.job_date = ?)
+             )
+           )
+         ORDER BY q.id DESC`,
+        [shopId, quotationDate, quotationDate, parsed.queue_no, parsed.queue_no, parsed.queue_no, quotationDate]
       );
+    } else {
+      [rows] = await conn.execute(
+        `${baseSelect} ${queueFilter} AND q.quotation_date = ? ORDER BY q.id DESC`,
+        [shopId, parsed.queue_no, parsed.queue_no, quotationDate]
+      );
+      if (rows.length === 0) {
+        [rows] = await conn.execute(
+          `${baseSelect} ${queueFilter} AND q.quotation_date >= DATE_SUB(?, INTERVAL 14 DAY) ORDER BY q.id DESC`,
+          [shopId, parsed.queue_no, parsed.queue_no, quotationDate]
+        );
+      }
     }
 
     if (rows.length === 0) {
       await conn.commit(); // ยังไม่ได้แก้อะไรเลย — commit เก็บไว้เฉย ๆ
-      return { matchCount: 0 };
+      return { matchCount: 0, quotation_date: quotationDate };
     }
 
     // เจอมากกว่า 1 ใบ — เกิดได้เพราะ requested_queue_no ยังจับคู่ใบที่เคยขอเลขคิวนี้
@@ -1160,20 +1181,20 @@ async function closeQuotationByQueue(parsed) {
       receiptId = quotation.converted_receipt_id;
       await conn.execute(
         'UPDATE receipts SET payment_method = ?, total_amount = ?, deposit_amount = ?, deposit_date = ? WHERE id = ? AND shop_id = ?',
-        [parsed.payment_method || null, receiptAmount, quotation.deposit_amount, quotation.deposit_date, receiptId, LINE_SHOP_ID]
+        [parsed.payment_method || null, receiptAmount, quotation.deposit_amount, quotation.deposit_date, receiptId, shopId]
       );
       await applyReceiptSplits(conn, receiptId, parseSplitsFromText(parsed.payment_method), receiptAmount, { strict: false });
-      const [[receiptRow]] = await conn.query('SELECT receipt_no FROM receipts WHERE id = ? AND shop_id = ?', [receiptId, LINE_SHOP_ID]);
+      const [[receiptRow]] = await conn.query('SELECT receipt_no FROM receipts WHERE id = ? AND shop_id = ?', [receiptId, shopId]);
       receipt_no = receiptRow ? receiptRow.receipt_no : null;
     } else {
       // ยัง pending → อนุมัติ+สร้างใบเสร็จเองในทรานแซกชันนี้เลย (mirror ของ
       // createQuotationFromQueue's paid_confirmed pending branch)
-      receipt_no = await generateReceiptNo(conn);
-      const car_sequence_no = await generateCarSequenceNo(conn);
+      receipt_no = await generateReceiptNo(conn, shopId);
+      const car_sequence_no = await generateCarSequenceNo(conn, shopId);
       const [receiptResult] = await conn.execute(
         `INSERT INTO receipts (shop_id, receipt_no, receipt_date, customer_id, vehicle_id, mileage, remark, payment_method, total_amount, customer_signature, deposit_amount, deposit_date, car_sequence_no)
          VALUES (?, ?, CURDATE(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [LINE_SHOP_ID, receipt_no, quotation.customer_id, quotation.vehicle_id, 0, null, parsed.payment_method || null, receiptAmount, null, quotation.deposit_amount, quotation.deposit_date, car_sequence_no]
+        [shopId, receipt_no, quotation.customer_id, quotation.vehicle_id, 0, null, parsed.payment_method || null, receiptAmount, null, quotation.deposit_amount, quotation.deposit_date, car_sequence_no]
       );
       receiptId = receiptResult.insertId;
       await applyReceiptSplits(conn, receiptId, parseSplitsFromText(parsed.payment_method), receiptAmount, { strict: false });
@@ -1186,26 +1207,27 @@ async function closeQuotationByQueue(parsed) {
       }
       await conn.execute(
         "UPDATE quotations SET status = 'approved', converted_receipt_id = ? WHERE id = ? AND shop_id = ?",
-        [receiptId, quotation.id, LINE_SHOP_ID]
+        [receiptId, quotation.id, shopId]
       );
       // ถ้าใบนี้ผูกกับงานในหน้าคิวที่ยังไม่ถูกตัดสินใจไปทางไหน — ดันสถานะงานตามด้วย
       // (บั๊กเดียวกับที่เจอตอนอนุมัติผ่านหน้าเว็บ — ดู syncJobOnQuotationStatusChange)
-      syncedJob = await syncJobOnQuotationStatusChange(conn, LINE_SHOP_ID, quotation.id, 'approved', null);
+      syncedJob = await syncJobOnQuotationStatusChange(conn, shopId, quotation.id, 'approved', null);
     }
 
-    await conn.execute('UPDATE quotations SET closed_at = NOW() WHERE id = ? AND shop_id = ?', [quotation.id, LINE_SHOP_ID]);
+    await conn.execute('UPDATE quotations SET closed_at = NOW() WHERE id = ? AND shop_id = ?', [quotation.id, shopId]);
     await conn.commit();
 
-    emitQuotationEvent('quotation:updated', { shopId: LINE_SHOP_ID, quotationId: quotation.id, status: 'approved', actorId: null });
-    emitReceiptEvent('receipt:updated', { shopId: LINE_SHOP_ID, receiptId, actorId: null });
+    emitQuotationEvent('quotation:updated', { shopId: shopId, quotationId: quotation.id, status: 'approved', actorId: null });
+    emitReceiptEvent('receipt:updated', { shopId: shopId, receiptId, actorId: null });
     if (syncedJob) {
-      emitJobEvent('job:status-changed', { shopId: LINE_SHOP_ID, jobId: syncedJob.jobId, jobDate: syncedJob.jobDate, status: syncedJob.status, actorId: null });
+      emitJobEvent('job:status-changed', { shopId: shopId, jobId: syncedJob.jobId, jobDate: syncedJob.jobDate, status: syncedJob.status, actorId: null });
     }
 
     return {
       matchCount: 1,
       quotation_no: quotation.quotation_no,
       customer_name: quotation.customer_name,
+      license_plate: quotation.license_plate,
       receiptNo: receipt_no,
       amount: receiptAmount,
     };
@@ -1585,6 +1607,8 @@ module.exports.getLineGroupId = getLineGroupId;
 // กับบอท 1) ใช้ตรวจลายเซ็น/อ่าน-เขียน app_settings/ยิง reply-push ผ่าน token ของตัวเอง
 // โดยไม่ต้องคัดลอกโค้ดชุดนี้ซ้ำ — ดูแผนงาน 3 บอท (Phase B-E)
 module.exports.verifySignature = verifySignature;
+module.exports.isProcessed = isProcessed;
+module.exports.markProcessed = markProcessed;
 module.exports.getSetting = getSetting;
 module.exports.setSetting = setSetting;
 module.exports.replyWithToken = replyWithToken;

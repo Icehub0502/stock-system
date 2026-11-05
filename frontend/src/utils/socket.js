@@ -34,8 +34,11 @@ export function getSocket() {
 
 export function getBoardSocket() {
   if (!boardSocket) {
+    // the branch comes from the page link, as on the board's REST call (no code = the main shop)
+    const shop = new URLSearchParams(window.location.search).get('shop');
     boardSocket = io(SOCKET_URL ? `${SOCKET_URL}/board` : '/board', {
       ...COMMON_OPTIONS,
+      ...(shop ? { query: { shop } } : {}),
     });
   }
   return boardSocket;

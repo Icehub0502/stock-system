@@ -5,6 +5,7 @@ import { useAuth } from "../context/AuthContext";
 import ChangePasswordModal from "./ChangePasswordModal";
 import { hasRole, isOwnerView, ROLE_LABEL } from "../utils/roles";
 import { BranchSwitcher } from "./BranchSwitcher";
+import { useBranchIdentity } from "../hooks/useDocHeader";
 
 const NAV_CATEGORIES = [
   {
@@ -67,6 +68,7 @@ const NAV_CATEGORIES = [
 
 export default function NavBar() {
   const { user, logout } = useAuth();
+  const { branchCode, shopCode } = useBranchIdentity();
   const navigate = useNavigate();
   const location = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -97,6 +99,10 @@ export default function NavBar() {
     return () => window.removeEventListener('open-nav-drawer', openDrawer);
   }, []);
 
+  useEffect(() => {
+    if (branchCode) document.title = `Champpower${branchCode}`;
+  }, [branchCode]);
+
   if (!user) return null;
 
   const handleLogout = () => {
@@ -119,7 +125,7 @@ export default function NavBar() {
     <nav className="navbar" ref={navRef}>
       <div className="navbar-brand">
         <div className="navbar-title navbar-brand-text">
-          <span className="brand-champ">Champ</span><span className="brand-power">power</span><span className="brand-spk">SPK</span>
+          <span className="brand-champ">Champ</span><span className="brand-power">power</span><span className="brand-spk">{branchCode}</span>
         </div>
         <button
           className="navbar-hamburger"
@@ -163,7 +169,7 @@ export default function NavBar() {
                 {cat.items.filter((it) => !it.min || hasRole(user, it.min)).map((it) => (
                   <Link
                     key={it.to}
-                    to={it.to}
+                    to={it.to === "/board" && shopCode ? `/board?shop=${shopCode}` : it.to}
                     className={location.pathname === it.to ? "active" : ""}
                     onClick={close}
                   >

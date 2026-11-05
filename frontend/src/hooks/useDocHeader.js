@@ -34,7 +34,7 @@ export function refreshDocHeaders(shopId) {
   return load(shopId, true);
 }
 
-// docType: 'quotation' | 'receipt' | 'claim' | 'repair_notice' → { header, loaded }
+// docType: 'quotation' | 'receipt' | 'claim' | 'repair_notice' → { header, loaded, shopCode }
 export function useDocHeader(docType) {
   const { user } = useAuth();
   const shopId = user ? user.shop_id : null;
@@ -48,7 +48,13 @@ export function useDocHeader(docType) {
   }, [shopId]);
 
   const fresh = cache && cache.shopId === shopId ? cache.data : null;
-  return { header: fresh ? fresh[docType] || EMPTY : EMPTY, loaded: Boolean(fresh) };
+  return { header: fresh ? fresh[docType] || EMPTY : EMPTY, loaded: Boolean(fresh), shopCode: fresh?.shop?.code || '' };
+}
+
+// The signed-in branch's short code (SPK, PKS) shown across the app, and the shop code its public links need
+export function useBranchIdentity() {
+  const { header, shopCode } = useDocHeader('repair_notice');
+  return { branchCode: header.branch_text || '', shopCode };
 }
 
 export function useRefreshDocHeaders() {

@@ -3,6 +3,7 @@ const pool = require('../db/pool');
 const { CLOSED_STATUSES, jobStatusLabel } = require('../utils/jobStatusFlow');
 const { WORK_BAYS } = require('../utils/workBays');
 const { resolvePublicShopId } = require('../utils/tenant');
+const { branchCodeOf } = require('../utils/branchCode');
 
 const router = express.Router();
 
@@ -45,7 +46,7 @@ router.get('/', async (req, res) => {
       received_at: r.received_at,
     }));
 
-    res.json({ success: true, bays: WORK_BAYS, data, server_time: new Date().toISOString() });
+    res.json({ success: true, branch_code: await branchCodeOf(shopId), bays: WORK_BAYS, data, server_time: new Date().toISOString() });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'โหลดข้อมูลบอร์ดไม่สำเร็จ' });

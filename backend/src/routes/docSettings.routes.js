@@ -10,6 +10,7 @@ const sharp = require('sharp');
 const pool = require('../db/pool');
 const { authenticate, requireManager } = require('../middleware/auth');
 const { UPLOADS_DIR, deleteUploadedFile } = require('../utils/photoStorage');
+const { branchCodeFromName } = require('../utils/branchCode');
 
 const router = express.Router();
 router.use(authenticate);
@@ -52,12 +53,6 @@ function defaultsFor(shopName) {
   };
 }
 
-// "แชมป์พาวเวอร์ PKS" → "PKS": what a repair notice prints until the branch sets its own code
-function branchCodeFromName(shopName) {
-  const match = /([A-Za-z0-9]{2,8})\s*$/.exec(String(shopName || ''));
-  return match ? match[1] : '';
-}
-
 function toPublic(row, shopName) {
   const base = defaultsFor(shopName);
   if (!row) return { ...base, saved: false };
@@ -76,10 +71,10 @@ function toPublic(row, shopName) {
   };
 }
 
-// GET /doc-settings → { quotation: {...}, receipt: {...}, claim: {...}, repair_notice: {...} }
+// GET /doc-settings → { quotation: {...}, receipt: {...}, claim: {...}, repair_notice: {...}, shop: { code } }
 router.get('/', async (req, res) => {
   try {
-    const [[shop]] = await pool.query('SELECT name FROM shops WHERE id = ?', [req.shopId]);
+    const [[shop]] = await pool.query('SELECT name, code FROM shops WHERE id = ?', [req.shopId]);
     const [rows] = await pool.query(
       `SELECT doc_type, company_name, address, phone, line_id, tax_id, branch_text, title, accent_color, logo_path, logo_width
        FROM shop_doc_settings WHERE shop_id = ?`,
@@ -93,6 +88,8 @@ router.get('/', async (req, res) => {
     if (!byType.has('claim')) data.claim = { ...data.quotation, title: '', saved: false };
     data.repair_notice.default_branch_text = branchCodeFromName(shopName);
     data.repair_notice.branch_text = data.repair_notice.branch_text || data.repair_notice.default_branch_text;
+    // public pages (queue screen, tracking) are told the branch by this code in their link
+    data.shop = { code: shop ? shop.code : '' };
     res.json({ success: true, data });
   } catch (err) {
     serverError(res, err, 'โหลดหัวกระดาษไม่สำเร็จ');

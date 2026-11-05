@@ -6,14 +6,16 @@
 // lineWebhook.routes.js — ไม่เขียนกลไกเก็บค่าซ้ำ)
 const express = require('express');
 const pool = require('../db/pool');
-const { authenticate, requireManager } = require('../middleware/auth');
+const { authenticate, requireManager, DEFAULT_SHOP_ID } = require('../middleware/auth');
 const { getSetting, setSetting, getMessageTemplate } = require('./lineWebhook.routes');
 const { LINE_MESSAGE_DEFAULTS } = require('../utils/lineMessageDefaults');
+const { groupOfShop, createBindCode, unbindGroup } = require('../utils/lineBot3Groups');
 
 const router = express.Router();
 router.use(authenticate);
 
-const GROUP_ID_KEYS = ['line_group_id', 'line_group_id_bot2', 'line_group_id_bot3'];
+// bot 3's group decides which branch a bill closes in, so it only changes through the bind code below
+const GROUP_ID_KEYS = ['line_group_id', 'line_group_id_bot2'];
 const MESSAGE_KEYS = Object.keys(LINE_MESSAGE_DEFAULTS);
 
 // พนักงานทั่วไป (ไม่ใช่แค่เจ้าของร้าน) ต้องอ่านค่านี้ได้ — ปุ่ม "คัดลอกลงกลุ่ม" ที่หน้า
@@ -29,11 +31,16 @@ router.get('/line-template-blank', async (req, res) => {
   }
 });
 
+function bot3GroupStatus(groupId) {
+  return { bound: Boolean(groupId), group_tail: groupId ? groupId.slice(-6) : '' };
+}
+
 router.get('/line', requireManager, async (req, res) => {
   try {
-    const [groupIdValues, messageValues] = await Promise.all([
+    const [groupIdValues, messageValues, bot3Group] = await Promise.all([
       Promise.all(GROUP_ID_KEYS.map((k) => getSetting(k, req.shopId))),
       Promise.all(MESSAGE_KEYS.map((k) => getSetting(k, req.shopId))),
+      groupOfShop(req.shopId),
     ]);
 
     const group_ids = {};
@@ -61,6 +68,8 @@ router.get('/line', requireManager, async (req, res) => {
           bot3: Boolean(process.env.LINE_BOT3_CHANNEL_SECRET && process.env.LINE_BOT3_CHANNEL_ACCESS_TOKEN),
         },
         group_ids,
+        bot3_group: bot3GroupStatus(bot3Group),
+        is_main_shop: req.shopId === DEFAULT_SHOP_ID, // bots 1 and 2 work on the main shop only
         messages,
       },
     });
@@ -89,6 +98,35 @@ router.put('/line', requireManager, async (req, res) => {
   } catch (err) {
     console.error('Error saving LINE settings:', err);
     res.status(500).json({ error: 'บันทึกการตั้งค่าไม่สำเร็จ' });
+  }
+});
+
+router.get('/line/bot3-group', requireManager, async (req, res) => {
+  try {
+    res.json({ success: true, data: bot3GroupStatus(await groupOfShop(req.shopId)) });
+  } catch (err) {
+    console.error('Error loading bot3 group:', err);
+    res.status(500).json({ error: 'โหลดสถานะกลุ่มไม่สำเร็จ' });
+  }
+});
+
+// The code a manager types in this branch's closing group: "ผูกกลุ่มปิดบิล <code>" (see utils/lineBot3Groups.js)
+router.post('/line/bot3-bind-code', requireManager, async (req, res) => {
+  try {
+    res.json({ success: true, data: await createBindCode(req.shopId) });
+  } catch (err) {
+    console.error('Error creating bot3 bind code:', err);
+    res.status(500).json({ error: 'สร้างรหัสไม่สำเร็จ' });
+  }
+});
+
+router.delete('/line/bot3-group', requireManager, async (req, res) => {
+  try {
+    await unbindGroup(req.shopId);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Error unbinding bot3 group:', err);
+    res.status(500).json({ error: 'ยกเลิกการผูกกลุ่มไม่สำเร็จ' });
   }
 });
 

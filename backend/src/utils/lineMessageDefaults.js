@@ -220,8 +220,8 @@ const LINE_MESSAGE_DEFAULTS = {
   bot3_close_not_found: {
     group: 'bot3',
     label: 'ปิดบิล — ไม่พบบิลที่เปิดอยู่',
-    vars: '{{queue_no}}',
-    default: '⚠️ ไม่พบบิลที่เปิดอยู่สำหรับคิว {{queue_no}} กรุณาตรวจสอบเลขคิว',
+    vars: '{{queue_no}}, {{date}}',
+    default: '⚠️ ไม่พบบิลที่เปิดอยู่ของคิว {{queue_no}} วันที่ {{date}} จึงยังไม่ได้ปิดบิล\nถ้าเป็นบิลวันอื่น ให้ใส่บรรทัดวันที่ใต้เลขคิว เช่น 01/11/69\nถ้ายังไม่ได้อนุมัติใบ ให้อนุมัติในระบบก่อน',
   },
   bot3_close_ambiguous: {
     group: 'bot3',
@@ -244,8 +244,32 @@ const LINE_MESSAGE_DEFAULTS = {
   bot3_close_success: {
     group: 'bot3',
     label: 'ปิดบิล — สำเร็จ',
-    vars: '{{quotation_no}}, {{queue_no}}, {{customer_name}}, {{payment_method}}, {{amount}}, {{receipt_no}}',
-    default: '✅ ปิดบิล {{quotation_no}} เรียบร้อยแล้วตรับ\nคิว {{queue_no}} · {{customer_name}}\n💰 รับชำระแล้ว ({{payment_method}} {{amount}} บาท) — ใบเสร็จ {{receipt_no}}',
+    vars: '{{quotation_no}}, {{queue_no}}, {{customer_name}}, {{license_plate}}, {{payment_method}}, {{amount}}, {{receipt_no}}',
+    default: '✅ ปิดบิล {{quotation_no}} เรียบร้อยแล้วครับ\nคิว {{queue_no}} · {{customer_name}} · {{license_plate}}\n💰 รับชำระแล้ว ({{payment_method}} {{amount}} บาท) — ใบเสร็จ {{receipt_no}}',
+  },
+  bot3_close_no_payment: {
+    group: 'bot3',
+    label: 'ปิดบิล — ไม่มีช่องทางชำระ',
+    vars: '{{queue_no}}',
+    default: '⚠️ คิว {{queue_no}} ยังไม่ได้ปิดบิล เพราะไม่มีช่องทางชำระ\nกรุณาเพิ่มบรรทัด "ช่องทางการชำระ: โอน" (หรือ เงินสด / บัตรเครดิต / QRCode) แล้วส่งใหม่',
+  },
+  bot3_group_not_bound: {
+    group: 'bot3',
+    label: 'กลุ่มนี้ยังไม่ได้ผูกกับสาขา',
+    vars: '(ไม่มี)',
+    default: '⚠️ กลุ่มนี้ยังไม่ได้ผูกกับสาขา จึงยังไม่ได้ปิดบิล\nให้ผู้จัดการสร้างรหัสที่หน้าตั้งค่า แล้วพิมพ์ "ผูกกลุ่มปิดบิล รหัส" ในกลุ่มนี้',
+  },
+  bot3_bind_success: {
+    group: 'bot3',
+    label: 'ผูกกลุ่ม — สำเร็จ',
+    vars: '{{shop_name}}',
+    default: '✅ ผูกกลุ่มนี้กับสาขา {{shop_name}} แล้ว ปิดบิลจากกลุ่มนี้ได้เลยครับ',
+  },
+  bot3_bind_invalid: {
+    group: 'bot3',
+    label: 'ผูกกลุ่ม — รหัสผิดหรือหมดอายุ',
+    vars: '(ไม่มี)',
+    default: '⚠️ รหัสไม่ถูกต้องหรือหมดอายุ กรุณาสร้างรหัสใหม่ที่หน้าตั้งค่า',
   },
   bot3_close_failed: {
     group: 'bot3',

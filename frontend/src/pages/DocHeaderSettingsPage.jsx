@@ -9,14 +9,14 @@ import { useRefreshDocHeaders } from '../hooks/useDocHeader';
 import { isHexColor } from '../utils/docTheme';
 
 // Print header of the quotation, the receipt and the claim document, set separately for the signed-in branch:
-// company details, title, logo and one accent colour. The repair notice has a fixed layout and only takes the branch
-// code. Saved with PUT /api/doc-settings/:docType.
+// company details, title, logo and one accent colour. The branch code tab sets the short code used across the app;
+// the repair notice previews it. Saved with PUT /api/doc-settings/:docType.
 
 const DOC_TABS = [
   { key: 'quotation', label: 'ใบเสนอราคา', defaultTitle: 'ใบเสนอราคา', defaultColor: '#1e40af' },
   { key: 'receipt', label: 'ใบเสร็จรับเงิน', defaultTitle: 'ใบเสร็จรับเงิน/ใบรับประกันสินค้า', defaultColor: '#c9a35e' },
   { key: 'claim', label: 'ใบเคลม', defaultTitle: 'ใบเคลม', defaultColor: '#1e40af' },
-  { key: 'repair_notice', label: 'ใบแจ้งซ่อม', branchCodeOnly: true },
+  { key: 'repair_notice', label: 'ตัวย่อสาขา', branchCodeOnly: true },
 ];
 const HEADER_TABS = DOC_TABS.filter((t) => !t.branchCodeOnly);
 
@@ -257,7 +257,7 @@ export default function DocHeaderSettingsPage() {
       const res = await client.get('/doc-settings');
       // only this document's form is replaced: unsaved edits of the others stay
       applyServerData(res.data.data, tab);
-      setNotice(meta.branchCodeOnly ? 'บันทึกตัวย่อสาขาบนใบแจ้งซ่อมแล้ว' : `บันทึกหัวกระดาษ${meta.label}แล้ว`);
+      setNotice(meta.branchCodeOnly ? 'บันทึกตัวย่อสาขาแล้ว' : `บันทึกหัวกระดาษ${meta.label}แล้ว`);
     } catch (err) {
       setError(errorText(err, 'บันทึกไม่สำเร็จ'));
     } finally {
@@ -326,7 +326,7 @@ export default function DocHeaderSettingsPage() {
         <div>
           <h1>หัวกระดาษเอกสาร</h1>
           <p className="subtitle">
-            ตั้งค่าโลโก้ ชื่อ ที่อยู่ และสีของใบเสนอราคา / ใบเสร็จ / ใบเคลม และตัวย่อสาขาบนใบแจ้งซ่อมของสาขานี้ แต่ละสาขาและแต่ละเอกสารตั้งแยกกันได้
+            ตั้งค่าโลโก้ ชื่อ ที่อยู่ และสีของใบเสนอราคา / ใบเสร็จ / ใบเคลม และตัวย่อของสาขานี้ แต่ละสาขาและแต่ละเอกสารตั้งแยกกันได้
           </p>
         </div>
       </div>
@@ -352,7 +352,7 @@ export default function DocHeaderSettingsPage() {
         <div className="dh-form">
           {meta.branchCodeOnly && (
             <div className="form-group">
-              <label htmlFor="dh-branch-code">ตัวย่อสาขาบนใบแจ้งซ่อม เช่น SPK, PKS (ไม่เกิน 8 ตัวอักษร · ไม่กรอก = ใช้ตัวย่อจากชื่อสาขา)</label>
+              <label htmlFor="dh-branch-code">ตัวย่อสาขา เช่น SPK, PKS ใช้บนใบแจ้งซ่อม แถบเมนู จอแสดงคิว และใบ QR (ไม่เกิน 8 ตัวอักษร · ไม่กรอก = ใช้ตัวย่อจากชื่อสาขา)</label>
               <input id="dh-branch-code" type="text" maxLength={8} value={form.branch_text} placeholder={form.default_branch_text}
                 onChange={(e) => setField('branch_text', e.target.value.toUpperCase())} />
             </div>

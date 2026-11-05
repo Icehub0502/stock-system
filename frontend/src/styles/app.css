@@ -5189,6 +5189,8 @@ body:has(.modal-backdrop) .page-fade-in {
 .job-card-status-actions { display: flex; gap: 6px; flex-wrap: wrap; }
 .job-card-status-actions button { font-size: 0.78rem; padding: 4px 8px; }
 .job-card-status-block select { font-size: 0.82rem; padding: 4px 8px; }
+.job-card-timer { font-size: 0.85rem; font-weight: 600; color: #475569; font-variant-numeric: tabular-nums; }
+.job-card-timer-running { color: #b45309; }
 .job-card-copy-queue-btn { font-size: 0.82rem; padding: 4px 8px; width: 100%; margin-top: 6px; }
 
 .job-card-vehicle {

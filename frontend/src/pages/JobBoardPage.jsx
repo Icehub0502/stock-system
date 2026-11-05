@@ -12,7 +12,9 @@ import CaseResolutionModal from '../components/CaseResolutionModal';
 import DeclineReasonModal from '../components/DeclineReasonModal';
 import CarIcon from '../components/CarIcon';
 import StatusTrack from '../components/StatusTrack';
+import RepairTimer from '../components/RepairTimer';
 import useRealtimeEvent from '../hooks/useRealtimeEvent';
+import { useBranchIdentity } from '../hooks/useDocHeader';
 
 /**
  * รายการงานวันนี้ (สำหรับพนักงาน — ต่างจาก /board ที่เป็นจอสาธารณะห้องรับรอง)
@@ -21,6 +23,7 @@ import useRealtimeEvent from '../hooks/useRealtimeEvent';
  * ซับซ้อนกว่านั้น (แก้ข้อมูลรถ/ลูกค้า, รายการอะไหล่/ใบเสนอราคา)
  */
 export default function JobBoardPage() {
+  const { branchCode } = useBranchIdentity();
   const navigate = useNavigate();
   const [date, setDate] = useState(todayStr());
   const [jobs, setJobs] = useState([]);
@@ -404,6 +407,7 @@ export default function JobBoardPage() {
 
                 <div className="job-card-status-block" onClick={(e) => e.stopPropagation()}>
                   <StatusTrack status={j.status} path={isRework ? REWORK_PATH : undefined} />
+                  <RepairTimer seconds={j.repair_seconds} running={j.repair_running} />
                   <div className="job-card-status-row">
                     <span className={`status-badge ${st.badge}`}>{st.label}</span>
                     <div className="job-card-status-actions">
@@ -549,7 +553,7 @@ export default function JobBoardPage() {
                     {[0, 1].map((i) => (
                       <div className="track-qr-print-cell" key={i}>
                         <div className="tqr-brand">
-                          <span className="tqr-brand-champ">Champ</span><span className="tqr-brand-power">power</span><span className="tqr-brand-spk">SPK</span>
+                          <span className="tqr-brand-champ">Champ</span><span className="tqr-brand-power">power</span><span className="tqr-brand-spk">{branchCode}</span>
                         </div>
                         <div className="tqr-title">สแกนเช็คสถานะรถ</div>
                         <div className="tqr-qr-frame">

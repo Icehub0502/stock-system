@@ -13,6 +13,9 @@ const boardClient = axios.create({ baseURL: import.meta.env.VITE_API_URL || '/ap
 // upgrades (e.g. nginx WS proxy not deployed yet).
 const POLL_MS = 30000;
 
+// the branch comes from the link (?shop=<shop code>); without it the main shop's queue is shown
+const shopCodeFromLink = () => new URLSearchParams(window.location.search).get('shop') || undefined;
+
 /**
  * จอบอร์ดห้องรับรอง — สาธารณะ ไม่ต้องล็อกอิน (ดู board.routes.js ฝั่ง backend ที่
  * ตัดข้อมูลลูกค้าออกตั้งแต่ระดับ SQL แล้ว หน้านี้แค่แสดงสิ่งที่ backend ส่งมาตรง ๆ)
@@ -22,11 +25,13 @@ const POLL_MS = 30000;
 export default function BoardPage() {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [branchCode, setBranchCode] = useState('');
 
   const load = useCallback(async () => {
     try {
-      const res = await boardClient.get('/board');
+      const res = await boardClient.get('/board', { params: { shop: shopCodeFromLink() } });
       setRows(res.data.data || []);
+      setBranchCode(res.data.branch_code || '');
     } catch (err) {
       // จอสาธารณะ ไม่มีใครกดปิด error ได้ — เงียบไว้แล้วลองรอบถัดไปพอ
     } finally {
@@ -44,13 +49,17 @@ export default function BoardPage() {
   // if the socket never connects.
   useRealtimeEvent('board:changed', () => load(), { channel: 'board' });
 
+  useEffect(() => {
+    if (branchCode) document.title = `Champpower${branchCode}`;
+  }, [branchCode]);
+
   return (
     <div className="board-page">
       <header className="board-header">
         <span className="navbar-brand-text board-brand-text">
           <span className="brand-champ">Champ</span>
           <span className="brand-power">power</span>
-          <span className="brand-spk">SPK</span>
+          <span className="brand-spk">{branchCode}</span>
         </span>
       </header>
 

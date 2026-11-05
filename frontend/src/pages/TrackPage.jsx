@@ -34,7 +34,7 @@ export default function TrackPage() {
     setError('');
     setResult(null);
     try {
-      const res = await trackClient.get('/track', { params: { plate: plate.trim(), phone_last4: phoneLast4.trim() } });
+      const res = await trackClient.get('/track', { params: { plate: plate.trim(), phone_last4: phoneLast4.trim(), shop: params.get('shop') || undefined } });
       setResult(res.data.data);
     } catch (err) {
       setError(err.response?.data?.error || 'ค้นหาข้อมูลไม่สำเร็จ ลองใหม่อีกครั้ง');
