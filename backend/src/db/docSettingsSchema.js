@@ -1,5 +1,6 @@
-// Print header settings per branch ("หัวกระดาษ"): one row per shop and document type (quotation / receipt) holding the
-// company name, address, contacts, title, accent colour and logo that the print templates show.
+// Print header settings per branch ("หัวกระดาษ"): one row per shop and document type (quotation / receipt / claim)
+// holding the company name, address, contacts, title, accent colour and logo that the print templates show. A
+// repair_notice row only uses branch_text: the short branch code printed on the repair notice.
 // A shop with no row prints with defaults built from its shop name (see routes/docSettings.routes.js), so another
 // branch never prints the first shop's address. Shop 1 (the original Champ Power shop) is seeded once with the
 // header that used to be hard-coded in the frontend (its tax id is left empty: it was never printed); logo_path 'builtin:champpower' is the logo bundled with the app.
@@ -13,11 +14,13 @@ const SHOP_1_DEFAULTS = {
   line_id: '@Champ5',
 };
 
+const DOC_TYPE_ENUM = "ENUM('quotation','receipt','claim','repair_notice')";
+
 async function migrateDocSettings(conn) {
   await conn.query(`
     CREATE TABLE IF NOT EXISTS shop_doc_settings (
       shop_id INT NOT NULL,
-      doc_type ENUM('quotation','receipt') NOT NULL,
+      doc_type ${DOC_TYPE_ENUM} NOT NULL,
       company_name VARCHAR(120) DEFAULT NULL,
       address VARCHAR(300) DEFAULT NULL,
       phone VARCHAR(50) DEFAULT NULL,
@@ -34,6 +37,15 @@ async function migrateDocSettings(conn) {
       CONSTRAINT fk_doc_settings_shop FOREIGN KEY (shop_id) REFERENCES shops(id) ON DELETE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
+
+  // a table created earlier only knows quotation / receipt
+  const [[docType]] = await conn.query(
+    `SELECT COLUMN_TYPE AS type FROM information_schema.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'shop_doc_settings' AND COLUMN_NAME = 'doc_type'`
+  );
+  if (!docType.type.includes("'repair_notice'")) {
+    await conn.query(`ALTER TABLE shop_doc_settings MODIFY doc_type ${DOC_TYPE_ENUM} NOT NULL`);
+  }
 
   const [[shop1]] = await conn.query('SELECT id FROM shops WHERE id = 1');
   if (!shop1) return;

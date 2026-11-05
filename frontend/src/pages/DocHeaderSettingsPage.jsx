@@ -2,17 +2,23 @@ import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 're
 import client from '../api/client';
 import QuotationPrintTemplate from '../components/QuotationPrintTemplate';
 import ReceiptPrintTemplate from '../components/ReceiptPrintTemplate';
+import ClaimPrintTemplate from '../components/ClaimPrintTemplate';
+import RepairWorksheetPrintTemplate from '../components/RepairWorksheetPrintTemplate';
 import { logoSrc } from '../components/DocBrand';
 import { useRefreshDocHeaders } from '../hooks/useDocHeader';
 import { isHexColor } from '../utils/docTheme';
 
-// Print header of the quotation and the receipt, set separately for the signed-in branch:
-// company details, title, logo and one accent colour. Saved with PUT /api/doc-settings/:docType.
+// Print header of the quotation, the receipt and the claim document, set separately for the signed-in branch:
+// company details, title, logo and one accent colour. The repair notice has a fixed layout and only takes the branch
+// code. Saved with PUT /api/doc-settings/:docType.
 
 const DOC_TABS = [
   { key: 'quotation', label: 'ใบเสนอราคา', defaultTitle: 'ใบเสนอราคา', defaultColor: '#1e40af' },
   { key: 'receipt', label: 'ใบเสร็จรับเงิน', defaultTitle: 'ใบเสร็จรับเงิน/ใบรับประกันสินค้า', defaultColor: '#c9a35e' },
+  { key: 'claim', label: 'ใบเคลม', defaultTitle: 'ใบเคลม', defaultColor: '#1e40af' },
+  { key: 'repair_notice', label: 'ใบแจ้งซ่อม', branchCodeOnly: true },
 ];
+const HEADER_TABS = DOC_TABS.filter((t) => !t.branchCodeOnly);
 
 const TEXT_FIELDS = [
   { key: 'company_name', label: 'ชื่อบริษัท / ร้าน (แสดงสูงสุด 2 บรรทัด)', max: 120 },
@@ -52,6 +58,21 @@ function sampleData(docType) {
       ],
     };
   }
+  if (docType === 'claim') {
+    return {
+      claim_no: 'CLM-0001', claim_date: today(), customer_name: customer.customer_name, phone: customer.phone,
+      brand: vehicle.brand, model: vehicle.model, color: vehicle.color, license_plate: vehicle.license_plate, mileage: vehicle.mileage,
+      symptom: 'ลูกค้าแจ้งว่าช่วงล่างยังมีเสียงดังหลังเปลี่ยนโช๊คอัพ', resolution: 'ตรวจพบน็อตยึดหลวม ขันแน่นและทดลองขับแล้วเสียงหาย',
+      items: [{ product_name: 'น็อตยึดโช๊คอัพ', quantity: 2, unit_price: 0 }],
+      technician: 'ช่างตัวอย่าง', created_by_name: 'พนักงานตัวอย่าง',
+    };
+  }
+  if (docType === 'repair_notice') {
+    return {
+      job_no: 'JOB-0001', queue_no: '1', date: today(), symptom: 'ช่วงล่างมีเสียงดัง', vehicle,
+      items: [{ product_name: 'โช๊คอัพหน้า', quantity: 2 }, { product_name: 'ลูกหมากปีกนกล่าง', quantity: 2 }],
+    };
+  }
   return {
     receipt_no: 'RC-0001', receipt_date: today(), customer, vehicle, total_amount: 5500, paid_amount: 5500,
     items: [
@@ -59,6 +80,14 @@ function sampleData(docType) {
       { product_name_snapshot: 'ค่าแรงเปลี่ยน', qty: 1, price: 500, amount: 500 },
     ],
   };
+}
+
+function DocPreview({ docType, header }) {
+  const data = sampleData(docType);
+  if (docType === 'quotation') return <QuotationPrintTemplate data={data} header={header} />;
+  if (docType === 'claim') return <ClaimPrintTemplate claim={data} header={header} />;
+  if (docType === 'repair_notice') return <RepairWorksheetPrintTemplate data={data} header={header} />;
+  return <ReceiptPrintTemplate data={data} header={header} />;
 }
 
 function readFileAsDataUrl(file) {
@@ -82,7 +111,7 @@ function canDecodeImage(dataUrl) {
 
 export default function DocHeaderSettingsPage() {
   const [tab, setTab] = useState('quotation');
-  const [saved, setSaved] = useState(null); // what the server holds, both documents
+  const [saved, setSaved] = useState(null); // what the server holds, every document
   const [forms, setForms] = useState({}); // edited copy per document
   // per document: a data URL (new upload), 'remove', or { copyFrom: docType }
   const [pendingLogo, setPendingLogo] = useState({});
@@ -102,7 +131,7 @@ export default function DocHeaderSettingsPage() {
     setSaved(data);
     setForms((prev) => (onlyTab
       ? { ...prev, [onlyTab]: { ...data[onlyTab] } }
-      : { quotation: { ...data.quotation }, receipt: { ...data.receipt } }));
+      : Object.fromEntries(DOC_TABS.map((t) => [t.key, { ...data[t.key] }]))));
     setPendingLogo((prev) => (onlyTab ? { ...prev, [onlyTab]: undefined } : {}));
   };
 
@@ -115,14 +144,14 @@ export default function DocHeaderSettingsPage() {
 
   const meta = DOC_TABS.find((t) => t.key === tab);
   const form = forms[tab];
-  const otherTab = tab === 'quotation' ? 'receipt' : 'quotation';
+  const otherTabs = HEADER_TABS.filter((t) => t.key !== tab);
 
   const isDirtyTab = (key) => {
     if (!forms[key] || !saved) return false;
     return FORM_FIELDS.some((k) => String(forms[key][k] ?? '') !== String(saved[key][k] ?? '')) || Boolean(pendingLogo[key]);
   };
   const dirty = isDirtyTab(tab);
-  const dirtyAny = isDirtyTab('quotation') || isDirtyTab('receipt');
+  const dirtyAny = DOC_TABS.some((t) => isDirtyTab(t.key));
 
   // refreshing or closing the tab with edits that are not saved
   useEffect(() => {
@@ -187,7 +216,7 @@ export default function DocHeaderSettingsPage() {
   };
 
   // the logo is copied on the server when saving, so no file has to be uploaded again
-  const copyFromOther = () => {
+  const copyFromOther = (otherTab) => {
     const other = forms[otherTab];
     if (!other) return;
     setNotice('');
@@ -207,24 +236,28 @@ export default function DocHeaderSettingsPage() {
   const save = async () => {
     if (!form) return;
     const color = normalizeColor(form.accent_color);
-    if (color && !isHexColor(color)) { setError('สีต้องอยู่ในรูปแบบ #rrggbb เช่น #15803d'); return; }
+    if (!meta.branchCodeOnly && color && !isHexColor(color)) { setError('สีต้องอยู่ในรูปแบบ #rrggbb เช่น #15803d'); return; }
     setBusy(true);
     setError('');
     setNotice('');
     try {
       const body = {};
-      FORM_FIELDS.forEach((k) => { body[k] = form[k]; });
-      body.accent_color = color;
-      const logo = pendingLogo[tab];
-      if (logo === 'remove') body.remove_logo = true;
-      else if (logo && logo.copyFrom) body.copy_logo_from = logo.copyFrom;
-      else if (logo) body.logo_data_url = logo;
+      if (meta.branchCodeOnly) {
+        body.branch_text = form.branch_text;
+      } else {
+        FORM_FIELDS.forEach((k) => { body[k] = form[k]; });
+        body.accent_color = color;
+        const logo = pendingLogo[tab];
+        if (logo === 'remove') body.remove_logo = true;
+        else if (logo && logo.copyFrom) body.copy_logo_from = logo.copyFrom;
+        else if (logo) body.logo_data_url = logo;
+      }
       await client.put(`/doc-settings/${tab}`, body);
       await refreshHeaders();
       const res = await client.get('/doc-settings');
-      // only this document's form is replaced: unsaved edits of the other one stay
+      // only this document's form is replaced: unsaved edits of the others stay
       applyServerData(res.data.data, tab);
-      setNotice(`บันทึกหัวกระดาษ${meta.label}แล้ว`);
+      setNotice(meta.branchCodeOnly ? 'บันทึกตัวย่อสาขาบนใบแจ้งซ่อมแล้ว' : `บันทึกหัวกระดาษ${meta.label}แล้ว`);
     } catch (err) {
       setError(errorText(err, 'บันทึกไม่สำเร็จ'));
     } finally {
@@ -240,7 +273,14 @@ export default function DocHeaderSettingsPage() {
     if (pending === 'remove') logoPath = '';
     else if (pending && pending.copyFrom) logoPath = saved[pending.copyFrom].logo_path;
     else if (pending) logoPath = pending;
-    return { ...form, accent_color: normalizeColor(form.accent_color), logo_path: logoPath, logo_width: Number(form.logo_width) || 130 };
+    return {
+      ...form,
+      accent_color: normalizeColor(form.accent_color),
+      logo_path: logoPath,
+      logo_width: Number(form.logo_width) || 130,
+      // an empty branch code prints the one from the branch name, so the preview shows that too
+      branch_text: form.branch_text || form.default_branch_text || '',
+    };
   }, [form, pending, saved]);
 
   // lines the printed header cannot show: the sheet is clipped in the preview exactly as it is on paper.
@@ -277,7 +317,6 @@ export default function DocHeaderSettingsPage() {
   if (loading && !form) return <div className="quotation-page"><div className="loading">กำลังโหลด...</div></div>;
   if (!form) return <div className="quotation-page">{error && <div className="error-message">{error}</div>}</div>;
 
-  const PreviewTemplate = tab === 'quotation' ? QuotationPrintTemplate : ReceiptPrintTemplate;
   const currentLogo = logoSrc(previewHeader.logo_path);
   const colorValue = isHexColor(previewHeader.accent_color) ? previewHeader.accent_color : meta.defaultColor;
 
@@ -287,7 +326,7 @@ export default function DocHeaderSettingsPage() {
         <div>
           <h1>หัวกระดาษเอกสาร</h1>
           <p className="subtitle">
-            ตั้งค่าโลโก้ ชื่อ ที่อยู่ และสีของใบเสนอราคา / ใบเสร็จของสาขานี้ แต่ละสาขาและแต่ละเอกสารตั้งแยกกันได้
+            ตั้งค่าโลโก้ ชื่อ ที่อยู่ และสีของใบเสนอราคา / ใบเสร็จ / ใบเคลม และตัวย่อสาขาบนใบแจ้งซ่อมของสาขานี้ แต่ละสาขาและแต่ละเอกสารตั้งแยกกันได้
           </p>
         </div>
       </div>
@@ -300,17 +339,25 @@ export default function DocHeaderSettingsPage() {
         ))}
       </div>
 
-      <div className="dh-layout">
+      <div className={`dh-layout ${meta.branchCodeOnly ? 'dh-layout-code' : ''}`}>
         <div className="dh-preview-col" ref={colRef}>
           <div className="dh-preview-label">ตัวอย่าง (ย่อส่วน) — ตรงกับที่พิมพ์จริง</div>
           <div className="dh-preview" style={{ width: A4_PX.width * scale, height: A4_PX.height * scale }}>
             <div className="dh-preview-inner" ref={previewRef} style={{ transform: `scale(${scale})` }}>
-              <PreviewTemplate data={sampleData(tab)} header={previewHeader} />
+              <DocPreview docType={tab} header={previewHeader} />
             </div>
           </div>
         </div>
 
         <div className="dh-form">
+          {meta.branchCodeOnly && (
+            <div className="form-group">
+              <label htmlFor="dh-branch-code">ตัวย่อสาขาบนใบแจ้งซ่อม เช่น SPK, PKS (ไม่เกิน 8 ตัวอักษร · ไม่กรอก = ใช้ตัวย่อจากชื่อสาขา)</label>
+              <input id="dh-branch-code" type="text" maxLength={8} value={form.branch_text} placeholder={form.default_branch_text}
+                onChange={(e) => setField('branch_text', e.target.value.toUpperCase())} />
+            </div>
+          )}
+          {!meta.branchCodeOnly && (<>
           <div className="form-group">
             <label>โลโก้ (PNG / JPG / WEBP ไม่เกิน 2 MB)</label>
             <div className="dh-logo-row">
@@ -359,7 +406,7 @@ export default function DocHeaderSettingsPage() {
               <input type="text" className="dh-color-hex" aria-label="รหัสสี" maxLength={7} placeholder={meta.defaultColor} value={form.accent_color}
                 onChange={(e) => setField('accent_color', e.target.value)} />
               <button type="button" className="btn btn-secondary" onClick={() => setField('accent_color', '')}>
-                ใช้สีมาตรฐาน ({tab === 'quotation' ? 'น้ำเงิน' : 'ครีม'})
+                ใช้สีมาตรฐาน ({tab === 'receipt' ? 'ครีม' : 'น้ำเงิน'})
               </button>
             </div>
             <div className="dh-swatches">
@@ -369,6 +416,7 @@ export default function DocHeaderSettingsPage() {
               ))}
             </div>
           </div>
+          </>)}
 
           <div ref={messageRef}>
             {clipped.map((text) => <div className="warning-message dh-clip-warning" role="alert" key={text}>{text}</div>)}
@@ -378,10 +426,16 @@ export default function DocHeaderSettingsPage() {
           <div className="modal-actions">
             <button type="button" className="btn btn-primary" onClick={save} disabled={busy || !dirty}>{busy ? 'กำลังบันทึก...' : 'บันทึก'}</button>
             <button type="button" className="btn btn-secondary" onClick={discardEdits} disabled={busy || !dirty}>ยกเลิกการแก้ไข</button>
-            <button type="button" className="btn btn-secondary" onClick={copyFromOther} disabled={busy}>
-              คัดลอกจาก{DOC_TABS.find((t) => t.key === otherTab).label}
-            </button>
           </div>
+          {!meta.branchCodeOnly && (
+            <div className="modal-actions dh-copy-actions">
+              {otherTabs.map((t) => (
+                <button key={t.key} type="button" className="btn btn-secondary" onClick={() => copyFromOther(t.key)} disabled={busy}>
+                  คัดลอกจาก{t.label}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>

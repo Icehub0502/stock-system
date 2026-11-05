@@ -34,7 +34,7 @@ export function refreshDocHeaders(shopId) {
   return load(shopId, true);
 }
 
-// docType: 'quotation' | 'receipt' → { header, loaded }
+// docType: 'quotation' | 'receipt' | 'claim' | 'repair_notice' → { header, loaded }
 export function useDocHeader(docType) {
   const { user } = useAuth();
   const shopId = user ? user.shop_id : null;

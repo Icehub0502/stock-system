@@ -143,4 +143,120 @@ describe('doc header settings', () => {
     expect(header.address).toBe('99/9 ถนนตัวอย่าง\nต.ตัวอย่าง อ.เมือง\nจ.สมุทรปราการ 10270');
     expect(header.company_name).toBe('ชื่อ สอง');
   });
+
+  describe('claim document header', () => {
+    let shop;
+
+    beforeAll(async () => {
+      shop = await createShop();
+      await put(shop, 'quotation', { company_name: 'Quote Co', title: 'หัวใบเสนอราคา', phone: '02-111', accent_color: '#112233', logo_data_url: pngDataUrl, logo_width: 150 });
+    });
+
+    afterAll(async () => {
+      fs.rmSync(path.join(UPLOADS_DIR, 'shops', String(shop.shopId)), { recursive: true, force: true });
+      await dropShop(shop.shopId);
+    });
+
+    test('prints the quotation header, not its title, until it is saved', async () => {
+      const { quotation, claim } = (await get(shop)).body.data;
+      expect(claim).toMatchObject({ company_name: 'Quote Co', phone: '02-111', accent_color: '#112233', logo_width: 150, title: '', saved: false });
+      expect(claim.logo_path).toBe(quotation.logo_path);
+    });
+
+    test('a document never saved copies the logo it is showing', async () => {
+      const other = await createShop();
+      try {
+        await put(other, 'quotation', { logo_data_url: pngDataUrl });
+        expect((await put(other, 'receipt', { copy_logo_from: 'claim' })).status).toBe(200);
+        expect((await get(other)).body.data.receipt.logo_path).toMatch(/logo-receipt-.*\.png$/);
+      } finally {
+        fs.rmSync(path.join(UPLOADS_DIR, 'shops', String(other.shopId)), { recursive: true, force: true });
+        await dropShop(other.shopId);
+      }
+    });
+
+    test('the first save keeps what it left out and gets a logo file of its own', async () => {
+      expect((await put(shop, 'claim', { title: 'ใบเคลมสินค้า' })).status).toBe(200);
+      const { quotation, claim } = (await get(shop)).body.data;
+      expect(claim).toMatchObject({ company_name: 'Quote Co', phone: '02-111', accent_color: '#112233', logo_width: 150, title: 'ใบเคลมสินค้า', saved: true });
+      expect(claim.logo_path).toMatch(/logo-claim-.*\.png$/);
+      expect(quotation.title).toBe('หัวใบเสนอราคา');
+
+      await put(shop, 'quotation', { remove_logo: true, company_name: 'Changed Co' });
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      const after = (await get(shop)).body.data.claim;
+      expect(after.company_name).toBe('Quote Co');
+      expect(fs.existsSync(path.join(UPLOADS_DIR, after.logo_path.slice('/uploads/'.length)))).toBe(true);
+    });
+
+    test('removing the logo on the first save leaves it empty and the quotation logo alone', async () => {
+      const other = await createShop();
+      try {
+        await put(other, 'quotation', { logo_data_url: pngDataUrl });
+        const quotationLogo = (await get(other)).body.data.quotation.logo_path;
+        expect((await put(other, 'claim', { remove_logo: true })).status).toBe(200);
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        expect((await get(other)).body.data.claim.logo_path).toBe('');
+        expect(fs.existsSync(path.join(UPLOADS_DIR, quotationLogo.slice('/uploads/'.length)))).toBe(true);
+      } finally {
+        fs.rmSync(path.join(UPLOADS_DIR, 'shops', String(other.shopId)), { recursive: true, force: true });
+        await dropShop(other.shopId);
+      }
+    });
+
+    test('only a manager and above may change it', async () => {
+      expect((await put(shop, 'claim', { title: 'Hack' }, shop.token)).status).toBe(403);
+    });
+  });
+
+  describe('branch code on the repair notice', () => {
+    const shopToken = (shopId) => require('jsonwebtoken').sign({ id: 1, username: 'x', role: 'office', shop_id: shopId }, process.env.JWT_SECRET, { expiresIn: '1h' });
+    let named;
+
+    beforeAll(async () => {
+      named = await createShop();
+      await pool.execute('UPDATE shops SET name = ? WHERE id = ?', ['แชมป์พาวเวอร์ PKS', named.shopId]);
+    });
+
+    afterAll(async () => { await dropShop(named.shopId); });
+
+    test('comes from the end of the branch name until it is set', async () => {
+      expect((await get(named)).body.data.repair_notice).toMatchObject({ branch_text: 'PKS', default_branch_text: 'PKS', saved: false });
+      const res = await request(app).get('/api/doc-settings').set(as(shopToken(1)));
+      expect(res.body.data.repair_notice.branch_text).toBe('SPK');
+    });
+
+    test('a name that does not end in a code prints no code', async () => {
+      const other = await createShop();
+      try {
+        await pool.execute('UPDATE shops SET name = ? WHERE id = ?', ['แชมป์พาวเวอร์', other.shopId]);
+        expect((await get(other)).body.data.repair_notice.branch_text).toBe('');
+      } finally {
+        await dropShop(other.shopId);
+      }
+    });
+
+    test('a manager sets it for their own branch, emptying it goes back to the name', async () => {
+      expect((await put(named, 'repair_notice', { branch_text: ' pk2 ' })).status).toBe(200);
+      expect((await get(named)).body.data.repair_notice).toMatchObject({ branch_text: 'PK2', saved: true });
+      expect((await get(shopB)).body.data.repair_notice.branch_text).not.toBe('PK2');
+      expect((await put(named, 'repair_notice', { branch_text: '' })).status).toBe(200);
+      expect((await get(named)).body.data.repair_notice.branch_text).toBe('PKS');
+    });
+
+    test('staff may not change it and it stays short', async () => {
+      expect((await put(named, 'repair_notice', { branch_text: 'XX' }, named.token)).status).toBe(403);
+      expect((await put(named, 'repair_notice', { branch_text: '123456789' })).status).toBe(400);
+    });
+
+    test('it takes no logo, colour or other header field', async () => {
+      expect((await put(named, 'repair_notice', {
+        branch_text: 'PKS', company_name: 'Ignored', accent_color: 'red', logo_width: 10, logo_data_url: pngDataUrl,
+      })).status).toBe(200);
+      expect((await get(named)).body.data.repair_notice).toMatchObject({ branch_text: 'PKS', logo_path: '', accent_color: '' });
+      expect((await put(named, 'repair_notice', { copy_logo_from: 'receipt' })).status).toBe(200);
+      expect((await get(named)).body.data.repair_notice.logo_path).toBe('');
+      expect((await put(named, 'quotation', { copy_logo_from: 'repair_notice' })).status).toBe(400);
+    });
+  });
 });

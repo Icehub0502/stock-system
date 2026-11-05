@@ -6,8 +6,8 @@ import { formatMoney } from '../utils/format';
 import { amountToWords } from '../utils/printDoc';
 import { plateWithProvince } from '../utils/thaiProvinces';
 
-// ใบเคลม: same family as the quotation (same header settings of the signed-in shop, same logo and colour), so it reuses
-// the quotation's print area id for the colours in receipt.css.
+// ใบเคลม: same family as the quotation, so it reuses the quotation's print area id for the colours in receipt.css. The
+// header is set on its own tab of the settings page; until then the server hands back the quotation's.
 const ITEMS_PER_PAGE = 8;
 
 function formatThaiDate(dateInput) {
@@ -27,8 +27,10 @@ function chunkItems(items, size) {
   return pages;
 }
 
-export default function ClaimPrintTemplate({ claim }) {
-  const { header } = useDocHeader('quotation');
+// header: optional override (the settings page previews unsaved changes); by default the signed-in shop's saved header
+export default function ClaimPrintTemplate({ claim, header: headerOverride }) {
+  const saved = useDocHeader('claim').header;
+  const header = headerOverride || saved;
   if (!claim) return null;
 
   const items = claim.items || [];
@@ -48,7 +50,7 @@ export default function ClaimPrintTemplate({ claim }) {
               <div className="doc-header-top">
                 <DocBrand header={header} />
                 <div className="doc-title-block">
-                  <h1>ใบเคลม</h1>
+                  <h1>{header.title || 'ใบเคลม'}</h1>
                   <div className="doc-infobox">
                     <div className="doc-meta-row doc-meta-primary"><span>เลขที่ใบเคลม :</span><strong>{claim.claim_no}</strong></div>
                     <div className="doc-meta-row"><span>วันที่ :</span><strong>{docDate}</strong></div>

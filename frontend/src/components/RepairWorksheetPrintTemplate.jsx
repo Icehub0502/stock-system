@@ -1,4 +1,5 @@
 import React from 'react';
+import { useDocHeader } from '../hooks/useDocHeader';
 
 // ใบแจ้งซ่อมแบบใหม่ — ให้หน้าตาเหมือนใบแจ้งซ่อมกระดาษแบบเดิม (checklist ตัวใหญ่
 // ติ๊ก ✓ ไม่ใช่ตารางใบเสร็จ/ใบเสนอราคา) แต่รายการมาจากใบเสนอราคาที่เลือกไว้แล้ว
@@ -27,7 +28,10 @@ function chunkItems(items, size) {
   return pages;
 }
 
-export default function RepairWorksheetPrintTemplate({ data }) {
+// header: optional override (the settings page previews unsaved changes); branch_text is the branch code (SPK, PKS)
+export default function RepairWorksheetPrintTemplate({ data, header: headerOverride }) {
+  const saved = useDocHeader('repair_notice').header;
+  const branchCode = (headerOverride || saved).branch_text;
   if (!data) return null;
 
   const {
@@ -46,12 +50,12 @@ export default function RepairWorksheetPrintTemplate({ data }) {
           <div className="doc-page rw-page" key={pageIndex}>
             <div className="rw-header">
               <div className="rw-spk">
-                <div className="rw-spk-label">SPK</div>
+                <div className="rw-spk-label">{branchCode}</div>
               </div>
 
               <div className="rw-title">
                 <div className="rw-brand">
-                  <span className="rw-champ">Champ</span><span className="rw-power">power</span><span className="rw-spktext">SPK</span>
+                  <span className="rw-champ">Champ</span><span className="rw-power">power</span><span className="rw-spktext">{branchCode}</span>
                 </div>
                 <div className="rw-doctitle">ใบแจ้งซ่อม / รายการซ่อม</div>
                 <div className="rw-plate">

@@ -6611,6 +6611,7 @@ td.stock-all-actions button { padding: 8px 14px; font-size: 0.85em; min-height: 
 .dh-form { grid-column: 1; grid-row: 1; }
 .dh-preview-col { grid-column: 2; grid-row: 1; min-width: 0; }
 .dh-form .form-group { margin-bottom: 14px; }
+.dh-copy-actions button { flex-basis: 100%; }
 .dh-form input[type="text"], .dh-form textarea { width: 100%; }
 .dh-logo-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
 .dh-logo-thumb { width: 96px; height: 96px; object-fit: contain; border: 1px solid #e5e7eb; border-radius: 8px; background: #fff; }
@@ -6634,6 +6635,9 @@ td.stock-all-actions button { padding: 8px 14px; font-size: 0.85em; min-height: 
   .dh-layout { grid-template-columns: 1fr; }
   .dh-form, .dh-preview-col { grid-column: 1; }
   .dh-form { grid-row: 2; }
+  /* the branch code tab is one field: keep it above the long preview */
+  .dh-layout-code .dh-form { grid-row: 1; }
+  .dh-layout-code .dh-preview-col { grid-row: 2; }
 }
 
 /* standard-price note under a selected row of the job page */
