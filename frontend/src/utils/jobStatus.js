@@ -48,3 +48,18 @@ export function prevMainStatus(status) {
   if (idx <= 0) return null;
   return MAIN_PATH[idx - 1];
 }
+
+// A come-back job (ลูกค้าเก่าแก้งาน) has nothing to quote or approve. Leaving "กำลังซ่อม" asks how the car was fixed, so
+// it has no plain next step: the fix goes to "พร้อมส่ง", or to "รอตั้งศูนย์" when alignment is still needed.
+export const REWORK_PATH = ['received', 'inspecting', 'repairing', 'aligning', 'ready', 'delivered'];
+
+const REWORK_NEXT = { received: 'inspecting', inspecting: 'repairing', aligning: 'ready', ready: 'delivered' };
+const REWORK_PREV = { inspecting: 'received', repairing: 'inspecting', aligning: 'repairing', ready: 'repairing', delivered: 'ready' };
+
+export function nextReworkStatus(status) {
+  return REWORK_NEXT[status] || null;
+}
+
+export function prevReworkStatus(status) {
+  return REWORK_PREV[status] || null;
+}

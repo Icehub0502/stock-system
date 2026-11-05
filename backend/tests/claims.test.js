@@ -230,6 +230,204 @@ describe('/api/claims — บันทึกเคลมอิสระ ไม�
       expect(await bucketOf(res.body.id)).toBe('open');
     });
 
+    describe('งานแก้จากการ์ดคิว', () => {
+      const newJob = async () => {
+        const res = await request(app).post('/api/jobs').set(auth()).send({ vehicle_id: vehicleId, customer_id: customerId, symptom: 'เสียงดังหลังเปลี่ยนแร็ค' });
+        expect(res.status).toBe(201);
+        await request(app).patch(`/api/jobs/${res.body.id}/status`).set(auth()).send({ status: 'inspecting' });
+        return res.body.id;
+      };
+      const setStatus = (jobId, status) => request(app).patch(`/api/jobs/${jobId}/status`).set(auth()).send({ status });
+      const getJob = async (jobId) => (await request(app).get(`/api/jobs/${jobId}`).set(auth())).body.data;
+      const removeJobs = () => pool.execute('DELETE FROM jobs WHERE vehicle_id = ? AND shop_id = 1', [vehicleId]);
+
+      afterEach(removeJobs);
+
+      test('กดลูกค้าเก่าแก้งาน → เปิดเคสจากอาการในคิว ไปกำลังซ่อมเลย กดซ้ำไม่เกิดเคสซ้ำ', async () => {
+        const jobId = await newJob();
+        const first = await request(app).post(`/api/claims/from-job/${jobId}`).set(auth());
+        expect(first.status).toBe(201);
+        const again = await request(app).post(`/api/claims/from-job/${jobId}`).set(auth());
+        expect(again.body.id).toBe(first.body.id);
+
+        const job = await getJob(jobId);
+        expect(job).toMatchObject({ status: 'repairing', case_id: first.body.id, case_type: 'rework', case_no: first.body.claim_no });
+        const detail = await request(app).get(`/api/claims/${first.body.id}`).set(auth());
+        expect(detail.body.data).toMatchObject({ symptom: 'เสียงดังหลังเปลี่ยนแร็ค', status: 'open', queue_no: job.queue_no });
+      });
+
+      test('เลือกแก้งานได้เฉพาะขั้นตรวจเช็ค และงานที่ยังไม่มีใบเสนอราคา', async () => {
+        const jobId = await newJob();
+        await setStatus(jobId, 'received');
+        expect((await request(app).post(`/api/claims/from-job/${jobId}`).set(auth())).status).toBe(409);
+        await setStatus(jobId, 'inspecting');
+        const [quote] = await pool.execute(
+          "INSERT INTO quotations (shop_id, quotation_no, quotation_date, customer_id, vehicle_id, total_amount) VALUES (1, ?, CURDATE(), ?, ?, 0)",
+          [`QT-CLAIM-${jobId}`, customerId, vehicleId]
+        );
+        await pool.execute('UPDATE jobs SET quotation_id = ? WHERE id = ?', [quote.insertId, jobId]);
+        expect((await request(app).post(`/api/claims/from-job/${jobId}`).set(auth())).status).toBe(409);
+        await pool.execute('UPDATE jobs SET quotation_id = NULL WHERE id = ?', [jobId]);
+        await pool.execute('DELETE FROM quotations WHERE id = ?', [quote.insertId]);
+      });
+
+      test('งานแก้ไม่เสนอราคาไม่อนุมัติ และออกจากกำลังซ่อมไม่ได้จนกว่าจะระบุวิธีแก้', async () => {
+        const jobId = await newJob();
+        const { body } = await request(app).post(`/api/claims/from-job/${jobId}`).set(auth());
+        expect((await setStatus(jobId, 'quoted')).status).toBe(409);
+        expect((await setStatus(jobId, 'approved')).status).toBe(409);
+        for (const status of ['aligning', 'ready', 'delivered']) {
+          expect((await setStatus(jobId, status)).status).toBe(409);
+        }
+
+        const url = `/api/claims/${body.id}/resolution`;
+        expect((await request(app).post(url).set(auth()).send({ resolution: '  ' })).status).toBe(400);
+        const saved = await request(app).post(url).set(auth()).send({ finding: 'น็อตหลวม', resolution: 'ขันน็อตใหม่', follow_up_date: today() });
+        expect(saved.status).toBe(200);
+        expect((await setStatus(jobId, 'ready')).status).toBe(200);
+        expect(await bucketOf(body.id)).toBe('due');
+      });
+
+      test('บันทึกวิธีแก้ไม่กระทบอะไหล่ที่ใส่ไว้ และเคสที่ปิดแล้วแก้ไม่ได้', async () => {
+        const res = await request(app).post('/api/claims').set(auth()).send({
+          customer_id: customerId, vehicle_id: vehicleId, case_type: 'parts_claim', items: [{ product_name: 'ลูกหมาก', quantity: 2, unit_price: 0 }],
+        });
+        const url = `/api/claims/${res.body.id}/resolution`;
+        expect((await request(app).post(url).set(auth()).send({ resolution: 'เปลี่ยนลูกหมาก' })).status).toBe(200);
+        const detail = await request(app).get(`/api/claims/${res.body.id}`).set(auth());
+        expect(detail.body.data.items).toHaveLength(1);
+        await pool.execute("UPDATE claims SET status = 'closed' WHERE id = ?", [res.body.id]);
+        expect((await request(app).post(url).set(auth()).send({ resolution: 'แก้อีก' })).status).toBe(409);
+      });
+
+      const comeBack = async (symptom = 'ยังมีเสียงตอนเลี้ยว') => {
+        const res = await request(app).post('/api/jobs').set(auth()).send({ vehicle_id: vehicleId, customer_id: customerId, symptom });
+        await setStatus(res.body.id, 'inspecting');
+        return res.body.id;
+      };
+      const items = [{ product_name: 'ลูกหมาก', quantity: 1, unit_price: 0 }, { product_name: 'ผ้าเบรก', quantity: 1, unit_price: 450 }];
+      const caseOf = async (id) => (await request(app).get(`/api/claims/${id}`).set(auth())).body.data;
+
+      test('รถกลับมาอีก: ทำต่อเป็นเคสใหม่ เริ่มรอบนี้ใหม่หมด เคสเดิมและใบเคลมเดิมไม่เปลี่ยน', async () => {
+        const firstJob = await newJob();
+        const { body: first } = await request(app).post(`/api/claims/from-job/${firstJob}`).set(auth());
+        await request(app).put(`/api/claims/${first.id}`).set(auth()).send({
+          customer_id: customerId, vehicle_id: vehicleId, symptom: 'เสียงดังหลังเปลี่ยนแร็ค', resolution: 'ขันน็อต', follow_up_date: today(), items,
+        });
+        await request(app).post(`/api/claims/${first.id}/issue-document`).set(auth());
+
+        const open = await request(app).get('/api/claims/open-cases').query({ vehicle_id: vehicleId }).set(auth());
+        expect(open.body.data.map((c) => c.id)).toContain(first.id);
+
+        const secondJob = await comeBack();
+        const res = await request(app).post(`/api/claims/from-job/${secondJob}`).set(auth()).send({ claim_id: first.id });
+        expect(res.status).toBe(201);
+        expect(res.body.id).not.toBe(first.id);
+        expect(res.body.claim_no).not.toBe(first.claim_no);
+
+        // this round has its own symptom, no fix yet, no parts and nothing to collect; what was tried stays readable
+        const round = await caseOf(res.body.id);
+        expect(round).toMatchObject({ symptom: 'ยังมีเสียงตอนเลี้ยว', finding: null, resolution: null, status: 'open', doc_issued_at: null, continued_from_id: first.id });
+        expect(round.items).toHaveLength(0);
+        expect(round.earlier_rounds).toContain(first.claim_no);
+        expect(round.earlier_rounds).toContain('วิธีแก้: ขันน็อต');
+        expect(round.earlier_rounds).toContain('ผ้าเบรก x1 ฿450');
+        expect((await setStatus(secondJob, 'ready')).status).toBe(409);
+        const board = (await request(app).get('/api/jobs').set(auth())).body.data;
+        expect(board.find((j) => j.id === secondJob)).toMatchObject({ case_id: res.body.id, case_charge: null });
+        expect(Number(board.find((j) => j.id === firstJob).case_charge)).toBe(450);
+
+        // the first document still prints what the customer was given
+        const old = await caseOf(first.id);
+        expect(old).toMatchObject({ status: 'continued', symptom: 'เสียงดังหลังเปลี่ยนแร็ค', resolution: 'ขันน็อต' });
+        expect(old.items).toHaveLength(2);
+        expect(old.doc_issued_at).toBeTruthy();
+        expect((await getJob(firstJob)).case_id).toBe(first.id);
+        expect(await bucketOf(first.id)).toBeNull();
+        expect(await bucketOf(res.body.id)).toBe('open');
+        const history = await request(app).get(`/api/vehicle-history/${vehicleId}`).set(auth());
+        expect(history.body.data.summary.open_case_count).toBe(1);
+      });
+
+      test('เคสที่มีเคสใหม่ต่อแล้ว ตั้งนัดโทรไม่ได้ แต่คิวเก่าที่ค้างซ่อมยังระบุวิธีแก้แล้วไปต่อได้', async () => {
+        const firstJob = await newJob();
+        const { body: first } = await request(app).post(`/api/claims/from-job/${firstJob}`).set(auth());
+        const secondJob = await comeBack();
+        await request(app).post(`/api/claims/from-job/${secondJob}`).set(auth()).send({ claim_id: first.id });
+
+        const put = await request(app).put(`/api/claims/${first.id}`).set(auth()).send({
+          customer_id: customerId, vehicle_id: vehicleId, resolution: 'ขันน็อต', follow_up_date: today(), items: [],
+        });
+        expect(put.status).toBe(409);
+        const fix = await request(app).post(`/api/claims/${first.id}/resolution`).set(auth()).send({ resolution: 'ขันน็อต', follow_up_date: today() });
+        expect(fix.status).toBe(200);
+        expect((await setStatus(firstJob, 'ready')).status).toBe(200);
+        expect(await caseOf(first.id)).toMatchObject({ status: 'continued', follow_ups: [] });
+      });
+
+      test('กดทำต่อผิด: เคสใหม่ที่ยังว่างเข้าถังขยะ และเคสเดิมกลับไปรอโทรตามเดิม', async () => {
+        const firstJob = await newJob();
+        const { body: first } = await request(app).post(`/api/claims/from-job/${firstJob}`).set(auth());
+        await request(app).post(`/api/claims/${first.id}/resolution`).set(auth()).send({ resolution: 'ขันน็อต', follow_up_date: today() });
+        const secondJob = await comeBack();
+        const { body: second } = await request(app).post(`/api/claims/from-job/${secondJob}`).set(auth()).send({ claim_id: first.id });
+
+        expect((await request(app).post(`/api/claims/from-job/${secondJob}/cancel`).set(auth())).status).toBe(200);
+        expect((await request(app).get(`/api/claims/${second.id}`).set(auth())).status).toBe(404);
+        await pool.execute("DELETE FROM deleted_records WHERE entity = 'claims' AND record_id = ?", [second.id]);
+        expect(await caseOf(first.id)).toMatchObject({ status: 'follow_up', resolution: 'ขันน็อต' });
+        expect(await bucketOf(first.id)).toBe('due');
+      });
+
+      test('กดผิด: เคสเปล่าเข้าถังขยะแล้วกลับไปตรวจเช็ค ส่วนเคสที่มีข้อมูลยังอยู่', async () => {
+        const blankJob = await newJob();
+        const blank = await request(app).post(`/api/claims/from-job/${blankJob}`).set(auth());
+        expect((await request(app).post(`/api/claims/from-job/${blankJob}/cancel`).set(auth())).status).toBe(200);
+        expect(await getJob(blankJob)).toMatchObject({ status: 'inspecting', claim_id: null, case_id: null });
+        expect((await request(app).get(`/api/claims/${blank.body.id}`).set(auth())).status).toBe(404);
+        await pool.execute("DELETE FROM deleted_records WHERE entity = 'claims' AND record_id = ?", [blank.body.id]);
+
+        const workedJob = await newJob();
+        const worked = await request(app).post(`/api/claims/from-job/${workedJob}`).set(auth());
+        await request(app).post(`/api/claims/${worked.body.id}/resolution`).set(auth()).send({ resolution: 'ขันน็อต' });
+        expect((await request(app).post(`/api/claims/from-job/${workedJob}/cancel`).set(auth())).status).toBe(200);
+        expect((await request(app).get(`/api/claims/${worked.body.id}`).set(auth())).status).toBe(200);
+      });
+
+      test('ออกใบเคลม: ต้องมีปัญหาและวิธีแก้ เก็บเวลาครั้งแรก เข้ารายการใบเคลมพร้อมค่าใช้จ่าย และเปลี่ยนเป็นลงรายการไม่ได้แล้ว', async () => {
+        const jobId = await newJob();
+        const { body } = await request(app).post(`/api/claims/from-job/${jobId}`).set(auth());
+        const issue = () => request(app).post(`/api/claims/${body.id}/issue-document`).set(auth());
+        expect((await issue()).status).toBe(400);
+
+        await request(app).put(`/api/claims/${body.id}`).set(auth()).send({
+          customer_id: customerId, vehicle_id: vehicleId, symptom: 'เสียงดัง', resolution: 'ขันน็อตใหม่',
+          items: [{ product_name: 'ลูกหมาก', quantity: 1, unit_price: 0 }, { product_name: 'น้ำมันเครื่อง', quantity: 2, unit_price: 150 }],
+        });
+        expect((await issue()).status).toBe(200);
+        const first = (await request(app).get(`/api/claims/${body.id}`).set(auth())).body.data;
+        expect(first.doc_issued_at).toBeTruthy();
+        await pool.execute('UPDATE claims SET doc_issued_at = ? WHERE id = ?', ['2020-01-02 03:04:05', body.id]);
+        expect((await issue()).status).toBe(200);
+        const list = await request(app).get('/api/claims').query({ issued: 1, search: body.claim_no }).set(auth());
+        expect(list.body.data).toHaveLength(1);
+        expect(list.body.data[0].doc_issued_at).toContain('2020-01-02');
+        expect(Number(list.body.data[0].charge_total)).toBe(300);
+
+        expect((await request(app).post(`/api/claims/from-job/${jobId}/cancel`).set(auth())).status).toBe(409);
+      });
+
+      test('ร้านอื่นเปิดเคสจากคิวนี้ไม่ได้', async () => {
+        const jobId = await newJob();
+        const jwt = require('jsonwebtoken');
+        const [[user]] = await pool.query('SELECT id, username FROM users WHERE shop_id = 1 ORDER BY id LIMIT 1');
+        const [[other]] = await pool.query('SELECT id FROM shops WHERE id <> 1 ORDER BY id LIMIT 1');
+        if (!other) return;
+        const token = jwt.sign({ id: user.id, username: user.username, role: 'manager', shop_id: other.id }, process.env.JWT_SECRET, { expiresIn: '1h' });
+        expect((await request(app).post(`/api/claims/from-job/${jobId}`).set(auth(token))).status).toBe(404);
+      });
+    });
+
     test('ค้นเคสเก่าจากวิธีแก้ได้ และเคสตัวอย่างของรุ่นเดียวกันขึ้นตอนเปิดเคสใหม่', async () => {
       const res = await createCase({ resolution: 'เปลี่ยนซีลกันรั่วรุ่นพิเศษ' });
       const list = await request(app).get('/api/claims').query({ search: 'ซีลกันรั่วรุ่นพิเศษ' }).set(auth());

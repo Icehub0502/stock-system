@@ -6931,3 +6931,28 @@ a.dash-stat-card.dash-stat-link { text-decoration: none; color: inherit; display
 
 /* scan summary: remove / give back is a worded, finger-size button */
 .scan-del { width: auto !important; height: 44px !important; padding: 0 12px !important; gap: 6px; font-weight: 600; font-size: 0.85rem; }
+
+/* come-back job: its badge on the queue card and job page, the two ways out of inspecting, the claim document */
+.job-card-case-badge { font-size: 0.75rem; white-space: nowrap; background: #ffedd5; color: #9a3412; border-radius: 999px; padding: 2px 8px; font-weight: 700; }
+.job-page-case-badge { margin-left: 8px; vertical-align: middle; }
+.job-card-rework-btn { background: #ffedd5; color: #9a3412; border-color: #fdba74; font-weight: 600; }
+.rework-panel-title { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; }
+.rework-cancel { margin-top: 16px; }
+.rework-case-list { display: grid; gap: 8px; margin: 12px 0; }
+.rework-case-option { display: grid; gap: 2px; width: 100%; min-height: 44px; padding: 10px 12px; text-align: left; overflow-wrap: anywhere; }
+.case-align-check { display: flex; align-items: center; gap: 8px; min-height: 40px; font-weight: 600; }
+.case-align-check input { width: auto; }
+.claim-doc-block { border: 1px solid #d1d5db; border-radius: 4px; padding: 6px 10px; page-break-inside: avoid; }
+.claim-doc-label { font-weight: 700; font-size: 12px; color: var(--doc-strong, #1e3a8a); }
+.claim-doc-text { min-height: 40px; white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13.5px; }
+.claim-doc-car { grid-column: span 2; }
+.case-issue-btn { background: #fff; color: #111; border: 1px solid #111; }
+.case-earlier { margin-top: 8px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.rework-case-option { background: #fff; border: 2px solid #111; border-radius: 8px; color: #111; cursor: pointer; }
+/* a long parts list stays in a short box, so a tapped part and the list of chosen parts are on screen together */
+.case-form .jdp-item-grid { max-height: 260px; overflow-y: auto; }
+@media (max-width: 640px) {
+  .case-form .jdp-selected-price { height: 42px; }
+  .case-form .jdp-selected-price input { background: transparent; }
+  .case-form .jdp-selected-qty button, .case-form .jdp-selected-remove { min-height: 42px; min-width: 42px; }
+}

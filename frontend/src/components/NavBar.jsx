@@ -46,6 +46,7 @@ const NAV_CATEGORIES = [
     items: [
       { to: "/receipt-list", label: "ใบเสร็จรับเงิน" },
       { to: "/quotations", label: "ใบเสนอราคา" },
+      { to: "/claim-documents", label: "ใบเคลม" },
       { to: "/vehicle-history", label: "ประวัติรถ" },
       { to: "/appointments", label: "ลูกค้าที่นัดหมาย" },
       { to: "/quotations/declined-summary", label: "ลูกค้าที่ไม่ได้ทำ (สรุปเหตุผล)" },

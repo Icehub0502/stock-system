@@ -3,7 +3,8 @@
 //
 // claims gets:
 //   case_type          parts_claim (a part was claimed) | rework (came back to have our work fixed)
-//   status             open (being fixed) → follow_up (fixed, staff call the customer) → closed (closed by a manager)
+//   status             open (being fixed) → follow_up (fixed, staff call the customer) → closed (closed by a manager),
+//                      or continued (the car came back and a newer case carries on)
 //   source_receipt_id  the bill the problem comes from (optional, no foreign key: a deleted bill must not touch the case)
 //   finding, resolution, outcome, lesson, closed_at, closed_by
 // claim_follow_ups: one row per planned call; done_at is empty until staff write the report. A child of claims like
@@ -49,6 +50,22 @@ async function migrateClaimCases(conn) {
   await addColumn(conn, 'claims', 'closed_by', 'VARCHAR(100) DEFAULT NULL');
   if (!(await indexExists(conn, 'claims', 'idx_claim_shop_status'))) {
     await conn.query('ALTER TABLE claims ADD INDEX idx_claim_shop_status (shop_id, status)');
+  }
+  // A car that comes back about the same problem gets a new case, so each round keeps its own number, parts, charge and
+  // document. The earlier case becomes status 'continued'; the new one remembers it and what was tried, as text.
+  await addColumn(conn, 'claims', 'earlier_rounds', 'TEXT');
+  await addColumn(conn, 'claims', 'continued_from_id', 'BIGINT UNSIGNED DEFAULT NULL');
+  // the claim document handed to the customer; its number is claim_no
+  await addColumn(conn, 'claims', 'doc_issued_at', 'DATETIME DEFAULT NULL');
+  await addColumn(conn, 'claims', 'doc_issued_by', 'VARCHAR(100) DEFAULT NULL');
+  if (!(await indexExists(conn, 'claims', 'idx_claim_shop_doc'))) {
+    await conn.query('ALTER TABLE claims ADD INDEX idx_claim_shop_doc (shop_id, doc_issued_at)');
+  }
+  // the queue job a come-back is being fixed on. One case can have several jobs when the car returns again, so the
+  // link sits on the job. No foreign key: deleting a case or a job must not touch the other one.
+  await addColumn(conn, 'jobs', 'claim_id', 'BIGINT UNSIGNED DEFAULT NULL');
+  if (!(await indexExists(conn, 'jobs', 'idx_job_claim'))) {
+    await conn.query('ALTER TABLE jobs ADD INDEX idx_job_claim (claim_id)');
   }
 
   await conn.query(`

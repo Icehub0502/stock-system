@@ -155,7 +155,7 @@ export default function ClaimManagementPage() {
                   <td data-label="สถานะ">
                     <span className={`status-badge ${CASE_STATUS[c.status]?.badge || 'status-badge-neutral'}`}>{CASE_STATUS[c.status]?.label || c.status}</span>
                     {c.outcome && <div className="vh-muted">{OUTCOME_LABEL[c.outcome]}</div>}
-                    {c.next_follow_up && <div className="vh-muted">โทร {formatDateTh(c.next_follow_up)}</div>}
+                    {c.next_follow_up && c.status !== 'continued' && <div className="vh-muted">โทร {formatDateTh(c.next_follow_up)}</div>}
                   </td>
                   <td data-label="ลูกค้า">{c.customer_name} {c.phone ? `· ${c.phone}` : ''}</td>
                   <td data-label="รถ">{c.license_plate || '-'} · {c.brand} {c.model}</td>

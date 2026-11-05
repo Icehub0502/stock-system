@@ -44,6 +44,7 @@ const DocHeaderSettingsPage = lazy(() => import("./pages/DocHeaderSettingsPage")
 const DailySalesSummaryPage = lazy(() => import("./pages/DailySalesSummaryPage"));
 const VehicleServiceHistoryPage = lazy(() => import("./pages/VehicleServiceHistoryPage"));
 const FollowUpPage = lazy(() => import("./pages/FollowUpPage"));
+const ClaimDocumentsPage = lazy(() => import("./pages/ClaimDocumentsPage"));
 const StockDeductionPage = lazy(() => import("./pages/StockDeductionPage"));
 const StockUsageReportPage = lazy(() => import("./pages/StockUsageReportPage"));
 const SettingsPage = lazy(() => import("./pages/SettingsPage"));
@@ -206,6 +207,14 @@ function AppRoutes() {
             element={
               <ProtectedRoute roles={["office"]}>
                 <FollowUpPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/claim-documents"
+            element={
+              <ProtectedRoute roles={["office"]}>
+                <ClaimDocumentsPage />
               </ProtectedRoute>
             }
           />

@@ -173,6 +173,7 @@ function VehicleDetail({ vehicleId }) {
             {c.symptom && <p className="visit-card-symptom">อาการ: {c.symptom}</p>}
             {c.finding && <p className="visit-card-symptom">ตรวจพบ: {c.finding}</p>}
             {c.resolution && <p className="visit-card-symptom">วิธีแก้: {c.resolution}</p>}
+            {c.earlier_rounds && <p className="visit-card-symptom case-earlier">{c.earlier_rounds}</p>}
             {c.lesson && <p className="visit-card-symptom">แนวทางครั้งหน้า: {c.lesson}</p>}
             {c.items.length > 0 && (
               <ul className="visit-item-list">

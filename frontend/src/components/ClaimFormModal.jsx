@@ -1,27 +1,16 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useRef, useState } from 'react';
 import client from '../api/client';
-import { todayStr } from '../utils/format';
-import { formatDateTh } from '../utils/dateGroups';
-import { CASE_TYPE_LABEL, OUTCOME_LABEL, addDays, addOneMonth } from '../utils/claimCases';
+import ClaimCaseForm from './ClaimCaseForm';
 
 // ฟอร์มเคส (มาแก้งาน/เคลมอะไหล่) — เลือกลูกค้า+รถที่มีอยู่แล้วในระบบ (รถที่เคยซ่อมมาก่อน
-// ไม่ใช่รถใหม่ จึงไม่มีโหมด "เพิ่มลูกค้า/รถใหม่" แบบ AddJobModal.jsx) แล้วบันทึกอาการ สิ่งที่
-// ตรวจพบ วิธีแก้ และอะไหล่ที่เปลี่ยน มาแก้งานเฉย ๆ ไม่มีอะไหล่ก็บันทึกได้ บิลต้นเหตุเลือกหรือ
-// ไม่เลือกก็ได้ ตั้งวันติดตามผลได้เมื่อกรอกวิธีแก้แล้ว — 2 ขั้นตอนในโมดัลเดียว มิเรอร์ step state
-// ของ RepairNoticePage.jsx (ค้นหารถ → กรอกรายละเอียด) แต่เป็น modal ไม่ใช่หน้าเต็ม
+// ไม่ใช่รถใหม่ จึงไม่มีโหมด "เพิ่มลูกค้า/รถใหม่" แบบ AddJobModal.jsx) แล้วกรอกรายละเอียดเคส
+// (ClaimCaseForm.jsx) — 2 ขั้นตอนในโมดัลเดียว มิเรอร์ step state ของ RepairNoticePage.jsx
+// (ค้นหารถ → กรอกรายละเอียด) แต่เป็น modal ไม่ใช่หน้าเต็ม
 //
 // claim: null = สร้างใหม่, object = แก้ไขเคลมเดิม (มาจาก GET /claims/:id)
-const FOLLOW_UP_CHOICES = [
-  { value: 'week', label: 'อีก 1 สัปดาห์' },
-  { value: 'month', label: 'อีก 1 เดือน' },
-  { value: 'custom', label: 'เลือกวันเอง' },
-];
-
 export default function ClaimFormModal({ claim, onClose, onSaved }) {
   const isEdit = Boolean(claim?.id);
   const [step, setStep] = useState(isEdit ? 'details' : 'vehicle');
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState('');
 
   const [vehicleQuery, setVehicleQuery] = useState('');
   const [vehicleResults, setVehicleResults] = useState([]);
@@ -42,78 +31,6 @@ export default function ClaimFormModal({ claim, onClose, onSaved }) {
         }
       : null
   );
-
-  const [claimDate, setClaimDate] = useState(claim?.claim_date ? claim.claim_date.slice(0, 10) : todayStr());
-  const [symptom, setSymptom] = useState(claim?.symptom || '');
-  const [remark, setRemark] = useState(claim?.remark || '');
-  const [caseType, setCaseType] = useState(claim?.case_type || 'rework');
-  const [sourceReceiptId, setSourceReceiptId] = useState(claim?.source_receipt_id ? String(claim.source_receipt_id) : '');
-  const [finding, setFinding] = useState(claim?.finding || '');
-  const [resolution, setResolution] = useState(claim?.resolution || '');
-  const [followUpChoice, setFollowUpChoice] = useState('');
-  const [followUpCustom, setFollowUpCustom] = useState('');
-  const pendingFollowUp = (claim?.follow_ups || []).find((f) => !f.done_at);
-  const isClosed = claim?.status === 'closed';
-  const [carBills, setCarBills] = useState([]);
-  const [similarCases, setSimilarCases] = useState([]);
-
-  const [catalogParts, setCatalogParts] = useState([]);
-  const [catalogLoading, setCatalogLoading] = useState(false);
-  const [categoryFilter, setCategoryFilter] = useState('');
-  // คีย์ด้วย part.id (ของจากแคตตาล็อก) หรือ `custom-<index>` (พิมพ์เองสด ๆ ไม่มีในแคตตาล็อก)
-  const [items, setItems] = useState(() => {
-    const seeded = {};
-    (claim?.items || []).forEach((it, idx) => {
-      seeded[`existing-${it.id ?? idx}`] = {
-        product_name: it.product_name,
-        quantity: it.quantity,
-        unitPrice: String(it.unit_price),
-      };
-    });
-    return seeded;
-  });
-  // a come-back usually has no parts, so the long parts list opens only when it is wanted
-  const [partsWanted, setPartsWanted] = useState(false);
-  const [showAddCustom, setShowAddCustom] = useState(false);
-  const [customName, setCustomName] = useState('');
-
-  useEffect(() => {
-    setCatalogLoading(true);
-    client.get('/service-items')
-      .then((res) => setCatalogParts(
-        (res.data.data || []).filter((si) => !si.is_set).map((si) => ({ id: si.id, part_name: si.product_name, category: si.category }))
-      ))
-      .catch(() => {})
-      .finally(() => setCatalogLoading(false));
-  }, []);
-
-  // บิลของรถคันนี้ (ให้เลือกบิลต้นเหตุ) และเคสเก่าของรุ่นเดียวกันที่เคยแก้ไว้ (เป็นแนวทาง)
-  const selectedVehicleId = selectedVehicle?.vehicle_id;
-  useEffect(() => {
-    if (!selectedVehicleId) return;
-    client.get(`/vehicle-history/${selectedVehicleId}`)
-      .then((res) => setCarBills(res.data.data.visits || []))
-      .catch(() => setCarBills([]));
-    client.get('/claims/similar', { params: { vehicle_id: selectedVehicleId, exclude: claim?.id } })
-      .then((res) => setSimilarCases(res.data.data || []))
-      .catch(() => setSimilarCases([]));
-  }, [selectedVehicleId, claim?.id]);
-
-  const catalogCategories = useMemo(() => {
-    const seen = new Set();
-    const list = [];
-    catalogParts.forEach((p) => {
-      if (p.category && !seen.has(p.category)) { seen.add(p.category); list.push(p.category); }
-    });
-    return list;
-  }, [catalogParts]);
-
-  const filteredCatalogParts = categoryFilter
-    ? catalogParts.filter((p) => p.category === categoryFilter)
-    : catalogParts;
-
-  const itemsList = Object.entries(items);
-  const itemsTotal = itemsList.reduce((sum, [, it]) => sum + Number(it.quantity) * (Number(it.unitPrice) || 0), 0);
 
   const handleVehicleQueryChange = (value) => {
     setVehicleQuery(value);
@@ -138,107 +55,6 @@ export default function ClaimFormModal({ claim, onClose, onSaved }) {
   const pickVehicle = (v) => {
     setSelectedVehicle(v);
     setStep('details');
-  };
-
-  function toggleCatalogPart(part) {
-    setItems((prev) => {
-      const key = `catalog-${part.id}`;
-      if (prev[key]) {
-        const next = { ...prev };
-        delete next[key];
-        return next;
-      }
-      return { ...prev, [key]: { product_name: part.part_name, quantity: 1, unitPrice: '' } };
-    });
-  }
-
-  function changeQty(key, delta) {
-    setItems((prev) => {
-      const current = prev[key];
-      if (!current) return prev;
-      const nextQty = current.quantity + delta;
-      if (nextQty <= 0) {
-        const next = { ...prev };
-        delete next[key];
-        return next;
-      }
-      return { ...prev, [key]: { ...current, quantity: nextQty } };
-    });
-  }
-
-  function changePrice(key, value) {
-    setItems((prev) => (prev[key] ? { ...prev, [key]: { ...prev[key], unitPrice: value } } : prev));
-  }
-
-  function removeItem(key) {
-    setItems((prev) => {
-      const next = { ...prev };
-      delete next[key];
-      return next;
-    });
-  }
-
-  function addCustomItem(e) {
-    e.preventDefault();
-    if (!customName.trim()) return;
-    setItems((prev) => ({
-      ...prev,
-      [`custom-${Date.now()}`]: { product_name: customName.trim(), quantity: 1, unitPrice: '' },
-    }));
-    setCustomName('');
-    setShowAddCustom(false);
-  }
-
-  const handleSave = async () => {
-    if (!selectedVehicle?.vehicle_id) {
-      setError('กรุณาเลือกรถก่อน');
-      return;
-    }
-    let followUpDate = null;
-    if (followUpChoice === 'week') followUpDate = addDays(todayStr(), 7);
-    if (followUpChoice === 'month') followUpDate = addOneMonth(todayStr());
-    if (followUpChoice === 'custom') {
-      if (!followUpCustom) {
-        setError('กรุณาเลือกวันที่ติดตามผล');
-        return;
-      }
-      followUpDate = followUpCustom;
-    }
-    if (followUpDate && !resolution.trim()) {
-      setError('กรุณากรอกวิธีแก้ก่อนตั้งวันติดตามผล');
-      return;
-    }
-    setSaving(true);
-    setError('');
-    try {
-      const payload = {
-        customer_id: selectedVehicle.customer_id,
-        vehicle_id: selectedVehicle.vehicle_id,
-        claim_date: claimDate,
-        symptom: symptom.trim() || null,
-        remark: remark.trim() || null,
-        case_type: caseType,
-        source_receipt_id: sourceReceiptId || null,
-        finding: finding.trim() || null,
-        resolution: resolution.trim() || null,
-        ...(followUpDate ? { follow_up_date: followUpDate } : {}),
-        items: itemsList.map(([, it]) => ({
-          product_name: it.product_name,
-          quantity: it.quantity,
-          unit_price: Number(it.unitPrice) || 0,
-        })),
-      };
-      if (isEdit) {
-        await client.put(`/claims/${claim.id}`, payload);
-      } else {
-        await client.post('/claims', payload);
-      }
-      onSaved();
-    } catch (err) {
-      setError(err.response?.data?.error || 'บันทึกเคลมไม่สำเร็จ');
-    } finally {
-      setSaving(false);
-    }
   };
 
   return (
@@ -283,9 +99,7 @@ export default function ClaimFormModal({ claim, onClose, onSaved }) {
             </div>
           </div>
         ) : (
-          <div className="modal-form">
-            {error && <div className="error-message">{error}</div>}
-
+          <>
             <div className="info-card" style={{ marginBottom: 12 }}>
               <div className="info-card-title">
                 {selectedVehicle.license_plate || '-'} · {selectedVehicle.brand} {selectedVehicle.model}
@@ -296,186 +110,8 @@ export default function ClaimFormModal({ claim, onClose, onSaved }) {
                 <button type="button" onClick={() => setStep('vehicle')} style={{ marginTop: 8 }}>เปลี่ยนรถ</button>
               )}
             </div>
-
-            {isClosed && (
-              <div className="fu-closed">
-                <strong>เคสนี้ปิดแล้ว</strong>
-                {claim.outcome ? ` · ${OUTCOME_LABEL[claim.outcome]}` : ''}
-                {claim.closed_by ? ` · ปิดโดย ${claim.closed_by}` : ''}
-                {claim.closed_at ? ` · ${formatDateTh(String(claim.closed_at).slice(0, 10))}` : ''}
-                {claim.lesson && <div><strong>แนวทางครั้งหน้า:</strong> {claim.lesson}</div>}
-                <div className="vh-muted">ถ้าปัญหากลับมา ผู้จัดการกด "เปิดเคสใหม่" ในรายการเคสเพื่อทำต่อและตั้งการติดตามผล</div>
-              </div>
-            )}
-
-            {similarCases.length > 0 && (
-              <details className="fu-similar">
-                <summary>เคยมีเคสของรุ่นนี้ {similarCases.length} เคส ดูวิธีแก้เป็นแนวทาง</summary>
-                {similarCases.map((c) => (
-                  <div key={c.id} className="fu-similar-item">
-                    <div className="vh-muted">
-                      {c.claim_no} · {formatDateTh(c.claim_date)}
-                      {c.outcome ? ` · ${OUTCOME_LABEL[c.outcome]}` : ''}
-                    </div>
-                    {c.symptom && <div><strong>อาการ:</strong> {c.symptom}</div>}
-                    {c.finding && <div><strong>ตรวจพบ:</strong> {c.finding}</div>}
-                    <div><strong>วิธีแก้:</strong> {c.resolution}</div>
-                    {c.lesson && <div><strong>แนวทาง:</strong> {c.lesson}</div>}
-                  </div>
-                ))}
-              </details>
-            )}
-
-            <div className="form-group">
-              <label>ประเภทเคส</label>
-              <select value={caseType} onChange={(e) => setCaseType(e.target.value)}>
-                {Object.entries(CASE_TYPE_LABEL).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-              </select>
-            </div>
-            <div className="form-group">
-              <label>วันที่รถเข้ามา</label>
-              <input type="date" value={claimDate} onChange={(e) => setClaimDate(e.target.value)} />
-            </div>
-            <div className="form-group">
-              <label>บิลต้นเหตุ (ไม่บังคับ)</label>
-              <select value={sourceReceiptId} onChange={(e) => setSourceReceiptId(e.target.value)}>
-                <option value="">ไม่ระบุ</option>
-                {carBills.map((b) => (
-                  <option key={b.receipt_id} value={b.receipt_id}>{b.receipt_no} · {formatDateTh(b.date)}</option>
-                ))}
-              </select>
-            </div>
-            <div className="form-group">
-              <label>อาการที่ลูกค้าแจ้ง</label>
-              <textarea rows={2} value={symptom} onChange={(e) => setSymptom(e.target.value)} placeholder="เช่น แร็คพวงมาลัยมีเสียงหลังเปลี่ยน" />
-            </div>
-            <div className="form-group">
-              <label>สิ่งที่ตรวจพบ</label>
-              <textarea rows={2} value={finding} onChange={(e) => setFinding(e.target.value)} placeholder="เช่น น็อตยึดหลวม" />
-            </div>
-            <div className="form-group">
-              <label>วิธีแก้</label>
-              <textarea rows={2} value={resolution} onChange={(e) => setResolution(e.target.value)} placeholder="เช่น ขันน็อตใหม่ตามค่าทอร์ค แล้วลองขับ" />
-            </div>
-            {!isClosed && (
-              <div className="form-group">
-                <label>
-                  ติดตามผล
-                  {pendingFollowUp ? ` (นัดโทร ${formatDateTh(pendingFollowUp.scheduled_date)})` : ''}
-                </label>
-                <select value={followUpChoice} onChange={(e) => setFollowUpChoice(e.target.value)}>
-                  <option value="">{pendingFollowUp ? 'คงวันเดิม' : 'ยังไม่ตั้ง (ยังแก้ไม่เสร็จ)'}</option>
-                  {FOLLOW_UP_CHOICES.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
-                </select>
-                {followUpChoice === 'custom' && (
-                  <input type="date" min={todayStr()} value={followUpCustom} onChange={(e) => setFollowUpCustom(e.target.value)} aria-label="วันที่ติดตามผล" />
-                )}
-              </div>
-            )}
-            <div className="form-group">
-              <label>หมายเหตุ</label>
-              <textarea rows={2} value={remark} onChange={(e) => setRemark(e.target.value)} />
-            </div>
-
-            {!(partsWanted || caseType === 'parts_claim' || itemsList.length > 0) ? (
-              <button type="button" className="btn btn-secondary" onClick={() => setPartsWanted(true)}>+ มีอะไหล่ที่เปลี่ยน</button>
-            ) : (
-            <div className="jdp-part-picker">
-              {itemsList.length > 0 && (
-                <div className="jdp-selected-list">
-                  <div className="jdp-selected-list-title">อะไหล่ที่เปลี่ยน ({itemsList.reduce((s, [, it]) => s + it.quantity, 0)} ชิ้น)</div>
-                  {itemsList.map(([key, item]) => (
-                    <div className="jdp-selected-row" key={key}>
-                      <span className="jdp-selected-name">{item.product_name}</span>
-                      <div className="jdp-selected-controls">
-                        <div className="jdp-selected-qty">
-                          <button type="button" onClick={() => changeQty(key, -1)} aria-label="ลดจำนวน">−</button>
-                          <span>{item.quantity}</span>
-                          <button type="button" onClick={() => changeQty(key, 1)} aria-label="เพิ่มจำนวน">+</button>
-                        </div>
-                        <label className="jdp-selected-price">
-                          <span>฿</span>
-                          <input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            placeholder="ราคา/หน่วย"
-                            value={item.unitPrice}
-                            onChange={(e) => changePrice(key, e.target.value)}
-                          />
-                        </label>
-                        <button type="button" className="jdp-selected-remove" onClick={() => removeItem(key)} aria-label="ลบรายการ">✕</button>
-                      </div>
-                    </div>
-                  ))}
-                  <div className="jdp-selected-total">รวม {itemsTotal.toLocaleString('th-TH')} บาท</div>
-                </div>
-              )}
-
-              {catalogLoading ? (
-                <div className="loading">กำลังโหลดรายการสินค้า/บริการ...</div>
-              ) : (
-                <>
-                  {catalogCategories.length > 0 && (
-                    <div className="jdp-category-bar">
-                      <button type="button" className={`jdp-category-chip ${!categoryFilter ? 'active' : ''}`} onClick={() => setCategoryFilter('')}>
-                        ทั้งหมด
-                      </button>
-                      {catalogCategories.map((cat) => (
-                        <button
-                          type="button"
-                          key={cat}
-                          className={`jdp-category-chip ${categoryFilter === cat ? 'active' : ''}`}
-                          onClick={() => setCategoryFilter(cat)}
-                        >
-                          {cat}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                  <div className="jdp-item-grid">
-                    {filteredCatalogParts.map((part) => {
-                      const selected = Boolean(items[`catalog-${part.id}`]);
-                      return (
-                        <button
-                          type="button"
-                          key={part.id}
-                          className={`jdp-item-btn ${selected ? 'active' : ''}`}
-                          onClick={() => toggleCatalogPart(part)}
-                        >
-                          {selected && <span className="jdp-item-check">✓</span>}
-                          {part.part_name}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </>
-              )}
-
-              <div className="jdp-add-part">
-                {!showAddCustom ? (
-                  <button type="button" onClick={() => setShowAddCustom(true)}>+ เพิ่มรายการที่ไม่มีในแคตตาล็อก</button>
-                ) : (
-                  <form className="modal-form jdp-add-part-form" onSubmit={addCustomItem}>
-                    <label>ชื่ออะไหล่/รายการ</label>
-                    <input type="text" autoFocus value={customName} onChange={(e) => setCustomName(e.target.value)} />
-                    <div className="modal-actions">
-                      <button type="submit" className="btn btn-primary btn-sm">เพิ่ม</button>
-                      <button type="button" className="btn btn-secondary btn-sm" onClick={() => { setShowAddCustom(false); setCustomName(''); }}>ยกเลิก</button>
-                    </div>
-                  </form>
-                )}
-              </div>
-            </div>
-            )}
-
-            <div className="modal-actions">
-              <button type="button" className="btn btn-primary" onClick={handleSave} disabled={saving}>
-                {saving ? 'กำลังบันทึก...' : isEdit ? 'บันทึกการแก้ไข' : 'บันทึกเคส'}
-              </button>
-              <button type="button" className="btn btn-secondary" onClick={onClose}>ยกเลิก</button>
-            </div>
-          </div>
+            <ClaimCaseForm claim={claim} vehicle={selectedVehicle} onSaved={onSaved} onCancel={onClose} />
+          </>
         )}
       </div>
     </div>

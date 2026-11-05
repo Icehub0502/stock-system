@@ -157,7 +157,7 @@ router.get('/:id', async (req, res) => {
 
     const [claims] = await pool.query(
       `SELECT id, claim_no, DATE_FORMAT(claim_date, '%Y-%m-%d') AS claim_date, symptom, remark,
-              case_type, status, source_receipt_id, finding, resolution, outcome, lesson
+              case_type, status, source_receipt_id, finding, resolution, outcome, lesson, earlier_rounds
        FROM claims WHERE vehicle_id = ? AND shop_id = ? ORDER BY claim_date DESC, id DESC LIMIT 100`,
       [vehicleId, shopId]
     );
@@ -258,7 +258,7 @@ router.get('/:id', async (req, res) => {
           visit_count: visits.length + visitsWithoutBill.length,
           rework_count: claims.filter((c) => c.case_type === 'rework').length,
           parts_claim_count: claims.filter((c) => c.case_type !== 'rework').length,
-          open_case_count: claims.filter((c) => c.status !== 'closed').length,
+          open_case_count: claims.filter((c) => c.status === 'open' || c.status === 'follow_up').length,
           claimed_parts: [...claimedParts.values()],
         },
       },

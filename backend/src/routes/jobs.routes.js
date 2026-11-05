@@ -72,11 +72,14 @@ router.get('/', async (req, res) => {
              v.license_plate, v.province, v.brand, v.model, v.color,
              q.quotation_no, q.status AS quotation_status, q.total_amount,
              q.deposit_amount, q.deposit_date,
+             cl.id AS case_id, cl.claim_no AS case_no, cl.case_type,
+             (SELECT SUM(ci.quantity * ci.unit_price) FROM claim_items ci WHERE ci.claim_id = cl.id) AS case_charge,
              (SELECT COALESCE(p.photo_thumb_data, p.photo_data) FROM job_photos p WHERE p.job_id = j.id AND p.photo_type = 'intake' ORDER BY p.sort_order LIMIT 1) AS photo_thumb
       FROM jobs j
       LEFT JOIN customers c ON c.id = j.customer_id
       LEFT JOIN vehicles v ON v.id = j.vehicle_id
       LEFT JOIN quotations q ON q.id = j.quotation_id
+      LEFT JOIN claims cl ON cl.id = j.claim_id AND cl.shop_id = j.shop_id
       WHERE j.shop_id = ? AND j.job_date = ?
       ORDER BY CAST(j.queue_no AS UNSIGNED), j.id
     `, [req.shopId, jobDate]);
@@ -101,7 +104,9 @@ router.get('/pending-delivery', async (req, res) => {
              j.expected_pickup_date, j.customer_id, j.vehicle_id, j.quotation_id,
              c.customer_name, c.phone,
              v.license_plate, v.province, v.brand, v.model, v.color,
-             q.quotation_no, q.status AS quotation_status, q.total_amount, q.product_summary,
+             q.quotation_no, q.status AS quotation_status, q.product_summary,
+             -- a come-back has no bill: what is left to collect is the parts charged on its case
+             COALESCE(q.total_amount, (SELECT SUM(ci.quantity * ci.unit_price) FROM claim_items ci WHERE ci.claim_id = j.claim_id)) AS total_amount,
              q.deposit_amount, q.deposit_date
       FROM jobs j
       LEFT JOIN customers c ON c.id = j.customer_id
@@ -157,11 +162,13 @@ router.get('/:id', async (req, res) => {
              v.license_plate, v.province, v.brand, v.model, v.color, v.year, v.vehicle_model_id,
              q.quotation_no, q.status AS quotation_status, q.total_amount,
              q.deposit_amount, q.deposit_date,
-             (q.customer_signature IS NOT NULL) AS customer_signature
+             (q.customer_signature IS NOT NULL) AS customer_signature,
+             cl.id AS case_id, cl.claim_no AS case_no, cl.case_type
       FROM jobs j
       LEFT JOIN customers c ON c.id = j.customer_id
       LEFT JOIN vehicles v ON v.id = j.vehicle_id
       LEFT JOIN quotations q ON q.id = j.quotation_id
+      LEFT JOIN claims cl ON cl.id = j.claim_id AND cl.shop_id = j.shop_id
       WHERE j.id = ? AND j.shop_id = ?
     `, [req.params.id, req.shopId]);
     if (!rows.length) return res.status(404).json({ error: 'ไม่พบงานนี้' });
@@ -528,6 +535,19 @@ router.patch('/:id/status', async (req, res) => {
     if (!job) {
       await conn.rollback();
       return res.status(404).json({ error: 'ไม่พบงานนี้' });
+    }
+
+    // A come-back job has nothing to quote or approve, and the repair cannot end until the fix is written down
+    if (job.claim_id) {
+      const [[kase]] = await conn.execute('SELECT resolution FROM claims WHERE id = ? AND shop_id = ?', [job.claim_id, req.shopId]);
+      if (kase && ['quoted', 'approved'].includes(status)) {
+        await conn.rollback();
+        return res.status(409).json({ error: 'งานนี้เป็นงานแก้ ไม่ต้องเสนอราคาหรืออนุมัติ' });
+      }
+      if (kase && ['aligning', 'ready', 'delivered'].includes(status) && !String(kase.resolution || '').trim()) {
+        await conn.rollback();
+        return res.status(409).json({ error: 'กรุณาระบุวิธีแก้ไขก่อนเปลี่ยนสถานะ' });
+      }
     }
 
     // เข้าสถานะ "รอตั้งศูนย์" แล้วจองช่องตั้งศูนย์ให้อัตโนมัติถ้าว่าง — ถ้าไม่ว่างก็

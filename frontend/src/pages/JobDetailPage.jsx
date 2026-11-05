@@ -12,6 +12,8 @@ import ExtraBillModal from '../components/ExtraBillModal';
 import PhotoLightbox from '../components/PhotoLightbox';
 import QuotationPrintModal from '../components/QuotationPrintModal';
 import RepairWorksheetPrintModal from '../components/RepairWorksheetPrintModal';
+import ReworkJobPanel from '../components/ReworkJobPanel';
+import { CASE_BADGE_LABEL } from '../utils/claimCases';
 import CarModelPicker from '../components/CarModelPicker';
 import useRealtimeEvent from '../hooks/useRealtimeEvent';
 import useVehicleGeneration from '../hooks/useVehicleGeneration';
@@ -1003,7 +1005,10 @@ export default function JobDetailPage() {
   return (
     <div className="office-dashboard container">
       <div className="dashboard-header">
-        <h2>{job.job_no} <span className="dashboard-header-sub">— คิว {job.queue_no || '-'}</span></h2>
+        <h2>
+          {job.job_no} <span className="dashboard-header-sub">— คิว {job.queue_no || '-'}</span>
+          {job.case_id && <span className="job-card-case-badge job-page-case-badge">🛠️ {CASE_BADGE_LABEL[job.case_type] || CASE_BADGE_LABEL.rework}</span>}
+        </h2>
         <div style={{ display: 'flex', gap: 8 }}>
           <button type="button" onClick={() => navigate('/jobs')}>← กลับรายการงาน</button>
         </div>
@@ -1086,7 +1091,7 @@ export default function JobDetailPage() {
         )}
       </div>
 
-      {isDecisionPoint && (
+      {isDecisionPoint && !job.case_id && (
         <div className="dash-panel">
           <div className="dash-panel-title">ตัดสินใจใบเสนอราคา</div>
           {error && <p className="error-text">{error}</p>}
@@ -1126,6 +1131,9 @@ export default function JobDetailPage() {
         </div>
       )}
 
+      {job.case_id ? (
+        <ReworkJobPanel job={job} onCancelled={() => navigate('/jobs')} />
+      ) : (
       <div className="dash-panel">
         <div className="dash-panel-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           ใบเสนอราคา
@@ -1370,6 +1378,7 @@ export default function JobDetailPage() {
           </button>
         </div>
       </div>
+      )}
 
       <div className="dash-panel">
         <div className="dash-panel-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -1461,7 +1470,9 @@ export default function JobDetailPage() {
         <div className="dash-panel">
           <div className="dash-panel-title">รูปอะไหล่ของใหม่</div>
           <p style={{ fontSize: 13, color: '#6b7280', marginTop: -6 }}>
-            ถ่ายรูปอะไหล่ของใหม่ตามรายการที่เปลี่ยน ให้ลูกค้าดูได้ว่าเปลี่ยนของจริงตามที่เสนอราคาไว้
+            {job.case_id
+              ? 'ถ่ายรูปอะไหล่ของใหม่ที่เปลี่ยนให้ลูกค้า เก็บไว้เป็นหลักฐานของเคสนี้'
+              : 'ถ่ายรูปอะไหล่ของใหม่ตามรายการที่เปลี่ยน ให้ลูกค้าดูได้ว่าเปลี่ยนของจริงตามที่เสนอราคาไว้'}
           </p>
           {partPhotosError && <p className="error-text">{partPhotosError}</p>}
           {partPhotos.length > 0 && (

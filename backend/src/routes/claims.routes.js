@@ -3,13 +3,16 @@ const pool = require('../db/pool');
 const { authenticate, requireRole, requireManager } = require('../middleware/auth');
 const { trashDelete } = require('../utils/trash');
 const { ownsRow } = require('../utils/tenant');
+const { emitJobEvent } = require('../realtime');
 
 const router = express.Router();
 router.use(authenticate);
 router.use(requireRole('office'));
 
 const CASE_TYPES = ['parts_claim', 'rework'];
-const CASE_STATUSES = ['open', 'follow_up', 'closed'];
+const CASE_STATUSES = ['open', 'follow_up', 'closed', 'continued'];
+// a case in one of these no longer takes a fix or a planned call
+const FINISHED_STATUSES = ['closed', 'continued'];
 const REPORT_RESULTS = ['ok', 'still_problem', 'no_answer'];
 const OUTCOMES = ['resolved', 'partial', 'not_resolved'];
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -66,6 +69,33 @@ async function receiptBelongsToCar(conn, receiptId, vehicleId, shopId) {
   return Boolean(row);
 }
 
+// one planned call at a time: a new date moves the call that is still waiting
+async function planFollowUp(conn, claimId, date) {
+  const [moved] = await conn.execute(
+    'UPDATE claim_follow_ups SET scheduled_date = ? WHERE claim_id = ? AND done_at IS NULL',
+    [date, claimId]
+  );
+  if (moved.affectedRows === 0) {
+    await conn.execute('INSERT INTO claim_follow_ups (claim_id, scheduled_date) VALUES (?, ?)', [claimId, date]);
+  }
+}
+
+// What was tried on a case the car came back from, as the history the new case shows
+function earlierRoundsText(kase, items) {
+  const parts = items.map((it) => {
+    const price = Number(it.unit_price);
+    return `${it.product_name} x${it.quantity}${price ? ` ฿${Number(it.quantity) * price}` : ' (เคลม ไม่คิดเงิน)'}`;
+  });
+  const round = [
+    kase.claim_no,
+    kase.symptom && `อาการ: ${kase.symptom}`,
+    kase.finding && `ตรวจพบ: ${kase.finding}`,
+    kase.resolution && `วิธีแก้: ${kase.resolution}`,
+    parts.length > 0 && `อะไหล่: ${parts.join(', ')}`,
+  ].filter(Boolean).join('\n');
+  return [kase.earlier_rounds, round].filter(Boolean).join('\n\n');
+}
+
 // Claim number CLM-YYMMDD-NNN: bound to the date (not a running number) because "which claim of today is this" means more
 // to the shop floor than a bare counter. FOR UPDATE stops two concurrent requests from taking the same number.
 async function generateClaimNo(conn, shopId) {
@@ -118,17 +148,19 @@ router.get('/next-code', async (req, res) => {
   }
 });
 
-// GET /claims?search=&status= : every word must match the car, the customer, the case text or a part, so a past case
-// can be found by model, symptom or part when the same problem comes back
+// GET /claims?search=&status=&issued=1 : every word must match the car, the customer, the case text or a part, so a past
+// case can be found by model, symptom or part when the same problem comes back. issued=1 lists the claim documents.
 router.get('/', async (req, res) => {
   try {
     const { search, status } = req.query;
+    const issued = req.query.issued === '1';
     const params = [req.shopId];
     let whereClause = 'WHERE cl.shop_id = ?';
     if (CASE_STATUSES.includes(status)) {
       whereClause += ' AND cl.status = ?';
       params.push(status);
     }
+    if (issued) whereClause += ' AND cl.doc_issued_at IS NOT NULL';
     if (search && search.trim()) {
       const words = search.trim().split(/\s+/).filter(Boolean).slice(0, 6);
       const perWordClause = `v.license_plate LIKE ? OR v.brand LIKE ? OR v.model LIKE ? OR c.customer_name LIKE ? OR c.phone LIKE ?
@@ -139,15 +171,17 @@ router.get('/', async (req, res) => {
     }
     const [rows] = await pool.query(
       `SELECT cl.id, cl.claim_no, cl.claim_date, cl.symptom, cl.created_at, cl.case_type, cl.status, cl.resolution, cl.outcome,
+              cl.doc_issued_at, cl.doc_issued_by,
               c.customer_name, c.phone,
               v.brand, v.model, v.license_plate,
               (SELECT COUNT(*) FROM claim_items ci WHERE ci.claim_id = cl.id) AS item_count,
+              (SELECT COALESCE(SUM(ci.quantity * ci.unit_price), 0) FROM claim_items ci WHERE ci.claim_id = cl.id) AS charge_total,
               (SELECT MIN(f.scheduled_date) FROM claim_follow_ups f WHERE f.claim_id = cl.id AND f.done_at IS NULL) AS next_follow_up
        FROM claims cl
        JOIN customers c ON cl.customer_id = c.id
        JOIN vehicles v ON cl.vehicle_id = v.id
        ${whereClause}
-       ORDER BY cl.created_at DESC
+       ORDER BY ${issued ? 'cl.doc_issued_at' : 'cl.created_at'} DESC
        LIMIT 300`,
       params
     );
@@ -239,16 +273,208 @@ router.get('/similar', async (req, res) => {
   }
 });
 
+// GET /claims/open-cases?vehicle_id= : cases of this car still being worked on. A car that came back again continues its case.
+router.get('/open-cases', async (req, res) => {
+  const vehicleId = Number(req.query.vehicle_id);
+  if (!Number.isInteger(vehicleId) || vehicleId <= 0) return res.status(400).json({ error: 'รหัสรถไม่ถูกต้อง' });
+  try {
+    const [rows] = await pool.execute(
+      `SELECT id, claim_no, claim_date, case_type, status, symptom, resolution
+       FROM claims
+       WHERE shop_id = ? AND vehicle_id = ? AND status IN ('open', 'follow_up')
+       ORDER BY id DESC
+       LIMIT 10`,
+      [req.shopId, vehicleId]
+    );
+    res.json({ success: true, data: rows });
+  } catch (err) {
+    console.error('Error loading open cases:', err);
+    res.status(500).json({ error: 'โหลดเคสของรถคันนี้ไม่สำเร็จ' });
+  }
+});
+
+// POST /claims/from-job/:jobId { claim_id? } : "ลูกค้าเก่าแก้งาน" on a queue card at the inspecting step. The job takes
+// a new case and goes straight to repairing, because a come-back has nothing to quote or approve. With claim_id (a case
+// of the same car still being worked on) the new case carries on from it: the earlier case keeps its parts, charge and
+// document as they were and stops being worked on, and its call still planned is dropped from the follow-up page.
+// Pressing it twice returns the case the job already has.
+router.post('/from-job/:jobId', async (req, res) => {
+  const reuseId = req.body?.claim_id ? Number(req.body.claim_id) : null;
+  if (reuseId !== null && (!Number.isInteger(reuseId) || reuseId <= 0)) return res.status(400).json({ error: 'เคสไม่ถูกต้อง' });
+
+  let conn;
+  try {
+    conn = await pool.getConnection();
+    await conn.beginTransaction();
+    const [[job]] = await conn.execute(
+      'SELECT id, job_date, status, customer_id, vehicle_id, quotation_id, claim_id, symptom FROM jobs WHERE id = ? AND shop_id = ? FOR UPDATE',
+      [req.params.jobId, req.shopId]
+    );
+    if (!job) {
+      await conn.rollback();
+      return res.status(404).json({ error: 'ไม่พบงานนี้' });
+    }
+    if (job.claim_id) {
+      const [[linked]] = await conn.execute('SELECT id, claim_no FROM claims WHERE id = ? AND shop_id = ?', [job.claim_id, req.shopId]);
+      if (linked) {
+        await conn.rollback();
+        return res.json({ success: true, id: linked.id, claim_no: linked.claim_no });
+      }
+    }
+    if (!job.customer_id || !job.vehicle_id) {
+      await conn.rollback();
+      return res.status(400).json({ error: 'งานนี้ยังไม่มีข้อมูลลูกค้าหรือรถ' });
+    }
+    if (job.quotation_id) {
+      await conn.rollback();
+      return res.status(409).json({ error: 'งานนี้มีใบเสนอราคาแล้ว จึงเปลี่ยนเป็นงานแก้ไม่ได้' });
+    }
+    if (job.status !== 'inspecting') {
+      await conn.rollback();
+      return res.status(409).json({ error: 'เลือกแก้งานได้ที่ขั้นตรวจเช็คเท่านั้น' });
+    }
+
+    let earlier = null;
+    let earlierItems = [];
+    if (reuseId) {
+      [[earlier]] = await conn.execute(
+        `SELECT id, claim_no, case_type, source_receipt_id, symptom, finding, resolution, earlier_rounds FROM claims
+         WHERE id = ? AND shop_id = ? AND vehicle_id = ? AND status IN ('open', 'follow_up') FOR UPDATE`,
+        [reuseId, req.shopId, job.vehicle_id]
+      );
+      if (!earlier) {
+        await conn.rollback();
+        return res.status(404).json({ error: 'ไม่พบเคสที่ยังเปิดอยู่ของรถคันนี้' });
+      }
+      [earlierItems] = await conn.execute('SELECT product_name, quantity, unit_price FROM claim_items WHERE claim_id = ? ORDER BY id', [earlier.id]);
+    }
+
+    const claimNo = await generateClaimNo(conn, req.shopId);
+    const [created] = await conn.execute(
+      `INSERT INTO claims (shop_id, claim_no, customer_id, vehicle_id, claim_date, symptom, created_by, case_type, status,
+                           source_receipt_id, earlier_rounds, continued_from_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?)`,
+      [
+        req.shopId,
+        claimNo,
+        job.customer_id,
+        job.vehicle_id,
+        job.job_date,
+        cleanText(job.symptom) || earlier?.symptom || null,
+        req.user.id,
+        earlier?.case_type || 'rework',
+        earlier?.source_receipt_id ?? null,
+        earlier ? earlierRoundsText(earlier, earlierItems) : null,
+        earlier?.id ?? null,
+      ]
+    );
+    const claimId = created.insertId;
+    if (earlier) {
+      await conn.execute("UPDATE claims SET status = 'continued' WHERE id = ? AND shop_id = ?", [earlier.id, req.shopId]);
+    }
+
+    await conn.execute("UPDATE jobs SET claim_id = ?, status = 'repairing' WHERE id = ? AND shop_id = ?", [claimId, job.id, req.shopId]);
+    await conn.execute('INSERT INTO job_status_history (job_id, status, changed_by) VALUES (?, ?, ?)', [job.id, 'repairing', req.user.id]);
+    await conn.commit();
+    emitJobEvent('job:status-changed', { shopId: req.shopId, jobId: job.id, jobDate: job.job_date, status: 'repairing', actorId: req.user.id });
+    res.status(201).json({ success: true, id: claimId, claim_no: claimNo });
+  } catch (err) {
+    if (conn) {
+      try { await conn.rollback(); } catch (rollbackErr) { console.error('Rollback error:', rollbackErr); }
+    }
+    console.error('Error starting a come-back job:', err);
+    res.status(500).json({ error: 'เปลี่ยนเป็นงานแก้ไม่สำเร็จ' });
+  } finally {
+    if (conn) conn.release();
+  }
+});
+
+// POST /claims/from-job/:jobId/cancel : "แก้งาน" was pressed by mistake. The job returns to inspecting so "ลงรายการ" can
+// be chosen. A case with nothing written on it goes to the trash, and the case it carried on from is worked on again;
+// a case that holds work stays in the case list.
+router.post('/from-job/:jobId/cancel', async (req, res) => {
+  let conn;
+  try {
+    conn = await pool.getConnection();
+    await conn.beginTransaction();
+    const [[job]] = await conn.execute(
+      'SELECT id, job_date, status, claim_id FROM jobs WHERE id = ? AND shop_id = ? FOR UPDATE',
+      [req.params.jobId, req.shopId]
+    );
+    if (!job) {
+      await conn.rollback();
+      return res.status(404).json({ error: 'ไม่พบงานนี้' });
+    }
+    if (!job.claim_id) {
+      await conn.rollback();
+      return res.status(409).json({ error: 'งานนี้ไม่ได้เป็นงานแก้' });
+    }
+    if (!['received', 'inspecting', 'repairing'].includes(job.status)) {
+      await conn.rollback();
+      return res.status(409).json({ error: 'ซ่อมเสร็จแล้ว จึงเปลี่ยนเป็นลงรายการไม่ได้' });
+    }
+    const [[kase]] = await conn.execute(
+      'SELECT id, finding, resolution, doc_issued_at, continued_from_id FROM claims WHERE id = ? AND shop_id = ? FOR UPDATE',
+      [job.claim_id, req.shopId]
+    );
+    if (kase?.doc_issued_at) {
+      await conn.rollback();
+      return res.status(409).json({ error: 'เคสนี้ออกใบเคลมแล้ว จึงเปลี่ยนเป็นลงรายการไม่ได้' });
+    }
+
+    await conn.execute(
+      "UPDATE jobs SET claim_id = NULL, status = 'inspecting' WHERE id = ? AND shop_id = ?",
+      [job.id, req.shopId]
+    );
+    await conn.execute('INSERT INTO job_status_history (job_id, status, changed_by) VALUES (?, ?, ?)', [job.id, 'inspecting', req.user.id]);
+    if (kase && !cleanText(kase.finding) && !cleanText(kase.resolution)) {
+      const [[counts]] = await conn.execute(
+        `SELECT (SELECT COUNT(*) FROM claim_items WHERE claim_id = ?) AS items,
+                (SELECT COUNT(*) FROM claim_follow_ups WHERE claim_id = ?) AS calls,
+                (SELECT COUNT(*) FROM jobs WHERE claim_id = ? AND shop_id = ?) AS jobs`,
+        [kase.id, kase.id, kase.id, req.shopId]
+      );
+      if (!Number(counts.items) && !Number(counts.calls) && !Number(counts.jobs)) {
+        await trashDelete(conn, { table: 'claims', id: kase.id, shopId: req.shopId, user: req.user });
+        if (kase.continued_from_id) {
+          // back to where it stood: waiting for its call if one is still planned, otherwise being fixed
+          await conn.execute(
+            `UPDATE claims SET status = IF(EXISTS (SELECT 1 FROM claim_follow_ups f WHERE f.claim_id = claims.id AND f.done_at IS NULL), 'follow_up', 'open')
+             WHERE id = ? AND shop_id = ? AND status = 'continued'`,
+            [kase.continued_from_id, req.shopId]
+          );
+        }
+      }
+    }
+    await conn.commit();
+    emitJobEvent('job:status-changed', { shopId: req.shopId, jobId: job.id, jobDate: job.job_date, status: 'inspecting', actorId: req.user.id });
+    res.json({ success: true });
+  } catch (err) {
+    if (conn) {
+      try { await conn.rollback(); } catch (rollbackErr) { console.error('Rollback error:', rollbackErr); }
+    }
+    console.error('Error cancelling a come-back job:', err);
+    res.status(500).json({ error: 'เปลี่ยนเป็นลงรายการไม่สำเร็จ' });
+  } finally {
+    if (conn) conn.release();
+  }
+});
+
 router.get('/:id', async (req, res) => {
   try {
+    // mileage and technician come from the latest job of the case, the reception staff from whoever opened it
     const [[claim]] = await pool.execute(
       `SELECT cl.*, c.customer_name, c.phone,
-              v.brand, v.model, v.color, v.license_plate, v.mileage,
-              r.receipt_no AS source_receipt_no
+              v.brand, v.model, v.color, v.license_plate, v.province, v.mileage,
+              r.receipt_no AS source_receipt_no,
+              j.job_no, j.queue_no, j.mileage_in, j.technician,
+              u.full_name AS created_by_name
        FROM claims cl
        JOIN customers c ON cl.customer_id = c.id
        JOIN vehicles v ON cl.vehicle_id = v.id
        LEFT JOIN receipts r ON r.id = cl.source_receipt_id AND r.shop_id = cl.shop_id
+       LEFT JOIN jobs j ON j.id = (SELECT MAX(j2.id) FROM jobs j2 WHERE j2.claim_id = cl.id AND j2.shop_id = cl.shop_id)
+       LEFT JOIN users u ON u.id = cl.created_by AND u.shop_id = cl.shop_id
        WHERE cl.id = ? AND cl.shop_id = ?`,
       [req.params.id, req.shopId]
     );
@@ -364,9 +590,9 @@ router.put('/:id', async (req, res) => {
       await conn.rollback();
       return res.status(400).json({ error: 'ใบเสร็จต้นเหตุไม่ใช่ของรถคันนี้' });
     }
-    if (fields.follow_up_date && current.status === 'closed') {
+    if (fields.follow_up_date && FINISHED_STATUSES.includes(current.status)) {
       await conn.rollback();
-      return res.status(409).json({ error: 'เคสนี้ปิดแล้ว ให้ผู้จัดการเปิดเคสใหม่ก่อนตั้งวันติดตามผล' });
+      return res.status(409).json({ error: 'เคสนี้จบแล้วจึงตั้งวันติดตามผลไม่ได้' });
     }
     await conn.execute(
       `UPDATE claims SET customer_id = ?, vehicle_id = ?, claim_date = ?, symptom = ?, remark = ?,
@@ -397,16 +623,7 @@ router.put('/:id', async (req, res) => {
         [req.params.id, it.product_name, Number(it.quantity) || 1, Number(it.unit_price) || 0]
       );
     }
-    if (fields.follow_up_date) {
-      // one planned call at a time: a new date moves the call that is still waiting
-      const [moved] = await conn.execute(
-        'UPDATE claim_follow_ups SET scheduled_date = ? WHERE claim_id = ? AND done_at IS NULL',
-        [fields.follow_up_date, req.params.id]
-      );
-      if (moved.affectedRows === 0) {
-        await conn.execute('INSERT INTO claim_follow_ups (claim_id, scheduled_date) VALUES (?, ?)', [req.params.id, fields.follow_up_date]);
-      }
-    }
+    if (fields.follow_up_date) await planFollowUp(conn, req.params.id, fields.follow_up_date);
     await conn.commit();
     res.json({ success: true });
   } catch (err) {
@@ -417,6 +634,67 @@ router.put('/:id', async (req, res) => {
     res.status(500).json({ error: 'แก้ไขเคลมไม่สำเร็จ' });
   } finally {
     if (conn) conn.release();
+  }
+});
+
+// POST /claims/:id/resolution { finding, resolution, follow_up_date? } : how the car was fixed, asked when the repair
+// ends. Only these fields change, so the parts on the case stay as they are.
+router.post('/:id/resolution', async (req, res) => {
+  const resolution = cleanText(req.body?.resolution);
+  if (!resolution) return res.status(400).json({ error: 'กรุณากรอกวิธีแก้ไขว่าทำอะไรบ้าง' });
+  const fields = parseCaseFields({ resolution, follow_up_date: req.body?.follow_up_date });
+  if (fields.error) return res.status(400).json({ error: fields.error });
+
+  let conn;
+  try {
+    conn = await pool.getConnection();
+    await conn.beginTransaction();
+    const [[kase]] = await conn.execute('SELECT id, status FROM claims WHERE id = ? AND shop_id = ? FOR UPDATE', [req.params.id, req.shopId]);
+    if (!kase) {
+      await conn.rollback();
+      return res.status(404).json({ error: 'ไม่พบเคส' });
+    }
+    if (kase.status === 'closed') {
+      await conn.rollback();
+      return res.status(409).json({ error: 'เคสนี้ปิดแล้ว ให้ผู้จัดการเปิดเคสใหม่ก่อน' });
+    }
+    // an older job can still be in the shop when a newer case has taken over: it can record its fix, the calls go with
+    // the newer case
+    const planCall = fields.follow_up_date && kase.status !== 'continued';
+    await conn.execute(
+      'UPDATE claims SET finding = ?, resolution = ?, status = ? WHERE id = ? AND shop_id = ?',
+      [cleanText(req.body?.finding), resolution, planCall ? 'follow_up' : kase.status, kase.id, req.shopId]
+    );
+    if (planCall) await planFollowUp(conn, kase.id, fields.follow_up_date);
+    await conn.commit();
+    res.json({ success: true });
+  } catch (err) {
+    if (conn) {
+      try { await conn.rollback(); } catch (rollbackErr) { console.error('Rollback error:', rollbackErr); }
+    }
+    console.error('Error saving the fix:', err);
+    res.status(500).json({ error: 'บันทึกวิธีแก้ไขไม่สำเร็จ' });
+  } finally {
+    if (conn) conn.release();
+  }
+});
+
+// POST /claims/:id/issue-document : the case becomes a claim document (listed on the ใบเคลม page). It needs the two things
+// the paper must state. Printing again keeps the first issue time and name.
+router.post('/:id/issue-document', async (req, res) => {
+  try {
+    const [[kase]] = await pool.execute('SELECT id, symptom, resolution FROM claims WHERE id = ? AND shop_id = ?', [req.params.id, req.shopId]);
+    if (!kase) return res.status(404).json({ error: 'ไม่พบเคส' });
+    if (!cleanText(kase.symptom)) return res.status(400).json({ error: 'กรุณากรอกรายละเอียดของปัญหาก่อนออกใบเคลม' });
+    if (!cleanText(kase.resolution)) return res.status(400).json({ error: 'กรุณากรอกวิธีแก้ไขก่อนออกใบเคลม' });
+    await pool.execute(
+      'UPDATE claims SET doc_issued_at = COALESCE(doc_issued_at, NOW()), doc_issued_by = COALESCE(doc_issued_by, ?) WHERE id = ? AND shop_id = ?',
+      [actorName(req), kase.id, req.shopId]
+    );
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Error issuing the claim document:', err);
+    res.status(500).json({ error: 'ออกใบเคลมไม่สำเร็จ' });
   }
 });
 

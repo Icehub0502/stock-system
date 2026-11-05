@@ -2,11 +2,13 @@ import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import client from '../api/client';
-import { jobStatusDef, nextMainStatus, prevMainStatus } from '../utils/jobStatus';
+import { jobStatusDef, nextMainStatus, prevMainStatus, nextReworkStatus, prevReworkStatus, REWORK_PATH } from '../utils/jobStatus';
+import { CASE_BADGE_LABEL } from '../utils/claimCases';
+import { formatDateTh } from '../utils/dateGroups';
 import { todayStr } from '../utils/format';
 import { buildLineQuoteText, copyTextToClipboard } from '../utils/lineQuoteText';
 import AddJobModal from '../components/AddJobModal';
-import ClaimFormModal from '../components/ClaimFormModal';
+import CaseResolutionModal from '../components/CaseResolutionModal';
 import DeclineReasonModal from '../components/DeclineReasonModal';
 import CarIcon from '../components/CarIcon';
 import StatusTrack from '../components/StatusTrack';
@@ -26,7 +28,9 @@ export default function JobBoardPage() {
   const [error, setError] = useState('');
   const [busyId, setBusyId] = useState(null);
   const [showAddModal, setShowAddModal] = useState(false);
-  const [showClaimModal, setShowClaimModal] = useState(false);
+  // a come-back job: which open cases to choose from, and the job whose repair just ended
+  const [reworkChoice, setReworkChoice] = useState(null);
+  const [resolutionJob, setResolutionJob] = useState(null);
   const [declineJob, setDeclineJob] = useState(null);
   const [declineBusy, setDeclineBusy] = useState(false);
   // งานที่เพิ่งกด "ลูกค้าไม่ทำ" — โชว์แถบ "ดึงกลับ" ชั่วคราวเผื่อกดผิด
@@ -118,6 +122,56 @@ export default function JobBoardPage() {
       await load({ silent: true });
     } catch (err) {
       setError(err.response?.data?.error || 'เปลี่ยนสถานะไม่สำเร็จ');
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  // "ลูกค้าเก่าแก้งาน" at the inspecting step. A car with a case still open is asked first: it usually came back about
+  // that case, and continuing it keeps the earlier fix and calls together.
+  async function pressRework(job) {
+    setBusyId(job.id);
+    setError('');
+    try {
+      const res = await client.get('/claims/open-cases', { params: { vehicle_id: job.vehicle_id } });
+      const openCases = res.data.data || [];
+      if (openCases.length > 0) {
+        setReworkChoice({ job, openCases });
+      } else {
+        await client.post(`/claims/from-job/${job.id}`);
+        await load({ silent: true });
+      }
+    } catch (err) {
+      setError(err.response?.data?.error || 'เปลี่ยนเป็นงานแก้ไม่สำเร็จ');
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function startRework(claimId) {
+    const { job } = reworkChoice;
+    setReworkChoice(null);
+    setBusyId(job.id);
+    setError('');
+    try {
+      await client.post(`/claims/from-job/${job.id}`, claimId ? { claim_id: claimId } : {});
+      await load({ silent: true });
+    } catch (err) {
+      setError(err.response?.data?.error || 'เปลี่ยนเป็นงานแก้ไม่สำเร็จ');
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function cancelRework(job) {
+    if (!window.confirm('งานนี้ไม่ใช่งานแก้ใช่ไหม? จะกลับไปเลือก "ลงรายการ"')) return;
+    setBusyId(job.id);
+    setError('');
+    try {
+      await client.post(`/claims/from-job/${job.id}/cancel`);
+      await load({ silent: true });
+    } catch (err) {
+      setError(err.response?.data?.error || 'เปลี่ยนเป็นลงรายการไม่สำเร็จ');
     } finally {
       setBusyId(null);
     }
@@ -274,9 +328,6 @@ export default function JobBoardPage() {
           <button type="button" className="btn btn-primary" onClick={() => setShowAddModal(true)}>
             + เพิ่มคิว
           </button>
-          <button type="button" onClick={() => setShowClaimModal(true)}>
-            🛠️ บันทึกเคลม
-          </button>
           <button type="button" onClick={handleShowQr} disabled={qrLoading}>
             {qrLoading ? 'กำลังสร้าง QR...' : '📱 QR ให้ลูกค้าดูสถานะรถ'}
           </button>
@@ -302,13 +353,20 @@ export default function JobBoardPage() {
         <div className="job-card-grid">
           {jobs.map((j) => {
             const st = jobStatusDef(j.status);
-            const next = nextMainStatus(j.status);
-            const prev = prevMainStatus(j.status);
+            const isRework = Boolean(j.case_id);
+            const next = isRework ? nextReworkStatus(j.status) : nextMainStatus(j.status);
+            const prev = isRework ? prevReworkStatus(j.status) : prevMainStatus(j.status);
+            // at the inspecting step a job with no bill yet goes one of two ways
+            const choosePath = !isRework && j.status === 'inspecting' && !j.quotation_id;
             const busy = busyId === j.id;
             return (
               <div key={j.id} className="job-card" onClick={() => navigate(`/jobs/${j.id}`)}>
                 <div className="job-card-top">
                   <span className="job-card-queue">คิว {j.queue_no || '-'}</span>
+                  {isRework && <span className="job-card-case-badge">🛠️ {CASE_BADGE_LABEL[j.case_type] || CASE_BADGE_LABEL.rework}</span>}
+                  {Number(j.case_charge) > 0 && j.status !== 'delivered' && (
+                    <span className="job-card-deposit-badge">💰 เก็บค่าอะไหล่ ฿{Number(j.case_charge).toLocaleString('th-TH')}</span>
+                  )}
                   {j.quotation_no && <span className="job-card-quote-no">{j.quotation_no}</span>}
                   {j.deposit_amount > 0 && (
                     <span className="job-card-deposit-badge">💰 มัดจำ ฿{Number(j.deposit_amount).toLocaleString('th-TH')}</span>
@@ -345,7 +403,7 @@ export default function JobBoardPage() {
                 </div>
 
                 <div className="job-card-status-block" onClick={(e) => e.stopPropagation()}>
-                  <StatusTrack status={j.status} />
+                  <StatusTrack status={j.status} path={isRework ? REWORK_PATH : undefined} />
                   <div className="job-card-status-row">
                     <span className={`status-badge ${st.badge}`}>{st.label}</span>
                     <div className="job-card-status-actions">
@@ -354,9 +412,27 @@ export default function JobBoardPage() {
                           ← {jobStatusDef(prev).label}
                         </button>
                       )}
-                      {next && (
+                      {choosePath ? (
+                        <>
+                          <button type="button" className="job-card-rework-btn" disabled={busy} onClick={() => pressRework(j)}>
+                            🛠️ ลูกค้าเก่าแก้งาน
+                          </button>
+                          <button type="button" className="btn-primary" disabled={busy} onClick={() => changeStatus(j, next)}>
+                            ลงรายการ →
+                          </button>
+                        </>
+                      ) : isRework && j.status === 'repairing' ? (
+                        <button type="button" className="btn-primary" disabled={busy} onClick={() => setResolutionJob(j)}>
+                          กดเพื่อระบุวิธีแก้ไข →
+                        </button>
+                      ) : next && (
                         <button type="button" className="btn-primary" disabled={busy} onClick={() => changeStatus(j, next)}>
                           {jobStatusDef(next).label} →
+                        </button>
+                      )}
+                      {isRework && j.status === 'inspecting' && (
+                        <button type="button" disabled={busy} onClick={() => cancelRework(j)}>
+                          เปลี่ยนเป็นลงรายการ
                         </button>
                       )}
                       {j.status === 'quoted' && (
@@ -397,11 +473,33 @@ export default function JobBoardPage() {
         />
       )}
 
-      {showClaimModal && (
-        <ClaimFormModal
-          claim={null}
-          onClose={() => setShowClaimModal(false)}
-          onSaved={() => setShowClaimModal(false)}
+      {reworkChoice && (
+        <div className="modal-backdrop" onClick={() => setReworkChoice(null)}>
+          <div className="modal-card" style={{ maxWidth: 460 }} onClick={(e) => e.stopPropagation()}>
+            <h3 className="modal-title">รถคันนี้มีเคสที่ยังเปิดอยู่</h3>
+            <p className="fu-line">กลับมาเรื่องเดิมให้ทำต่อจากเคสเดิม ระบบจะออกเลขเคสใหม่ของรอบนี้ และเก็บประวัติรอบก่อนไว้ให้ดู</p>
+            <div className="rework-case-list">
+              {reworkChoice.openCases.map((c) => (
+                <button type="button" key={c.id} className="rework-case-option" onClick={() => startRework(c.id)}>
+                  <strong>ทำต่อจาก {c.claim_no}</strong>
+                  <span className="vh-muted">{formatDateTh(c.claim_date)}</span>
+                  <span>{c.symptom || 'ไม่ได้ระบุอาการ'}</span>
+                </button>
+              ))}
+            </div>
+            <div className="modal-actions">
+              <button type="button" onClick={() => startRework(null)}>เปิดเคสใหม่ (เรื่องอื่น)</button>
+              <button type="button" onClick={() => setReworkChoice(null)}>ยกเลิก</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {resolutionJob && (
+        <CaseResolutionModal
+          job={resolutionJob}
+          onClose={() => setResolutionJob(null)}
+          onDone={() => { setResolutionJob(null); load({ silent: true }); }}
         />
       )}
 
