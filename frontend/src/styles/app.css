@@ -6962,3 +6962,86 @@ a.dash-stat-card.dash-stat-link { text-decoration: none; color: inherit; display
   .case-form .jdp-selected-price input { background: transparent; }
   .case-form .jdp-selected-qty button, .case-form .jdp-selected-remove { min-height: 42px; min-width: 42px; }
 }
+
+/* ── สแกนรับเข้าต่อเนื่อง (BatchScanOverlay) ── */
+.scan-batch .scan-camera-view { display: flex; flex-direction: column; align-items: center; min-height: 0; overflow: hidden; }
+.scan-batch-camera-toggle {
+  margin-left: auto; height: 36px; min-height: 0; padding: 0 14px; border-radius: 999px; cursor: pointer;
+  background: rgba(255, 255, 255, 0.14); border: 1px solid rgba(255, 255, 255, 0.25); color: #fff;
+  font-family: inherit; font-size: 13px; font-weight: 700;
+}
+.scan-batch-hint { margin: 8px 0 0; padding: 0 16px; text-align: center; font-size: 12.5px; line-height: 1.5; color: rgba(255, 255, 255, 0.8); }
+.scan-batch-flash { position: absolute; inset: 0; pointer-events: none; border: 6px solid #22c55e; animation: scan-batch-flash 0.5s ease-out forwards; }
+@keyframes scan-batch-flash { from { opacity: 1; } to { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .scan-batch-flash { animation-duration: 0.2s; } }
+.scan-batch-panel {
+  flex-shrink: 0; max-height: 58vh; overflow-y: auto; padding: 12px 14px calc(14px + env(safe-area-inset-bottom, 0px));
+  background: #fff; color: #111827; border-radius: 18px 18px 0 0; text-align: left;
+}
+.scan-batch-panel *, .scan-review *, .scan-basket-note * { box-sizing: border-box; }
+.scan-batch-entry { display: flex; gap: 8px; }
+.scan-batch-entry .scan-input { flex: 1; min-width: 0; }
+.scan-batch-empty, .scan-batch-more { margin: 10px 0; text-align: center; font-size: 13px; color: #6b7280; }
+.scan-batch-row { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid #e5e7eb; }
+.scan-batch-row-main { flex: 1; min-width: 0; }
+.scan-batch-row-name { margin: 2px 0 0; font-size: 12.5px; color: #4b5563; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.scan-batch-new { font-size: 11px; font-weight: 700; color: #92400e; background: #fef3c7; border-radius: 6px; padding: 1px 7px; }
+.scan-batch-stepper { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+.scan-batch-stepper b { min-width: 30px; text-align: center; font-size: 16px; }
+.scan-batch-stepper button {
+  width: 44px; height: 44px; min-height: 0; padding: 0; border-radius: 10px; border: 1px solid #d1d5db; background: #f9fafb;
+  color: #111827; font-family: inherit; font-size: 20px; line-height: 1; cursor: pointer;
+}
+.scan-batch-stepper button:disabled { opacity: 0.4; cursor: not-allowed; }
+.scan-batch-stepper button.is-remove { background: #fee2e2; border-color: #fecaca; color: #b91c1c; font-size: 15px; }
+.scan-batch-held {
+  margin: 8px 16px 0; padding: 8px 12px; border-radius: 10px; background: #fef3c7; color: #92400e;
+  text-align: center; font-size: 13px; font-weight: 700; line-height: 1.5; overflow-wrap: anywhere;
+}
+.scan-batch-panel > .scan-btn { margin-top: 12px; }
+
+/* ── ตรวจรายการที่สแกน (BatchScanReview) ── */
+.scan-review-section { margin-top: 18px; }
+.scan-review-section h2 { margin: 0 0 8px; font-size: 15px; font-weight: 800; }
+.scan-review-section h2 small { margin-left: 4px; font-size: 12.5px; font-weight: 500; color: #6b7280; }
+.scan-review-card { margin-bottom: 10px; padding: 12px 14px; background: #fff; border: 1px solid #e5e7eb; border-radius: 14px; }
+.scan-review-pair { border-left: 4px solid #2563eb; }
+.scan-review-bulk .scan-label:first-child { margin-top: 0; }
+.scan-review-confirm-all { margin-bottom: 10px; }
+.scan-review-newcat { display: flex; gap: 8px; margin-top: 8px; }
+.scan-review-newcat .scan-input { flex: 1; min-width: 0; }
+.scan-review-name { margin: 0 0 4px; font-size: 13.5px; font-weight: 700; }
+.scan-review-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; }
+.scan-review-row .scan-row-code { flex: 1; min-width: 0; flex-wrap: wrap; }
+.scan-review-stock { font-size: 11.5px; color: #6b7280; }
+.scan-review-remove {
+  width: 36px; height: 40px; min-height: 0; padding: 0; flex-shrink: 0; border: none; border-radius: 10px;
+  background: #fee2e2; color: #b91c1c; font-family: inherit; font-size: 15px; cursor: pointer;
+}
+.scan-review-note { margin: 6px 0; font-size: 13px; line-height: 1.5; color: #4b5563; }
+.scan-review-warn { margin: 6px 0 0; font-size: 13px; font-weight: 700; color: #92400e; }
+.scan-review-ok { margin: 6px 0 0; font-size: 13px; font-weight: 700; color: #047857; }
+.scan-review-required { font-weight: 500; font-size: 11.5px; color: #b91c1c; }
+.scan-review-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.scan-review-actions .scan-btn--sm, .scan-review-card > .scan-btn--sm { height: 40px; }
+.scan-review-choice {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; width: 100%; min-height: 44px; margin-bottom: 6px; padding: 8px 10px;
+  background: #f9fafb; border: 1px solid #d1d5db; border-radius: 10px; text-align: left; font-family: inherit; color: #111827; cursor: pointer;
+}
+.scan-review-choice:hover { background: #f3f4f6; }
+.scan-review-choice-name { font-size: 12.5px; color: #4b5563; }
+.scan-review-manual .scan-label, .scan-review-fields .scan-label { margin-top: 10px; }
+.scan-review-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); column-gap: 10px; }
+.scan-review-split { grid-column: 1 / -1; display: flex; align-items: flex-start; gap: 8px; margin-top: 12px; font-size: 13px; line-height: 1.5; color: #374151; cursor: pointer; }
+.scan-review-split input { width: 18px; height: 18px; margin-top: 2px; flex-shrink: 0; }
+.scan-review-error { margin-top: 12px; }
+.scan-review-error .scan-btn { margin-top: 8px; }
+.scan-review-footer { margin-top: 18px; }
+.scan-review-footer .scan-actions { margin-top: 10px; }
+.scan-review-footer .scan-hint { margin: 10px 0 0; }
+.scan-basket-note {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 12px; padding: 10px 14px;
+  background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 14px; font-size: 13.5px;
+}
+.scan-basket-note p { margin: 0; }
+.scan-basket-note .scan-btn { flex-shrink: 0; height: 40px; }

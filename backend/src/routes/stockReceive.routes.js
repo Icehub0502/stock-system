@@ -5,7 +5,8 @@ const { authenticate, requireRole, requireManager, roleRank } = require('../midd
 const { emitStockEvent, emitStockTxEvent } = require('../realtime');
 const { positionsFor, positionLabel } = require('../utils/stockPositions');
 const { recomputeItemCost, parseUnitCost } = require('../utils/stockCost');
-const { parseQty, parseNewStockItem, insertStockItem, hideUnusedScanItem } = require('../utils/stockItemCreate');
+const { parseQty, cleanText, parseNewStockItem, insertStockItem, hideUnusedScanItem } = require('../utils/stockItemCreate');
+const { sideMarkers, likelySide, findPairs, oppositePosition, compactCode } = require('../utils/scanPairs');
 
 // รับเข้าสต๊อกรวมตามบิล (หน้าสแกน /scan โหมดรับเข้า) + พิมพ์ QR ของสต๊อกรวม
 //
@@ -19,6 +20,7 @@ const router = express.Router();
 router.use(authenticate);
 
 const MAX_QTY = 1000000;
+const MAX_BATCH_CODES = 200; // one round of continuous scanning, a bill is never this long
 
 function parseId(value) {
   const n = Number(value);
@@ -157,6 +159,41 @@ function shapeLine(row) {
 // เพิ่มรายการรอยืนยันเข้าบิล (ยังไม่บวกสต๊อก) — สแกนชิ้น/ตำแหน่งเดิมซ้ำในบิลเดียวกัน = รวมจำนวนใน
 // แถวเดิม (แก้ได้ทีหลัง) แทนที่จะเกิดแถวซ้ำ
 // A different price per piece starts its own line, so one price never silently replaces another.
+// Runs in the caller's transaction; returns { lineId, qty, merged } or { status, error }.
+async function addPendingLine(conn, { sessionId, itemId, position, qty, unitCost, userId, shopId }) {
+  const [[item]] = await conn.execute(
+    'SELECT id, has_sides, has_axles, has_levels FROM stock_items WHERE id = ? AND shop_id = ? AND is_active = 1',
+    [itemId, shopId]
+  );
+  if (!item) return { status: 404, error: 'ไม่พบรายการนี้ในสต๊อกรวม' };
+  const validPositions = positionsFor(item.has_sides, item.has_axles, item.has_levels);
+  if (validPositions.length > 0 ? !validPositions.includes(position) : position !== null) {
+    return {
+      status: 400,
+      error: validPositions.length > 0 ? 'รายการนี้แยกตำแหน่ง ต้องระบุตำแหน่งให้ถูกต้อง' : 'รายการนี้ไม่แยกตำแหน่ง',
+    };
+  }
+
+  const [[existing]] = await conn.execute(
+    `SELECT id, qty FROM stock_receive_lines
+     WHERE receipt_session_id = ? AND item_id = ? AND position <=> ? AND applied_at IS NULL
+       ${unitCost === null ? '' : 'AND unit_cost <=> ?'}
+     ORDER BY id DESC LIMIT 1 FOR UPDATE`,
+    unitCost === null ? [sessionId, itemId, position] : [sessionId, itemId, position, unitCost]
+  );
+  if (existing) {
+    const lineQty = existing.qty + qty;
+    if (lineQty > MAX_QTY) return { status: 400, error: 'จำนวนรวมสูงเกินไป' };
+    await conn.execute('UPDATE stock_receive_lines SET qty = ?, unit_cost = COALESCE(?, unit_cost) WHERE id = ?', [lineQty, unitCost, existing.id]);
+    return { lineId: existing.id, qty: lineQty, merged: true };
+  }
+  const [ins] = await conn.execute(
+    'INSERT INTO stock_receive_lines (receipt_session_id, item_id, position, qty, user_id, unit_cost) VALUES (?, ?, ?, ?, ?, ?)',
+    [sessionId, itemId, position, qty, userId, unitCost]
+  );
+  return { lineId: ins.insertId, qty, merged: false };
+}
+
 router.post('/lines', async (req, res) => {
   const itemId = parseId(req.body?.item_id);
   const position = req.body?.position ?? null;
@@ -180,52 +217,16 @@ router.post('/lines', async (req, res) => {
       return res.status(owned.status).json({ error: owned.error });
     }
 
-    const [[item]] = await conn.execute(
-      'SELECT id, has_sides, has_axles, has_levels FROM stock_items WHERE id = ? AND shop_id = ? AND is_active = 1',
-      [itemId, req.shopId]
-    );
-    if (!item) {
+    const added = await addPendingLine(conn, {
+      sessionId, itemId, position, qty, unitCost: cost.value, userId: req.user.id, shopId: req.shopId,
+    });
+    if (added.error) {
       await conn.rollback();
-      return res.status(404).json({ error: 'ไม่พบรายการนี้ในสต๊อกรวม' });
+      return res.status(added.status).json({ error: added.error });
     }
-    const validPositions = positionsFor(item.has_sides, item.has_axles, item.has_levels);
-    if (validPositions.length > 0 ? !validPositions.includes(position) : position !== null) {
-      await conn.rollback();
-      return res.status(400).json({
-        error: validPositions.length > 0 ? 'รายการนี้แยกตำแหน่ง ต้องระบุตำแหน่งให้ถูกต้อง' : 'รายการนี้ไม่แยกตำแหน่ง',
-      });
-    }
-
-    const [[existing]] = await conn.execute(
-      `SELECT id, qty FROM stock_receive_lines
-       WHERE receipt_session_id = ? AND item_id = ? AND position <=> ? AND applied_at IS NULL
-         ${cost.value === null ? '' : 'AND unit_cost <=> ?'}
-       ORDER BY id DESC LIMIT 1 FOR UPDATE`,
-      cost.value === null ? [sessionId, itemId, position] : [sessionId, itemId, position, cost.value]
-    );
-    let lineId;
-    let lineQty;
-    let merged = false;
-    if (existing) {
-      lineQty = existing.qty + qty;
-      if (lineQty > MAX_QTY) {
-        await conn.rollback();
-        return res.status(400).json({ error: 'จำนวนรวมสูงเกินไป' });
-      }
-      await conn.execute('UPDATE stock_receive_lines SET qty = ?, unit_cost = COALESCE(?, unit_cost) WHERE id = ?', [lineQty, cost.value, existing.id]);
-      lineId = existing.id;
-      merged = true;
-    } else {
-      const [ins] = await conn.execute(
-        'INSERT INTO stock_receive_lines (receipt_session_id, item_id, position, qty, user_id, unit_cost) VALUES (?, ?, ?, ?, ?, ?)',
-        [sessionId, itemId, position, qty, req.user.id, cost.value]
-      );
-      lineId = ins.insertId;
-      lineQty = qty;
-    }
-    const [[line]] = await conn.execute(lineSelect('l.id = ?'), [req.shopId, lineId]);
+    const [[line]] = await conn.execute(lineSelect('l.id = ?'), [req.shopId, added.lineId]);
     await conn.commit();
-    res.status(merged ? 200 : 201).json({ success: true, merged, line: shapeLine(line), qty: lineQty });
+    res.status(added.merged ? 200 : 201).json({ success: true, merged: added.merged, line: shapeLine(line), qty: added.qty });
   } catch (err) {
     if (conn) await conn.rollback().catch(() => {});
     console.error('Error adding stock receive line:', err);
@@ -234,6 +235,64 @@ router.post('/lines', async (req, res) => {
     if (conn) conn.release();
   }
 });
+
+// One new item as sent by the scan page: the new-item fields of POST /stock-items + unit_cost, and qty (plain
+// item) or qtys ({ position: qty }). Opening stock is always 0 here: what arrives goes through the bill.
+// Returns { item, receive, unitCost } or { error }; receive = [position, qty] of each bill line to add.
+function parseNewItemReceive(body) {
+  const cost = parseUnitCost(body.unit_cost);
+  if (cost.error) return { error: cost.error };
+  const parsed = parseNewStockItem({ ...body, stocks: undefined, stock_qty: 0 });
+  if (parsed.error) return { error: parsed.error };
+  const { item } = parsed;
+
+  if (item.positions.length === 0) {
+    const qty = parseQty(body.qty, 1);
+    if (qty === null) return { error: 'กรุณาใส่จำนวนที่รับเข้าตั้งแต่ 1 ชิ้นขึ้นไป' };
+    return { item, receive: [[null, qty]], unitCost: cost.value };
+  }
+  const receive = [];
+  for (const position of item.positions) {
+    const raw = body.qtys ? body.qtys[position] : undefined;
+    const qty = raw === undefined || raw === '' ? 0 : parseQty(raw);
+    if (qty === null) return { error: 'จำนวนต้องเป็นเลขจำนวนเต็มตั้งแต่ 0 ขึ้นไป' };
+    if (qty > 0) receive.push([position, qty]);
+  }
+  if (receive.length === 0) return { error: 'กรุณาใส่จำนวนที่รับเข้าอย่างน้อยหนึ่งตำแหน่ง' };
+  return { item, receive, unitCost: cost.value };
+}
+
+function typedCodesOf(item) {
+  return [...new Set([item.oemCode, ...Object.values(item.codes)].filter(Boolean))];
+}
+
+// Items of this shop already using one of these codes (another category, or a position code of another item)
+async function findItemsWithCodes(shopId, codes) {
+  const [rows] = await pool.query(
+    `${MATCH_SELECT}
+     WHERE i.shop_id = ? AND i.is_active = 1
+       AND ((p.item_id IS NOT NULL AND p.oem_code IN (?)) OR (p.item_id IS NULL AND i.oem_code IN (?)))
+     ORDER BY i.id, p.position`,
+    [shopId, codes, codes]
+  );
+  return rows;
+}
+
+// Creates a parsed item and puts what arrived on the bill as pending lines, in the caller's transaction.
+// Returns { itemId, lineIds } or { status, error }.
+async function insertItemWithLines(conn, { sessionId, parsed, userId, shopId }) {
+  const created = await insertStockItem(conn, { shopId, userId, item: parsed.item, createdInSessionId: sessionId });
+  if (created.error) return created;
+  const lineIds = [];
+  for (const [position, qty] of parsed.receive) {
+    const [ins] = await conn.execute(
+      'INSERT INTO stock_receive_lines (receipt_session_id, item_id, position, qty, user_id, unit_cost) VALUES (?, ?, ?, ?, ?, ?)',
+      [sessionId, created.itemId, position, qty, userId, parsed.unitCost]
+    );
+    lineIds.push(ins.insertId);
+  }
+  return { itemId: created.itemId, lineIds };
+}
 
 // A code that is not in สต๊อกรวม yet, typed in on the scan page: creates the item (opening stock 0) and
 // puts the received quantity on the bill as pending lines in one transaction. The stock is added when the
@@ -244,48 +303,19 @@ router.post('/new-item', requireRole('office'), async (req, res) => {
   const body = req.body || {};
   const sessionId = parseId(body.receipt_session_id);
   if (!sessionId) return res.status(400).json({ error: 'ข้อมูลไม่ถูกต้อง' });
-  const cost = parseUnitCost(body.unit_cost);
-  if (cost.error) return res.status(400).json({ error: cost.error });
-  // opening stock is always 0 here: what arrives goes through the bill
-  const parsed = parseNewStockItem({ ...body, stocks: undefined, stock_qty: 0 });
+  const parsed = parseNewItemReceive(body);
   if (parsed.error) return res.status(400).json({ error: parsed.error });
-  const { item } = parsed;
-
-  // [position, qty] of each bill line to add (position null = an item not split by position)
-  let receive;
-  if (item.positions.length > 0) {
-    receive = [];
-    for (const position of item.positions) {
-      const raw = body.qtys ? body.qtys[position] : undefined;
-      const qty = raw === undefined || raw === '' ? 0 : parseQty(raw);
-      if (qty === null) return res.status(400).json({ error: 'จำนวนต้องเป็นเลขจำนวนเต็มตั้งแต่ 0 ขึ้นไป' });
-      if (qty > 0) receive.push([position, qty]);
-    }
-    if (receive.length === 0) return res.status(400).json({ error: 'กรุณาใส่จำนวนที่รับเข้าอย่างน้อยหนึ่งตำแหน่ง' });
-  } else {
-    const qty = parseQty(body.qty, 1);
-    if (qty === null) return res.status(400).json({ error: 'กรุณาใส่จำนวนที่รับเข้าตั้งแต่ 1 ชิ้นขึ้นไป' });
-    receive = [[null, qty]];
-  }
 
   let conn;
   try {
     // a code typed here may already be in stock (another category, or a position code of another item):
     // send those back so the user picks the existing item instead of creating a second one
-    const typedCodes = [...new Set([item.oemCode, ...Object.values(item.codes)].filter(Boolean))];
-    const [existing] = await pool.query(
-      `${MATCH_SELECT}
-       WHERE i.shop_id = ? AND i.is_active = 1
-         AND ((p.item_id IS NOT NULL AND p.oem_code IN (?)) OR (p.item_id IS NULL AND i.oem_code IN (?)))
-       ORDER BY i.id, p.position
-       LIMIT 20`,
-      [req.shopId, typedCodes, typedCodes]
-    );
+    const existing = await findItemsWithCodes(req.shopId, typedCodesOf(parsed.item));
     if (existing.length > 0) {
       return res.status(409).json({
         code: 'CODE_EXISTS',
         error: 'รหัสนี้มีอยู่ในสต๊อกรวมแล้ว — เลือกรายการเดิมแทน',
-        matches: existing.map(shapeMatch),
+        matches: existing.slice(0, 20).map(shapeMatch),
       });
     }
 
@@ -296,22 +326,12 @@ router.post('/new-item', requireRole('office'), async (req, res) => {
       await conn.rollback();
       return res.status(owned.status).json({ error: owned.error });
     }
-    const created = await insertStockItem(conn, {
-      shopId: req.shopId, userId: req.user.id, item, createdInSessionId: sessionId,
-    });
+    const created = await insertItemWithLines(conn, { sessionId, parsed, userId: req.user.id, shopId: req.shopId });
     if (created.error) {
       await conn.rollback();
       return res.status(created.status).json({ error: created.error });
     }
-    const lineIds = [];
-    for (const [position, qty] of receive) {
-      const [ins] = await conn.execute(
-        'INSERT INTO stock_receive_lines (receipt_session_id, item_id, position, qty, user_id, unit_cost) VALUES (?, ?, ?, ?, ?, ?)',
-        [sessionId, created.itemId, position, qty, req.user.id, cost.value]
-      );
-      lineIds.push(ins.insertId);
-    }
-    const [lines] = await conn.query(`${lineSelect('l.id IN (?)')} ORDER BY l.id`, [req.shopId, lineIds]);
+    const [lines] = await conn.query(`${lineSelect('l.id IN (?)')} ORDER BY l.id`, [req.shopId, created.lineIds]);
     await conn.commit();
     emitStockEvent('stock:item-created', { shopId: req.shopId, entityType: 'stock_item', entityId: created.itemId, actorId: req.user.id });
     res.status(201).json({ success: true, item_id: created.itemId, lines: lines.map(shapeLine) });
@@ -322,6 +342,235 @@ router.post('/new-item', requireRole('office'), async (req, res) => {
     }
     console.error('Error creating stock item from receive:', err);
     res.status(500).json({ error: 'เพิ่มรายการใหม่ไม่สำเร็จ' });
+  } finally {
+    if (conn) conn.release();
+  }
+});
+
+// ── continuous scanning ────────────────────────────────────────────────
+// Scans pile up in the browser first; these two routes turn the pile into bill lines once a person has checked it.
+
+// Sorts one round of scanned codes for the review screen:
+//   known   the code belongs to exactly one item or position
+//   choose  several items use this code, or only a differently written code matched (ABC-123 / abc123)
+//   attach  a new code whose other side is already in stock, on an item with that side's code still blank
+//   pairs   two new codes that look like the left and right of one part
+//   singles other new codes (partner: the other side exists as a separate item, which cannot be joined)
+// Nothing is saved here.
+router.post('/batch/resolve', async (req, res) => {
+  const raw = req.body?.codes;
+  if (!Array.isArray(raw) || raw.length === 0 || raw.length > MAX_BATCH_CODES) {
+    return res.status(400).json({ error: 'ข้อมูลไม่ถูกต้อง' });
+  }
+  const invalid = [];
+  const byUpper = new Map();
+  for (const value of raw) {
+    const code = extractScanCode(value);
+    if (!code || code.length > 100) invalid.push(String(value ?? '').slice(0, 100));
+    else if (!byUpper.has(code.toUpperCase())) byUpper.set(code.toUpperCase(), code);
+  }
+  const codes = [...byUpper.values()];
+  const result = { known: [], choose: [], attach: [], pairs: [], singles: [], invalid };
+  if (codes.length === 0) return res.json(result);
+
+  try {
+    const exact = new Map();
+    for (const row of (await findItemsWithCodes(req.shopId, codes)).map(shapeMatch)) {
+      const key = row.code.toUpperCase();
+      if (!exact.has(key)) exact.set(key, []);
+      exact.get(key).push(row);
+    }
+    let remaining = [];
+    for (const code of codes) {
+      const matches = exact.get(code.toUpperCase());
+      if (!matches) remaining.push(code);
+      else if (matches.length === 1) result.known.push({ code, match: matches[0] });
+      else result.choose.push({ code, matches, loose: false });
+    }
+
+    // codes written differently from stock, compared without separators: never matched automatically
+    const compacts = [...new Set(remaining.map(compactCode).filter(Boolean))];
+    if (compacts.length > 0) {
+      const strip = (col) => `REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(${col}, ' ', ''), '-', ''), '_', ''), '.', ''), '/', '')`;
+      const [looseRows] = await pool.query(
+        `${MATCH_SELECT}
+         WHERE i.shop_id = ? AND i.is_active = 1
+           AND ((p.item_id IS NOT NULL AND ${strip('p.oem_code')} IN (?)) OR (p.item_id IS NULL AND ${strip('i.oem_code')} IN (?)))
+         ORDER BY i.id, p.position`,
+        [req.shopId, compacts, compacts]
+      );
+      const loose = new Map();
+      for (const row of looseRows.map(shapeMatch)) {
+        const key = compactCode(row.code);
+        if (!loose.has(key)) loose.set(key, []);
+        loose.get(key).push(row);
+      }
+      remaining = remaining.filter((code) => {
+        const matches = loose.get(compactCode(code));
+        if (matches) result.choose.push({ code, matches, loose: true });
+        return !matches;
+      });
+    }
+
+    // the other side of a new code already in stock
+    const partnerCodes = [...new Set(remaining.flatMap((code) => sideMarkers(code).map((m) => m.partner)))];
+    const partners = new Map();
+    const blankPositions = new Set();
+    if (partnerCodes.length > 0) {
+      const partnerRows = await findItemsWithCodes(req.shopId, partnerCodes);
+      for (const row of partnerRows.map(shapeMatch)) {
+        const key = row.code.toUpperCase();
+        if (!partners.has(key)) partners.set(key, []);
+        partners.get(key).push(row);
+      }
+      const itemIds = [...new Set(partnerRows.map((row) => row.item_id))];
+      if (itemIds.length > 0) {
+        const [positions] = await pool.query(
+          "SELECT item_id, position FROM stock_item_positions WHERE item_id IN (?) AND (oem_code IS NULL OR oem_code = '')",
+          [itemIds]
+        );
+        for (const row of positions) blankPositions.add(`${row.item_id}|${row.position}`);
+      }
+    }
+    const partnerHints = new Map();
+    remaining = remaining.filter((code) => {
+      for (const { partner } of sideMarkers(code)) {
+        const rows = partners.get(partner);
+        if (rows?.length !== 1) continue;
+        const position = oppositePosition(rows[0].position);
+        if (position && blankPositions.has(`${rows[0].item_id}|${position}`)) {
+          result.attach.push({
+            code,
+            item_id: rows[0].item_id,
+            position,
+            position_label: positionLabel(position),
+            partner_code: rows[0].code,
+            partner_label: rows[0].position_label,
+            category_name: rows[0].category_name,
+            description: rows[0].description,
+          });
+          return false;
+        }
+        partnerHints.set(code, { code: rows[0].code, description: rows[0].description });
+      }
+      return true;
+    });
+
+    const { pairs, singles } = findPairs(remaining);
+    result.pairs = pairs;
+    result.singles = singles.map((code) => ({ code, side: likelySide(code), partner: partnerHints.get(code) || null }));
+    res.json(result);
+  } catch (err) {
+    console.error('Error resolving scanned codes:', err);
+    res.status(500).json({ error: 'ตรวจรายการที่สแกนไม่สำเร็จ' });
+  }
+});
+
+// Puts one checked round on the bill as pending lines, all or nothing. Stock moves only when the bill is confirmed.
+// Body: receipt_session_id,
+//   known     [{ item_id, position, qty }]
+//   attach    [{ item_id, position, code, qty }]  fills that position's blank code, then adds the line
+//   new_items [the fields of POST /stock-receive/new-item]
+router.post('/batch/apply', requireRole('office'), async (req, res) => {
+  const body = req.body || {};
+  const sessionId = parseId(body.receipt_session_id);
+  const known = body.known ?? [];
+  const attach = body.attach ?? [];
+  const newItems = body.new_items ?? [];
+  if (!sessionId || !Array.isArray(known) || !Array.isArray(attach) || !Array.isArray(newItems)) {
+    return res.status(400).json({ error: 'ข้อมูลไม่ถูกต้อง' });
+  }
+  const total = known.length + attach.length + newItems.length;
+  if (total === 0 || total > MAX_BATCH_CODES) return res.status(400).json({ error: 'ข้อมูลไม่ถูกต้อง' });
+
+  const parseRow = (row) => {
+    const itemId = parseId(row?.item_id);
+    const qty = parseQty(row?.qty, 1);
+    const position = row?.position ?? null;
+    if (!itemId || qty === null || (position !== null && typeof position !== 'string')) return null;
+    return { itemId, qty, position };
+  };
+  const knownRows = known.map(parseRow);
+  const attachRows = attach.map((row) => {
+    const parsed = parseRow(row);
+    const code = cleanText(row?.code, 100);
+    return parsed && parsed.position && code ? { ...parsed, code } : null;
+  });
+  if (knownRows.includes(null) || attachRows.includes(null)) return res.status(400).json({ error: 'ข้อมูลไม่ถูกต้อง' });
+
+  const parsedItems = newItems.map((row) => parseNewItemReceive(row || {}));
+  const badItem = parsedItems.find((p) => p.error);
+  if (badItem) return res.status(400).json({ error: badItem.error });
+
+  // two new entries with one code would make two items, or fail halfway on a duplicate key
+  const newCodes = [...attachRows.map((row) => row.code), ...parsedItems.flatMap((p) => typedCodesOf(p.item))];
+  if (new Set(newCodes.map((code) => code.toUpperCase())).size !== newCodes.length) {
+    return res.status(400).json({ error: 'มีรหัสซ้ำกันในรายการใหม่' });
+  }
+
+  let conn;
+  try {
+    if (newCodes.length > 0) {
+      const existing = await findItemsWithCodes(req.shopId, newCodes);
+      if (existing.length > 0) {
+        return res.status(409).json({
+          code: 'CODE_EXISTS',
+          error: `รหัส ${shapeMatch(existing[0]).code} มีอยู่ในสต๊อกรวมแล้ว — กดตรวจรายการอีกครั้ง`,
+          matches: existing.slice(0, 20).map(shapeMatch),
+        });
+      }
+    }
+
+    conn = await pool.getConnection();
+    await conn.beginTransaction();
+    const fail = async (status, error) => {
+      await conn.rollback();
+      return res.status(status).json({ error });
+    };
+    const owned = await loadOwnedSession(conn, sessionId, req.user, req.shopId, { lock: true });
+    if (owned.error) return await fail(owned.status, owned.error);
+
+    const shared = { sessionId, userId: req.user.id, shopId: req.shopId };
+    const lineIds = new Set();
+    const updatedItems = new Set();
+    const createdItems = [];
+
+    for (const row of knownRows) {
+      const added = await addPendingLine(conn, { ...shared, itemId: row.itemId, position: row.position, qty: row.qty, unitCost: null });
+      if (added.error) return await fail(added.status, added.error);
+      lineIds.add(added.lineId);
+    }
+    for (const row of attachRows) {
+      const [[slot]] = await conn.execute(
+        `SELECT p.oem_code FROM stock_item_positions p JOIN stock_items i ON i.id = p.item_id
+         WHERE p.item_id = ? AND p.position = ? AND i.shop_id = ? AND i.is_active = 1 FOR UPDATE`,
+        [row.itemId, row.position, req.shopId]
+      );
+      if (!slot) return await fail(404, 'ไม่พบตำแหน่งนี้ในสต๊อกรวม');
+      if (slot.oem_code) return await fail(409, 'ตำแหน่งนี้มีรหัสแล้ว — กดตรวจรายการอีกครั้ง');
+      await conn.execute('UPDATE stock_item_positions SET oem_code = ? WHERE item_id = ? AND position = ?', [row.code, row.itemId, row.position]);
+      const added = await addPendingLine(conn, { ...shared, itemId: row.itemId, position: row.position, qty: row.qty, unitCost: null });
+      if (added.error) return await fail(added.status, added.error);
+      lineIds.add(added.lineId);
+      updatedItems.add(row.itemId);
+    }
+    for (const parsed of parsedItems) {
+      const created = await insertItemWithLines(conn, { ...shared, parsed });
+      if (created.error) return await fail(created.status, created.error);
+      created.lineIds.forEach((id) => lineIds.add(id));
+      createdItems.push(created.itemId);
+    }
+
+    const [lines] = await conn.query(`${lineSelect('l.id IN (?)')} ORDER BY l.id`, [req.shopId, [...lineIds]]);
+    await conn.commit();
+    createdItems.forEach((entityId) => emitStockEvent('stock:item-created', { shopId: req.shopId, entityType: 'stock_item', entityId, actorId: req.user.id }));
+    updatedItems.forEach((entityId) => emitStockEvent('stock:item-updated', { shopId: req.shopId, entityType: 'stock_item', entityId, actorId: req.user.id }));
+    res.status(201).json({ success: true, created: createdItems.length, lines: lines.map(shapeLine) });
+  } catch (err) {
+    if (conn) await conn.rollback().catch(() => {});
+    if (err.code === 'ER_DUP_ENTRY') return res.status(409).json({ error: 'มีรหัสซ้ำในหมวดนี้ — กดตรวจรายการอีกครั้ง' });
+    console.error('Error applying scanned batch:', err);
+    res.status(500).json({ error: 'เพิ่มรายการเข้าบิลไม่สำเร็จ' });
   } finally {
     if (conn) conn.release();
   }

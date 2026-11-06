@@ -6,6 +6,11 @@ import { useAuth } from '../context/AuthContext';
 import { hasRole } from '../utils/roles';
 import { positionLabel, POSITION_COLOR, NEUTRAL_POSITION_COLOR } from '../utils/stockPositions';
 import ScanNewItemSheet from '../components/ScanNewItemSheet';
+import { ScanPositionChip as PositionChip } from '../components/PositionChip';
+import BatchScanOverlay from '../components/BatchScanOverlay';
+import BatchScanReview from '../components/BatchScanReview';
+import useScanBasket from '../hooks/useScanBasket';
+import { cleanScannedCode, prepareScanSound } from '../utils/scanBatch';
 
 // ─────────────────────────────────────────
 //  ICONS
@@ -79,7 +84,8 @@ const IconEdit = () => (
 // ─────────────────────────────────────────
 // DONE = หน้าสรุปหลังกด "เสร็จสิ้น" — ทวนของที่สแกนเข้าไปทั้งหมดก่อนปิดงาน
 // แก้ผิดได้ (ลบทีละรายการ) แล้วกลับไปสแกนต่อได้
-const STEP = { MODE: 'mode', INVOICE: 'invoice', SCAN: 'scan', DONE: 'done' };
+// REVIEW = ตรวจของที่สแกนต่อเนื่องไว้ ก่อนเพิ่มเข้าบิล (โหมดรับเข้า)
+const STEP = { MODE: 'mode', INVOICE: 'invoice', SCAN: 'scan', REVIEW: 'review', DONE: 'done' };
 
 function todayStr() {
   const d = new Date();
@@ -89,16 +95,6 @@ function todayStr() {
 // ─────────────────────────────────────────
 //  ชิ้นส่วนที่ใช้ซ้ำ
 // ─────────────────────────────────────────
-function PositionChip({ position }) {
-  if (!position) return null;
-  const color = POSITION_COLOR[position] || NEUTRAL_POSITION_COLOR;
-  return (
-    <span className="scan-chip" style={{ color: color.fg, background: color.bg }}>
-      {positionLabel(position)}
-    </span>
-  );
-}
-
 // ป้ายประเภทของรายการในบิล (ข้างรหัส)
 function kindLabel(type) {
   if (type === 'stock_item') return 'สต๊อกรวม';
@@ -283,7 +279,7 @@ function ScanOverlay({ active, mode, onResult, onClose }) {
         {active && <QRScanner active={active} onResult={onResult} />}
       </div>
 
-      <p className="scan-camera-hint">วาง QR Code ในกรอบ — ระบบจะสแกนอัตโนมัติ</p>
+      <p className="scan-camera-hint">วาง QR หรือบาร์โค้ดในกรอบ — ระบบจะสแกนอัตโนมัติ</p>
     </div>
   );
 }
@@ -374,18 +370,6 @@ function lineToOrder(line) {
     type: 'stock_item',
     position: line.position,
   };
-}
-
-// a scanned label is the bare code, or JSON on the old wing-arm labels ({"sku": ...}) — the code to prefill
-function scannedCodeText(raw) {
-  const text = String(raw ?? '').trim();
-  if (!text.startsWith('{')) return text;
-  try {
-    const parsed = JSON.parse(text);
-    return String(parsed.sku ?? parsed.model_code ?? parsed.code ?? '').trim();
-  } catch {
-    return text;
-  }
 }
 
 // แปลงผลจาก /stock-receive เป็นรูปแบบเดียวกับ item ที่ ConfirmSheet/OrderRow ใช้อยู่
@@ -538,6 +522,11 @@ export default function TechnicianScanPage() {
 
   const [orders, setOrders]       = useState([]);             // รายการในบิลนี้
   const [toast, setToast]         = useState(null);
+
+  // สแกนต่อเนื่อง (โหมดรับเข้า): ของที่สแกนกองไว้ในตะกร้าก่อน ตรวจแล้วค่อยเข้าบิล
+  const [batchScanning, setBatchScanning] = useState(false);
+  const [reviewDetails, setReviewDetails] = useState({});     // ที่กรอกไว้ของรหัสใหม่ เผื่อกลับไปสแกนเพิ่ม
+  const basket = useScanBasket(mode === 'IN' && session ? session.id : null);
 
   // ── มาจากหน้าบิลรับเข้า: "สแกนของเข้าบิลนี้" — เปิดบิลเดิมต่อได้เลย ไม่ต้องเปิดบิลใหม่
   // ใช้ตอนต้นทางส่งของมาไม่ครบ/บิลมาทีหลัง แล้วต้องแอดของเข้าบิลเดิมภายหลัง
@@ -702,6 +691,9 @@ export default function TechnicianScanPage() {
     if (mode === 'IN' && pendingCount > 0 && !window.confirm(
       `ยังมี ${pendingCount} รายการที่ยังไม่บวกสต๊อก\nถ้าออกตอนนี้ รายการจะค้างอยู่ในบิล (เปิดสแกนต่อได้จากหน้า "บิลรับเข้า") แต่สต๊อกจะยังไม่เพิ่ม\n\nออกจากหน้านี้เลยใช่ไหม?`
     )) return;
+    if (mode === 'IN' && basket.items.length > 0 && !window.confirm(
+      `ยังมี ${basket.items.length} รหัสที่สแกนไว้แต่ยังไม่เข้าบิล\nรายการจะค้างอยู่ในเครื่องนี้เท่านั้น (เปิดบิลนี้ต่อจากหน้า "บิลรับเข้า" แล้วตรวจรายการได้)\n\nออกจากหน้านี้เลยใช่ไหม?`
+    )) return;
     action();
   };
 
@@ -740,7 +732,7 @@ export default function TechnicianScanPage() {
         setPickMatches(found);
       } else if (mode === 'IN' && session) {
         // ของใหม่ที่ยังไม่เคยมีในสต๊อกรวม — กรอกรายละเอียดแล้วเพิ่มเข้าบิลได้เลย
-        setNewItemCode(scannedCodeText(code));
+        setNewItemCode(cleanScannedCode(code));
       } else {
         setToast({ ok: false, title: 'ไม่พบรหัสนี้ในสต๊อกรวม', body: 'ตรวจสอบว่า QR ถูกต้อง หรือเพิ่มรายการที่หน้าสต๊อกรวมก่อน' });
         setScanning(true);
@@ -865,6 +857,18 @@ export default function TechnicianScanPage() {
     } finally { setConfirmLoading(false); }
   };
 
+  // รายการที่ตรวจแล้วเข้าบิลเป็นรอยืนยันทั้งชุด (แถวเดิมที่รวมจำนวนจะถูกแทนที่ด้วยยอดใหม่)
+  const handleBatchApplied = (lines) => {
+    const added = lines.map(lineToOrder);
+    const addedKeys = new Set(added.map((o) => o.key));
+    setOrders((prev) => [...[...added].reverse(), ...prev.filter((o) => !addedKeys.has(o.key))]);
+    const totalAdded = basket.totalQty;
+    basket.clear();
+    setReviewDetails({});
+    setStep(STEP.SCAN);
+    setToast({ ok: true, title: `เพิ่มเข้าบิลแล้ว ${added.length} รายการ`, body: `${totalAdded} ชิ้น · ยังไม่บวกสต๊อก (กด “บันทึก” เพื่อบวก)` });
+  };
+
   const clearToast = useCallback(() => setToast(null), []);
 
   const resetAll = () => {
@@ -873,6 +877,7 @@ export default function TechnicianScanPage() {
     setSupplier(''); setSupplierOther(false); setSupplierErr('');
     setBillDate(todayStr());
     setScannedItem(null); setScannedType(null); setScanning(false);
+    setBatchScanning(false); setReviewDetails({});
     setManualOpen(false); setPickMatches(null); setNewItemCode(null);
   };
 
@@ -887,7 +892,7 @@ export default function TechnicianScanPage() {
   //  RENDER — จัดวางด้วยคลาส scan-* (สไตล์อยู่ท้าย styles/app.css) ใช้ได้ทั้งมือถือและจอคอม
   // ─────────────────────────────
   return (
-    <div className={`scan-page ${step === STEP.SCAN || step === STEP.DONE ? (isIN ? 'is-in' : 'is-out') : ''}`}>
+    <div className={`scan-page ${step === STEP.SCAN || step === STEP.REVIEW || step === STEP.DONE ? (isIN ? 'is-in' : 'is-out') : ''}`}>
 
       {/* ════════════ STEP 1 — เลือก IN / OUT ════════════ */}
       {step === STEP.MODE && (
@@ -1044,7 +1049,7 @@ export default function TechnicianScanPage() {
             {isOffice && <button type="button" className="scan-icon-btn" onClick={() => confirmLeave(resetAll)} aria-label="ย้อนกลับ ออกจากหน้านี้"><IconArrowLeft /></button>}
             <div className="scan-topbar-text">
               <strong>{isIN ? 'รับเข้าสต๊อก' : 'จ่ายออกจากสต๊อก'}</strong>
-              <small>{isIN ? 'สแกน QR เพื่อรับของเข้าบิลนี้' : 'สแกน QR เพื่อจ่ายของออก'}</small>
+              <small>{isIN ? 'สแกน QR หรือบาร์โค้ดเพื่อรับของเข้าบิลนี้' : 'สแกน QR หรือบาร์โค้ดเพื่อจ่ายของออก'}</small>
             </div>
             <span className={`scan-pill ${isIN ? 'scan-pill--in' : 'scan-pill--out'}`}>{isIN ? 'รับเข้า' : 'จ่ายออก'}</span>
           </header>
@@ -1074,8 +1079,15 @@ export default function TechnicianScanPage() {
             )}
           </section>
 
+          {isIN && basket.items.length > 0 && (
+            <section className="scan-basket-note">
+              <p>สแกนไว้ <b>{basket.items.length} รหัส · {basket.totalQty} ชิ้น</b> ยังไม่เข้าบิล</p>
+              <button type="button" className="scan-btn scan-btn--in scan-btn--sm" onClick={() => setStep(STEP.REVIEW)}>ตรวจรายการ</button>
+            </section>
+          )}
+
           <form className="scan-code-entry" onSubmit={handleCodeEntry}>
-            <label className="scan-label" htmlFor="scan-code-entry">พิมพ์รหัสอะไหล่ หรือกดสแกน QR ด้านล่าง</label>
+            <label className="scan-label" htmlFor="scan-code-entry">พิมพ์รหัสอะไหล่ หรือกดสแกนด้านล่าง</label>
             <div className="scan-code-entry-row">
               <input
                 id="scan-code-entry"
@@ -1100,7 +1112,7 @@ export default function TechnicianScanPage() {
               <div className="scan-empty">
                 <span className="scan-empty-icon"><IconQR /></span>
                 <p>ยังไม่มีรายการ</p>
-                <small>พิมพ์รหัสด้านบน หรือกดปุ่ม "สแกน QR" ด้านล่างเพื่อเริ่ม</small>
+                <small>พิมพ์รหัสด้านบน หรือกดปุ่ม "สแกน" ด้านล่างเพื่อเริ่ม{isIN ? ' สแกนต่อกันได้หลายชิ้น' : ''}</small>
               </div>
             ) : (
               orders.map((o, i) => (
@@ -1122,16 +1134,22 @@ export default function TechnicianScanPage() {
                 <IconSearch />
                 <span>ค้นหาเอง</span>
               </button>
-              <button type="button" className="scan-dock-btn scan-dock-btn--scan" onClick={() => setScanning(true)}>
+              <button
+                type="button"
+                className="scan-dock-btn scan-dock-btn--scan"
+                onClick={() => {
+                  if (isIN) { prepareScanSound(); setBatchScanning(true); } else setScanning(true);
+                }}
+              >
                 <IconQR />
-                <span>สแกน QR</span>
+                <span>สแกน</span>
                 {orders.length > 0 && <em className="scan-dock-badge">{orders.length}</em>}
               </button>
               <button
                 type="button"
                 className="scan-dock-btn scan-dock-btn--side scan-dock-btn--finish"
-                onClick={() => setStep(STEP.DONE)}
-                disabled={orders.length === 0}
+                onClick={() => setStep(isIN && basket.items.length > 0 ? STEP.REVIEW : STEP.DONE)}
+                disabled={orders.length === 0 && basket.items.length === 0}
               >
                 <IconCheck />
                 <span>{isIN ? 'บันทึก' : 'สรุป'}</span>
@@ -1145,6 +1163,14 @@ export default function TechnicianScanPage() {
               mode={mode}
               onResult={handleScan}
               onClose={() => setScanning(false)}
+            />
+          )}
+
+          {batchScanning && session && (
+            <BatchScanOverlay
+              basket={basket}
+              onReview={() => { setBatchScanning(false); setStep(STEP.REVIEW); }}
+              onClose={() => setBatchScanning(false)}
             />
           )}
 
@@ -1186,6 +1212,18 @@ export default function TechnicianScanPage() {
             />
           )}
         </div>
+      )}
+
+      {/* ════════════ ตรวจของที่สแกนต่อเนื่อง ก่อนเข้าบิล ════════════ */}
+      {step === STEP.REVIEW && session && (
+        <BatchScanReview
+          sessionId={session.id}
+          basket={basket}
+          details={reviewDetails}
+          onDetailsChange={setReviewDetails}
+          onBack={() => setStep(STEP.SCAN)}
+          onApplied={handleBatchApplied}
+        />
       )}
 
       {/* ════════════ STEP 4 — สรุปของที่สแกน ════════════ */}

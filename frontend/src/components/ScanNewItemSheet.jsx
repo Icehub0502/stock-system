@@ -1,19 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import client from '../api/client';
-import { positionsFor, positionLabel, POSITION_COLOR, NEUTRAL_POSITION_COLOR } from '../utils/stockPositions';
+import { positionsFor, positionLabel } from '../utils/stockPositions';
+import { ScanPositionChip as PositionChip } from './PositionChip';
 
 // รหัสที่ยังไม่มีในสต๊อกรวม (หน้าสแกน โหมดรับเข้า) — กรอกรายละเอียดตรงนี้แล้วระบบสร้างรายการในสต๊อกรวม
 // (เริ่ม 0 ชิ้น) และใส่จำนวนเข้าบิลเป็น "รอยืนยัน" ทีเดียว (POST /stock-receive/new-item) ยอดบวกจริงตอน
 // กดยืนยันบวกสต๊อกเหมือนของที่สแกนเจอ ช่องต่าง ๆ ตรงกับฟอร์มเพิ่มรายการของหน้าสต๊อกรวม
 const NEW_CATEGORY = '__new__';
 const emptyFitment = { brand: '', model: '', year_from: '', year_to: '' };
-
-function PositionChip({ position }) {
-  const color = POSITION_COLOR[position] || NEUTRAL_POSITION_COLOR;
-  return (
-    <span className="scan-chip" style={{ color: color.fg, background: color.bg }}>{positionLabel(position)}</span>
-  );
-}
 
 // quantity box text → '' while retyping, else a whole number 0..100000
 function qtyText(value) {
