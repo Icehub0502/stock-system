@@ -7,6 +7,7 @@ const {
   MAX_QTY, parseQty, cleanText, parseCodes, primaryCode, parseFitments, replaceFitments,
   parseNewStockItem, insertStockItem,
 } = require('../utils/stockItemCreate');
+const { suggestPairs, pairItems, unpairItem } = require('../utils/stockPair');
 
 // สต๊อกรวม: หมวดหมู่ + รหัส OEM + รายละเอียด + จำนวน (ดู stock_items ใน db/init.js)
 const router = express.Router();
@@ -17,8 +18,11 @@ function parseId(value) {
   return Number.isInteger(n) && n > 0 ? n : null;
 }
 
+// paired_from_id: the hidden item this one was joined with, which is what lets the join be undone
+// tenant-ok: r is reached through i, and every query using this filters i by shop
 const ITEM_COLUMNS = `i.id, i.category_id, c.name AS category_name, i.oem_code,
-  i.description, i.has_sides, i.has_axles, i.has_levels, i.stock_qty, i.min_stock, i.updated_at`;
+  i.description, i.has_sides, i.has_axles, i.has_levels, i.stock_qty, i.min_stock, i.updated_at,
+  (SELECT MAX(r.id) FROM stock_items r WHERE r.merged_into_id = i.id) AS paired_from_id`;
 
 // ---------- หมวดหมู่ ----------
 router.get('/categories', async (req, res) => {
@@ -375,6 +379,78 @@ router.get('/:id/movements', async (req, res) => {
 });
 
 // ซ่อนรายการ (ไม่ลบจริง — ประวัติยังอยู่ และเพิ่มรหัสเดิมกลับมาได้ภายหลัง)
+// ---------- join left and right that were entered as two items ----------
+
+// Plain items that look like two sides of one part
+router.get('/pair-suggestions', async (req, res) => {
+  try {
+    const [rows] = await pool.execute(
+      `SELECT i.id, i.category_id, c.name AS category_name, i.oem_code, i.description, i.stock_qty
+       FROM stock_items i JOIN stock_categories c ON c.id = i.category_id
+       WHERE i.shop_id = ? AND i.is_active = 1 AND i.has_sides = 0 AND i.has_axles = 0 AND i.has_levels = 0
+       ORDER BY i.id`,
+      [req.shopId]
+    );
+    res.json({ success: true, data: suggestPairs(rows).slice(0, 100) });
+  } catch (err) {
+    console.error('Error suggesting stock pairs:', err);
+    res.status(500).json({ error: 'โหลดรายการแนะนำไม่สำเร็จ' });
+  }
+});
+
+router.post('/pairs', async (req, res) => {
+  const leftId = parseId(req.body?.left_id);
+  const rightId = parseId(req.body?.right_id);
+  if (!leftId || !rightId) return res.status(400).json({ error: 'กรุณาเลือกทั้งข้างซ้ายและข้างขวา' });
+  const description = cleanText(req.body?.description, 500);
+  let conn;
+  try {
+    conn = await pool.getConnection();
+    await conn.beginTransaction();
+    const paired = await pairItems(conn, { leftId, rightId, description, shopId: req.shopId });
+    if (paired.error) {
+      await conn.rollback();
+      return res.status(paired.status).json({ error: paired.error });
+    }
+    await conn.commit();
+    emitStockEvent('stock:item-updated', { shopId: req.shopId, entityType: 'stock_item', entityId: paired.itemId, actorId: req.user.id });
+    emitStockEvent('stock:item-deleted', { shopId: req.shopId, entityType: 'stock_item', entityId: paired.hiddenId, actorId: req.user.id });
+    res.json({ success: true, item_id: paired.itemId });
+  } catch (err) {
+    if (conn) await conn.rollback().catch(() => {});
+    console.error('Error pairing stock items:', err);
+    res.status(500).json({ error: 'จับคู่ไม่สำเร็จ' });
+  } finally {
+    if (conn) conn.release();
+  }
+});
+
+router.post('/:id/unpair', async (req, res) => {
+  const itemId = parseId(req.params.id);
+  if (!itemId) return res.status(400).json({ error: 'ข้อมูลไม่ถูกต้อง' });
+  let conn;
+  try {
+    conn = await pool.getConnection();
+    await conn.beginTransaction();
+    const result = await unpairItem(conn, { itemId, shopId: req.shopId });
+    if (result.error) {
+      await conn.rollback();
+      return res.status(result.status).json({ error: result.error });
+    }
+    await conn.commit();
+    emitStockEvent('stock:item-updated', { shopId: req.shopId, entityType: 'stock_item', entityId: result.itemId, actorId: req.user.id });
+    emitStockEvent('stock:item-updated', { shopId: req.shopId, entityType: 'stock_item', entityId: result.restoredId, actorId: req.user.id });
+    res.json({ success: true, restored_id: result.restoredId });
+  } catch (err) {
+    if (conn) await conn.rollback().catch(() => {});
+    if (err.code === 'ER_DUP_ENTRY') return res.status(409).json({ error: 'รหัสของอีกข้างถูกใช้กับรายการอื่นในหมวดนี้แล้ว' });
+    console.error('Error unpairing stock item:', err);
+    res.status(500).json({ error: 'แยกคู่ไม่สำเร็จ' });
+  } finally {
+    if (conn) conn.release();
+  }
+});
+
 router.delete('/:id', requireManager, async (req, res) => {
   const id = parseId(req.params.id);
   if (!id) return res.status(400).json({ error: 'ข้อมูลไม่ถูกต้อง' });

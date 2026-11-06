@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import client from '../api/client';
 import useRealtimeEvent from '../hooks/useRealtimeEvent';
+import StockPairModal, { StockPairButton } from '../components/StockPairModal';
 import { positionsFor, positionLabel, POSITION_COLOR, NEUTRAL_POSITION_COLOR } from '../utils/stockPositions';
 
 const ALL_TAB = 'all';
@@ -86,6 +87,7 @@ export default function StockAllPage() {
   const [loadError, setLoadError] = useState(''); // list loading only: a background refresh never clears a form error
 
   const [showForm, setShowForm] = useState(false);
+  const [showPair, setShowPair] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
@@ -344,6 +346,17 @@ export default function StockAllPage() {
     setForm((prev) => ({ ...prev, fitments: prev.fitments.filter((_, i) => i !== index) }));
   }
 
+  async function handleUnpair() {
+    if (!window.confirm(`แยก "${editingItem.oem_code}" กลับเป็น 2 รายการ? ยอดของแต่ละข้างและประวัติจะกลับไปอยู่กับรายการของมัน`)) return;
+    try {
+      await client.post(`/stock-items/${editingItem.id}/unpair`);
+      closeForm();
+      load();
+    } catch (err) {
+      setErrorMsg(err.response?.data?.error || 'แยกคู่ไม่สำเร็จ');
+    }
+  }
+
   async function handleHide() {
     if (!editingItem) return;
     if (!window.confirm(`ซ่อนรายการ "${editingItem.oem_code}" ออกจากสต๊อก?\n(ประวัติยังเก็บไว้ ไม่ได้ลบจริง)`)) return;
@@ -390,6 +403,7 @@ export default function StockAllPage() {
           {!selectMode ? (
             <>
               <button type="button" onClick={toggleSelectMode}>🖨️ พิมพ์ป้าย QR หลายชิ้น</button>
+              <StockPairButton onClick={() => setShowPair(true)} />
               <button className="btn-primary" onClick={openAdd} disabled={categories.length === 0}>+ เพิ่มอะไหล่เข้าสต๊อก</button>
             </>
           ) : (
@@ -728,6 +742,9 @@ export default function StockAllPage() {
                 </div>
                 <div className="modal-delete-zone">
                   <hr />
+                  {editingItem?.paired_from_id && (
+                    <button className="btn-full" type="button" onClick={handleUnpair}>แยกคู่กลับเป็น 2 รายการ</button>
+                  )}
                   <button className="btn-danger btn-full" type="button" onClick={handleHide}>🗑️ ซ่อนรายการนี้</button>
                 </div>
               </>
@@ -735,6 +752,7 @@ export default function StockAllPage() {
           </div>
         </div>
       )}
+      {showPair && <StockPairModal onClose={() => setShowPair(false)} onChanged={load} />}
     </div>
   );
 }

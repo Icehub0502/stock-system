@@ -142,7 +142,8 @@ async function insertStockItem(conn, { shopId, userId, item, createdInSessionId 
   const flags = [item.hasSides ? 1 : 0, item.hasAxles ? 1 : 0, item.hasLevels ? 1 : 0];
   // รหัสเดิมที่เคยถูกซ่อน (is_active=0) → นำกลับมาใช้แทนการสร้างซ้ำ ไม่ชน UNIQUE
   const [[hidden]] = await conn.execute(
-    'SELECT id FROM stock_items WHERE shop_id = ? AND category_id = ? AND oem_code = ? AND is_active = 0 FOR UPDATE',
+    // an item joined into a pair is hidden but its code is alive on the pair, so it is never brought back here
+    'SELECT id FROM stock_items WHERE shop_id = ? AND category_id = ? AND oem_code = ? AND is_active = 0 AND merged_into_id IS NULL FOR UPDATE',
     [shopId, item.categoryId, item.oemCode]
   );
   let itemId;

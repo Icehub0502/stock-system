@@ -1029,6 +1029,11 @@ async function initDatabase() {
   // The receipt bill an item was created from on the scan page (a code not in stock yet), NULL for items
   // made on the สต๊อกรวม page. Such an item is hidden again if its bill line is removed before anything
   // was ever received (see hideUnusedScanItem in utils/stockItemCreate.js).
+  // Two items joined into one left/right item (utils/stockPair.js): the hidden right-hand item remembers where it went,
+  // and the kept item its name from before, so the join can be undone.
+  await conn.query(`ALTER TABLE stock_items ADD COLUMN merged_into_id INT DEFAULT NULL`).catch(ignoreIfAlreadyApplied);
+  await conn.query(`ALTER TABLE stock_items ADD INDEX idx_stock_item_merged (merged_into_id)`).catch(ignoreIfAlreadyApplied);
+  await conn.query(`ALTER TABLE stock_items ADD COLUMN pre_pair_description VARCHAR(500) DEFAULT NULL`).catch(ignoreIfAlreadyApplied);
   await conn.query(`ALTER TABLE stock_items ADD COLUMN created_in_session_id INT DEFAULT NULL`).catch(ignoreIfAlreadyApplied);
 
   // position: left | right | front | rear | front_left | front_right | rear_left | rear_right
