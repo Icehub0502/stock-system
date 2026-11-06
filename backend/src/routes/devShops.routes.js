@@ -237,7 +237,7 @@ router.post('/users/:id/reset-password', async (req, res) => {
   }
 });
 
-const USER_ROLES = ['technician', 'office', 'manager', 'owner', 'dev'];
+const USER_ROLES = ['technician', 'office', 'sales', 'accountant', 'manager', 'owner', 'dev'];
 
 // Switch an account off / on, or change its role. A switched-off account cannot log in; a token already
 // issued (with its old role) stays valid until it expires.

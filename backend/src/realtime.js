@@ -53,7 +53,7 @@ function initRealtime(httpServers) {
   io.of('/rt').on('connection', (socket) => {
     const shopId = Number(socket.data.user?.shop_id) || 1;
     socket.join(`shop:${shopId}`);
-    if (socket.data.user?.role === 'office') socket.join(`office:${shopId}`);
+    if (['office', 'sales'].includes(socket.data.user?.role)) socket.join(`office:${shopId}`);
   });
 
   // จอบอร์ดสาธารณะ: เลือกร้านด้วย ?shop=<รหัสร้าน> ตอนเชื่อมต่อ (ไม่ใส่ = ร้านที่ 1)

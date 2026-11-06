@@ -2,8 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import client from '../api/client';
 import ClaimFormModal from '../components/ClaimFormModal';
+import ClaimPartsModal from '../components/ClaimPartsModal';
 import { useAuth } from '../context/AuthContext';
-import { hasRole } from '../utils/roles';
+import { canChange } from '../utils/roles';
 import { CASE_STATUS, CASE_TYPE_LABEL, OUTCOME_LABEL } from '../utils/claimCases';
 import { formatDateTh } from '../utils/dateGroups';
 
@@ -15,7 +16,8 @@ const formatThaiDate = (dateInput) => (dateInput ? new Date(dateInput).toLocaleD
 // แทนฟอร์มเล็กในโมดัลเดียวกัน เพราะต้องค้นหา+เลือกรถก่อน
 export default function ClaimManagementPage() {
   const { user } = useAuth();
-  const isManager = hasRole(user, 'manager');
+  const mayEdit = canChange(user, 'office');
+  const isManager = canChange(user, 'manager');
   const [searchParams, setSearchParams] = useSearchParams();
   const [claims, setClaims] = useState([]);
   const [search, setSearch] = useState('');
@@ -24,6 +26,7 @@ export default function ClaimManagementPage() {
   const [error, setError] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [editingClaim, setEditingClaim] = useState(null);
+  const [partsClaimId, setPartsClaimId] = useState(null);
 
   const fetchClaims = async () => {
     try {
@@ -120,8 +123,8 @@ export default function ClaimManagementPage() {
             <option value="">ทุกสถานะ</option>
             {Object.entries(CASE_STATUS).map(([value, s]) => <option key={value} value={value}>{s.label}</option>)}
           </select>
-          <Link to="/follow-ups" className="btn btn-secondary">ติดตามผล</Link>
-          <button className="btn btn-primary" onClick={openAdd}>+ เปิดเคสใหม่</button>
+          {mayEdit && <Link to="/follow-ups" className="btn btn-secondary">ติดตามผล</Link>}
+          {mayEdit && <button className="btn btn-primary" onClick={openAdd}>+ เปิดเคสใหม่</button>}
         </div>
       </div>
       {error && <div className="error-message">{error}</div>}
@@ -163,7 +166,8 @@ export default function ClaimManagementPage() {
                   <td data-label="วิธีแก้">{c.resolution || '-'}</td>
                   <td data-label="จำนวนรายการ">{c.item_count}</td>
                   <td className="actions" data-label="จัดการ">
-                    <button onClick={() => openEdit(c.id)}>แก้ไข</button>
+                    {mayEdit && <button onClick={() => openEdit(c.id)}>แก้ไข</button>}
+                    <button onClick={() => setPartsClaimId(c.id)}>อะไหล่ / เก็บเงิน</button>
                     {isManager && c.status === 'closed' && <button onClick={() => reopenCase(c.id)}>เปิดเคสใหม่</button>}
                     {isManager && <button className="btn-danger" onClick={() => deleteClaim(c.id)}>ลบ</button>}
                   </td>
@@ -177,6 +181,7 @@ export default function ClaimManagementPage() {
       {showForm && (
         <ClaimFormModal claim={editingClaim} onClose={closeForm} onSaved={handleSaved} />
       )}
+      {partsClaimId && <ClaimPartsModal claimId={partsClaimId} onClose={() => setPartsClaimId(null)} />}
     </div>
   );
 }

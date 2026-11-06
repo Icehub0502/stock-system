@@ -5,7 +5,7 @@ import client from '../../api/client';
 // sent and how the record looked before. Data from GET /dev/activity (backend/src/routes/devActivity.routes.js).
 
 const KIND_LABEL = { create: 'เพิ่ม', update: 'แก้ไข', delete: 'ลบ', action: 'ทำรายการ', login: 'เข้าสู่ระบบ' };
-const ROLE_LABEL = { technician: 'ช่าง', office: 'ออฟฟิศ', manager: 'ผู้จัดการ', owner: 'เจ้าของ', dev: 'แอดมิน' };
+const ROLE_LABEL = { technician: 'ช่าง', office: 'ออฟฟิศ', sales: 'ฝ่ายขาย', accountant: 'บัญชี', manager: 'ผู้จัดการ', owner: 'เจ้าของ', dev: 'แอดมิน' };
 const ENTITIES = [
   ['customers', 'ลูกค้า'], ['vehicles', 'รถ'], ['quotations', 'ใบเสนอราคา'], ['receipts', 'ใบเสร็จ'], ['jobs', 'งาน/คิว'],
   ['claims', 'เคลม'], ['warranties', 'การรับประกัน'], ['service-items', 'รายการสินค้า/บริการ'], ['stock-items', 'สต๊อก'],

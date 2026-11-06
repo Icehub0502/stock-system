@@ -1093,31 +1093,37 @@ async function closeQuotationByQueue(parsed, { shopId = LINE_SHOP_ID, exactDate 
        FROM quotations q
        LEFT JOIN customers c ON q.customer_id = c.id
        LEFT JOIN vehicles v ON q.vehicle_id = v.id
-       WHERE q.shop_id = ? AND q.closed_at IS NULL
-         AND q.status IN ('pending', 'approved', 'no_date')`;
+       WHERE q.shop_id = ? AND q.closed_at IS NULL`;
+    const openStatuses = "q.status IN ('pending', 'approved', 'no_date')";
     const queueFilter = 'AND (q.queue_no = ? OR q.requested_queue_no = ?)';
     let rows;
     if (exactDate) {
+      // A card on the queue board is the truth: the number and date on the card find its bill, whatever date and state
+      // the bill still shows. A bill made earlier for an appointment, or a car moved to another day, has a different date,
+      // and a car that came back may leave the bill at scheduled or parts_ready. Without a card, the number and date on the
+      // bill itself decide, and a bill still waiting for its appointment is not closed.
       [rows] = await conn.execute(
-        `${baseSelect} AND q.quotation_date = ?
+        `${baseSelect}
            AND (
-             EXISTS (SELECT 1 FROM jobs j WHERE j.quotation_id = q.id AND j.shop_id = q.shop_id AND j.job_date = ? AND j.queue_no = ?)
+             (q.status IN ('pending', 'approved', 'no_date', 'scheduled', 'parts_ready')
+               AND EXISTS (SELECT 1 FROM jobs j WHERE j.quotation_id = q.id AND j.shop_id = q.shop_id AND j.job_date = ? AND j.queue_no = ?))
              OR (
-               (q.queue_no = ? OR q.requested_queue_no = ?)
+               ${openStatuses} AND q.quotation_date = ?
+               AND (q.queue_no = ? OR q.requested_queue_no = ?)
                AND NOT EXISTS (SELECT 1 FROM jobs j WHERE j.quotation_id = q.id AND j.shop_id = q.shop_id AND j.job_date = ?)
              )
            )
          ORDER BY q.id DESC`,
-        [shopId, quotationDate, quotationDate, parsed.queue_no, parsed.queue_no, parsed.queue_no, quotationDate]
+        [shopId, quotationDate, parsed.queue_no, quotationDate, parsed.queue_no, parsed.queue_no, quotationDate]
       );
     } else {
       [rows] = await conn.execute(
-        `${baseSelect} ${queueFilter} AND q.quotation_date = ? ORDER BY q.id DESC`,
+        `${baseSelect} AND ${openStatuses} ${queueFilter} AND q.quotation_date = ? ORDER BY q.id DESC`,
         [shopId, parsed.queue_no, parsed.queue_no, quotationDate]
       );
       if (rows.length === 0) {
         [rows] = await conn.execute(
-          `${baseSelect} ${queueFilter} AND q.quotation_date >= DATE_SUB(?, INTERVAL 14 DAY) ORDER BY q.id DESC`,
+          `${baseSelect} AND ${openStatuses} ${queueFilter} AND q.quotation_date >= DATE_SUB(?, INTERVAL 14 DAY) ORDER BY q.id DESC`,
           [shopId, parsed.queue_no, parsed.queue_no, quotationDate]
         );
       }
@@ -1206,7 +1212,7 @@ async function closeQuotationByQueue(parsed, { shopId = LINE_SHOP_ID, exactDate 
         );
       }
       await conn.execute(
-        "UPDATE quotations SET status = 'approved', converted_receipt_id = ? WHERE id = ? AND shop_id = ?",
+        "UPDATE quotations SET status = 'approved', scheduled_date = NULL, converted_receipt_id = ? WHERE id = ? AND shop_id = ?",
         [receiptId, quotation.id, shopId]
       );
       // ถ้าใบนี้ผูกกับงานในหน้าคิวที่ยังไม่ถูกตัดสินใจไปทางไหน — ดันสถานะงานตามด้วย

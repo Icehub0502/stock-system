@@ -8,7 +8,7 @@ const router = express.Router();
 // บัญชี role 'dev' (ผู้ดูแลระบบ) ไม่โผล่ในรายการและเจ้าของร้านแก้/ลบ/ตั้งเป็น dev ไม่ได้
 router.use(authenticate, requireOwner);
 
-const SHOP_ROLES = ['technician', 'office', 'manager', 'owner'];
+const SHOP_ROLES = ['technician', 'office', 'sales', 'accountant', 'manager', 'owner'];
 const isDev = (req) => req.user.role === 'dev';
 const assignableRoles = (req) => (isDev(req) ? [...SHOP_ROLES, 'dev'] : SHOP_ROLES);
 

@@ -8,7 +8,7 @@ import QuotationPrintTemplate from "./QuotationPrintTemplate";
 import FormModalShell from "./FormModalShell";
 import CarModelPicker from "./CarModelPicker";
 import { useAuth } from "../context/AuthContext";
-import { hasRole } from "../utils/roles";
+import { canChange } from "../utils/roles";
 import { todayStr, formatMoney } from "../utils/format";
 import { RACK_KEYWORDS, BALL_JOINT_KEYWORDS, ALL_WARRANTY_KEYWORDS, applyWarrantyToItems, findMatchingWarrantyId } from "../utils/warrantyKeywords";
 
@@ -146,7 +146,7 @@ export default function QuotationFormModal({ quotation, onClose, onSuccess, onDe
   const carBrand = (vehicleMode === 'existing' ? currentVehicle?.brand : newVehicle.brand) || '';
   const carModelText = (vehicleMode === 'existing' ? currentVehicle?.model : newVehicle.model) || '';
   const carKey = `${vehicleMode}|${vehicleId}|${carBrand}|${carModelText}`;
-  const canSetStandard = hasRole(user, 'manager');
+  const canSetStandard = canChange(user, 'manager');
   itemsRef.current = items;
 
   // Find the generation of the car: the one stored on the car, else the one its brand + model text names. Exactly

@@ -6,7 +6,7 @@ import { buildArchiveGroups, formatDateTh, formatMonthTh, formatYearTh } from ".
 import useRealtimeEvent from "../hooks/useRealtimeEvent";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
-import { hasRole } from "../utils/roles";
+import { canChange } from "../utils/roles";
 
 export default function ReceiptListPage() {
   const [receipts, setReceipts] = useState([]);
@@ -16,7 +16,8 @@ export default function ReceiptListPage() {
   const [dateFilter, setDateFilter] = useState("");
   const [showFormModal, setShowFormModal] = useState(false);
   const { user } = useAuth();
-  const canDelete = hasRole(user, 'manager'); // deleting a receipt is a manager's call (enforced by the server)
+  const mayEdit = canChange(user, 'office');
+  const canDelete = canChange(user, 'manager'); // deleting a receipt is a manager's call (enforced by the server)
   const location = useLocation();
   const navigateTo = useNavigate();
   useEffect(() => {
@@ -163,9 +164,11 @@ export default function ReceiptListPage() {
               ล้างวันที่
             </button>
           )}
-          <button className="btn btn-primary btn-fab-mobile" onClick={() => setShowFormModal(true)}>
-            + สร้างบิลใหม่
-          </button>
+          {mayEdit && (
+            <button className="btn btn-primary btn-fab-mobile" onClick={() => setShowFormModal(true)}>
+              + สร้างบิลใหม่
+            </button>
+          )}
         </div>
       </div>
 
@@ -241,12 +244,14 @@ export default function ReceiptListPage() {
                             )}
                           </td>
                           <td className="actions" data-label="จัดการ">
-                            <button
-                              className="btn-icon-small"
-                              onClick={() => { setEditingReceiptId(receipt.id); setShowFormModal(true); }}
-                            >
-                              แก้ไข
-                            </button>
+                            {mayEdit && (
+                              <button
+                                className="btn-icon-small"
+                                onClick={() => { setEditingReceiptId(receipt.id); setShowFormModal(true); }}
+                              >
+                                แก้ไข
+                              </button>
+                            )}
                             <button
                               className={`btn-icon-small ${receipt.printed_at ? 'btn-printed' : ''}`}
                               onClick={() => setSelectedReceiptForPrint(receipt.id)}

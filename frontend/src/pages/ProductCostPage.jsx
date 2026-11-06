@@ -1,6 +1,8 @@
 // pages/ProductCostPage.jsx
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import client from "../api/client";
+import { useAuth } from "../context/AuthContext";
+import { isReadOnly } from "../utils/roles";
 import useRealtimeEvent from "../hooks/useRealtimeEvent";
 
 function detectCategory(desc = "") {
@@ -237,6 +239,7 @@ function ConfirmModal({ message, onConfirm, onClose }) {
 
 /* ─── Main Page ─────────────────────────────────────────────────── */
 export default function ProductCostPage() {
+  const { user } = useAuth();
   const API = "/product-costs";
 
   const [products, setProducts] = useState([]);
@@ -575,7 +578,7 @@ export default function ProductCostPage() {
           <h1 className="pcp-title">ต้นทุนสินค้า</h1>
           <p className="pcp-subtitle">จัดการราคาต้นทุนอะไหล่ทั้งหมด</p>
         </div>
-        <div className="pcp-header-actions">
+        {!isReadOnly(user) && <div className="pcp-header-actions">
           <button
             className={`pcp-btn-select-mode ${selectionMode ? "active" : ""}`}
             onClick={() => selectionMode ? exitSelectionMode() : setSelectionMode(true)}
@@ -588,7 +591,7 @@ export default function ProductCostPage() {
           >
             + เพิ่มสินค้า
           </button>
-        </div>
+        </div>}
       </div>
 
       {/* ── Filters ── */}
@@ -729,12 +732,14 @@ export default function ProductCostPage() {
                       : <span className="pcp-price-na">-</span>}
                   </td>
                   <td className="pcp-col-action">
+                    {!isReadOnly(user) && (
                     <button
                       className="pcp-btn-edit"
                       onClick={() => setModal({ type: "edit", data: p })}
                     >
                       แก้ไข
                     </button>
+                    )}
                   </td>
                 </tr>
               ))}

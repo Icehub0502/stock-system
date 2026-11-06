@@ -3,7 +3,11 @@ const pool = require('../db/pool');
 const { authenticate, requireRole, requireManager } = require('../middleware/auth');
 const { trashDelete } = require('../utils/trash');
 const { ownsRow } = require('../utils/tenant');
-const { emitJobEvent } = require('../realtime');
+const { emitJobEvent, emitReceiptEvent, emitStockEvent, emitStockTxEvent } = require('../realtime');
+const { deductStock } = require('../utils/stockDeduct');
+const { positionLabel } = require('../utils/stockPositions');
+const { PAYMENT_METHODS } = require('../utils/paymentMethods');
+const { generateReceiptNo, generateCarSequenceNo } = require('./quotations.routes');
 
 const router = express.Router();
 router.use(authenticate);
@@ -695,6 +699,169 @@ router.post('/:id/issue-document', async (req, res) => {
   } catch (err) {
     console.error('Error issuing the claim document:', err);
     res.status(500).json({ error: 'ออกใบเคลมไม่สำเร็จ' });
+  }
+});
+
+// ── parts and money of a case ──────────────────────────────────────────
+
+async function loadChargeReceipt(conn, chargeReceiptId, shopId) {
+  if (!chargeReceiptId) return null;
+  const [[receipt]] = await conn.execute(
+    'SELECT id, receipt_no, total_amount, payment_method FROM receipts WHERE id = ? AND shop_id = ?',
+    [chargeReceiptId, shopId]
+  );
+  return receipt || null; // a receipt deleted later leaves the case free to issue a new one
+}
+
+// GET /claims/:id/parts : the parts on the case, what it took out of stock, and the receipt for what the customer pays
+router.get('/:id/parts', async (req, res) => {
+  try {
+    const [[kase]] = await pool.execute(
+      'SELECT id, claim_no, charge_receipt_id FROM claims WHERE id = ? AND shop_id = ?',
+      [req.params.id, req.shopId]
+    );
+    if (!kase) return res.status(404).json({ error: 'ไม่พบเคส' });
+    const [items] = await pool.execute(
+      'SELECT id, product_name, quantity, unit_price FROM claim_items WHERE claim_id = ? ORDER BY id',
+      [kase.id]
+    );
+    const [moves] = await pool.execute(
+      `SELECT m.id, m.item_id, m.position, (m.qty_before - m.qty_after) AS qty, m.created_at,
+              COALESCE(p.oem_code, i.oem_code) AS code, i.description
+       FROM stock_item_movements m
+       JOIN stock_items i ON i.id = m.item_id
+       LEFT JOIN stock_item_positions p ON p.item_id = m.item_id AND p.position = m.position
+       WHERE m.claim_id = ? AND i.shop_id = ? AND m.reason = 'deduct' AND m.voided_at IS NULL
+       ORDER BY m.id`,
+      [kase.id, req.shopId]
+    );
+    res.json({
+      success: true,
+      data: {
+        claim_no: kase.claim_no,
+        items,
+        charge_total: items.reduce((sum, it) => sum + Number(it.quantity) * Number(it.unit_price), 0),
+        moves: moves.map((m) => ({ ...m, position_label: positionLabel(m.position) })),
+        receipt: await loadChargeReceipt(pool, kase.charge_receipt_id, req.shopId),
+      },
+    });
+  } catch (err) {
+    console.error('Error loading claim parts:', err);
+    res.status(500).json({ error: 'โหลดข้อมูลอะไหล่ของเคสไม่สำเร็จ' });
+  }
+});
+
+// POST /claims/:id/parts/deduct : takes a part used on this case out of stock. Giving it back is the normal cancel on
+// the stock movement (DELETE /stock-deductions/movements/:id), with its time limit and manager rule.
+router.post('/:id/parts/deduct', async (req, res) => {
+  const itemId = Number(req.body?.item_id);
+  const qty = Number(req.body?.qty);
+  const position = req.body?.position ?? null;
+  if (!Number.isInteger(itemId) || itemId <= 0 || !Number.isInteger(qty) || qty <= 0 || qty > 1000000
+      || (position !== null && typeof position !== 'string')) {
+    return res.status(400).json({ error: 'จำนวนต้องเป็นเลขจำนวนเต็มตั้งแต่ 1 ขึ้นไป' });
+  }
+  let conn;
+  try {
+    conn = await pool.getConnection();
+    await conn.beginTransaction();
+    const [[kase]] = await conn.execute(
+      `SELECT cl.id, cl.claim_no, v.brand, v.model
+       FROM claims cl LEFT JOIN vehicles v ON v.id = cl.vehicle_id AND v.shop_id = cl.shop_id
+       WHERE cl.id = ? AND cl.shop_id = ? FOR UPDATE`,
+      [req.params.id, req.shopId]
+    );
+    if (!kase) {
+      await conn.rollback();
+      return res.status(404).json({ error: 'ไม่พบเคส' });
+    }
+    const taken = await deductStock(conn, {
+      itemId,
+      lines: [{ position, qty }],
+      note: `เคลม ${kase.claim_no}`,
+      vehicleModel: [kase.brand, kase.model].filter(Boolean).join(' ').slice(0, 150) || null,
+      claimId: kase.id,
+      userId: req.user.id,
+      shopId: req.shopId,
+    });
+    if (taken.error) {
+      await conn.rollback();
+      return res.status(taken.status).json({ error: taken.error });
+    }
+    await conn.commit();
+    emitStockEvent('stock:item-updated', { shopId: req.shopId, entityType: 'stock_item', entityId: itemId, actorId: req.user.id });
+    emitStockTxEvent('stock:tx-created', { shopId: req.shopId, txType: 'OUT', entityType: 'stock_item', entityId: itemId, actorId: req.user.id });
+    res.status(201).json({ success: true, movement_ids: taken.movementIds });
+  } catch (err) {
+    if (conn) await conn.rollback().catch(() => {});
+    console.error('Error deducting claim part:', err);
+    res.status(500).json({ error: 'ตัดสต๊อกไม่สำเร็จ' });
+  } finally {
+    if (conn) conn.release();
+  }
+});
+
+// POST /claims/:id/charge-receipt : what the customer pays for this case becomes an ordinary receipt dated today, so it
+// reaches the daily sales, the owner's figures and the payment summary like every other bill. Only rows with a price.
+// It takes a car sequence number like every receipt: at start-up db/init.js treats a receipt without one as an old bill
+// and numbers it, which fails on a duplicate and stops the server from starting.
+router.post('/:id/charge-receipt', async (req, res) => {
+  const paymentMethod = req.body?.payment_method;
+  if (!PAYMENT_METHODS.includes(paymentMethod)) return res.status(400).json({ error: 'กรุณาเลือกช่องทางชำระ' });
+  let conn;
+  try {
+    conn = await pool.getConnection();
+    await conn.beginTransaction();
+    const [[kase]] = await conn.execute(
+      'SELECT id, claim_no, customer_id, vehicle_id, charge_receipt_id FROM claims WHERE id = ? AND shop_id = ? FOR UPDATE',
+      [req.params.id, req.shopId]
+    );
+    if (!kase) {
+      await conn.rollback();
+      return res.status(404).json({ error: 'ไม่พบเคส' });
+    }
+    if (await loadChargeReceipt(conn, kase.charge_receipt_id, req.shopId)) {
+      await conn.rollback();
+      return res.status(409).json({ error: 'เคสนี้ออกใบเสร็จไปแล้ว' });
+    }
+    const [items] = await conn.execute(
+      'SELECT product_name, quantity, unit_price FROM claim_items WHERE claim_id = ? AND unit_price > 0 ORDER BY id',
+      [kase.id]
+    );
+    if (items.length === 0) {
+      await conn.rollback();
+      return res.status(400).json({ error: 'เคสนี้ไม่มียอดที่ต้องเก็บเงิน' });
+    }
+    const total = items.reduce((sum, it) => sum + Number(it.quantity) * Number(it.unit_price), 0);
+    const [[job]] = await conn.execute(
+      'SELECT mileage_in FROM jobs WHERE claim_id = ? AND shop_id = ? ORDER BY id DESC LIMIT 1',
+      [kase.id, req.shopId]
+    );
+    const receiptNo = await generateReceiptNo(conn, req.shopId);
+    const carSequenceNo = await generateCarSequenceNo(conn, req.shopId);
+    const [receipt] = await conn.execute(
+      `INSERT INTO receipts (shop_id, receipt_no, receipt_date, customer_id, vehicle_id, mileage, remark, payment_method, total_amount, car_sequence_no)
+       VALUES (?, ?, CURDATE(), ?, ?, ?, ?, ?, ?, ?)`,
+      [req.shopId, receiptNo, kase.customer_id, kase.vehicle_id, job?.mileage_in || 0, `ค่าอะไหล่เคลม ${kase.claim_no}`, paymentMethod, total, carSequenceNo]
+    );
+    for (const it of items) {
+      const amount = Number(it.quantity) * Number(it.unit_price);
+      await conn.execute(
+        `INSERT INTO receipt_items (receipt_id, service_item_id, product_name_snapshot, qty, price, amount, warranty_name, warranty_year, warranty_month, warranty_km)
+         VALUES (?, NULL, ?, ?, ?, ?, NULL, 0, 0, 0)`,
+        [receipt.insertId, it.product_name, it.quantity, it.unit_price, amount]
+      );
+    }
+    await conn.execute('UPDATE claims SET charge_receipt_id = ? WHERE id = ? AND shop_id = ?', [receipt.insertId, kase.id, req.shopId]);
+    await conn.commit();
+    emitReceiptEvent('receipt:created', { shopId: req.shopId, receiptId: receipt.insertId, actorId: req.user.id });
+    res.status(201).json({ success: true, receipt_id: receipt.insertId, receipt_no: receiptNo, total_amount: total });
+  } catch (err) {
+    if (conn) await conn.rollback().catch(() => {});
+    console.error('Error issuing the claim charge receipt:', err);
+    res.status(500).json({ error: 'ออกใบเสร็จไม่สำเร็จ' });
+  } finally {
+    if (conn) conn.release();
   }
 });
 

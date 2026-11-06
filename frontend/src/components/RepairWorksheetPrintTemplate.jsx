@@ -51,6 +51,7 @@ export default function RepairWorksheetPrintTemplate({ data, header: headerOverr
             <div className="rw-header">
               <div className="rw-spk">
                 <div className="rw-spk-label">{branchCode}</div>
+                {data.warranty_no && <div className="rw-spk-no">{data.warranty_no}</div>}
               </div>
 
               <div className="rw-title">

@@ -37,6 +37,8 @@ const vehicleHistoryRoutes = require('./routes/vehicleHistory.routes');
 const managerRoutes = require('./routes/manager.routes');
 const serviceItemsRoutes = require('./routes/service-items.routes');
 const warrantiesRoutes = require('./routes/warranties.routes');
+const warrantyRegisterRoutes = require('./routes/warrantyRegister.routes');
+const priceListRoutes = require('./routes/priceList.routes');
 const lineWebhookRoutes = require('./routes/lineWebhook.routes');
 const lineWebhookBot2Routes = require('./routes/lineWebhookBot2.routes');
 const lineWebhookBot3Routes = require('./routes/lineWebhookBot3.routes');
@@ -154,6 +156,8 @@ function createApp() {
   app.use('/api/manager', managerRoutes);
   app.use('/api/service-items', serviceItemsRoutes);
   app.use('/api/warranties', warrantiesRoutes);
+  app.use('/api/warranty-register', warrantyRegisterRoutes);
+  app.use('/api/price-list', priceListRoutes);
   app.use('/api/line', lineWebhookRoutes);
   // บอท 2 "รับรายการ" / บอท 3 "ปิดบิล" — endpoint แยกกันเพราะแต่ละบอทมี Channel
   // Secret ของตัวเอง (ดู routes/lineWebhookBot2.routes.js, lineWebhookBot3.routes.js)

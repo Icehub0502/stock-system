@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import client from '../api/client';
 import { useAuth } from '../context/AuthContext';
-import { hasRole } from '../utils/roles';
+import { canChange } from '../utils/roles';
 import { formatDateTh } from '../utils/dateGroups';
 import { todayStr } from '../utils/format';
 import { CASE_TYPE_LABEL, OUTCOME_LABEL, REPORT_RESULT_LABEL, addDays, addOneMonth } from '../utils/claimCases';
@@ -203,7 +203,7 @@ function Section({ title, hint, rows, emptyText, children }) {
 
 export default function FollowUpPage() {
   const { user } = useAuth();
-  const canClose = hasRole(user, 'manager');
+  const canClose = canChange(user, 'manager');
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
 

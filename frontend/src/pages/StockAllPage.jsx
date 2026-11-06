@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import client from '../api/client';
+import { useAuth } from '../context/AuthContext';
+import { canMoveStock } from '../utils/roles';
 import useRealtimeEvent from '../hooks/useRealtimeEvent';
 import StockPairModal, { StockPairButton } from '../components/StockPairModal';
 import { positionsFor, positionLabel, POSITION_COLOR, NEUTRAL_POSITION_COLOR } from '../utils/stockPositions';
@@ -75,6 +77,8 @@ function formatDateTime(value) {
 }
 
 export default function StockAllPage() {
+  const { user } = useAuth();
+  const mayEditStock = canMoveStock(user);
   const [categories, setCategories] = useState([]);
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -404,7 +408,7 @@ export default function StockAllPage() {
             <>
               <button type="button" onClick={toggleSelectMode}>🖨️ พิมพ์ป้าย QR หลายชิ้น</button>
               <StockPairButton onClick={() => setShowPair(true)} />
-              <button className="btn-primary" onClick={openAdd} disabled={categories.length === 0}>+ เพิ่มอะไหล่เข้าสต๊อก</button>
+              {mayEditStock && <button className="btn-primary" onClick={openAdd} disabled={categories.length === 0}>+ เพิ่มอะไหล่เข้าสต๊อก</button>}
             </>
           ) : (
             <>
@@ -442,7 +446,7 @@ export default function StockAllPage() {
             {c.name} <span className="stock-all-tab-count">{countsByCategory[c.id] || 0}</span>
           </button>
         ))}
-        <button type="button" className="stock-all-tab stock-all-tab--add" onClick={handleAddCategory}>+ หมวดใหม่</button>
+        {mayEditStock && <button type="button" className="stock-all-tab stock-all-tab--add" onClick={handleAddCategory}>+ หมวดใหม่</button>}
         {activeCategory && (
           <button type="button" className="stock-all-tab stock-all-tab--add" onClick={handleRenameCategory}>✏️ แก้ชื่อหมวด</button>
         )}
@@ -537,7 +541,7 @@ export default function StockAllPage() {
                       </svg>
                       ป้าย QR
                     </button>
-                    <button type="button" onClick={() => openEdit(item)}>แก้ไข</button>
+                    {mayEditStock && <button type="button" onClick={() => openEdit(item)}>แก้ไข</button>}
                   </div>
                 </td>
               </tr>

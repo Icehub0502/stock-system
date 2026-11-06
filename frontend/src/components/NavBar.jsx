@@ -3,7 +3,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import ChangePasswordModal from "./ChangePasswordModal";
-import { hasRole, isOwnerView, ROLE_LABEL } from "../utils/roles";
+import { canMoveStock, hasRole, isOwnerView, isReadOnly, ROLE_LABEL } from "../utils/roles";
 import { BranchSwitcher } from "./BranchSwitcher";
 import { useBranchIdentity } from "../hooks/useDocHeader";
 
@@ -13,11 +13,11 @@ const NAV_CATEGORIES = [
     label: "สต๊อกสินค้า",
     items: [
       { to: "/stock-all", label: "สต๊อกรวม" },
-      { to: "/stock-deduction", label: "ตัดสต๊อก" },
-      { to: "/receipts", label: "บิลรับของเข้า" },
+      { to: "/stock-deduction", label: "ตัดสต๊อก", movesStock: true },
+      { to: "/receipts", label: "บิลรับของเข้า", notFor: ["sales"] },
       { to: "/product-costs", label: "ต้นทุนสินค้า", min: "manager" },
-      { to: "/stock-costs", label: "กรอกต้นทุนที่ยังขาด" },
-      { to: "/suppliers", label: "ร้านอะไหล่", min: "manager" },
+      { to: "/stock-costs", label: "กรอกต้นทุนที่ยังขาด", movesStock: true },
+      { to: "/suppliers", label: "ร้านอะไหล่", min: "manager", notFor: ["accountant"] },
     ],
   },
   {
@@ -26,10 +26,10 @@ const NAV_CATEGORIES = [
     items: [
       { to: "/customers", label: "ลูกค้า" },
       { to: "/vehicles", label: "รถลูกค้า" },
-      { to: "/warranties", label: "การรับประกัน" },
+      { to: "/warranties", label: "การรับประกัน", notFor: ["accountant"] },
       { to: "/claims", label: "เคสแก้งาน / เคลม" },
-      { to: "/follow-ups", label: "ติดตามผล" },
-      { to: "/customers/found-via", label: "ช่องทางที่ลูกค้าเจอเรา" },
+      { to: "/follow-ups", label: "ติดตามผล", notFor: ["accountant"] },
+      { to: "/customers/found-via", label: "ช่องทางที่ลูกค้าเจอเรา", notFor: ["accountant"] },
     ],
   },
   {
@@ -47,20 +47,22 @@ const NAV_CATEGORIES = [
     items: [
       { to: "/receipt-list", label: "ใบเสร็จรับเงิน" },
       { to: "/quotations", label: "ใบเสนอราคา" },
+      { to: "/price-list", label: "ราคาขาย" },
       { to: "/claim-documents", label: "ใบเคลม" },
+      { to: "/warranty-register", label: "ทะเบียนประกัน" },
       { to: "/vehicle-history", label: "ประวัติรถ" },
-      { to: "/appointments", label: "ลูกค้าที่นัดหมาย" },
+      { to: "/appointments", label: "ลูกค้าที่นัดหมาย", notFor: ["accountant"] },
       { to: "/quotations/declined-summary", label: "ลูกค้าที่ไม่ได้ทำ (สรุปเหตุผล)" },
-      { to: "/service-items", label: "รายการขาย/บริการ (ใช้ทำใบเสนอราคา)" },
-      { to: "/model-prices", label: "ราคามาตรฐานตามรุ่นรถ", min: "manager" },
+      { to: "/service-items", label: "รายการขาย/บริการ (ใช้ทำใบเสนอราคา)", notFor: ["accountant"] },
+      { to: "/model-prices", label: "ราคามาตรฐานตามรุ่นรถ", min: "manager", notFor: ["accountant"] },
     ],
   },
   {
     key: "reports",
     label: "รายงาน",
     items: [
-      { to: "/history", label: "ประวัติรับ-จ่ายสต๊อกทั้งหมด" },
-      { to: "/stock-usage-report", label: "ประวัติการตัดสต๊อก" },
+      { to: "/history", label: "ประวัติรับ-จ่ายสต๊อกทั้งหมด", notFor: ["sales"] },
+      { to: "/stock-usage-report", label: "ประวัติการตัดสต๊อก", notFor: ["sales"] },
       { to: "/daily-summary", label: "สรุปยอดขายรายวัน", min: "manager" },
     ],
   },
@@ -166,7 +168,7 @@ export default function NavBar() {
                 <span className="navbar-category-caret">▾</span>
               </button>
               <div className="navbar-category-menu">
-                {cat.items.filter((it) => !it.min || hasRole(user, it.min)).map((it) => (
+                {cat.items.filter((it) => (!it.min || hasRole(user, it.min)) && (!it.movesStock || canMoveStock(user)) && !it.notFor?.includes(user?.role)).map((it) => (
                   <Link
                     key={it.to}
                     to={it.to === "/board" && shopCode ? `/board?shop=${shopCode}` : it.to}
@@ -180,7 +182,7 @@ export default function NavBar() {
             </div>
           ))}
 
-        {!isOwnerView(user) && <Link to="/scan" className="navbar-standalone-link" onClick={close}>สแกน QR</Link>}
+        {!isOwnerView(user) && canMoveStock(user) && <Link to="/scan" className="navbar-standalone-link" onClick={close}>สแกน QR</Link>}
         {hasRole(user, "manager") && !isOwnerView(user) && (
           <Link to="/manager" className={`navbar-standalone-link ${location.pathname === "/manager" ? "active" : ""}`} onClick={close}>หน้าผู้จัดการ</Link>
         )}
@@ -191,7 +193,7 @@ export default function NavBar() {
           <Link to="/dev" className={`navbar-standalone-link ${location.pathname.startsWith("/dev") ? "active" : ""}`} onClick={close}>🛠️ จัดการระบบ</Link>
         )}
         {/* ผู้จัดการขึ้นไป — backend บังคับสิทธิ์จริงอีกชั้น (requireManager) ปุ่มนี้แค่ซ่อนไม่ให้คนอื่นเห็น */}
-        {hasRole(user, "manager") && (
+        {hasRole(user, "manager") && !isReadOnly(user) && (
           <Link to="/settings" className="navbar-standalone-link" onClick={close}>⚙️ ตั้งค่า</Link>
         )}
 

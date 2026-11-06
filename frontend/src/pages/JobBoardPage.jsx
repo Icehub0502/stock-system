@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import client from '../api/client';
+import { useAuth } from '../context/AuthContext';
+import { isReadOnly } from '../utils/roles';
 import { jobStatusDef, nextMainStatus, prevMainStatus, nextReworkStatus, prevReworkStatus, REWORK_PATH } from '../utils/jobStatus';
 import { CASE_BADGE_LABEL } from '../utils/claimCases';
 import { formatDateTh } from '../utils/dateGroups';
@@ -23,6 +25,7 @@ import { useBranchIdentity } from '../hooks/useDocHeader';
  * ซับซ้อนกว่านั้น (แก้ข้อมูลรถ/ลูกค้า, รายการอะไหล่/ใบเสนอราคา)
  */
 export default function JobBoardPage() {
+  const { user } = useAuth();
   const { branchCode } = useBranchIdentity();
   const navigate = useNavigate();
   const [date, setDate] = useState(todayStr());
@@ -328,9 +331,11 @@ export default function JobBoardPage() {
             <label>วันที่</label>
             <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
           </div>
-          <button type="button" className="btn btn-primary" onClick={() => setShowAddModal(true)}>
-            + เพิ่มคิว
-          </button>
+          {!isReadOnly(user) && (
+            <button type="button" className="btn btn-primary" onClick={() => setShowAddModal(true)}>
+              + เพิ่มคิว
+            </button>
+          )}
           <button type="button" onClick={handleShowQr} disabled={qrLoading}>
             {qrLoading ? 'กำลังสร้าง QR...' : '📱 QR ให้ลูกค้าดูสถานะรถ'}
           </button>
@@ -353,6 +358,7 @@ export default function JobBoardPage() {
       ) : jobs.length === 0 ? (
         <div className="empty-message">ยังไม่มีรถเข้าคิววันนี้</div>
       ) : (
+        <fieldset disabled={isReadOnly(user)} className="job-page-fields">
         <div className="job-card-grid">
           {jobs.map((j) => {
             const st = jobStatusDef(j.status);
@@ -468,6 +474,7 @@ export default function JobBoardPage() {
             );
           })}
         </div>
+        </fieldset>
       )}
 
       {showAddModal && (

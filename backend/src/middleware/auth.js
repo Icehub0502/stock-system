@@ -2,6 +2,7 @@ const jwt = require('jsonwebtoken');
 require('dotenv').config();
 const { JWT_SECRET } = require('../config');
 const pool = require('../db/pool');
+const { roleRefusal } = require('./rolePolicy');
 
 const DEFAULT_SHOP_ID = 1;
 
@@ -11,7 +12,8 @@ const DEFAULT_SHOP_ID = 1;
 // manager  = + sales/profit/cost figures, cancelling/deleting documents, technicians, part prices, shop settings
 // owner    = + user accounts of the shop (and all branches of the owner's group)
 // dev      = platform administrator (shops, groups, catalogue); can act inside any shop
-const ROLE_RANK = { technician: 1, office: 2, manager: 3, owner: 4, dev: 5 };
+// sales and accountant sit beside office and manager for what they may open; rolePolicy.js takes away what they must not do
+const ROLE_RANK = { technician: 1, office: 2, sales: 2, manager: 3, accountant: 3, owner: 4, dev: 5 };
 
 function roleRank(role) {
   return ROLE_RANK[role] || 0;
@@ -65,6 +67,9 @@ async function authenticate(req, res, next) {
     console.error(err);
     return res.status(500).json({ error: 'ตรวจสอบสถานะร้านไม่สำเร็จ' });
   }
+
+  const refusal = roleRefusal(req.user.role, req.method, req.originalUrl);
+  if (refusal) return res.status(403).json({ error: refusal });
   next();
 }
 

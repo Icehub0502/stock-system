@@ -68,6 +68,14 @@ async function migrateClaimCases(conn) {
     await conn.query('ALTER TABLE jobs ADD INDEX idx_job_claim (claim_id)');
   }
 
+  // What a case took out of stock sits on the stock movement, not on claim_items: saving a case rewrites its item rows,
+  // and that must not forget what was taken. The receipt for what the customer pays puts the money in the daily sales.
+  await addColumn(conn, 'stock_item_movements', 'claim_id', 'BIGINT UNSIGNED DEFAULT NULL');
+  if (!(await indexExists(conn, 'stock_item_movements', 'idx_sim_claim'))) {
+    await conn.query('ALTER TABLE stock_item_movements ADD INDEX idx_sim_claim (claim_id)');
+  }
+  await addColumn(conn, 'claims', 'charge_receipt_id', 'BIGINT UNSIGNED DEFAULT NULL');
+
   await conn.query(`
     CREATE TABLE IF NOT EXISTS claim_follow_ups (
       id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,

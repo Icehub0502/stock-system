@@ -29,6 +29,29 @@ function writeBasket(key, items) {
   }
 }
 
+// What is waiting on this device for a bill, for the pages that show bills
+export function basketSummary(sessionId) {
+  const items = readBasket(storageKey(sessionId));
+  return { codes: items.length, qty: items.reduce((sum, row) => sum + row.qty, 0) };
+}
+
+// Ids of the bills with scans waiting on this device
+export function basketSessionIds() {
+  try {
+    return Object.keys(localStorage)
+      .map((key) => /^scan-basket:(\d+)$/.exec(key))
+      .filter(Boolean)
+      .map((match) => Number(match[1]));
+  } catch {
+    return [];
+  }
+}
+
+// the bill is gone, so what waited for it has nowhere to go
+export function forgetBasket(sessionId) {
+  writeBasket(storageKey(sessionId), []);
+}
+
 export default function useScanBasket(sessionId) {
   const key = storageKey(sessionId);
   const [items, setItems] = useState(() => readBasket(key));

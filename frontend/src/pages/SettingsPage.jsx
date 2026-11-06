@@ -191,6 +191,8 @@ function UsersSection() {
                 <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
                   <option value="technician">ช่าง</option>
                   <option value="office">ออฟฟิศ</option>
+                  <option value="sales">ฝ่ายขาย</option>
+                  <option value="accountant">บัญชี</option>
                   <option value="manager">ผู้จัดการ</option>
                   <option value="owner">เจ้าของร้าน</option>
                 </select>

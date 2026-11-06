@@ -9,8 +9,8 @@ import ScanNewItemSheet from '../components/ScanNewItemSheet';
 import { ScanPositionChip as PositionChip } from '../components/PositionChip';
 import BatchScanOverlay from '../components/BatchScanOverlay';
 import BatchScanReview from '../components/BatchScanReview';
-import useScanBasket from '../hooks/useScanBasket';
-import { cleanScannedCode, prepareScanSound } from '../utils/scanBatch';
+import useScanBasket, { basketSessionIds, basketSummary } from '../hooks/useScanBasket';
+import { NO_DECISIONS, cleanScannedCode, prepareScanSound } from '../utils/scanBatch';
 
 // ─────────────────────────────────────────
 //  ICONS
@@ -526,12 +526,16 @@ export default function TechnicianScanPage() {
   // สแกนต่อเนื่อง (โหมดรับเข้า): ของที่สแกนกองไว้ในตะกร้าก่อน ตรวจแล้วค่อยเข้าบิล
   const [batchScanning, setBatchScanning] = useState(false);
   const [reviewDetails, setReviewDetails] = useState({});     // ที่กรอกไว้ของรหัสใหม่ เผื่อกลับไปสแกนเพิ่ม
+  const [reviewDecisions, setReviewDecisions] = useState(NO_DECISIONS); // ที่ตัดสินใจไว้ในหน้าตรวจ เผื่อกลับไปสแกนเพิ่ม
+  const [waitingBills, setWaitingBills] = useState([]);       // บิลที่มีสแกนค้างในเครื่องนี้ (เช่นหลังรีเฟรช)
   const basket = useScanBasket(mode === 'IN' && session ? session.id : null);
 
   // ── มาจากหน้าบิลรับเข้า: "สแกนของเข้าบิลนี้" — เปิดบิลเดิมต่อได้เลย ไม่ต้องเปิดบิลใหม่
   // ใช้ตอนต้นทางส่งของมาไม่ครบ/บิลมาทีหลัง แล้วต้องแอดของเข้าบิลเดิมภายหลัง
   // โหลดของที่เคยสแกนเข้าบิลไว้แล้วมาแสดงด้วย จะได้เห็นบิลทั้งใบและกดลบรายการเก่าได้
   const resumeSession = useCallback((resume) => {
+    setReviewDetails({});
+    setReviewDecisions(NO_DECISIONS);
     setMode('IN');
     setSession(resume);
     setStep(STEP.SCAN);
@@ -572,6 +576,21 @@ export default function TechnicianScanPage() {
     resumeSession(resume);
   }, [location.state, location.pathname, navigate, resumeSession]);
 
+  // หน้าเลือกโหมด: บิลที่มีของสแกนค้างในเครื่องนี้ กลับเข้าไปต่อได้ในปุ่มเดียว (หลังรีเฟรชหรือปิดแอป)
+  useEffect(() => {
+    if (step !== STEP.MODE || !isOffice) return undefined;
+    const ids = basketSessionIds();
+    if (ids.length === 0) { setWaitingBills([]); return undefined; }
+    let cancelled = false;
+    client.get('/transactions/receipt-sessions')
+      .then((res) => {
+        if (cancelled) return;
+        setWaitingBills((res.data || []).filter((s) => ids.includes(s.id)).map((s) => ({ ...s, ...basketSummary(s.id) })));
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [step, isOffice]);
+
   // ── เลือก mode ──
   const selectMode = (m) => {
     setMode(m);
@@ -610,6 +629,8 @@ export default function TechnicianScanPage() {
       });
       setSession(res.data);
       setOrders([]);
+      setReviewDetails({});
+      setReviewDecisions(NO_DECISIONS);
       setStep(STEP.SCAN);
     } catch (err) {
       const data = err?.response?.data;
@@ -865,6 +886,7 @@ export default function TechnicianScanPage() {
     const totalAdded = basket.totalQty;
     basket.clear();
     setReviewDetails({});
+    setReviewDecisions(NO_DECISIONS);
     setStep(STEP.SCAN);
     setToast({ ok: true, title: `เพิ่มเข้าบิลแล้ว ${added.length} รายการ`, body: `${totalAdded} ชิ้น · ยังไม่บวกสต๊อก (กด “บันทึก” เพื่อบวก)` });
   };
@@ -877,7 +899,7 @@ export default function TechnicianScanPage() {
     setSupplier(''); setSupplierOther(false); setSupplierErr('');
     setBillDate(todayStr());
     setScannedItem(null); setScannedType(null); setScanning(false);
-    setBatchScanning(false); setReviewDetails({});
+    setBatchScanning(false); setReviewDetails({}); setReviewDecisions(NO_DECISIONS);
     setManualOpen(false); setPickMatches(null); setNewItemCode(null);
   };
 
@@ -904,6 +926,13 @@ export default function TechnicianScanPage() {
               <p className="scan-subtitle">เลือกประเภทรายการก่อนเริ่ม</p>
             </div>
           </header>
+
+          {waitingBills.map((bill) => (
+            <button type="button" key={bill.id} className="scan-waiting-bill" onClick={() => resumeSession(bill)}>
+              <span>กลับไปบิล <b>{bill.invoice_no}</b></span>
+              <small>สแกนค้างในเครื่องนี้ {bill.codes} รหัส · {bill.qty} ชิ้น ยังไม่เข้าบิล</small>
+            </button>
+          ))}
 
           <div className="scan-mode-grid">
             {isOffice && (
@@ -1221,6 +1250,8 @@ export default function TechnicianScanPage() {
           basket={basket}
           details={reviewDetails}
           onDetailsChange={setReviewDetails}
+          decisions={reviewDecisions}
+          onDecisionsChange={setReviewDecisions}
           onBack={() => setStep(STEP.SCAN)}
           onApplied={handleBatchApplied}
         />

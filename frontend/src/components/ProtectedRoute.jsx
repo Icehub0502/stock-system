@@ -5,10 +5,12 @@ import { hasRole } from '../utils/roles';
 
 // roles: the lowest role in the list is the minimum (a higher role never loses access).
 // minRole: explicit minimum, e.g. "manager" for pages with sales figures / shop settings.
-export default function ProtectedRoute({ roles, minRole, children }) {
+// notFor: roles sent home even though their level would let them in.
+export default function ProtectedRoute({ roles, minRole, notFor, children }) {
   const { user } = useAuth();
   if (!user) return <Navigate to="/login" replace />;
   if (roles && !roles.some((r) => hasRole(user, r))) return <Navigate to="/" replace />;
   if (minRole && !hasRole(user, minRole)) return <Navigate to="/" replace />;
+  if (notFor && notFor.includes(user.role)) return <Navigate to="/" replace />;
   return children;
 }

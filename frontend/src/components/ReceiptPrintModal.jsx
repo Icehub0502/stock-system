@@ -52,6 +52,7 @@ export default function ReceiptPrintModal({ receiptId, onClose, onPrinted }) {
   const previewData = {
     receipt_no: receipt.receipt_no,
     receipt_date: receipt.receipt_date,
+    warranty_label: receipt.warranty_label,
     pic: receipt.pic || '',
     customer: {
       customer_name: receipt.customer_name,

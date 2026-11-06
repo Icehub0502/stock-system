@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import client from '../api/client';
 import { useAuth } from '../context/AuthContext';
-import { hasRole } from '../utils/roles';
+import { canChange } from '../utils/roles';
 
 // ต้นทุนที่ยังไม่ได้กรอก: lines of closed receive bills without a price per piece, and stock on the shelf with no cost at
 // all (bought before costs were recorded). Data from GET /stock-receive/costs/missing.
@@ -36,7 +36,7 @@ function CostRow({ id, title, subtitle, onSave }) {
 
 export default function StockCostsPage() {
   const { user } = useAuth();
-  const canSetItemCost = hasRole(user, 'manager');
+  const canSetItemCost = canChange(user, 'manager');
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
 

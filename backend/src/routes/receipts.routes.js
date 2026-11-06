@@ -1,5 +1,7 @@
 const express = require('express');
 const pool = require('../db/pool');
+const { relatedDocs, findWarrantyNumber, numberLabel } = require('../utils/warrantyNumbers');
+const { branchCodeOf } = require('../utils/branchCode');
 const { authenticate, requireRole, requireManager } = require('../middleware/auth');
 const { trashDelete } = require('../utils/trash');
 const { formatPhone } = require('../utils/parseLineQueueMessage');
@@ -524,7 +526,12 @@ router.get('/:id', async (req, res) => {
       [req.shopId, id]
     );
 
-    res.json({ success: true, data: { ...receipt, items } });
+    // the rack warranty number printed on the receipt, whether it was taken on the job or on this receipt
+    const docs = await relatedDocs(pool, req.shopId, { receiptId: receipt.id });
+    const number = docs ? await findWarrantyNumber(pool, req.shopId, docs) : null;
+    const warranty_label = number ? numberLabel(await branchCodeOf(req.shopId), number.warranty_no) : null;
+
+    res.json({ success: true, data: { ...receipt, items, warranty_label } });
   } catch (err) {
     console.error('Error loading receipt details:', err);
     res.status(500).json({ error: 'โหลดรายละเอียดบิลไม่สำเร็จ' });

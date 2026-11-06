@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import { useAuth } from "../context/AuthContext";
+import { canChange } from "../utils/roles";
 import client from "../api/client";
 import QuotationFormModal from "../components/QuotationFormModal";
 import QuotationPrintModal from "../components/QuotationPrintModal";
@@ -17,6 +18,7 @@ import useRealtimeEvent from "../hooks/useRealtimeEvent";
 
 export default function QuotationListPage() {
   const { user } = useAuth();
+  const mayEdit = canChange(user, 'office');
   const navigate = useNavigate();
   const [quotations, setQuotations] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -322,6 +324,7 @@ export default function QuotationListPage() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
+          {mayEdit && (
           <button
             className="btn btn-primary btn-fab-mobile"
             onClick={() => {
@@ -331,6 +334,7 @@ export default function QuotationListPage() {
           >
             + สร้างใบเสนอราคา
           </button>
+          )}
         </div>
       </div>
 
@@ -439,15 +443,17 @@ export default function QuotationListPage() {
                         )}
                       </td>
                       <td className="actions" data-label="จัดการ">
-                        <button
-                          className="btn-icon-small"
-                          onClick={() => {
-                            setEditingQuotation(q);
-                            setShowFormModal(true);
-                          }}
-                        >
-                          แก้ไข
-                        </button>
+                        {mayEdit && (
+                          <button
+                            className="btn-icon-small"
+                            onClick={() => {
+                              setEditingQuotation(q);
+                              setShowFormModal(true);
+                            }}
+                          >
+                            แก้ไข
+                          </button>
+                        )}
                         <button
                           className={`btn-icon-small ${q.printed_at ? 'btn-printed' : ''}`}
                           onClick={() => {
@@ -458,7 +464,7 @@ export default function QuotationListPage() {
                         >
                           {q.printed_at ? '🖨️ พิมพ์ซ้ำ' : '🖨️ พิมพ์'}
                         </button>
-                        {q.status === 'declined' && (
+                        {mayEdit && q.status === 'declined' && (
                           <button
                             className="btn-icon-small"
                             onClick={() => handleUndoDecline(q)}
@@ -467,7 +473,7 @@ export default function QuotationListPage() {
                             ดึงกลับเข้าคิว
                           </button>
                         )}
-                        {q.status !== 'approved' && q.status !== 'declined' && (
+                        {mayEdit && q.status !== 'approved' && q.status !== 'declined' && (
                           <>
                             <button
                               className="btn-icon-small"
@@ -492,7 +498,7 @@ export default function QuotationListPage() {
                             </button>
                           </>
                         )}
-                        {!q.closed_at && q.status !== 'approved' && !q.linked_job_id && (
+                        {mayEdit && !q.closed_at && q.status !== 'approved' && !q.linked_job_id && (
                           <button
                             className="btn-icon-small btn-primary"
                             onClick={() => setCreatingJobFor(q)}
@@ -502,7 +508,7 @@ export default function QuotationListPage() {
                             สร้างคิว
                           </button>
                         )}
-                        {q.status === 'approved' && !q.closed_at && (
+                        {mayEdit && q.status === 'approved' && !q.closed_at && (
                           <button
                             className="btn-icon-small"
                             onClick={() => setClosingQuotation(q)}
@@ -511,7 +517,7 @@ export default function QuotationListPage() {
                             รับชำระ/ปิดบิล
                           </button>
                         )}
-                        {q.closed_at && (
+                        {mayEdit && q.closed_at && (
                           <button
                             className="btn-icon-small btn-danger"
                             onClick={() => handleReopen(q)}

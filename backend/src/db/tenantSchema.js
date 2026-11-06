@@ -17,7 +17,7 @@ const SHOP_TABLES = [
   'users', 'receipt_sessions', 'customers', 'quotations', 'products', 'vehicles', 'warranties',
   'service_items', 'receipts', 'repair_notices', 'claims', 'quote_part_prices', 'app_settings', 'jobs',
   'technicians', 'decline_reasons', 'suppliers', 'parts', 'part_codes', 'stock_ledger', 'stock_counts',
-  'stock_categories', 'stock_items',
+  'stock_categories', 'stock_items', 'warranty_numbers',
 ];
 
 // single/multi-column UNIQUE constraints that must become per-shop

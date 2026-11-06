@@ -95,7 +95,7 @@ async function seedBill(shop, { queueNo, date = today, plate = `T${crypto.random
       [shop.shopId, `JB-${suffix}`, jobQueueNo, isoDate(date), customer.insertId, vehicle.insertId, quotation.insertId]
     );
   }
-  return { quotationId: quotation.insertId, customerId: customer.insertId, plate };
+  return { quotationId: quotation.insertId, customerId: customer.insertId, vehicleId: vehicle.insertId, plate };
 }
 
 async function billState(quotationId) {
@@ -283,6 +283,75 @@ describe('bot 3 webhook', () => {
       expect(await say(groupB, closeText('16'))).toContain('ไม่พบบิล');
       expect((await billState(todays.quotationId)).closed_at).not.toBeNull();
       expect((await billState(old.quotationId)).closed_at).toBeNull();
+    });
+
+    // ลูกค้านัดหมาย: the bill was made on an earlier day, then the queue is created from the appointment page
+    describe('a bill from an appointment', () => {
+      const queueFromAppointment = async (shop, bill, queueNo) => {
+        const res = await request(app).post('/api/jobs').set(as(shop.managerToken)).send({
+          vehicle_id: bill.vehicleId, customer_id: bill.customerId, queue_no: queueNo, quotation_id: bill.quotationId, symptom: 'นัดมาทำ',
+        });
+        expect(res.status).toBe(201);
+        return res.body;
+      };
+
+      test.each(['scheduled', 'no_date', 'parts_ready', 'pending'])('made yesterday as %s, queued today: closes by the number on the card', async (status) => {
+        const queueNo = String(30 + ['scheduled', 'no_date', 'parts_ready', 'pending'].indexOf(status));
+        const bill = await seedBill(shopB, { queueNo: '777', date: yesterday, status });
+        const job = await queueFromAppointment(shopB, bill, queueNo);
+        const reply = await say(groupB, closeText(job.queue_no));
+        expect(reply).toContain('ปิดบิล');
+        const state = await billState(bill.quotationId);
+        expect(state.closed_at).not.toBeNull();
+        expect(state.receipt_shop_id).toBe(shopB.shopId);
+      });
+
+      test('made and queued on the same day as parts_ready: closes too', async () => {
+        const bill = await seedBill(shopB, { queueNo: '778', status: 'parts_ready' });
+        const job = await queueFromAppointment(shopB, bill, '41');
+        expect(await say(groupB, closeText(job.queue_no))).toContain('ปิดบิล');
+        expect((await billState(bill.quotationId)).closed_at).not.toBeNull();
+      });
+
+      test('the card number closes it even if the old number on the bill belongs to someone else today', async () => {
+        const bill = await seedBill(shopB, { queueNo: '42', date: yesterday, status: 'scheduled' });
+        const other = await seedBill(shopB, { queueNo: '42' });
+        const job = await queueFromAppointment(shopB, bill, '43');
+        expect(await say(groupB, closeText(job.queue_no))).toContain('ปิดบิล');
+        expect((await billState(bill.quotationId)).closed_at).not.toBeNull();
+        expect((await billState(other.quotationId)).closed_at).toBeNull();
+      });
+
+      test('a car moved to another day closes on the day on its card, not the day on the bill', async () => {
+        const bill = await seedBill(shopB, { queueNo: '44', date: yesterday, jobQueueNo: '44', status: 'approved' });
+        const [[row]] = await pool.query('SELECT id FROM jobs WHERE quotation_id = ?', [bill.quotationId]);
+        const [receipt] = await pool.query(
+          "INSERT INTO receipts (shop_id, receipt_no, receipt_date, customer_id, vehicle_id, mileage, total_amount, car_sequence_no) VALUES (?, ?, ?, ?, ?, 0, 1000, ?)",
+          [shopB.shopId, `RC-M-${bill.quotationId}`, isoDate(yesterday), bill.customerId, bill.vehicleId, 7000 + bill.quotationId]
+        );
+        await pool.query('UPDATE quotations SET converted_receipt_id = ? WHERE id = ?', [receipt.insertId, bill.quotationId]);
+        await pool.query("UPDATE jobs SET status = 'repairing' WHERE id = ?", [row.id]);
+        const moved = await request(app).patch('/api/jobs/move-date').set(as(shopB.managerToken)).send({ ids: [row.id], job_date: isoDate(today) });
+        expect(moved.status).toBe(200);
+        const [[after]] = await pool.query('SELECT queue_no FROM jobs WHERE id = ?', [row.id]);
+        expect(await say(groupB, closeText(after.queue_no))).toContain('ปิดบิล');
+        expect((await billState(bill.quotationId)).closed_at).not.toBeNull();
+      });
+
+      test('a car that went home to wait for its appointment and came back on the same job closes too', async () => {
+        const bill = await seedBill(shopB, { queueNo: '45', jobQueueNo: '45', status: 'scheduled' });
+        await pool.query("UPDATE jobs SET status = 'received' WHERE quotation_id = ?", [bill.quotationId]);
+        expect(await say(groupB, closeText('45'))).toContain('ปิดบิล');
+        expect((await billState(bill.quotationId)).closed_at).not.toBeNull();
+      });
+
+      test('the job page lists its bill even when the dates differ', async () => {
+        const bill = await seedBill(shopB, { queueNo: '46', date: yesterday, jobQueueNo: '46' });
+        const [[row]] = await pool.query('SELECT id FROM jobs WHERE quotation_id = ?', [bill.quotationId]);
+        await pool.query('UPDATE jobs SET job_date = ? WHERE id = ?', [isoDate(today), row.id]);
+        const list = await request(app).get(`/api/jobs/${row.id}/quotations`).set(as(shopB.managerToken));
+        expect(list.body.data.map((q) => q.id)).toContain(bill.quotationId);
+      });
     });
 
     test('LINE delivering the same message twice closes and replies once', async () => {

@@ -1,9 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import client from '../api/client';
+import { useAuth } from '../context/AuthContext';
+import { canChange } from '../utils/roles';
 import { getNameInitials } from '../utils/format';
 
 export default function CustomerManagementPage() {
+  const { user } = useAuth();
+  const mayEdit = canChange(user, 'office');
   const [customers, setCustomers] = useState([]);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
@@ -109,9 +113,11 @@ export default function CustomerManagementPage() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
-          <button className="btn btn-primary" onClick={openAdd}>
-            + เพิ่มลูกค้า
-          </button>
+          {mayEdit && (
+            <button className="btn btn-primary" onClick={openAdd}>
+              + เพิ่มลูกค้า
+            </button>
+          )}
         </div>
       </div>
       {error && <div className="error-message">{error}</div>}
@@ -143,10 +149,12 @@ export default function CustomerManagementPage() {
                   <td data-label="โทรศัพท์">{customer.phone || '-'}</td>
                   <td className="actions" data-label="จัดการ">
                     <Link to={`/customers/${customer.id}/history`} className="btn-icon-small">ดูประวัติ</Link>
-                    <button onClick={() => openEdit(customer)}>แก้ไข</button>
-                    <button className="btn-danger" onClick={() => deleteCustomer(customer.id)}>
-                      ลบ
-                    </button>
+                    {mayEdit && <button onClick={() => openEdit(customer)}>แก้ไข</button>}
+                    {mayEdit && (
+                      <button className="btn-danger" onClick={() => deleteCustomer(customer.id)}>
+                        ลบ
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}

@@ -6,7 +6,7 @@ import NavBar from "./components/NavBar";
 import QueueNavBar from "./components/QueueNavBar";
 import BottomNav from "./components/BottomNav";
 import PageSkeleton from "./components/PageSkeleton";
-import { hasRole } from "./utils/roles";
+import { hasRole, isReadOnly } from "./utils/roles";
 import { BranchBanner } from "./components/BranchSwitcher";
 import { isQueueHost } from "./utils/isQueueHost";
 // LoginPage stays a static import — every visitor needs it before we know
@@ -45,6 +45,8 @@ const DailySalesSummaryPage = lazy(() => import("./pages/DailySalesSummaryPage")
 const VehicleServiceHistoryPage = lazy(() => import("./pages/VehicleServiceHistoryPage"));
 const FollowUpPage = lazy(() => import("./pages/FollowUpPage"));
 const ClaimDocumentsPage = lazy(() => import("./pages/ClaimDocumentsPage"));
+const WarrantyRegisterPage = lazy(() => import("./pages/WarrantyRegisterPage"));
+const PriceListPage = lazy(() => import("./pages/PriceListPage"));
 const StockDeductionPage = lazy(() => import("./pages/StockDeductionPage"));
 const StockUsageReportPage = lazy(() => import("./pages/StockUsageReportPage"));
 const SettingsPage = lazy(() => import("./pages/SettingsPage"));
@@ -59,6 +61,13 @@ const JobDetailPage = lazy(() => import("./pages/JobDetailPage"));
 const TrackPage = lazy(() => import("./pages/TrackPage"));
 const CustomerHistoryPage = lazy(() => import("./pages/CustomerHistoryPage"));
 const VehicleHistoryPage = lazy(() => import("./pages/VehicleHistoryPage"));
+
+// บัญชีดูได้อย่างเดียว: บอกไว้ทุกหน้า จะได้รู้ว่าทำไมกดแก้ไขแล้วไม่ผ่าน
+function ReadOnlyBanner() {
+  const { user } = useAuth();
+  if (!isReadOnly(user)) return null;
+  return <div className="readonly-banner" role="status">บัญชี: ดูข้อมูลได้อย่างเดียว แก้ไขไม่ได้</div>;
+}
 
 function Home() {
   const { user } = useAuth();
@@ -86,7 +95,7 @@ function AppRoutes() {
   const queueHost = isQueueHost();
   return (
     <>
-      {!isKiosk && (queueHost ? <QueueNavBar /> : <><NavBar /><BranchBanner /></>)}
+      {!isKiosk && (queueHost ? <QueueNavBar /> : <><NavBar /><BranchBanner /><ReadOnlyBanner /></>)}
       <div className={isKiosk ? "" : "container"}>
         {/* key={pathname} forces this subtree to remount on navigation, which
             both retriggers the fade-in animation and gives Suspense a fresh
@@ -116,7 +125,7 @@ function AppRoutes() {
           <Route
             path="/history"
             element={
-              <ProtectedRoute roles={["office"]}>
+              <ProtectedRoute roles={["office"]} notFor={["sales"]}>
                 <TransactionHistoryPage />
               </ProtectedRoute>
             }
@@ -124,7 +133,7 @@ function AppRoutes() {
           <Route
             path="/scan"
             element={
-              <ProtectedRoute roles={["office", "technician"]}>
+              <ProtectedRoute roles={["office", "technician"]} notFor={["sales", "accountant"]}>
                 <TechnicianScanPage />
               </ProtectedRoute>
             }
@@ -132,7 +141,7 @@ function AppRoutes() {
           <Route
             path="/receipts"
             element={
-              <ProtectedRoute roles={["office"]}>
+              <ProtectedRoute roles={["office"]} notFor={["sales"]}>
                 <ReceiptSessionPage />
               </ProtectedRoute>
             }
@@ -181,7 +190,7 @@ function AppRoutes() {
           <Route
             path="/service-items"
             element={
-              <ProtectedRoute roles={["office"]}>
+              <ProtectedRoute roles={["office"]} notFor={["accountant"]}>
                 <ServiceItemManagementPage />
               </ProtectedRoute>
             }
@@ -189,7 +198,7 @@ function AppRoutes() {
           <Route
             path="/warranties"
             element={
-              <ProtectedRoute roles={["office"]}>
+              <ProtectedRoute roles={["office"]} notFor={["accountant"]}>
                 <WarrantyManagementPage />
               </ProtectedRoute>
             }
@@ -205,8 +214,24 @@ function AppRoutes() {
           <Route
             path="/follow-ups"
             element={
-              <ProtectedRoute roles={["office"]}>
+              <ProtectedRoute roles={["office"]} notFor={["accountant"]}>
                 <FollowUpPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/price-list"
+            element={
+              <ProtectedRoute roles={["office"]}>
+                <PriceListPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/warranty-register"
+            element={
+              <ProtectedRoute roles={["office"]}>
+                <WarrantyRegisterPage />
               </ProtectedRoute>
             }
           />
@@ -229,7 +254,7 @@ function AppRoutes() {
           <Route
             path="/stock-costs"
             element={
-              <ProtectedRoute roles={["office"]}>
+              <ProtectedRoute roles={["office"]} notFor={["sales", "accountant"]}>
                 <StockCostsPage />
               </ProtectedRoute>
             }
@@ -237,7 +262,7 @@ function AppRoutes() {
           <Route
             path="/suppliers"
             element={
-              <ProtectedRoute minRole="manager">
+              <ProtectedRoute minRole="manager" notFor={["accountant"]}>
                 <SuppliersPage />
               </ProtectedRoute>
             }
@@ -269,7 +294,7 @@ function AppRoutes() {
           <Route
             path="/settings"
             element={
-              <ProtectedRoute minRole="manager">
+              <ProtectedRoute minRole="manager" notFor={["accountant"]}>
                 <SettingsPage />
               </ProtectedRoute>
             }
@@ -293,7 +318,7 @@ function AppRoutes() {
           <Route
             path="/appointments"
             element={
-              <ProtectedRoute roles={["office"]}>
+              <ProtectedRoute roles={["office"]} notFor={["accountant"]}>
                 <AppointmentsPage />
               </ProtectedRoute>
             }
@@ -309,7 +334,7 @@ function AppRoutes() {
           <Route
             path="/customers/found-via"
             element={
-              <ProtectedRoute roles={["office"]}>
+              <ProtectedRoute roles={["office"]} notFor={["accountant"]}>
                 <CustomerChannelPage />
               </ProtectedRoute>
             }
@@ -317,7 +342,7 @@ function AppRoutes() {
           <Route
             path="/model-prices"
             element={
-              <ProtectedRoute minRole="manager">
+              <ProtectedRoute minRole="manager" notFor={["accountant"]}>
                 <ModelPricesPage />
               </ProtectedRoute>
             }
@@ -357,7 +382,7 @@ function AppRoutes() {
           <Route
             path="/stock-deduction"
             element={
-              <ProtectedRoute roles={["office"]}>
+              <ProtectedRoute roles={["office"]} notFor={["sales", "accountant"]}>
                 <StockDeductionPage />
               </ProtectedRoute>
             }
@@ -365,7 +390,7 @@ function AppRoutes() {
           <Route
             path="/stock-usage-report"
             element={
-              <ProtectedRoute roles={["office"]}>
+              <ProtectedRoute roles={["office"]} notFor={["sales"]}>
                 <StockUsageReportPage />
               </ProtectedRoute>
             }

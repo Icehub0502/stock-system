@@ -7044,7 +7044,68 @@ a.dash-stat-card.dash-stat-link { text-decoration: none; color: inherit; display
   background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 14px; font-size: 13.5px;
 }
 .scan-basket-note p { margin: 0; }
+.scan-waiting-bill {
+  display: block; width: 100%; min-height: 48px; margin-bottom: 12px; padding: 12px 16px; text-align: left; cursor: pointer;
+  background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 14px; color: #111827; font-family: inherit; font-size: 15px;
+}
+.scan-waiting-bill small { display: block; margin-top: 2px; font-size: 12.5px; color: #047857; }
+.scan-waiting-note { margin: 0 0 12px; padding: 10px 14px; background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 12px; font-size: 13.5px; line-height: 1.5; color: #065f46; }
+.scan-review-actions .scan-review-ok, .scan-review-actions .scan-review-note { margin: 0; flex: 1 1 180px; align-self: center; }
 .scan-basket-note .scan-btn { flex-shrink: 0; height: 40px; }
+
+/* ── ทะเบียนประกัน ── */
+.wr-numbering { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 16px; margin-bottom: 12px; padding: 10px 14px; background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; }
+.wr-numbering p { margin: 0; font-size: 14px; }
+.wr-numbering-warn { color: #92400e; font-weight: 700; }
+.wr-numbering-ok { flex-basis: 100%; color: #047857; font-weight: 700; }
+.wr-numbering-form { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 13px; }
+.wr-numbering-form input { width: 110px; min-height: 40px; }
+.wr-filters { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.wr-filters button { min-height: 40px; padding: 0 12px; border-radius: 999px; border: 1px solid #d1d5db; background: #fff; color: #374151; font-family: inherit; font-size: 13px; cursor: pointer; }
+.wr-filters button.is-on { background: #111827; border-color: #111827; color: #fff; }
+.wr-assign-btn { min-height: 40px; padding: 0 10px; border-radius: 10px; border: 1px solid #d1d5db; background: #fff; color: #111827; font-family: inherit; font-size: 13px; font-weight: 700; white-space: nowrap; cursor: pointer; }
+.wr-sub { display: block; margin-top: 2px; font-size: 12px; color: #6b7280; }
+.wr-more { margin: 10px 0 0; text-align: center; font-size: 13px; color: #6b7280; }
+.wr-status-active { color: #047857; font-weight: 700; }
+.wr-status-soon { color: #b45309; font-weight: 700; }
+.wr-status-expired { color: #b91c1c; font-weight: 700; }
+.wr-status-none { color: #6b7280; font-weight: 700; }
+.wr-card-number { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 12px; }
+.wr-card-number span { font-size: 13px; color: #6b7280; }
+.wr-card-number b { font-size: 20px; }
+.wr-link-btn { margin-left: auto; min-height: 40px; padding: 0 10px; background: none; border: none; color: #b91c1c; font-family: inherit; font-size: 13px; text-decoration: underline; cursor: pointer; }
+.wr-card-assign p { margin: 0 0 8px; font-size: 14px; }
+.wr-card-typed { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.wr-card-typed input { width: 160px; min-height: 40px; }
+.wr-card-running { margin-top: 12px; padding-top: 10px; border-top: 1px solid #e5e7eb; }
+.wr-card-running-title { margin: 0 0 6px; font-size: 13px; font-weight: 700; color: #047857; }
+.wr-card-running-row { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px; padding: 6px 0; font-size: 14px; }
+.wr-card-running-row small { display: block; font-size: 12px; color: #6b7280; }
+.wr-card-running-left { text-align: right; }
+
+/* ── อะไหล่และค่าใช้จ่ายของเคส (ClaimPartsModal) ── */
+.cp-section { margin-top: 14px; padding-top: 12px; border-top: 1px solid #e5e7eb; }
+.cp-section:first-of-type { border-top: none; padding-top: 0; }
+.cp-section h4 { margin: 0 0 8px; font-size: 14.5px; font-weight: 800; }
+.cp-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 12px; padding: 6px 0; font-size: 14px; }
+.cp-note { margin: 4px 0 8px; font-size: 13px; line-height: 1.5; color: #6b7280; }
+.cp-warn { margin: 4px 0 8px; font-size: 13px; font-weight: 700; color: #92400e; }
+.cp-undo { min-height: 40px; padding: 0 10px; }
+.cp-search { width: 100%; margin-top: 6px; box-sizing: border-box; }
+.cp-match {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 10px; width: 100%; min-height: 44px; margin-top: 6px; padding: 8px 10px;
+  background: #f9fafb; border: 1px solid #d1d5db; border-radius: 10px; color: #111827; font-family: inherit; font-size: 13.5px; text-align: left; cursor: pointer;
+}
+.cp-match small { color: #6b7280; }
+.cp-pick { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 8px; padding: 10px; background: #f9fafb; border-radius: 10px; }
+.cp-pick p { flex-basis: 100%; margin: 0; font-size: 14px; }
+.cp-pick input { width: 90px; min-height: 40px; }
+.cp-charge { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.cp-charge p { flex-basis: 100%; margin: 0; font-size: 14px; }
+.cp-charge select { min-height: 40px; }
+
+.readonly-banner { padding: 6px 12px; background: #fef3c7; color: #92400e; font-size: 13px; font-weight: 700; text-align: center; }
+.job-page-fields { display: contents; }
 
 /* ── จับคู่ซ้าย/ขวา (StockPairModal) ── */
 .sp-note { margin: 4px 0 10px; font-size: 13px; line-height: 1.5; color: #6b7280; }
@@ -7073,3 +7134,33 @@ a.dash-stat-card.dash-stat-link { text-decoration: none; color: inherit; display
 .sp-chip { flex-shrink: 0; padding: 2px 9px; border-radius: 999px; font-size: 12px; font-weight: 800; }
 .sp-chip--left { color: #1d4ed8; background: #dbeafe; }
 .sp-chip--right { color: #b91c1c; background: #fee2e2; }
+
+/* ── ราคาขาย (PriceListPage) ── */
+.pl-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 8px; }
+.pl-filters select { min-height: 40px; max-width: 100%; }
+.pl-search { flex: 1 1 220px; min-width: 0; }
+.pl-check { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; font-size: 13.5px; cursor: pointer; }
+.pl-check--warn { color: #b91c1c; font-weight: 700; }
+.pl-note { margin: 0 0 10px; font-size: 12.5px; line-height: 1.5; color: #6b7280; }
+.pl-more { margin-top: 10px; text-align: center; }
+.pl-muted { color: #6b7280; font-size: 13px; }
+.pl-in-stock { color: #047857; }
+.pl-out-of-stock { color: #b91c1c; font-weight: 700; }
+.pl-codes { display: block; margin-top: 2px; font-size: 12px; color: #6b7280; overflow-wrap: anywhere; }
+.pl-chip { display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 6px; background: #ede9fe; color: #6d28d9; font-size: 11.5px; font-weight: 700; }
+.pl-chip--typed { background: #fef3c7; color: #92400e; }
+.pl-hidden { margin-bottom: 12px; padding: 8px 12px; background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; }
+.pl-hidden-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; padding: 6px 0; font-size: 14px; }
+.pl-hidden-row button { min-height: 40px; padding: 0 12px; }
+.pl-foot { margin-top: 12px; }
+/* on a phone the answer comes first: the header stays small, and the total leads each card */
+@media (max-width: 768px) {
+  .pl-page .subtitle { display: none; }
+  .pl-page .quotation-header { margin-bottom: 8px; }
+  .pl-page .quotation-actions { display: flex; flex-direction: row; flex-wrap: wrap; gap: 6px; }
+  .pl-page .quotation-actions > * { width: auto; min-height: 40px; padding: 0 10px; font-size: 13px; }
+  .pl-page .pl-search { flex-basis: 100%; }
+  .pl-page .pl-filters select { flex: 1 1 30%; min-width: 0; }
+  .pl-page .quotation-table tbody tr { display: flex; flex-direction: column; }
+  .pl-page .quotation-table tbody td.pl-total { order: -1; font-size: 17px; }
+}

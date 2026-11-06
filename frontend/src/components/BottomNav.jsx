@@ -50,6 +50,19 @@ const OFFICE_ITEMS = [
   { to: '/scan', label: 'สแกน', icon: 'scan' },
 ];
 
+const SALES_ITEMS = [
+  { to: '/dashboard', label: 'หน้าหลัก', icon: 'home' },
+  { to: '/jobs', label: 'คิวรถ', icon: 'repair' },
+  { to: '/quotations', label: 'ใบเสนอราคา', icon: 'stock' },
+  { to: '/receipt-list', label: 'ใบเสร็จ', icon: 'receipt' },
+];
+
+const ACCOUNTANT_ITEMS = [
+  { to: '/dashboard', label: 'หน้าหลัก', icon: 'home' },
+  { to: '/receipt-list', label: 'ใบเสร็จ', icon: 'receipt' },
+  { to: '/daily-summary', label: 'ยอดรายวัน', icon: 'stock' },
+];
+
 const OWNER_ITEMS = [
   { to: '/owner', label: 'ภาพรวม', icon: 'home' },
   { to: '/owner/overview', label: 'เทียบสาขา', icon: 'receipt' },
@@ -68,6 +81,8 @@ export default function BottomNav() {
 
   let items = hasRole(user, 'office') ? OFFICE_ITEMS : TECHNICIAN_ITEMS;
   if (isOwnerView(user)) items = OWNER_ITEMS;
+  if (user.role === 'sales') items = SALES_ITEMS;
+  if (user.role === 'accountant') items = ACCOUNTANT_ITEMS;
 
   const openDrawer = () => {
     window.dispatchEvent(new CustomEvent('open-nav-drawer'));

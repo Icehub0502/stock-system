@@ -7,7 +7,7 @@
 //     users page when they want the stricter rules
 // Idempotent: the data moves only happen when the ENUM did not yet contain 'manager'.
 
-const ROLES = ['technician', 'office', 'manager', 'owner', 'dev'];
+const ROLES = ['technician', 'office', 'manager', 'owner', 'dev', 'sales', 'accountant'];
 
 async function migrateRoles(conn) {
   const [cols] = await conn.query(
@@ -15,9 +15,13 @@ async function migrateRoles(conn) {
      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'role'`
   );
   if (!cols[0]) return;
-  if (cols[0].t.includes("'manager'")) return;
-
   const enumList = ROLES.map((r) => `'${r}'`).join(',');
+  if (cols[0].t.includes("'manager'")) {
+    // sales and accountant (November 2026): the list only grows, nobody's role changes
+    if (!cols[0].t.includes("'accountant'")) await conn.query(`ALTER TABLE users MODIFY role ENUM(${enumList}) NOT NULL`);
+    return;
+  }
+
   await conn.query(`ALTER TABLE users MODIFY role ENUM(${enumList}) NOT NULL`);
   const [dev] = await conn.query("UPDATE users SET role = 'dev' WHERE shop_id = 1 AND username = 'ice'");
   const [mgr] = await conn.query("UPDATE users SET role = 'manager' WHERE shop_id = 1 AND role = 'office'");

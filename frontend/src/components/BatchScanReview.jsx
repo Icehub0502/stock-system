@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import client from '../api/client';
 import { ScanPositionChip as PositionChip } from './PositionChip';
-import { basketQty, sideBalanceNote } from '../utils/scanBatch';
+import { applyReviewDecisions, basketQty, sideBalanceNote } from '../utils/scanBatch';
 
 const SIDE_LABEL = { left: 'ซ้าย', right: 'ขวา' };
 
@@ -51,7 +51,7 @@ function NewItemFields({ id, detail, categories, onChange, children }) {
 
 // The check between scanning and the bill. The server sorts the codes; everything it is unsure about waits for a
 // person: nothing here touches stock, and a pair is only a suggestion until "ยืนยันคู่" is pressed.
-export default function BatchScanReview({ sessionId, basket, details, onDetailsChange, onBack, onApplied }) {
+export default function BatchScanReview({ sessionId, basket, details, onDetailsChange, decisions, onDecisionsChange, onBack, onApplied }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [canRecheck, setCanRecheck] = useState(false);
@@ -59,12 +59,8 @@ export default function BatchScanReview({ sessionId, basket, details, onDetailsC
   const [categories, setCategories] = useState([]);
   const [newCategory, setNewCategory] = useState('');
   const [addingCategory, setAddingCategory] = useState(false);
-  const [known, setKnown] = useState([]);
-  const [choose, setChoose] = useState([]);
-  const [attach, setAttach] = useState([]);
-  const [pairs, setPairs] = useState([]);
-  const [singles, setSingles] = useState([]);
-  const [invalid, setInvalid] = useState([]);
+  const [resolved, setResolved] = useState({ known: [], choose: [], attach: [], pairs: [], singles: [], invalid: [] });
+  const { invalid } = resolved;
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -72,12 +68,7 @@ export default function BatchScanReview({ sessionId, basket, details, onDetailsC
     setCanRecheck(false);
     try {
       const res = await client.post('/stock-receive/batch/resolve', { codes: basket.items.map((row) => row.code) });
-      setKnown(res.data.known);
-      setChoose(res.data.choose);
-      setAttach(res.data.attach.map((row) => ({ ...row, accepted: false })));
-      setPairs(res.data.pairs.map((pair) => ({ ...pair, confirmed: false })));
-      setSingles(res.data.singles);
-      setInvalid(res.data.invalid);
+      setResolved(res.data);
     } catch (err) {
       setError(err?.response?.data?.error || 'ตรวจรายการที่สแกนไม่สำเร็จ');
       setCanRecheck(true);
@@ -94,6 +85,10 @@ export default function BatchScanReview({ sessionId, basket, details, onDetailsC
   }, []);
 
   const qtyOf = (code) => basketQty(basket.items, code);
+  const { known, choose, attach, pairs, singles } = useMemo(
+    () => applyReviewDecisions(resolved, decisions, (code) => basketQty(basket.items, code) > 0),
+    [resolved, decisions, basket.items]
+  );
 
   // a category chosen in the bulk box stands for every item without its own, including pairs confirmed later
   const bulkCategory = details.__bulk || '';
@@ -104,39 +99,39 @@ export default function BatchScanReview({ sessionId, basket, details, onDetailsC
   };
   const setDetail = (key, change) => onDetailsChange((prev) => ({ ...prev, [key]: { ...prev[key], ...change } }));
 
-  const asSingle = (code) => ({ code, side: null, partner: null });
+  const removeCode = (code) => basket.setQty(code, 0);
 
-  const removeCode = (code) => {
-    basket.setQty(code, 0);
-    setKnown((list) => list.filter((row) => row.code !== code));
-    setChoose((list) => list.filter((row) => row.code !== code));
-    setAttach((list) => list.filter((row) => row.code !== code));
-    setSingles((list) => {
-      const pair = pairs.find((p) => p.left === code || p.right === code);
-      const rest = list.filter((row) => row.code !== code);
-      return pair ? [...rest, asSingle(pair.left === code ? pair.right : pair.left)] : rest;
-    });
-    setPairs((list) => list.filter((p) => p.left !== code && p.right !== code));
+  // every choice below goes into the decisions; the lists on screen are worked out from them
+  const up = (code) => code.toUpperCase();
+  const withoutKey = (map, key) => {
+    const { [key]: dropped, ...rest } = map;
+    return rest;
   };
-
-  const pickMatch = (entry, match) => {
-    setChoose((list) => list.filter((row) => row !== entry));
-    setKnown((list) => [...list, { code: entry.code, match }]);
+  const pickMatch = (entry, match) => onDecisionsChange((d) => ({
+    ...d, chosen: { ...d.chosen, [up(entry.code)]: { item_id: match.item_id, position: match.position } },
+  }));
+  const treatAsNew = (code) => onDecisionsChange((d) => ({ ...d, asNew: { ...d.asNew, [up(code)]: true } }));
+  const undoNew = (code) => onDecisionsChange((d) => ({ ...d, asNew: withoutKey(d.asNew, up(code)) }));
+  const setAttached = (code, yes) => onDecisionsChange((d) => ({
+    ...d, attached: yes ? { ...d.attached, [up(code)]: true } : withoutKey(d.attached, up(code)),
+  }));
+  const savePairs = (list) => onDecisionsChange((d) => {
+    const codes = new Set(list.flatMap((p) => [up(p.left), up(p.right)]));
+    const others = d.pairs.filter((p) => !codes.has(up(p.left)) && !codes.has(up(p.right)));
+    return { ...d, pairs: [...others, ...list] };
+  });
+  const confirmPairs = (list) => savePairs(list.map((p) => ({ left: p.left, right: p.right, confirmed: true })));
+  const swapPair = (pair) => {
+    // what was typed for the pair stays with it, it is filed under the left code
+    onDetailsChange((prev) => (prev[pair.left] ? { ...prev, [pair.right]: prev[pair.left] } : prev));
+    savePairs([{ left: pair.right, right: pair.left, confirmed: pair.confirmed }]);
   };
-  const treatAsNew = (code) => {
-    setChoose((list) => list.filter((row) => row.code !== code));
-    setAttach((list) => list.filter((row) => row.code !== code));
-    setSingles((list) => [...list, asSingle(code)]);
-  };
-  const updatePair = (pair, change) => setPairs((list) => list.map((p) => (p === pair ? { ...p, ...change } : p)));
-  const splitPair = (pair) => {
-    setPairs((list) => list.filter((p) => p !== pair));
-    setSingles((list) => [...list, asSingle(pair.left), asSingle(pair.right)]);
-  };
-  const pairByHand = (left, right) => {
-    setSingles((list) => list.filter((row) => row.code !== left && row.code !== right));
-    setPairs((list) => [...list, { left, right, confirmed: true }]);
-  };
+  const splitPair = (pair) => onDecisionsChange((d) => ({
+    ...d,
+    pairs: d.pairs.filter((p) => up(p.left) !== up(pair.left) || up(p.right) !== up(pair.right)),
+    asNew: { ...d.asNew, [up(pair.left)]: true, [up(pair.right)]: true },
+  }));
+  const pairByHand = (left, right) => savePairs([{ left, right, confirmed: true }]);
 
   const addCategory = async () => {
     const name = newCategory.trim();
@@ -299,10 +294,13 @@ export default function BatchScanReview({ sessionId, basket, details, onDetailsC
                 น่าจะเป็นข้าง{row.position_label}ของ <b>{row.description || row.partner_code}</b> ({row.partner_label} {row.partner_code}) ที่ยังไม่มีรหัสข้างนี้
               </p>
               {row.accepted ? (
-                <p className="scan-review-ok">ยืนยันแล้ว ใส่เป็นรหัสข้าง{row.position_label}ของรายการนี้</p>
+                <div className="scan-review-actions">
+                  <p className="scan-review-ok">ยืนยันแล้ว ใส่เป็นรหัสข้าง{row.position_label}ของรายการนี้</p>
+                  <button type="button" className="scan-btn scan-btn--ghost scan-btn--sm" onClick={() => setAttached(row.code, false)}>ยกเลิก</button>
+                </div>
               ) : (
                 <div className="scan-review-actions">
-                  <button type="button" className="scan-btn scan-btn--dark scan-btn--sm" onClick={() => setAttach((list) => list.map((a) => (a === row ? { ...a, accepted: true } : a)))}>ใช่ ใส่รหัสนี้</button>
+                  <button type="button" className="scan-btn scan-btn--dark scan-btn--sm" onClick={() => setAttached(row.code, true)}>ใช่ ใส่รหัสนี้</button>
                   <button type="button" className="scan-btn scan-btn--ghost scan-btn--sm" onClick={() => treatAsNew(row.code)}>ไม่ใช่ เป็นรายการใหม่</button>
                 </div>
               )}
@@ -332,7 +330,7 @@ export default function BatchScanReview({ sessionId, basket, details, onDetailsC
             <button
               type="button"
               className="scan-btn scan-btn--dark scan-btn--block scan-review-confirm-all"
-              onClick={() => setPairs((list) => list.map((p) => ({ ...p, confirmed: true })))}
+              onClick={() => confirmPairs(pairs)}
             >
               ยืนยันทุกคู่ ({pairs.filter((p) => !p.confirmed).length} คู่)
             </button>
@@ -354,9 +352,9 @@ export default function BatchScanReview({ sessionId, basket, details, onDetailsC
                 ))}
                 {note && <p className="scan-review-warn">{note}</p>}
                 <div className="scan-review-actions">
-                  {!pair.confirmed && <button type="button" className="scan-btn scan-btn--dark scan-btn--sm" onClick={() => updatePair(pair, { confirmed: true })}>ยืนยันคู่</button>}
+                  {!pair.confirmed && <button type="button" className="scan-btn scan-btn--dark scan-btn--sm" onClick={() => confirmPairs([pair])}>ยืนยันคู่</button>}
                   <button type="button" className="scan-btn scan-btn--ghost scan-btn--sm" onClick={() => splitPair(pair)}>{pair.confirmed ? 'แยกคู่' : 'ไม่ใช่คู่'}</button>
-                  <button type="button" className="scan-btn scan-btn--ghost scan-btn--sm" onClick={() => updatePair(pair, { left: pair.right, right: pair.left })}>สลับซ้าย/ขวา</button>
+                  <button type="button" className="scan-btn scan-btn--ghost scan-btn--sm" onClick={() => swapPair(pair)}>สลับซ้าย/ขวา</button>
                 </div>
                 {pair.confirmed && (
                   <NewItemFields id={`pair-${pair.left}`} detail={detailOf(pair.left)} categories={categories} onChange={(change) => setDetail(pair.left, change)} />
@@ -375,6 +373,12 @@ export default function BatchScanReview({ sessionId, basket, details, onDetailsC
                   <QtyStepper code={single.code} qty={qtyOf(single.code)} onChange={basket.setQty} />
                   <RemoveButton code={single.code} onRemove={removeCode} />
                 </div>
+                {single.origin && (
+                  <div className="scan-review-actions">
+                    <p className="scan-review-note">เลือกไว้ว่าเป็นรายการใหม่ ไม่ใช่ {single.origin.like}</p>
+                    <button type="button" className="scan-btn scan-btn--ghost scan-btn--sm" onClick={() => undoNew(single.code)}>ย้อนกลับ</button>
+                  </div>
+                )}
                 {single.partner && (
                   <p className="scan-review-note">รหัสอีกข้าง {single.partner.code} ({single.partner.description || 'ไม่มีชื่อ'}) เป็นรายการแยกอยู่แล้ว ระบบจะไม่รวมให้</p>
                 )}

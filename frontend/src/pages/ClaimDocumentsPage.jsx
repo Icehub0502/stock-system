@@ -4,6 +4,7 @@ import { formatMoney } from '../utils/format';
 import { formatDateTh } from '../utils/dateGroups';
 import { CASE_TYPE_LABEL } from '../utils/claimCases';
 import ClaimPrintModal from '../components/ClaimPrintModal';
+import ClaimPartsModal from '../components/ClaimPartsModal';
 
 // ใบเคลม (งานขาย → ใบเคลม): every claim document given to a customer, to look up and print again. A document is issued
 // from its case, on the job page of a come-back or in the case list.
@@ -13,6 +14,7 @@ export default function ClaimDocumentsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [printId, setPrintId] = useState(null);
+  const [partsId, setPartsId] = useState(null);
 
   useEffect(() => {
     const timer = setTimeout(async () => {
@@ -81,6 +83,7 @@ export default function ClaimDocumentsPage() {
                   <td data-label="ค่าใช้จ่าย">{Number(c.charge_total) ? `฿${formatMoney(c.charge_total)}` : 'ไม่คิดเงิน'}</td>
                   <td className="actions" data-label="จัดการ">
                     <button type="button" onClick={() => setPrintId(c.id)}>ดู / พิมพ์</button>
+                    <button type="button" onClick={() => setPartsId(c.id)}>อะไหล่ / เก็บเงิน</button>
                   </td>
                 </tr>
               ))}
@@ -90,6 +93,7 @@ export default function ClaimDocumentsPage() {
       )}
 
       {printId && <ClaimPrintModal claimId={printId} onClose={() => setPrintId(null)} />}
+      {partsId && <ClaimPartsModal claimId={partsId} onClose={() => setPartsId(null)} />}
     </div>
   );
 }

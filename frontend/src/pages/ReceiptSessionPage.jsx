@@ -4,7 +4,8 @@ import client from '../api/client';
 import { formatDbTime, formatDbDateTime, todayStr } from '../utils/format';
 import useRealtimeEvent from '../hooks/useRealtimeEvent';
 import { useAuth } from '../context/AuthContext';
-import { hasRole } from '../utils/roles';
+import { canChange, canMoveStock } from '../utils/roles';
+import { basketSummary, forgetBasket } from '../hooks/useScanBasket';
 
 // ── Icons ──
 const IconDoc = () => (
@@ -57,7 +58,7 @@ export default function ReceiptSessionPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   // lines not yet added to stock can be removed by office; what is already in stock, and whole bills, by managers
-  const isManager = hasRole(user, 'manager');
+  const isManager = canChange(user, 'manager');
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -156,10 +157,13 @@ export default function ReceiptSessionPage() {
   // ลบทั้งบิล — เผื่อบิลผิด/ไม่ได้ใช้แล้ว คืนสต๊อกทุกรายการในบิลให้อัตโนมัติ
   const handleDeleteBill = async () => {
     if (!selected) return;
-    if (!window.confirm(`ลบบิล "${selected.session.invoice_no}" ทั้งใบ? ระบบจะคืนสต๊อกทุกรายการในบิลนี้ให้อัตโนมัติ และไม่สามารถย้อนกลับได้`)) return;
+    const waiting = basketSummary(selected.session.id);
+    const waitingText = waiting.codes > 0 ? `\n\nของที่สแกนค้างในเครื่องนี้ ${waiting.codes} รหัส · ${waiting.qty} ชิ้น จะหายไปด้วย` : '';
+    if (!window.confirm(`ลบบิล "${selected.session.invoice_no}" ทั้งใบ? ระบบจะคืนสต๊อกทุกรายการในบิลนี้ให้อัตโนมัติ และไม่สามารถย้อนกลับได้${waitingText}`)) return;
     setDeletingBill(true);
     try {
       await client.delete(`/transactions/receipt-sessions/${selected.session.id}`);
+      forgetBasket(selected.session.id);
       setSelected(null);
       loadSessions();
     } catch (err) {
@@ -208,9 +212,11 @@ export default function ReceiptSessionPage() {
           </div>
           <p className="subtitle">ของที่รับเข้าสต๊อกจากร้านอะไหล่ · กดที่บิลเพื่อดูรายการข้างใน</p>
         </div>
-        <button type="button" className="btn-primary" onClick={() => navigate('/scan', { state: { startMode: 'IN' } })}>
-          + รับของเข้า (เปิดบิลใหม่)
-        </button>
+        {canMoveStock(user) && (
+          <button type="button" className="btn-primary" onClick={() => navigate('/scan', { state: { startMode: 'IN' } })}>
+            + รับของเข้า (เปิดบิลใหม่)
+          </button>
+        )}
 
         <div className="quotation-actions intake-toolbar">
           <div className="intake-seg">
@@ -304,6 +310,9 @@ export default function ReceiptSessionPage() {
                           {Number(s.pending_count ?? 0) > 0 && (
                             <span className="scan-pending-chip" style={{ marginLeft: 8 }}>รอยืนยัน {Number(s.pending_count)} รายการ</span>
                           )}
+                          {basketSummary(s.id).codes > 0 && (
+                            <span className="scan-pending-chip" style={{ marginLeft: 8 }}>สแกนค้าง {basketSummary(s.id).codes} รหัส (เครื่องนี้)</span>
+                          )}
                         </td>
                         <td data-label="ผู้บันทึก">{s.full_name || '—'}</td>
                         <td data-label="เวลา">{formatDbTime(s.created_at)}</td>
@@ -348,6 +357,13 @@ export default function ReceiptSessionPage() {
                 · บันทึกโดย {selected.session.full_name} เมื่อ {formatDbDateTime(selected.session.created_at)}
               </span>
             </div>
+
+            {basketSummary(selected.session.id).codes > 0 && (
+              <p className="scan-waiting-note">
+                มีของสแกนค้างในเครื่องนี้ {basketSummary(selected.session.id).codes} รหัส · {basketSummary(selected.session.id).qty} ชิ้น ยังไม่เข้าบิล
+                กด “สแกนของเข้าบิลนี้” เพื่อตรวจรายการ เครื่องอื่นจะไม่เห็นรายการนี้
+              </p>
+            )}
 
             {selected.items.length === 0 ? (
               <p style={{ textAlign: 'center', color: '#9ca3af', padding: '1.5rem 0' }}>
@@ -426,9 +442,11 @@ export default function ReceiptSessionPage() {
                 </button>
               ) : <span />}
               <div style={{ display: 'flex', gap: '0.5rem' }}>
+                {canMoveStock(user) && (
                 <button className="btn-primary" onClick={handleScanIntoBill}>
                   <IconQR /> สแกนของเข้าบิลนี้
                 </button>
+                )}
                 <button className="btn-secondary" onClick={() => setSelected(null)}>ปิด</button>
               </div>
             </div>

@@ -1946,3 +1946,5 @@
 }
 /* a long option ("ชื่อประกัน • 1 ปี 0 เดือน 12,000 กม.") must not push the select past its card on a phone */
 .receipt-info-grid select { width: 100%; max-width: 100%; box-sizing: border-box; text-overflow: ellipsis; }
+
+.rw-spk-no { font-size: 24px; font-weight: 900; color: #111; text-align: center; line-height: 1.1; margin-top: 2px; }

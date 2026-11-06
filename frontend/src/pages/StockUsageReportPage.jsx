@@ -4,7 +4,7 @@ import { todayStr, formatDbTime } from '../utils/format';
 import { formatDateTh } from '../utils/dateGroups';
 import useRealtimeEvent from '../hooks/useRealtimeEvent';
 import { useAuth } from '../context/AuthContext';
-import { hasRole } from '../utils/roles';
+import { canChange } from '../utils/roles';
 
 const CURRENT_YEAR = new Date().getFullYear();
 const YEAR_OPTIONS = Array.from({ length: 6 }, (_, i) => CURRENT_YEAR - i);
@@ -62,7 +62,7 @@ function rowKey(row) {
 
 export default function StockUsageReportPage() {
   const { user } = useAuth();
-  const canDelete = hasRole(user, 'manager'); // cancelling a deduction gives stock back: managers only from here
+  const canDelete = canChange(user, 'manager'); // cancelling a deduction gives stock back: managers only from here
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');

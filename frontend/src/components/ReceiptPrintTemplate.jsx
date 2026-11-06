@@ -163,6 +163,7 @@ export default function ReceiptPrintTemplate({ data, header: headerOverride }) {
                     <div className="doc-meta-row"><span>วันที่ :</span><strong>{receipt_date ? formatThaiDate(receipt_date) : '-'}</strong></div>
                     <div className="doc-meta-row"><span>รหัสลูกค้า :</span><strong>{customer.customer_code || '-'}</strong></div>
                     {header.branch_text && <div className="doc-meta-row"><span>PIC :</span><strong>{header.branch_text}</strong></div>}
+                    {data.warranty_label && <div className="doc-meta-row"><span>เลขประกันแร็ค :</span><strong>{data.warranty_label}</strong></div>}
                   </div>
                 </div>
               </div>

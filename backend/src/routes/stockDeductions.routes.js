@@ -2,7 +2,8 @@ const express = require('express');
 const pool = require('../db/pool');
 const { authenticate, roleRank } = require('../middleware/auth');
 const { emitStockEvent, emitStockTxEvent } = require('../realtime');
-const { positionsFor, positionLabel } = require('../utils/stockPositions');
+const { positionLabel } = require('../utils/stockPositions');
+const { deductStock } = require('../utils/stockDeduct');
 const { resolveTransactionDate } = require('../utils/resolveTransactionDate');
 
 // ตัดสต๊อกของสต๊อกรวม (หน้า "ตัดสต๊อก" และโหมดจ่ายออกที่หน้าสแกน)
@@ -47,7 +48,7 @@ router.get('/mine/recent', async (req, res) => {
        JOIN stock_items i ON i.id = m.item_id
        JOIN stock_categories c ON c.id = i.category_id
        LEFT JOIN stock_item_positions p ON p.item_id = m.item_id AND p.position = m.position
-       WHERE i.shop_id = ? AND m.user_id = ? AND m.reason = 'deduct' AND m.voided_at IS NULL
+       WHERE i.shop_id = ? AND m.user_id = ? AND m.reason = 'deduct' AND m.voided_at IS NULL AND m.claim_id IS NULL
          AND m.created_at >= NOW() - INTERVAL ${UNDO_MINUTES} MINUTE
        ORDER BY m.id DESC LIMIT 50`,
       [req.shopId, req.user.id]
@@ -110,71 +111,18 @@ router.post('/', async (req, res) => {
     conn = await pool.getConnection();
     await conn.beginTransaction();
 
-    const [[item]] = await conn.execute(
-      `SELECT id, description, has_sides, has_axles, has_levels, stock_qty
-       FROM stock_items WHERE id = ? AND shop_id = ? AND is_active = 1 FOR UPDATE`,
-      [itemId, req.shopId]
-    );
-    if (!item) {
+    const taken = await deductStock(conn, {
+      itemId, lines, note, vehicleModel, movedAt, userId: req.user.id, shopId: req.shopId,
+    });
+    if (taken.error) {
       await conn.rollback();
-      return res.status(404).json({ error: 'ไม่พบรายการนี้ในสต๊อกรวม' });
+      return res.status(taken.status).json({ error: taken.error });
     }
-    const validPositions = positionsFor(item.has_sides, item.has_axles, item.has_levels);
-    const isPositioned = validPositions.length > 0;
-    for (const line of lines) {
-      if (isPositioned ? !validPositions.includes(line.position) : line.position !== null) {
-        await conn.rollback();
-        return res.status(400).json({
-          error: isPositioned ? 'รายการนี้แยกตำแหน่ง ต้องระบุตำแหน่งให้ถูกต้อง' : 'รายการนี้ไม่แยกตำแหน่ง',
-        });
-      }
-    }
-
-    const results = [];
-    const movementIds = [];
-    let total = item.stock_qty;
-    for (const line of lines) {
-      let before = item.stock_qty;
-      if (isPositioned) {
-        const [[row]] = await conn.execute(
-          'SELECT qty FROM stock_item_positions WHERE item_id = ? AND position = ? FOR UPDATE',
-          [itemId, line.position]
-        );
-        before = row ? row.qty : 0;
-      }
-      if (before < line.qty) {
-        await conn.rollback();
-        const where = line.position ? ` (${positionLabel(line.position)})` : '';
-        return res.status(400).json({ error: `สต๊อก "${item.description}"${where} เหลือไม่พอ (คงเหลือ ${before})` });
-      }
-      const after = before - line.qty;
-      if (isPositioned) {
-        await conn.execute('UPDATE stock_item_positions SET qty = ? WHERE item_id = ? AND position = ?', [after, itemId, line.position]);
-      } else {
-        total = after;
-      }
-      const [mv] = await conn.execute(
-        `INSERT INTO stock_item_movements
-           (item_id, qty_before, qty_after, reason, position, note, user_id, vehicle_model, moved_at)
-         VALUES (?, ?, ?, 'deduct', ?, ?, ?, ?, ?)`,
-        [itemId, before, after, line.position, note, req.user.id, vehicleModel, movedAt]
-      );
-      movementIds.push(mv.insertId);
-      results.push({ position: line.position, qty_after: after });
-    }
-    if (isPositioned) {
-      const [[sum]] = await conn.execute(
-        'SELECT COALESCE(SUM(qty), 0) AS total FROM stock_item_positions WHERE item_id = ?',
-        [itemId]
-      );
-      total = Number(sum.total);
-    }
-    await conn.execute('UPDATE stock_items SET stock_qty = ? WHERE id = ? AND shop_id = ?', [total, itemId, req.shopId]);
     await conn.commit();
 
     emitStockEvent('stock:item-updated', { shopId: req.shopId, entityType: 'stock_item', entityId: itemId, actorId: req.user.id });
     emitStockTxEvent('stock:tx-created', { shopId: req.shopId, txType: 'OUT', entityType: 'stock_item', entityId: itemId, actorId: req.user.id });
-    res.status(201).json({ success: true, movement_ids: movementIds, items: results, stock_qty: total });
+    res.status(201).json({ success: true, movement_ids: taken.movementIds, items: taken.items, stock_qty: taken.total });
   } catch (err) {
     if (conn) await conn.rollback().catch(() => {});
     console.error('Error deducting stock item:', err);

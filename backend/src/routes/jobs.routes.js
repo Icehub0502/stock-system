@@ -249,9 +249,9 @@ router.get('/:id/quotations', async (req, res) => {
       `SELECT id, quotation_no, status, total_amount, deposit_amount, deposit_date,
               scheduled_date, closed_at, converted_receipt_id
        FROM quotations
-       WHERE shop_id = ? AND customer_id = ? AND vehicle_id = ? AND quotation_date = ?
+       WHERE shop_id = ? AND customer_id = ? AND vehicle_id = ? AND (quotation_date = ? OR id = ?)
        ORDER BY created_at ASC`,
-      [req.shopId, job.customer_id, job.vehicle_id, job.job_date]
+      [req.shopId, job.customer_id, job.vehicle_id, job.job_date, job.quotation_id || 0]
     );
     const data = rows.map((r) => ({ ...r, is_primary: r.id === job.quotation_id }));
     res.json({ success: true, data });
@@ -376,7 +376,7 @@ router.post('/', async (req, res) => {
       // ถ้ามี เพราะลูกค้ามาถึงแล้วจริง ไม่ใช่แค่รอนัดอีกต่อไป
       // "ลูกค้าไม่ได้ทำ" (declined) ก็เหมือนกัน — ใบเก็บไว้ไม่หาย พอรถกลับมาทำจริงต้องกลับเป็น
       // "รอดำเนินการ" และล้างเหตุผลที่ไม่ทำ (เหมือน PATCH /quotations/:id/undecline)
-      const clearWaitingStatus = quote.status === 'scheduled' || quote.status === 'no_date' || quote.status === 'declined';
+      const clearWaitingStatus = ['scheduled', 'no_date', 'parts_ready', 'declined'].includes(quote.status);
       const clearDecline = quote.status === 'declined' ? ', decline_reason = NULL, decline_note = NULL' : '';
       await conn.execute(
         `UPDATE quotations SET quotation_date = ?${clearWaitingStatus ? ", status = 'pending', scheduled_date = NULL" : ''}${clearDecline} WHERE id = ? AND shop_id = ?`,

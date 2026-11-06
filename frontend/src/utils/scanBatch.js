@@ -69,6 +69,64 @@ export function sideBalanceNote(rows) {
   return notes.join(' / ');
 }
 
+// What a person has decided on the review screen, kept apart from what the server sorted, so going back to scan more
+// and returning (a fresh sort) does not ask everything again. Every key is an upper-case code.
+//   chosen   { item_id, position } picked for a code that needed choosing
+//   asNew    "not that item, it is new", or a suggested pair that was turned down
+//   attached yes to filling the blank side of an existing item
+//   pairs    { left, right, confirmed }: pairs made by hand, confirmed or swapped
+export const NO_DECISIONS = { chosen: {}, asNew: {}, attached: {}, pairs: [] };
+
+// The server's sort + the decisions + what is still in the basket → the lists the review screen shows
+export function applyReviewDecisions(resolved, decisions, hasCode) {
+  const up = (code) => code.toUpperCase();
+  const known = resolved.known.filter((row) => hasCode(row.code));
+  const choose = [];
+  const attach = [];
+  let singles = resolved.singles.filter((row) => hasCode(row.code));
+  let pairs = [];
+  const asPlainSingle = (code, origin) => ({ code, side: null, partner: null, origin });
+
+  for (const entry of resolved.choose) {
+    if (!hasCode(entry.code)) continue;
+    const picked = decisions.chosen[up(entry.code)];
+    const match = picked && entry.matches.find((m) => m.item_id === picked.item_id && m.position === picked.position);
+    if (match) known.push({ code: entry.code, match });
+    else if (decisions.asNew[up(entry.code)]) singles.push(asPlainSingle(entry.code, { like: entry.matches[0].code }));
+    else choose.push(entry);
+  }
+  for (const row of resolved.attach) {
+    if (!hasCode(row.code)) continue;
+    if (decisions.asNew[up(row.code)]) singles.push(asPlainSingle(row.code, { like: row.description || row.partner_code }));
+    else attach.push({ ...row, accepted: Boolean(decisions.attached[up(row.code)]) });
+  }
+  for (const pair of resolved.pairs) {
+    const both = hasCode(pair.left) && hasCode(pair.right);
+    if (both && !decisions.asNew[up(pair.left)] && !decisions.asNew[up(pair.right)]) {
+      pairs.push({ left: pair.left, right: pair.right, confirmed: false });
+    } else {
+      [pair.left, pair.right].filter(hasCode).forEach((code) => singles.push(asPlainSingle(code)));
+    }
+  }
+
+  // saved pairs win over suggestions, as long as both codes are still new codes in this round
+  for (const saved of decisions.pairs) {
+    const inRound = (code) => singles.some((row) => up(row.code) === up(code))
+      || pairs.some((p) => up(p.left) === up(code) || up(p.right) === up(code));
+    if (!inRound(saved.left) || !inRound(saved.right)) continue;
+    const taken = new Set([up(saved.left), up(saved.right)]);
+    const freed = pairs.filter((p) => taken.has(up(p.left)) || taken.has(up(p.right)))
+      .flatMap((p) => [p.left, p.right]).filter((code) => !taken.has(up(code)));
+    // a confirmed or swapped pair keeps its place in the list
+    const place = pairs.findIndex((p) => taken.has(up(p.left)) || taken.has(up(p.right)));
+    pairs = pairs.filter((p) => !taken.has(up(p.left)) && !taken.has(up(p.right)));
+    singles = singles.filter((row) => !taken.has(up(row.code)));
+    freed.forEach((code) => singles.push(asPlainSingle(code)));
+    pairs.splice(place < 0 ? pairs.length : place, 0, { left: saved.left, right: saved.right, confirmed: saved.confirmed });
+  }
+  return { known, choose, attach, pairs, singles };
+}
+
 // The sound has to be unlocked from a tap (phones block audio otherwise), so the scan button calls this first
 let audioContext = null;
 export function prepareScanSound() {

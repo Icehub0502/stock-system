@@ -1,11 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import client from '../api/client';
+import { useAuth } from '../context/AuthContext';
+import { canChange } from '../utils/roles';
 import { plateWithProvince } from '../utils/thaiProvinces';
 import ProvinceSelect from '../components/ProvinceSelect';
 import { getNameInitials } from '../utils/format';
 
 export default function VehicleManagementPage() {
+  const { user } = useAuth();
+  const mayEdit = canChange(user, 'office');
   const [vehicles, setVehicles] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [search, setSearch] = useState('');
@@ -123,9 +127,11 @@ export default function VehicleManagementPage() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
-          <button className="btn btn-primary" onClick={openAdd}>
-            + เพิ่มรถ
-          </button>
+          {mayEdit && (
+            <button className="btn btn-primary" onClick={openAdd}>
+              + เพิ่มรถ
+            </button>
+          )}
         </div>
       </div>
       {error && <div className="error-message">{error}</div>}
@@ -177,10 +183,12 @@ export default function VehicleManagementPage() {
                   <td data-label="ไมล์">{vehicle.mileage ?? 0}</td>
                   <td className="actions" data-label="จัดการ">
                     <Link to={`/vehicle-history/${vehicle.id}`} className="btn-icon-small">ดูประวัติ</Link>
-                    <button onClick={() => openEdit(vehicle)}>แก้ไข</button>
-                    <button className="btn-danger" onClick={() => deleteVehicle(vehicle.id)}>
-                      ลบ
-                    </button>
+                    {mayEdit && <button onClick={() => openEdit(vehicle)}>แก้ไข</button>}
+                    {mayEdit && (
+                      <button className="btn-danger" onClick={() => deleteVehicle(vehicle.id)}>
+                        ลบ
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}

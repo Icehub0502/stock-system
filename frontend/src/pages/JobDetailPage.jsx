@@ -12,13 +12,14 @@ import ExtraBillModal from '../components/ExtraBillModal';
 import PhotoLightbox from '../components/PhotoLightbox';
 import QuotationPrintModal from '../components/QuotationPrintModal';
 import RepairWorksheetPrintModal from '../components/RepairWorksheetPrintModal';
+import WarrantyNumberCard from '../components/WarrantyNumberCard';
 import ReworkJobPanel from '../components/ReworkJobPanel';
 import { CASE_BADGE_LABEL } from '../utils/claimCases';
 import CarModelPicker from '../components/CarModelPicker';
 import useRealtimeEvent from '../hooks/useRealtimeEvent';
 import useVehicleGeneration from '../hooks/useVehicleGeneration';
 import { useAuth } from '../context/AuthContext';
-import { hasRole } from '../utils/roles';
+import { canChange, isReadOnly } from '../utils/roles';
 
 // quotation status as staff say it
 const QUOTATION_STATUS_TH = {
@@ -116,6 +117,7 @@ export default function JobDetailPage() {
   const [intakePhotosBusy, setIntakePhotosBusy] = useState(false);
   const [intakePhotosError, setIntakePhotosError] = useState('');
   const [showWorksheetModal, setShowWorksheetModal] = useState(false);
+  const [warrantyNo, setWarrantyNo] = useState(null); // printed in the branch box of the repair notice
   const [lightboxSrc, setLightboxSrc] = useState(null);
   const [siblingQuotations, setSiblingQuotations] = useState([]);
   const [showExtraBillModal, setShowExtraBillModal] = useState(false);
@@ -127,7 +129,7 @@ export default function JobDetailPage() {
   // set's price is remembered under), setMember (a later row of a set, price 0), autoLabor (a labour line added from a
   // standard price, not remembered on its own).
   const { user } = useAuth();
-  const canSetStandard = hasRole(user, 'manager');
+  const canSetStandard = canChange(user, 'manager');
   const gen = useVehicleGeneration({ vehicleId: job?.vehicle_id, vehicleModelId: job?.vehicle_model_id, brand: job?.brand, model: job?.model });
   const vehicleModel = gen.vehicleModel;
   const vehicleModelRef = useRef(null);
@@ -1014,6 +1016,8 @@ export default function JobDetailPage() {
         </div>
       </div>
 
+      {/* the read-only role sees the whole job, and every control on it is switched off */}
+      <fieldset disabled={isReadOnly(user)} className="job-page-fields">
       <div className="dash-panel">
         <div className="dash-panel-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           ข้อมูลรถ / ลูกค้า
@@ -1090,6 +1094,8 @@ export default function JobDetailPage() {
           </>
         )}
       </div>
+
+      <WarrantyNumberCard jobId={Number(id)} onChange={(info) => setWarrantyNo(info.warranty_no)} />
 
       {isDecisionPoint && !job.case_id && (
         <div className="dash-panel">
@@ -1574,6 +1580,8 @@ export default function JobDetailPage() {
         />
       )}
 
+      </fieldset>
+
       {showPrintModal && job.quotation_id && (
         <QuotationPrintModal
           quotation={{ id: job.quotation_id }}
@@ -1627,6 +1635,7 @@ export default function JobDetailPage() {
             phone: job.phone,
             vehicle: { brand: job.brand, model: job.model, color: job.color, license_plate: job.license_plate, mileage: job.mileage_in },
             items: worksheetPartsList.map((p) => ({ product_name: p.part_name, quantity: p.quantity })),
+            warranty_no: warrantyNo,
           }}
           markPrintedUrl={`/jobs/${id}/mark-worksheet-printed`}
           onClose={() => { setShowWorksheetModal(false); load({ silent: true }); }}
