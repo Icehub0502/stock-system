@@ -1,14 +1,20 @@
 // Left and right codes of one part are often told apart by a marker in the code: JET-1234L / JET-1234R,
-// 3L-100 / 3R-100, ABC-12-LH / ABC-12-RH. What comes out of here is only a suggestion and a person confirms
-// every pair, because an L or R inside a code does not always mean a side.
+// ABC-12-LH / ABC-12-RH. What comes out of here is only a suggestion and a person confirms every pair,
+// because an L or R inside a code does not always mean a side.
 const MARKER_RE = /(?<![A-Z])(LEFT|RIGHT|LH|RH|L|R)(?![A-Z])/g;
+// A number and a letter opening the code is a brand's part family, not a side: 333 prints 3L-H540 on a
+// stabilizer link box that holds both sides, and 3R- on rack ends
+const FAMILY_PREFIX_RE = /^\d+$/;
+const isFamilyPrefix = (text, index, marker) => index > 0
+  && FAMILY_PREFIX_RE.test(text.slice(0, index))
+  && /^[\s\-_./]/.test(text.slice(index + marker.length));
 const SIDE = { L: 'left', LH: 'left', LEFT: 'left', R: 'right', RH: 'right', RIGHT: 'right' };
 const OPPOSITE = { L: 'R', R: 'L', LH: 'RH', RH: 'LH', LEFT: 'RIGHT', RIGHT: 'LEFT' };
 
 // Every side marker found in a code: which side it says, and what the code of the other side would be
 function sideMarkers(code) {
   const text = String(code ?? '').toUpperCase();
-  return [...text.matchAll(MARKER_RE)].map((m) => ({
+  return [...text.matchAll(MARKER_RE)].filter((m) => !isFamilyPrefix(text, m.index, m[1])).map((m) => ({
     side: SIDE[m[1]],
     partner: `${text.slice(0, m.index)}${OPPOSITE[m[1]]}${text.slice(m.index + m[1].length)}`,
   }));

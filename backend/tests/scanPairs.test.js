@@ -3,7 +3,6 @@ const { sideMarkers, likelySide, findPairs, oppositePosition, compactCode } = re
 describe('scanPairs — suggesting which scanned codes are the left and right of one part', () => {
   test('pairs codes that differ only by a side marker, wherever it sits', () => {
     expect(findPairs(['JET-1234L', 'JET-1234R']).pairs).toEqual([{ left: 'JET-1234L', right: 'JET-1234R' }]);
-    expect(findPairs(['3R-100', '3L-100']).pairs).toEqual([{ left: '3L-100', right: '3R-100' }]);
     expect(findPairs(['ABC-12-RH', 'ABC-12-LH']).pairs).toEqual([{ left: 'ABC-12-LH', right: 'ABC-12-RH' }]);
     expect(findPairs(['L1234', 'R1234']).pairs).toEqual([{ left: 'L1234', right: 'R1234' }]);
     expect(findPairs(['X-LEFT', 'X-RIGHT']).pairs).toEqual([{ left: 'X-LEFT', right: 'X-RIGHT' }]);
@@ -27,14 +26,24 @@ describe('scanPairs — suggesting which scanned codes are the left and right of
     expect(singles).toEqual(['A-1L', 'B-7', 'A-2R']);
   });
 
+  test('a number and a letter opening the code is a part family, not a side (333: 3L link, 3R rack end)', () => {
+    expect(sideMarkers('3L-H540')).toEqual([]);
+    expect(likelySide('3R-1234')).toBeNull();
+    expect(findPairs(['3L-H540', '3R-H540']).pairs).toEqual([]);
+    // a side at the end of such a code still counts
+    expect(findPairs(['3L-12R', '3L-12L']).pairs).toEqual([{ left: '3L-12L', right: '3L-12R' }]);
+    // without a separator after it, a leading L or R is still read as a side
+    expect(likelySide('L1234')).toBe('left');
+  });
+
   test('a code joins only one pair', () => {
-    const { pairs, singles } = findPairs(['3L-12R', '3R-12R', '3L-12L']);
+    const { pairs, singles } = findPairs(['A-12R', 'A-12L', 'A-12-L']);
     expect(pairs).toHaveLength(1);
     expect(singles).toHaveLength(1);
   });
 
   test('likelySide takes the last marker; oppositePosition keeps the rest of the position', () => {
-    expect(likelySide('3L-12R')).toBe('right');
+    expect(likelySide('X-12L-R')).toBe('right');
     expect(likelySide('45510-0K010')).toBeNull();
     expect(oppositePosition('left')).toBe('right');
     expect(oppositePosition('front_upper_right')).toBe('front_upper_left');
