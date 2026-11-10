@@ -158,8 +158,7 @@ export default function ReceiptFormModal({ onClose, onSuccess, receiptId }) {
         setWarranties(activeWarranties);
         setRackWarrantyId(findMatchingWarrantyId(loadedItems, activeWarranties, RACK_KEYWORDS, false, 'product_name_snapshot'));
         setBallJointWarrantyId(findMatchingWarrantyId(loadedItems, activeWarranties, BALL_JOINT_KEYWORDS, false, 'product_name_snapshot'));
-        // "ประกันอื่นๆ" ไม่ auto-select — รายการที่ไม่ตรงคำแร็ค/ลูกหมากมีความหลากหลายเกินกว่า
-        // จะเดาแคตตาล็อกที่ตรงใจได้ ให้ผู้ใช้เลือกเองเสมอ (ป้องกันโชว์ค่าประกันผิดๆ)
+        // "ประกันอื่นๆ" has no state of its own here: WarrantySection shows the warranty its items carry
       } catch (err) {
         console.error('Error loading warranties:', err);
       }
@@ -745,6 +744,8 @@ export default function ReceiptFormModal({ onClose, onSuccess, receiptId }) {
               />
 
               <WarrantySection
+                items={items}
+                nameField="product_name_snapshot"
                 warranties={warranties}
                 rackWarrantyId={rackWarrantyId}
                 ballJointWarrantyId={ballJointWarrantyId}
