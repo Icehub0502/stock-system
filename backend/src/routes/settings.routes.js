@@ -10,6 +10,9 @@ const { authenticate, requireManager, DEFAULT_SHOP_ID } = require('../middleware
 const { getSetting, setSetting, getMessageTemplate } = require('./lineWebhook.routes');
 const { LINE_MESSAGE_DEFAULTS } = require('../utils/lineMessageDefaults');
 const { groupOfShop, createBindCode, unbindGroup } = require('../utils/lineBot3Groups');
+const {
+  getShopPaymentMethods, setShopPaymentMethods, validatePaymentMethods, fillPaymentMethods,
+} = require('../utils/paymentMethods');
 
 const router = express.Router();
 router.use(authenticate);
@@ -23,11 +26,37 @@ const MESSAGE_KEYS = Object.keys(LINE_MESSAGE_DEFAULTS);
 // ก็อปปี้แยกไว้เอง (ที่ผ่านมาสองจุดนี้เพี้ยนกันจนบอทอ่านไม่รู้จักบรรทัดที่เปลี่ยนไป)
 router.get('/line-template-blank', async (req, res) => {
   try {
-    const template = await getMessageTemplate('line_template_blank', req.shopId);
-    res.json({ template });
+    const [stored, paymentMethods] = await Promise.all([
+      getMessageTemplate('line_template_blank', req.shopId),
+      getShopPaymentMethods(pool, req.shopId),
+    ]);
+    res.json({ template: fillPaymentMethods(stored, paymentMethods) });
   } catch (err) {
     console.error('Error loading blank LINE template:', err);
     res.status(500).json({ error: 'โหลดเทมเพลตไม่สำเร็จ' });
+  }
+});
+
+// The branch's payment methods (banks, cash, card): every role reads them (closing a bill, the daily summary); managers
+// change them. The LINE template and both bots follow the list of the branch the bill belongs to.
+router.get('/payment-methods', async (req, res) => {
+  try {
+    res.json({ success: true, data: await getShopPaymentMethods(pool, req.shopId) });
+  } catch (err) {
+    console.error('Error loading payment methods:', err);
+    res.status(500).json({ error: 'โหลดช่องทางชำระไม่สำเร็จ' });
+  }
+});
+
+router.put('/payment-methods', requireManager, async (req, res) => {
+  const result = validatePaymentMethods(req.body?.methods);
+  if (result.error) return res.status(400).json({ error: result.error });
+  try {
+    await setShopPaymentMethods(pool, req.shopId, result.methods);
+    res.json({ success: true, data: result.methods });
+  } catch (err) {
+    console.error('Error saving payment methods:', err);
+    res.status(500).json({ error: 'บันทึกช่องทางชำระไม่สำเร็จ' });
   }
 });
 

@@ -13,7 +13,7 @@ const LINE_MESSAGE_DEFAULTS = {
   line_template_blank: {
     group: 'bot1',
     label: 'เทมเพลตว่าง (ตอนพิมพ์ "คิว")',
-    vars: '{{queue_no}}, {{date}}',
+    vars: '{{queue_no}}, {{date}}, {{payment_methods}} (ช่องทางชำระของสาขา ตั้งที่หน้าตั้งค่า)',
     default: [
       'คิว {{queue_no}}',
       '{{date}}',
@@ -35,7 +35,7 @@ const LINE_MESSAGE_DEFAULTS = {
       'หมายเหตุ:',
       '',
       '<--ลูกค้าชำระเงิน-->',
-      'ช่องทางการชำระ (ออมสิน/คลิก/JPM/เงินสด/บัตรเครดิต):',
+      'ช่องทางการชำระ ({{payment_methods}}):',
       'ลูกค้าชำระเงิน (ยอดที่ได้รับจริง):',
     ].join('\n'),
   },
@@ -250,8 +250,8 @@ const LINE_MESSAGE_DEFAULTS = {
   bot3_close_no_payment: {
     group: 'bot3',
     label: 'ปิดบิล — ไม่มีช่องทางชำระ',
-    vars: '{{queue_no}}',
-    default: '⚠️ คิว {{queue_no}} ยังไม่ได้ปิดบิล เพราะไม่มีช่องทางชำระ\nกรุณาเพิ่มบรรทัด "ช่องทางการชำระ: โอน" (หรือ เงินสด / บัตรเครดิต / QRCode) แล้วส่งใหม่',
+    vars: '{{queue_no}}, {{payment_methods}}',
+    default: '⚠️ คิว {{queue_no}} ยังไม่ได้ปิดบิล เพราะไม่มีช่องทางชำระ\nกรุณาเพิ่มบรรทัด "ช่องทางการชำระ: …" ({{payment_methods}}) แล้วส่งใหม่',
   },
   bot3_group_not_bound: {
     group: 'bot3',

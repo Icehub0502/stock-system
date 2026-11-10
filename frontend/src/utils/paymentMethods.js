@@ -11,6 +11,18 @@ export const PAYMENT_METHOD_CLASS = {
 
 export const UNSPECIFIED_METHOD = 'ไม่ระบุ';
 
+const EXTRA_CLASSES = ['pay-chip-p0', 'pay-chip-p1', 'pay-chip-p2', 'pay-chip-p3', 'pay-chip-p4', 'pay-chip-p5'];
+
+// A chip colour for any method: the fixed colours above, and for a bank a branch added (กสิกร, ไทยพาณิชย์…) one picked
+// from its name, so it keeps the same colour on every screen
+export function paymentMethodClass(method) {
+  if (PAYMENT_METHOD_CLASS[method]) return PAYMENT_METHOD_CLASS[method];
+  if (!method || method === UNSPECIFIED_METHOD) return 'pay-chip-other';
+  let hash = 0;
+  for (const ch of String(method)) hash = (hash * 31 + ch.codePointAt(0)) >>> 0;
+  return EXTRA_CLASSES[hash % EXTRA_CLASSES.length];
+}
+
 // รวมยอดตามช่องทางจากรายการบิล → [{ method, bill_count, total }] เรียงตามช่องทางมาตรฐาน
 // ตามด้วยค่าอื่นที่เหลือ (บิลเก่าที่เป็น "โอน"/"QRCode") และ "ไม่ระบุ" ท้ายสุด
 export function summarizeByMethod(receipts) {

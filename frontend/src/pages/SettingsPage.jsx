@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import client from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { hasRole, ROLE_LABEL } from '../utils/roles';
+import { setPaymentMethodsCache } from '../hooks/usePaymentMethods';
 
 // หน้า "ตั้งค่า" เฉพาะเจ้าของร้าน (username 'ice' — บังคับจริงฝั่ง backend ผ่าน
 // requireOwner, หน้านี้แค่เป็นทางเข้า ป้องกันซ้ำอีกชั้นที่ ProtectedRoute ownerOnly)
@@ -24,6 +25,7 @@ export default function SettingsPage() {
       {hasRole(user, 'owner') && <UsersSection />}
       <TechniciansSection />
       <DeclineReasonsSection />
+      <PaymentMethodsSection />
       <details className="settings-advanced">
         <summary>บอทไลน์และข้อความตอบกลับอัตโนมัติ (ขั้นสูง — กดเพื่อเปิด)</summary>
         <LineBotSection />
@@ -467,6 +469,106 @@ function DeclineReasonsSection() {
             </tbody>
           </table>
         </div>
+      )}
+    </div>
+  );
+}
+
+// The branch's payment methods (banks, cash, card). Saved as one list: the bill-closing screens, the daily summary,
+// the LINE template "ช่องทางการชำระ (…)" and both bots follow it, for this branch only.
+function PaymentMethodsSection() {
+  const [methods, setMethods] = useState([]);
+  const [saved, setSaved] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+  const [newName, setNewName] = useState('');
+
+  useEffect(() => {
+    client.get('/settings/payment-methods')
+      .then((res) => { setMethods(res.data.data || []); setSaved(res.data.data || []); })
+      .catch((err) => setError(err.response?.data?.error || 'โหลดช่องทางชำระไม่สำเร็จ'))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const changed = JSON.stringify(methods) !== JSON.stringify(saved);
+  const edit = (next) => { setMethods(next); setNotice(''); setError(''); };
+  const rename = (i, value) => edit(methods.map((m, j) => (j === i ? value : m)));
+  const remove = (i) => edit(methods.filter((_, j) => j !== i));
+  const move = (i, step) => {
+    const j = i + step;
+    if (j < 0 || j >= methods.length) return;
+    const next = [...methods];
+    [next[i], next[j]] = [next[j], next[i]];
+    edit(next);
+  };
+  const add = (e) => {
+    e.preventDefault();
+    const name = newName.trim();
+    if (!name) return;
+    edit([...methods, name]);
+    setNewName('');
+  };
+
+  const save = async () => {
+    setSaving(true);
+    setError('');
+    try {
+      const res = await client.put('/settings/payment-methods', { methods });
+      setMethods(res.data.data);
+      setSaved(res.data.data);
+      setPaymentMethodsCache(res.data.data);
+      setNotice('บันทึกแล้ว — เทมเพลตไลน์และบอทใช้รายชื่อใหม่ทันที');
+    } catch (err) {
+      setError(err.response?.data?.error || 'บันทึกช่องทางชำระไม่สำเร็จ');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="dash-panel">
+      <div className="dash-panel-title">ช่องทางชำระเงิน / ธนาคารของสาขานี้</div>
+      <p style={{ fontSize: 13, color: '#6b7280', marginBottom: 8 }}>
+        ใช้ตอนปิดบิล สรุปยอดรายวัน และบรรทัด "ช่องทางการชำระ (…)" ในเทมเพลตไลน์ บอทปิดบิลรับเฉพาะชื่อในรายการนี้ของสาขานี้
+        เปลี่ยนธนาคารแล้ว บิลเก่ายังเป็นชื่อเดิม
+      </p>
+      {error && <div className="error-message">{error}</div>}
+      {notice && <div className="info-message" role="status">{notice}</div>}
+      {loading ? (
+        <div className="loading">กำลังโหลด...</div>
+      ) : (
+        <>
+          <div className="quotation-table-wrap">
+            <table className="quotation-table">
+              <thead>
+                <tr><th>ช่องทาง</th><th>จัดการ</th></tr>
+              </thead>
+              <tbody>
+                {methods.map((m, i) => (
+                  <tr key={i}>
+                    <td data-label="ช่องทาง">
+                      <input type="text" value={m} maxLength={30} aria-label={`ช่องทางที่ ${i + 1}`} onChange={(e) => rename(i, e.target.value)} />
+                    </td>
+                    <td className="actions" data-label="จัดการ">
+                      <button type="button" className="btn-secondary" onClick={() => move(i, -1)} disabled={i === 0} aria-label={`เลื่อน ${m} ขึ้น`}>▲</button>
+                      <button type="button" className="btn-secondary" onClick={() => move(i, 1)} disabled={i === methods.length - 1} aria-label={`เลื่อน ${m} ลง`}>▼</button>
+                      <button type="button" className="btn-danger" onClick={() => remove(i)} disabled={methods.length <= 1}>ลบ</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <form onSubmit={add} className="modal-actions" style={{ marginTop: 12 }}>
+            <input type="text" placeholder="เช่น กสิกร" maxLength={30} value={newName} onChange={(e) => setNewName(e.target.value)} />
+            <button type="submit" className="btn btn-secondary">+ เพิ่มช่องทาง</button>
+            <button type="button" className="btn btn-primary" onClick={save} disabled={!changed || saving}>
+              {saving ? 'กำลังบันทึก...' : 'บันทึก'}
+            </button>
+          </form>
+        </>
       )}
     </div>
   );

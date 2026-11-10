@@ -6,7 +6,7 @@ const { ownsRow } = require('../utils/tenant');
 const { emitJobEvent, emitReceiptEvent, emitStockEvent, emitStockTxEvent } = require('../realtime');
 const { deductStock } = require('../utils/stockDeduct');
 const { positionLabel } = require('../utils/stockPositions');
-const { PAYMENT_METHODS } = require('../utils/paymentMethods');
+const { getShopPaymentMethods } = require('../utils/paymentMethods');
 const { generateReceiptNo, generateCarSequenceNo } = require('./quotations.routes');
 
 const router = express.Router();
@@ -807,9 +807,10 @@ router.post('/:id/parts/deduct', async (req, res) => {
 // and numbers it, which fails on a duplicate and stops the server from starting.
 router.post('/:id/charge-receipt', async (req, res) => {
   const paymentMethod = req.body?.payment_method;
-  if (!PAYMENT_METHODS.includes(paymentMethod)) return res.status(400).json({ error: 'กรุณาเลือกช่องทางชำระ' });
   let conn;
   try {
+    const methods = await getShopPaymentMethods(pool, req.shopId);
+    if (!methods.includes(paymentMethod)) return res.status(400).json({ error: 'กรุณาเลือกช่องทางชำระ' });
     conn = await pool.getConnection();
     await conn.beginTransaction();
     const [[kase]] = await conn.execute(

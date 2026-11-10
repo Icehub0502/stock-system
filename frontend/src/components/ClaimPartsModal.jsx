@@ -3,7 +3,7 @@ import client from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { canChange, canMoveStock } from '../utils/roles';
 import { formatMoney } from '../utils/format';
-import { PAYMENT_METHODS } from '../utils/paymentMethods';
+import usePaymentMethods from '../hooks/usePaymentMethods';
 import { ScanPositionChip as PositionChip } from './PositionChip';
 import ReceiptPrintModal from './ReceiptPrintModal';
 
@@ -23,6 +23,7 @@ export default function ClaimPartsModal({ claimId, onClose, onChanged }) {
   const [qty, setQty] = useState('1');
   const [method, setMethod] = useState('');
   const [printId, setPrintId] = useState(null);
+  const paymentMethods = usePaymentMethods();
 
   const load = useCallback(async () => {
     try {
@@ -178,7 +179,7 @@ export default function ClaimPartsModal({ claimId, onClose, onChanged }) {
                   <label htmlFor="cp-method">ช่องทางชำระ</label>
                   <select id="cp-method" value={method} onChange={(e) => setMethod(e.target.value)}>
                     <option value="">-- เลือกช่องทาง --</option>
-                    {PAYMENT_METHODS.map((m) => <option key={m} value={m}>{m}</option>)}
+                    {paymentMethods.map((m) => <option key={m} value={m}>{m}</option>)}
                   </select>
                   <button type="button" className="btn-primary" onClick={issueReceipt} disabled={busy || !method}>ออกใบเสร็จ เข้ายอดขายวันนี้</button>
                   {!method && <p className="cp-note">เลือกช่องทางชำระก่อน จึงจะออกใบเสร็จได้</p>}

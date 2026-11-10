@@ -19,7 +19,9 @@ const { emitQuotationEvent, emitReceiptEvent, emitJobEvent } = require('../realt
 const { generateJobNo } = require('../utils/generateJobNo');
 const { syncJobOnQuotationStatusChange, closeWaitingJobs } = require('../utils/jobQuotationSync');
 const { LINE_MESSAGE_DEFAULTS } = require('../utils/lineMessageDefaults');
-const { applyReceiptSplits, parseSplitsFromText } = require('../utils/paymentMethods');
+const {
+  applyReceiptSplits, parseSplitsFromText, fillPaymentMethods, getShopPaymentMethods, localizeParsedPayment, DEFAULT_PAYMENT_METHODS,
+} = require('../utils/paymentMethods');
 const { DEFAULT_SHOP_ID } = require('../middleware/auth');
 
 // บอทไลน์ยังผูกกับร้านที่ 1 ร้านเดียว (token ของบอทอยู่ใน .env ไม่ใช่ต่อร้าน) — ทุก query ในไฟล์นี้
@@ -347,9 +349,17 @@ async function getMessageTemplate(key, shopId = DEFAULT_SHOP_ID) {
 
 const DEFAULT_BLANK_TEMPLATE = LINE_MESSAGE_DEFAULTS.line_template_blank.default;
 
-function buildQueueTemplateText(nextQueueNo, template = DEFAULT_BLANK_TEMPLATE) {
+function buildQueueTemplateText(nextQueueNo, template = DEFAULT_BLANK_TEMPLATE, paymentMethods = DEFAULT_PAYMENT_METHODS) {
   const dateStr = formatThaiShortDate(new Date());
-  return renderTemplate(template, { queue_no: nextQueueNo, date: dateStr });
+  return fillPaymentMethods(renderTemplate(template, { queue_no: nextQueueNo, date: dateStr }), paymentMethods);
+}
+
+// the splits of a parsed message, by the branch's methods once localizeParsedPayment has run
+function parsedSplits(parsed) {
+  return parsed.payment_splits || parseSplitsFromText(parsed.payment_method);
+}
+function parsedMethods(parsed) {
+  return parsed.payment_methods || DEFAULT_PAYMENT_METHODS;
 }
 
 // ── กติกาปิดบิลอัตโนมัติเมื่อพนักงานพิมพ์ "วลีแจ้งจ่ายเงินแล้ว" มา (parsed.paid_confirmed
@@ -929,7 +939,7 @@ async function createQuotationFromQueue(parsed) {
             'UPDATE receipts SET payment_method = ?, total_amount = ? WHERE id = ? AND shop_id = ?',
             [parsed.payment_method || null, paymentAmount, receiptId, LINE_SHOP_ID]
           );
-          await applyReceiptSplits(conn, receiptId, parseSplitsFromText(parsed.payment_method), paymentAmount, { strict: false });
+          await applyReceiptSplits(conn, receiptId, parsedSplits(parsed), paymentAmount, { strict: false, methods: parsedMethods(parsed) });
           const [[receiptRow]] = await conn.query('SELECT receipt_no FROM receipts WHERE id = ? AND shop_id = ?', [receiptId, LINE_SHOP_ID]);
           paymentReceiptNo = receiptRow ? receiptRow.receipt_no : null;
           await conn.execute('UPDATE quotations SET closed_at = NOW() WHERE id = ? AND shop_id = ?', [quotationId, LINE_SHOP_ID]);
@@ -952,7 +962,7 @@ async function createQuotationFromQueue(parsed) {
             [LINE_SHOP_ID, receipt_no, customerId, vehicleId, parsed.mileage ?? 0, parsed.remark || null, parsed.payment_method || null, paymentAmount, null, parsed.deposit_amount ?? null, parsed.deposit_date || null, car_sequence_no]
           );
           const receiptId = receiptResult.insertId;
-          await applyReceiptSplits(conn, receiptId, parseSplitsFromText(parsed.payment_method), paymentAmount, { strict: false });
+          await applyReceiptSplits(conn, receiptId, parsedSplits(parsed), paymentAmount, { strict: false, methods: parsedMethods(parsed) });
           for (const item of resolvedItems) {
             await conn.execute(
               `INSERT INTO receipt_items (receipt_id, service_item_id, product_name_snapshot, qty, price, amount, warranty_name, warranty_year, warranty_month, warranty_km)
@@ -1189,7 +1199,7 @@ async function closeQuotationByQueue(parsed, { shopId = LINE_SHOP_ID, exactDate 
         'UPDATE receipts SET payment_method = ?, total_amount = ?, deposit_amount = ?, deposit_date = ? WHERE id = ? AND shop_id = ?',
         [parsed.payment_method || null, receiptAmount, quotation.deposit_amount, quotation.deposit_date, receiptId, shopId]
       );
-      await applyReceiptSplits(conn, receiptId, parseSplitsFromText(parsed.payment_method), receiptAmount, { strict: false });
+      await applyReceiptSplits(conn, receiptId, parsedSplits(parsed), receiptAmount, { strict: false, methods: parsedMethods(parsed) });
       const [[receiptRow]] = await conn.query('SELECT receipt_no FROM receipts WHERE id = ? AND shop_id = ?', [receiptId, shopId]);
       receipt_no = receiptRow ? receiptRow.receipt_no : null;
     } else {
@@ -1203,7 +1213,7 @@ async function closeQuotationByQueue(parsed, { shopId = LINE_SHOP_ID, exactDate 
         [shopId, receipt_no, quotation.customer_id, quotation.vehicle_id, 0, null, parsed.payment_method || null, receiptAmount, null, quotation.deposit_amount, quotation.deposit_date, car_sequence_no]
       );
       receiptId = receiptResult.insertId;
-      await applyReceiptSplits(conn, receiptId, parseSplitsFromText(parsed.payment_method), receiptAmount, { strict: false });
+      await applyReceiptSplits(conn, receiptId, parsedSplits(parsed), receiptAmount, { strict: false, methods: parsedMethods(parsed) });
       for (const item of items) {
         await conn.execute(
           `INSERT INTO receipt_items (receipt_id, service_item_id, product_name_snapshot, qty, price, amount, warranty_name, warranty_year, warranty_month, warranty_km)
@@ -1527,7 +1537,8 @@ router.post('/webhook', async (req, res) => {
         const nextQueueNo = await getNextQueueNoPreview();
         // เจ้าของร้านแก้ไขเทมเพลตนี้เองได้จากหน้าตั้งค่า — ใช้ค่าที่ตั้งไว้ถ้ามี
         const template = (await getSetting('line_template_blank')) || DEFAULT_BLANK_TEMPLATE;
-        await replyToLine(event.replyToken, buildQueueTemplateText(nextQueueNo, template));
+        const paymentMethods = await getShopPaymentMethods(pool, LINE_SHOP_ID);
+        await replyToLine(event.replyToken, buildQueueTemplateText(nextQueueNo, template, paymentMethods));
         if (messageId) await markProcessed(messageId);
       } catch (err) {
         console.error('Error replying queue template:', err);
@@ -1537,6 +1548,7 @@ router.post('/webhook', async (req, res) => {
 
     const parsed = parseLineQueueMessage(event.message.text);
     if (!parsed) continue; // แชตทั่วไปในกลุ่ม — ข้ามเงียบ ๆ ไม่ตอบ ไม่รบกวน
+    await localizeParsedPayment(pool, parsed, LINE_SHOP_ID);
 
     if (messageId) await markProcessed(messageId);
 

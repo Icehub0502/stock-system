@@ -3,7 +3,7 @@ import client from "../api/client";
 import TechnicianMultiSelect from "./TechnicianMultiSelect";
 import PaymentBreakdown from "./PaymentBreakdown";
 import PaymentSplitEditor, { initialSelection, selectionToPayload, formatMoney } from "./PaymentSplitEditor";
-import { PAYMENT_METHOD_CLASS, summarizeByMethod } from "../utils/paymentMethods";
+import { paymentMethodClass, summarizeByMethod } from "../utils/paymentMethods";
 
 function formatDateTh(dateStr) {
   const d = new Date(dateStr);
@@ -424,7 +424,7 @@ export default function DailySummaryDetailModal({ date, onClose, onReceiptsMoved
                                 <span className="ds-pay-empty">+ เลือกช่องทาง</span>
                               ) : (
                                 chips.map((c) => (
-                                  <span key={c.key} className={`ds-pay-chip ${PAYMENT_METHOD_CLASS[c.label] || 'pay-chip-other'}`}>
+                                  <span key={c.key} className={`ds-pay-chip ${paymentMethodClass(c.label)}`}>
                                     {c.label}
                                     {c.amount != null && <em>฿{formatMoney(c.amount)}</em>}
                                   </span>

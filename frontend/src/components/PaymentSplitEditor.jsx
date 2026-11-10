@@ -1,5 +1,6 @@
 import React from 'react';
-import { PAYMENT_METHODS, PAYMENT_METHOD_CLASS } from '../utils/paymentMethods';
+import { paymentMethodClass } from '../utils/paymentMethods';
+import usePaymentMethods from '../hooks/usePaymentMethods';
 
 // เลือกช่องทางชำระได้มากกว่า 1 ช่องทาง (เช่น เงินสดครึ่งหนึ่ง + บัตรเครดิตอีกครึ่ง)
 // selection = { [method]: amountString } — เลือกช่องเดียวไม่ต้องกรอกยอด (ใช้ยอดเต็มของบิล)
@@ -41,8 +42,10 @@ export function selectionToPayload(selection, total) {
 }
 
 export default function PaymentSplitEditor({ selection, onChange, total }) {
-  const extras = Object.keys(selection).filter((m) => !PAYMENT_METHODS.includes(m));
-  const methods = [...PAYMENT_METHODS, ...extras];
+  // the branch's methods, plus what this bill already has (an old "โอน", a bank since dropped)
+  const shopMethods = usePaymentMethods();
+  const extras = Object.keys(selection).filter((m) => !shopMethods.includes(m));
+  const methods = [...shopMethods, ...extras];
   const selected = Object.keys(selection);
   const multi = selected.length > 1;
 
@@ -87,7 +90,7 @@ export default function PaymentSplitEditor({ selection, onChange, total }) {
             <button
               type="button"
               key={m}
-              className={`pay-split-chip ${PAYMENT_METHOD_CLASS[m] || 'pay-chip-other'}${on ? ' is-on' : ''}`}
+              className={`pay-split-chip ${paymentMethodClass(m)}${on ? ' is-on' : ''}`}
               aria-pressed={on}
               onClick={() => toggle(m)}
             >

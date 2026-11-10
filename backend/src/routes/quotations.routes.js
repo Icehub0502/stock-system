@@ -7,7 +7,7 @@ const { computeReceiptAmount } = require('./lineWebhook.routes');
 const { emitQuotationEvent, emitReceiptEvent, emitJobEvent } = require('../realtime');
 const { syncJobOnQuotationStatusChange } = require('../utils/jobQuotationSync');
 const { QUOTATION_RELEASED_STATUSES } = require('../utils/jobStatusFlow');
-const { applyReceiptSplits } = require('../utils/paymentMethods');
+const { applyReceiptSplits, allowedMethodsForReceipt } = require('../utils/paymentMethods');
 const { ownsAll } = require('../utils/tenant');
 const { recordQuotationPrices } = require('../utils/modelPrices');
 
@@ -722,6 +722,7 @@ router.patch('/:id/close', async (req, res) => {
       ? Number(paid_amount)
       : null;
     const receiptAmount = computeReceiptAmount(quotation.deposit_amount, paidAmountNum, Number(quotation.total_amount));
+    const methods = await allowedMethodsForReceipt(conn, req.shopId, quotation.converted_receipt_id);
 
     await conn.execute(
       'UPDATE receipts SET payment_method = ?, total_amount = ? WHERE id = ? AND shop_id = ?',
@@ -733,7 +734,7 @@ router.patch('/:id/close', async (req, res) => {
         method: String(s?.method ?? ''),
         amount: s?.amount === '' || s?.amount == null ? null : Number(s.amount),
       }));
-      await applyReceiptSplits(conn, quotation.converted_receipt_id, splits, receiptAmount);
+      await applyReceiptSplits(conn, quotation.converted_receipt_id, splits, receiptAmount, { methods });
     } else {
       await applyReceiptSplits(conn, quotation.converted_receipt_id, [], receiptAmount);
     }

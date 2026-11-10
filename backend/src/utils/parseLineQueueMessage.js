@@ -145,7 +145,13 @@ const PAYMENT_LABELS = {
   มัดจำ: 'deposit_amount',
   วันที่มัดจำ: 'deposit_date',
 };
-const PAYMENT_LABEL_RE = new RegExp(`^(${Object.keys(PAYMENT_LABELS).map(escapeRegExp).join('|')})\\s*:*\\s*(.*)$`);
+// The template lists the branch's own methods in brackets ("ช่องทางการชำระ (กสิกร/เงินสด):", see fillPaymentMethods), so any
+// bracketed list after ช่องทางการชำระ is that label. It comes first, so the bare label does not leave the brackets in the value.
+const PAYMENT_METHOD_LABEL_SRC = 'ช่องทางการชำระ\\s*\\([^)\\n]*\\)';
+const PAYMENT_LABEL_RE = new RegExp(`^(${PAYMENT_METHOD_LABEL_SRC}|${Object.keys(PAYMENT_LABELS).map(escapeRegExp).join('|')})\\s*:*\\s*(.*)$`);
+function paymentFieldOf(label) {
+  return PAYMENT_LABELS[label] || (label.startsWith('ช่องทางการชำระ') ? 'payment_method' : undefined);
+}
 // จุดจบรายการแบบระบุชัดเจนในเทมเพลตใหม่ — ทุกอย่างหลังบรรทัดนี้เป็น "ส่วนชำระเงิน"
 // ไม่ใช่รายการสินค้าอีกต่อไป (ทนช่องว่างรอบคำได้ เผื่อพิมพ์ "<-- สิ้นสุดรายการ -->")
 const END_MARKER_RE = /^<--\s*สิ้นสุดรายการ\s*-->$/;
@@ -251,7 +257,7 @@ function parsePaymentSectionLines(lines) {
     const match = PAYMENT_LABEL_RE.exec(trimmed);
     if (!match) continue;
     const [, label, rest] = match;
-    const field = PAYMENT_LABELS[label];
+    const field = paymentFieldOf(label);
     const value = parsePaymentLabelValue(field, rest);
 
     if (field === 'remark') {
@@ -544,7 +550,7 @@ function parseLineQueueMessage(text) {
     const paymentMatch = PAYMENT_LABEL_RE.exec(line);
     if (paymentMatch) {
       const [, paymentLabel, paymentRest] = paymentMatch;
-      const paymentField = PAYMENT_LABELS[paymentLabel];
+      const paymentField = paymentFieldOf(paymentLabel);
       const paymentValue = parsePaymentLabelValue(paymentField, paymentRest);
       if (paymentField === 'remark') {
         if (paymentValue) result.remark = result.remark ? `${result.remark}\n${paymentValue}` : paymentValue;

@@ -28,6 +28,8 @@ const {
 } = require('./lineWebhook.routes');
 const parseLineQueueMessage = require('../utils/parseLineQueueMessage');
 const { shopOfGroup, bindGroup } = require('../utils/lineBot3Groups');
+const { localizeParsedPayment, getShopPaymentMethods } = require('../utils/paymentMethods');
+const pool = require('../db/pool');
 
 const router = express.Router();
 
@@ -89,7 +91,8 @@ async function handleClose(token, event, parsed, shopId) {
 
   // ยอดสรุปรายวันแยกตามช่องทางชำระ ไม่รู้ช่องทางก็ลงยอดไม่ถูก — ยังไม่ปิดบิล ให้ส่งใหม่
   if (!parsed.payment_method) {
-    await reply('bot3_close_no_payment', { queue_no: queueNo });
+    const methods = await getShopPaymentMethods(pool, shopId);
+    await reply('bot3_close_no_payment', { queue_no: queueNo, payment_methods: methods.join(' / ') });
     return;
   }
 
@@ -161,6 +164,8 @@ router.post('/webhook', async (req, res) => {
       }
       continue;
     }
+    // each branch has its own banks: "กสิกร" is a method only where that branch lists it
+    await localizeParsedPayment(pool, parsed, shopId);
 
     // ยังไม่พิมพ์วลีปิดบิล ("ชำระเงินเรียบร้อย" ฯลฯ) — ถ้ามีรายการมาด้วย ให้ตรวจยอด
     // ให้เฉย ๆ (read-only ไม่แตะ DB) ไม่มีรายการเลยก็ไม่ใช่ข้อความที่เกี่ยวกับกลุ่มนี้

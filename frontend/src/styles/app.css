@@ -2299,6 +2299,13 @@ button:disabled { background: #f3f4f6; color: #9ca3af; cursor: not-allowed; }
 .pay-chip-click    { background: #dbeafe; border-color: #93c5fd; color: #1d4ed8; }
 .pay-chip-jpm      { background: #ccfbf1; border-color: #5eead4; color: #0f766e; }
 .pay-chip-other    { background: #f3f4f6; border-color: #d1d5db; color: #4b5563; }
+/* banks a branch adds itself (paymentMethodClass) */
+.pay-chip-p0       { background: #ecfccb; border-color: #bef264; color: #4d7c0f; }
+.pay-chip-p1       { background: #fef3c7; border-color: #fcd34d; color: #b45309; }
+.pay-chip-p2       { background: #e0f2fe; border-color: #7dd3fc; color: #0369a1; }
+.pay-chip-p3       { background: #ffe4e6; border-color: #fda4af; color: #be123c; }
+.pay-chip-p4       { background: #e0e7ff; border-color: #a5b4fc; color: #4338ca; }
+.pay-chip-p5       { background: #d1fae5; border-color: #6ee7b7; color: #047857; }
 
 /* ── Payment breakdown cards (dashboard / daily+monthly summary) ── */
 .pay-breakdown { margin-bottom: 16px; }

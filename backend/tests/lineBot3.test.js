@@ -400,6 +400,40 @@ describe('bot 3 webhook', () => {
       expect(await say(groupB, closeText('23', { method: null }))).toBe('B custom 23');
       expect(await say(groupA, closeText('23', { method: null }))).toContain('ยังไม่ได้ปิดบิล');
     });
+
+    test('each branch closes by its own banks: กสิกร in one, ออมสิน in the other', async () => {
+      const put = await request(app).put('/api/settings/payment-methods').set(as(shopB.managerToken))
+        .send({ methods: ['กสิกร', 'เงินสด', 'บัตรเครดิต'] });
+      expect(put.status).toBe(200);
+      expect((await request(app).get('/api/settings/payment-methods').set(as(shopA.managerToken))).body.data)
+        .toEqual(['ออมสิน', 'คลิก', 'JPM', 'เงินสด', 'บัตรเครดิต']);
+
+      const tpl = await request(app).get('/api/settings/line-template-blank').set(as(shopB.managerToken));
+      expect(tpl.body.template).toContain('ช่องทางการชำระ (กสิกร/เงินสด/บัตรเครดิต):');
+
+      const billB = await seedBill(shopB, { queueNo: '24' });
+      const splitB = await seedBill(shopB, { queueNo: '25' });
+      const billA = await seedBill(shopA, { queueNo: '24' });
+      expect(await say(groupB, closeText('24', { method: 'kbank' }))).toContain('กสิกร');
+      expect((await billState(billB.quotationId)).payment_method).toBe('กสิกร');
+      await say(groupB, closeText('25', { method: 'กสิกร 600 + เงินสด 400' }));
+      const split = await billState(splitB.quotationId);
+      const [rows] = await pool.query('SELECT method, amount FROM receipt_payments WHERE receipt_id = ? ORDER BY method', [split.converted_receipt_id]);
+      expect(rows.map((r) => [r.method, Number(r.amount)])).toEqual([['กสิกร', 600], ['เงินสด', 400]]);
+      await say(groupA, closeText('24', { method: 'gsb' }));
+      expect((await billState(billA.quotationId)).payment_method).toBe('ออมสิน');
+
+      // back to the default reply (an earlier test gave branch B its own), which names the branch's banks
+      await request(app).put('/api/settings/line').set(as(shopB.managerToken)).send({ messages: { bot3_close_no_payment: '' } });
+      expect(await say(groupB, closeText('26', { method: null }))).toContain('กสิกร / เงินสด / บัตรเครดิต');
+    });
+
+    test('only a manager changes the banks, and a broken list is refused', async () => {
+      const put = (token, methods) => request(app).put('/api/settings/payment-methods').set(as(token)).send({ methods });
+      expect((await put(shopB.token, ['กสิกร'])).status).toBe(403);
+      expect((await put(shopB.managerToken, [])).status).toBe(400);
+      expect((await put(shopB.managerToken, ['กสิกร/ออมสิน'])).status).toBe(400);
+    });
   });
 });
 

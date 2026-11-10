@@ -5,7 +5,7 @@ const { branchCodeOf } = require('../utils/branchCode');
 const { authenticate, requireRole, requireManager } = require('../middleware/auth');
 const { trashDelete } = require('../utils/trash');
 const { formatPhone } = require('../utils/parseLineQueueMessage');
-const { applyReceiptSplits } = require('../utils/paymentMethods');
+const { applyReceiptSplits, allowedMethodsForReceipt } = require('../utils/paymentMethods');
 const { emitReceiptEvent, emitQuotationEvent } = require('../realtime');
 const { ownsAll } = require('../utils/tenant');
 
@@ -282,6 +282,8 @@ router.patch('/:id/meta', async (req, res) => {
 
     conn = await pool.getConnection();
     await conn.beginTransaction();
+    // read before the update below overwrites the bill's own method
+    const methods = Array.isArray(payment_splits) ? await allowedMethodsForReceipt(conn, req.shopId, id) : null;
     const [result] = await conn.execute(sql, params);
     if (result.affectedRows === 0) {
       await conn.rollback();
@@ -294,7 +296,7 @@ router.patch('/:id/meta', async (req, res) => {
         method: String(s?.method ?? ''),
         amount: s?.amount === '' || s?.amount == null ? null : Number(s.amount),
       }));
-      await applyReceiptSplits(conn, id, splits, Number(row.total_amount));
+      await applyReceiptSplits(conn, id, splits, Number(row.total_amount), { methods });
     } else if (setTotal) {
       // แก้ยอดบิลโดยไม่ได้ส่งการแบ่งช่องทางมา — บิลที่แบ่งไว้หลายช่องทางจะยอดไม่ตรงกัน ต้องแก้การแบ่งด้วย
       const [[split]] = await conn.execute('SELECT COUNT(*) AS n, SUM(amount) AS total FROM receipt_payments WHERE receipt_id = ?', [id]);
