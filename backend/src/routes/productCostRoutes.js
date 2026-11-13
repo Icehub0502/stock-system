@@ -168,6 +168,118 @@ router.get("/categories", async (req, res) => {
 });
 
 // ============================================================
+// GET /api/product-costs/received
+// What stock items cost according to the receive bills of this branch (read-only):
+// the weighted average kept on the item, plus the latest bill line that had a cost.
+// Lists active items that have a cost or were ever received.
+// ============================================================
+router.get("/received", async (req, res) => {
+  try {
+    const search = typeof req.query.search === "string" ? req.query.search.trim().slice(0, 100) : "";
+    const params = [req.shopId, req.shopId];
+    let searchSql = "";
+    if (search) {
+      const like = `%${search}%`;
+      searchSql = " AND (i.oem_code LIKE ? OR i.description LIKE ? OR c.name LIKE ?)";
+      params.push(like, like, like);
+    }
+
+    const [items] = await pool.query(
+      `SELECT i.id, i.oem_code, i.description, i.stock_qty, i.avg_cost, i.manual_cost, c.name AS category_name,
+              COALESCE(r.lines_total, 0) AS lines_total, COALESCE(r.lines_with_cost, 0) AS lines_with_cost,
+              DATE_FORMAT(r.last_received, '%Y-%m-%d') AS last_received
+       FROM stock_items i
+       JOIN stock_categories c ON c.id = i.category_id
+       LEFT JOIN (
+         SELECT l.item_id, COUNT(*) AS lines_total, SUM(l.unit_cost IS NOT NULL) AS lines_with_cost,
+                MAX(COALESCE(s.bill_date, DATE(s.created_at))) AS last_received
+         FROM stock_receive_lines l JOIN receipt_sessions s ON s.id = l.receipt_session_id
+         WHERE s.shop_id = ? AND l.applied_at IS NOT NULL AND l.voided_at IS NULL
+         GROUP BY l.item_id
+       ) r ON r.item_id = i.id
+       WHERE i.shop_id = ? AND i.is_active = 1 AND (r.item_id IS NOT NULL OR i.avg_cost IS NOT NULL)${searchSql}
+       ORDER BY c.name, i.description
+       LIMIT 3000`,
+      params
+    );
+
+    // latest line with a cost per item (highest line id = entered last)
+    const [lastLines] = await pool.query(
+      `SELECT l.item_id, l.unit_cost, s.supplier_name, DATE_FORMAT(COALESCE(s.bill_date, DATE(s.created_at)), '%Y-%m-%d') AS bill_date
+       FROM stock_receive_lines l JOIN receipt_sessions s ON s.id = l.receipt_session_id
+       WHERE l.id IN (
+         SELECT MAX(l2.id) FROM stock_receive_lines l2 JOIN receipt_sessions s2 ON s2.id = l2.receipt_session_id
+         WHERE s2.shop_id = ? AND l2.applied_at IS NOT NULL AND l2.voided_at IS NULL AND l2.unit_cost IS NOT NULL
+         GROUP BY l2.item_id
+       )`,
+      [req.shopId]
+    );
+    const lastByItem = new Map(lastLines.map((l) => [l.item_id, l]));
+
+    const data = items.map((i) => {
+      const last = lastByItem.get(i.id);
+      const withCost = Number(i.lines_with_cost) || 0;
+      return {
+        id: i.id,
+        oem_code: i.oem_code,
+        description: i.description,
+        category_name: i.category_name,
+        stock_qty: Number(i.stock_qty) || 0,
+        avg_cost: i.avg_cost == null ? null : Number(i.avg_cost),
+        // where avg_cost came from: receive bills, a cost typed by hand, or nothing yet
+        cost_source: withCost > 0 ? "bill" : i.avg_cost != null ? "manual" : null,
+        last_cost: last ? Number(last.unit_cost) : null,
+        last_supplier: last ? last.supplier_name : null,
+        last_cost_date: last ? last.bill_date : null,
+        last_received: i.last_received,
+        lines_total: Number(i.lines_total) || 0,
+        lines_with_cost: withCost
+      };
+    });
+
+    res.json({ success: true, data });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: "โหลดต้นทุนจากบิลรับเข้าไม่สำเร็จ" });
+  }
+});
+
+// ============================================================
+// GET /api/product-costs/received/:itemId/lines
+// Every receive bill line of one item in this branch, newest first (read-only)
+// ============================================================
+router.get("/received/:itemId/lines", async (req, res) => {
+  const itemId = Number(req.params.itemId);
+  if (!Number.isInteger(itemId) || itemId <= 0) {
+    return res.status(400).json({ success: false, message: "รหัสสินค้าไม่ถูกต้อง" });
+  }
+  try {
+    const [[item]] = await pool.query(
+      "SELECT id FROM stock_items WHERE id = ? AND shop_id = ?",
+      [itemId, req.shopId]
+    );
+    if (!item) return res.status(404).json({ success: false, message: "ไม่พบสินค้า" });
+
+    const [lines] = await pool.query(
+      `SELECT l.id, l.qty, l.position, l.unit_cost, s.id AS session_id, s.invoice_no, s.supplier_name,
+              DATE_FORMAT(COALESCE(s.bill_date, DATE(s.created_at)), '%Y-%m-%d') AS bill_date
+       FROM stock_receive_lines l JOIN receipt_sessions s ON s.id = l.receipt_session_id
+       WHERE l.item_id = ? AND s.shop_id = ? AND l.applied_at IS NOT NULL AND l.voided_at IS NULL
+       ORDER BY COALESCE(s.bill_date, DATE(s.created_at)) DESC, l.id DESC
+       LIMIT 200`,
+      [itemId, req.shopId]
+    );
+    res.json({
+      success: true,
+      data: lines.map((l) => ({ ...l, unit_cost: l.unit_cost == null ? null : Number(l.unit_cost) }))
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: "โหลดประวัติราคาไม่สำเร็จ" });
+  }
+});
+
+// ============================================================
 // POST /api/product-costs
 // ============================================================
 router.post("/", async (req, res) => {

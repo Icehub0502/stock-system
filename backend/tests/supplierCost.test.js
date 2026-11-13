@@ -267,3 +267,34 @@ describe('bills of other staff', () => {
     expect(Number(detail.body.items.find((it) => it.source === 'pending_line').unit_cost)).toBe(125);
   });
 });
+
+describe('product cost page: costs from receive bills', () => {
+  test('lists each item with its average, its latest priced line and supplier; managers only, own branch only', async () => {
+    const item = await newItem();
+    const older = await newSession('JET');
+    await addLine(older, item, 2, 100);
+    await commit(older);
+    const newer = await newSession('333');
+    await addLine(newer, item, 1, 130);
+    await commit(newer);
+    const unpriced = await newSession('PMC');
+    await addLine(unpriced, item, 1);
+    await commit(unpriced);
+
+    expect((await request(app).get('/api/product-costs/received').set(as(shopA.token))).status).toBe(403);
+
+    const res = await request(app).get('/api/product-costs/received').set(as(shopA.managerToken)).query({ search: `SC${unique}` });
+    expect(res.status).toBe(200);
+    const row = res.body.data.find((r) => r.id === item);
+    expect(row).toMatchObject({ avg_cost: 110, last_cost: 130, last_supplier: '333', cost_source: 'bill', lines_total: 3, lines_with_cost: 2, stock_qty: 4 });
+
+    const other = await request(app).get('/api/product-costs/received').set(as(shopB.managerToken));
+    expect(other.body.data.find((r) => r.id === item)).toBeUndefined();
+
+    const history = await request(app).get(`/api/product-costs/received/${item}/lines`).set(as(shopA.managerToken));
+    expect(history.status).toBe(200);
+    expect(history.body.data.map((l) => l.unit_cost).sort()).toEqual([100, 130, null].sort());
+    expect((await request(app).get(`/api/product-costs/received/${item}/lines`).set(as(shopB.managerToken))).status).toBe(404);
+    expect((await request(app).get('/api/product-costs/received/abc/lines').set(as(shopA.managerToken))).status).toBe(400);
+  });
+});

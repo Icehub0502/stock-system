@@ -7171,3 +7171,15 @@ a.dash-stat-card.dash-stat-link { text-decoration: none; color: inherit; display
   .pl-page .quotation-table tbody tr { display: flex; flex-direction: column; }
   .pl-page .quotation-table tbody td.pl-total { order: -1; font-size: 17px; }
 }
+
+/* Product cost page: tab "ต้นทุนจากบิลรับเข้า" (ReceivedCostsTab.jsx) */
+.rct-muted { font-size: 12px; color: #6b7280; }
+.rct-intro { margin: 0 0 10px; font-size: 13px; }
+.rct-intro a { color: #1d4ed8; }
+.rct-history-item { margin: 0 0 4px; font-weight: 600; }
+.rct-history-table th, .rct-history-table td { white-space: nowrap; }
+@media (max-width: 1024px), (hover: none) and (pointer: coarse) {
+  .pcp-root .rct-muted { color: var(--m-text-lo); }
+  .pcp-root .rct-intro a { color: var(--m-accent); }
+  .pcp-root .rct-history-item { color: var(--m-text-hi); }
+}

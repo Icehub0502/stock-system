@@ -4,6 +4,7 @@ import client from "../api/client";
 import { useAuth } from "../context/AuthContext";
 import { isReadOnly } from "../utils/roles";
 import useRealtimeEvent from "../hooks/useRealtimeEvent";
+import ReceivedCostsTab from "../components/ReceivedCostsTab";
 
 function detectCategory(desc = "") {
   const d = desc.toLowerCase();
@@ -257,6 +258,8 @@ export default function ProductCostPage() {
   const [categoryCounts, setCategoryCounts] = useState({});
   const [totalValue, setTotalValue] = useState(0);
   const [page, setPage] = useState(1);
+  // "list" = the hand-kept cost list (products), "received" = costs from receive bills
+  const [tab, setTab] = useState("list");
   const PAGE_SIZE = 50;
 
   /* ─ fetch ─ */
@@ -306,6 +309,14 @@ export default function ProductCostPage() {
     return () => clearTimeout(timer);
   }, [fetchProducts]);
   useEffect(() => { fetchCategories(); }, [fetchCategories]);
+
+  // A branch with no hand-kept cost list (e.g. a new branch) opens on the receive-bill costs instead of an empty table
+  const tabChosenRef = useRef(false);
+  useEffect(() => {
+    if (tabChosenRef.current || loading) return;
+    tabChosenRef.current = true;
+    if (products.length === 0 && !search && !filterCategory && !filterCarBrand) setTab("received");
+  }, [loading, products.length, search, filterCategory, filterCarBrand]);
   useEffect(() => { setPage(1); }, [search, filterCategory, filterCarBrand]);
 
   // หน้าปัจจุบันอาจเกินจำนวนหน้าจริงหลังข้อมูลเปลี่ยน (เช่นอยู่หน้า 5/5 แล้วมีคนลบ
@@ -578,7 +589,7 @@ export default function ProductCostPage() {
           <h1 className="pcp-title">ต้นทุนสินค้า</h1>
           <p className="pcp-subtitle">จัดการราคาต้นทุนอะไหล่ทั้งหมด</p>
         </div>
-        {!isReadOnly(user) && <div className="pcp-header-actions">
+        {tab === "list" && !isReadOnly(user) && <div className="pcp-header-actions">
           <button
             className={`pcp-btn-select-mode ${selectionMode ? "active" : ""}`}
             onClick={() => selectionMode ? exitSelectionMode() : setSelectionMode(true)}
@@ -594,6 +605,22 @@ export default function ProductCostPage() {
         </div>}
       </div>
 
+      <div className="stock-all-tabs" role="tablist" aria-label="แหล่งต้นทุน">
+        {[["list", "รายการราคาทุน"], ["received", "ต้นทุนจากบิลรับเข้า"]].map(([key, label]) => (
+          <button
+            key={key}
+            type="button"
+            role="tab"
+            aria-selected={tab === key}
+            className={`stock-all-tab${tab === key ? " stock-all-tab--active" : ""}`}
+            onClick={() => setTab(key)}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {tab === "received" ? <ReceivedCostsTab /> : <>
       {/* ── Filters ── */}
       <div className="pcp-filters">
         <div className="pcp-filter-search">
@@ -770,6 +797,8 @@ export default function ProductCostPage() {
           </button>
         </div>
       )}
+
+      </>}
 
       {/* ── Modals ── */}
       {modal?.type === "add" && (
