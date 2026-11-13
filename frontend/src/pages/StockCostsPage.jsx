@@ -47,8 +47,10 @@ export default function StockCostsPage() {
   }, []);
   useEffect(() => { load(); }, [load]);
 
-  const saveLine = async (id, value) => { await client.put(`/stock-receive/costs/lines/${id}`, { unit_cost: Number(value) }); };
-  const saveItem = async (id, value) => { await client.put(`/stock-receive/costs/items/${id}`, { manual_cost: Number(value) }); };
+  // After a save the lists are fetched again: a priced bill line also gives its item a cost, so that item must leave
+  // "สินค้าในสต๊อกที่ยังไม่มีต้นทุนเลย" too (rows are keyed by id, so what is typed in other rows stays)
+  const saveLine = async (id, value) => { await client.put(`/stock-receive/costs/lines/${id}`, { unit_cost: Number(value) }); load(); };
+  const saveItem = async (id, value) => { await client.put(`/stock-receive/costs/items/${id}`, { manual_cost: Number(value) }); load(); };
 
   if (!data) return <div className="quotation-page">{error ? <div className="error-message">{error}</div> : <div className="loading">กำลังโหลด...</div>}</div>;
 

@@ -202,7 +202,9 @@ export default function ReceivedCostsTab() {
         ) : shown.length === 0 ? (
           <div className="pcp-empty">
             <span className="pcp-empty-icon">◻</span>
-            {items.length === 0 ? "สาขานี้ยังไม่มีบิลรับเข้า" : "ไม่พบรายการ"}
+            {search.trim()
+              ? `ไม่พบสินค้าที่ตรงกับ "${search.trim()}"`
+              : items.length === 0 ? "สาขานี้ยังไม่มีบิลรับเข้า" : "ไม่พบรายการ"}
           </div>
         ) : (
           <table className="pcp-table">
