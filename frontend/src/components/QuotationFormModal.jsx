@@ -1081,7 +1081,10 @@ export default function QuotationFormModal({ quotation, onClose, onSuccess, onDe
                 <button type="button" className="btn btn-secondary" onClick={requestClose}>
                   ยกเลิก
                 </button>
-                {quotation && onDelete && (
+              </div>
+              {/* delete stays out of the save bar, which sticks to the bottom of the screen on phones */}
+              {quotation && onDelete && (
+                <div className="modal-danger-row no-print">
                   <button
                     type="button"
                     className="btn btn-danger"
@@ -1089,8 +1092,8 @@ export default function QuotationFormModal({ quotation, onClose, onSuccess, onDe
                   >
                     ลบใบเสนอราคา
                   </button>
-                )}
-              </div>
+                </div>
+              )}
             </form>
           </div>
 

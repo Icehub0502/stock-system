@@ -95,4 +95,28 @@ describe('POST /api/receipts — total calculation', () => {
 
     expect(res.status).toBe(401);
   });
+
+  test('GET /customers/by-phone finds the customer a typed phone belongs to, in any format', async () => {
+    const phone = `09${String(Date.now()).slice(-8)}`;
+    const formatted = `${phone.slice(0, 3)}-${phone.slice(3, 6)}-${phone.slice(6)}`;
+    await pool.query('UPDATE customers SET phone = ? WHERE id = ?', [formatted, fixture.customerId]);
+
+    const raw = await request(app).get('/api/receipts/customers/by-phone').query({ phone }).set('Authorization', `Bearer ${token}`);
+    expect(raw.status).toBe(200);
+    expect(raw.body.data).toMatchObject({ id: fixture.customerId, customer_code: fixture.customerCode, phone: formatted });
+
+    const dashed = await request(app).get('/api/receipts/customers/by-phone').query({ phone: formatted }).set('Authorization', `Bearer ${token}`);
+    expect(dashed.body.data.id).toBe(fixture.customerId);
+
+    const nobody = await request(app).get('/api/receipts/customers/by-phone').query({ phone: '0000000001' }).set('Authorization', `Bearer ${token}`);
+    expect(nobody.status).toBe(200);
+    expect(nobody.body.data).toBeNull();
+  });
+
+  test('GET /customers/by-phone rejects a phone that is not 9-10 digits', async () => {
+    for (const phone of ['', '12345', '0812345678901', 'abc']) {
+      const res = await request(app).get('/api/receipts/customers/by-phone').query({ phone }).set('Authorization', `Bearer ${token}`);
+      expect(res.status).toBe(400);
+    }
+  });
 });

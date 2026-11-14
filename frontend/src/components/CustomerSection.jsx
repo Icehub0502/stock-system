@@ -14,6 +14,31 @@ export default function CustomerSection({
   onCustomerModeChange,
 }) {
   const [similarCustomers, setSimilarCustomers] = useState([]);
+  // the customer this phone already belongs to: saving a "new customer" with it makes the bill theirs
+  const [phoneOwner, setPhoneOwner] = useState(null);
+
+  useEffect(() => {
+    const digits = (newCustomer?.phone || '').replace(/D/g, '');
+    if (customerMode !== 'new' || digits.length < 9 || digits.length > 10) {
+      setPhoneOwner(null);
+      return;
+    }
+
+    let cancelled = false;
+    const timer = window.setTimeout(async () => {
+      try {
+        const response = await client.get('/receipts/customers/by-phone', { params: { phone: digits } });
+        if (!cancelled) setPhoneOwner(response.data.data || null);
+      } catch (err) {
+        if (!cancelled) setPhoneOwner(null);
+      }
+    }, 350);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [customerMode, newCustomer?.phone]);
 
   useEffect(() => {
     const query = (newCustomer?.customer_name || '').trim();
@@ -34,6 +59,8 @@ export default function CustomerSection({
 
     return () => window.clearTimeout(timer);
   }, [customerMode, newCustomer?.customer_name]);
+
+  const typedName = (newCustomer?.customer_name || '').trim();
 
   return (
     <div className="info-card">
@@ -92,6 +119,18 @@ export default function CustomerSection({
             readOnly={customerMode === 'existing'}
           />
           {fieldErrors.phone && <div className="field-error">{fieldErrors.phone}</div>}
+          {customerMode === 'new' && phoneOwner && (
+            <div className="customer-similar-warning customer-phone-owner" role="alert">
+              <div>
+                เบอร์นี้เป็นของลูกค้า "{phoneOwner.customer_name}" ({phoneOwner.customer_code}) อยู่แล้ว
+                — ถ้าบันทึก บิลนี้จะเป็นของลูกค้าคนนี้
+                {typedName && typedName !== phoneOwner.customer_name && ` และชื่อ "${typedName}" ที่พิมพ์จะไม่ถูกบันทึก`}
+              </div>
+              <button type="button" className="customer-similar-link" onClick={() => onCustomerSelect(phoneOwner)}>
+                ใช้ลูกค้าเดิม: {phoneOwner.customer_name} · {phoneOwner.phone}
+              </button>
+            </div>
+          )}
         </div>
       </div>
       <div className="customer-mode-toggle two-column info-card-toggle">

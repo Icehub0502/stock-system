@@ -7186,3 +7186,24 @@ a.dash-stat-card.dash-stat-link { text-decoration: none; color: inherit; display
 
 /* WarrantySection: a warranty picked with no row of the bill to carry it */
 .warranty-orphan-warn { margin: 4px 0 0; font-size: 12px; color: #b45309; line-height: 1.4; }
+
+/* new-customer form: similar names and a phone already on file are said in a visible box, with the old customer one tap away */
+.customer-similar-warning {
+  margin-top: 6px; padding: 8px 10px; border-radius: 8px; font-size: 13px; line-height: 1.5;
+  background: #fffbeb; border: 1px solid #fcd34d; color: #92400e; overflow-wrap: anywhere;
+}
+.customer-similar-link {
+  display: block; width: 100%; margin-top: 6px; min-height: 40px; padding: 6px 10px; text-align: left;
+  background: #fff; border: 1px solid #f59e0b; border-radius: 8px; color: #78350f; font-weight: 600; cursor: pointer;
+}
+/* quotation delete sits under the save bar, apart from it */
+.modal-danger-row { display: flex; justify-content: flex-end; margin-top: 16px; }
+/* phones: the save bar is one row and sits flush on the bottom edge, so it covers less of the form (it took ~1/4 of the screen) */
+@media (max-width: 640px) {
+  .receipt-content > .receipt-form-pane { padding-bottom: 0; }
+  .modal-footer.no-print { flex-direction: row; flex-wrap: nowrap; gap: 8px; }
+  .modal-footer.no-print .btn { width: auto; flex: 1 1 0; min-width: 0; }
+  .modal-footer.no-print .btn-primary { flex-grow: 2; }
+  .modal-danger-row { margin: 16px 0 24px; }
+  .modal-danger-row .btn { width: 100%; }
+}

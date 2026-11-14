@@ -105,6 +105,26 @@ router.get('/customers', async (req, res) => {
   }
 });
 
+// The customer a "new customer" phone already belongs to. Saving a quotation or receipt with a new customer whose
+// phone is already on file reuses that customer (see the POST/PUT handlers), so the form asks this first and tells
+// the user whose bill it will become, instead of silently dropping the name they typed.
+router.get('/customers/by-phone', async (req, res) => {
+  try {
+    const digits = String(req.query.phone ?? '').replace(/\D/g, '');
+    if (digits.length < 9 || digits.length > 10) {
+      return res.status(400).json({ error: 'เบอร์โทรไม่ถูกต้อง' });
+    }
+    const [rows] = await pool.execute(
+      'SELECT id, customer_code, customer_name, phone FROM customers WHERE shop_id = ? AND phone = ? LIMIT 1',
+      [req.shopId, normalizePhone(digits)]
+    );
+    res.json({ success: true, data: rows[0] || null });
+  } catch (err) {
+    console.error('Error finding customer by phone:', err);
+    res.status(500).json({ error: 'ค้นหาลูกค้าจากเบอร์โทรไม่สำเร็จ' });
+  }
+});
+
 router.get('/customers/:customerId/vehicles', async (req, res) => {
   try {
     const { customerId } = req.params;
