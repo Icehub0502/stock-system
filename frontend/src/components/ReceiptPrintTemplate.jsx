@@ -5,14 +5,14 @@ import { useDocHeader } from '../hooks/useDocHeader';
 import { docThemeStyle } from '../utils/docTheme';
 import { formatMoney } from '../utils/format';
 import { highlightDeposit } from '../utils/highlightDeposit';
-import { ALL_WARRANTY_KEYWORDS } from '../utils/warrantyKeywords';
+import { ALL_WARRANTY_KEYWORDS, RACK_KEYWORDS, BALL_JOINT_KEYWORDS, nameHasKeyword } from '../utils/warrantyKeywords';
 
 // Fixed warranty-tag slots printed on every receipt (matches the physical form).
 // Matched against the item name itself — `category` isn't persisted on saved
 // receipt_items, so matching on it always misses once a receipt is reloaded.
 const WARRANTY_SLOTS = [
-  { label: 'แร็คพวงมาลัย', matchKeyword: 'แร็ค' },
-  { label: 'ลูกหมากช่วงล่าง', matchKeyword: 'ลูกหมาก' },
+  { label: 'แร็คพวงมาลัย', matchKeywords: RACK_KEYWORDS },
+  { label: 'ลูกหมากช่วงล่าง', matchKeywords: BALL_JOINT_KEYWORDS },
   { label: 'อื่นๆ', isOther: true },
 ];
 
@@ -55,8 +55,8 @@ function findWarrantySlotText(items, slot, excludeWarrantyNames = []) {
     if (!name || !it.warranty_name) return false;
     if (slot.isOther && excludeWarrantyNames.includes(it.warranty_name)) return false;
     return slot.isOther
-      ? !ALL_WARRANTY_KEYWORDS.some((kw) => name.includes(kw))
-      : name.includes(slot.matchKeyword);
+      ? !nameHasKeyword(name, ALL_WARRANTY_KEYWORDS)
+      : nameHasKeyword(name, slot.matchKeywords); // same matching as the form (any marks, any case)
   });
   if (!match) return '';
   // warranty_name already carries the year/km inline (e.g. "แร็ค 1 ปี 100000 Km") —

@@ -7183,3 +7183,6 @@ a.dash-stat-card.dash-stat-link { text-decoration: none; color: inherit; display
   .pcp-root .rct-intro a { color: var(--m-accent); }
   .pcp-root .rct-history-item { color: var(--m-text-hi); }
 }
+
+/* WarrantySection: a warranty picked with no row of the bill to carry it */
+.warranty-orphan-warn { margin: 4px 0 0; font-size: 12px; color: #b45309; line-height: 1.4; }

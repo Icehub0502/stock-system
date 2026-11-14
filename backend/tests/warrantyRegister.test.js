@@ -44,6 +44,11 @@ describe('warranty status — ends at the time limit or the distance limit, whic
     expect(isRackText('เปลี่ยนแร็คพวงมาลัย')).toBe(true);
     expect(isRackText('ลูกหมากปลายแร็ค')).toBe(true);
     expect(isRackText('ลูกหมากปีกนก')).toBe(false);
+    // typed with another mark over ร (PKS bills had "แร๊ค OEM"); "แรก" (first) is still not a rack
+    expect(isRackText('แร๊ค OEM')).toBe(true);
+    expect(isRackText('แร้ค')).toBe(true);
+    expect(isRegisterText('แร๊ค OEM')).toBe(true);
+    expect(isRackText('ตรวจเช็คครั้งแรก')).toBe(false);
     expect(isRegisterText('ลูกหมากปีกนก')).toBe(true);
     expect(isRegisterText('ชุดโปรช่วงล่าง')).toBe(true);
     expect(isRegisterText('เปลี่ยนน้ำมันเครื่อง')).toBe(false);

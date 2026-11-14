@@ -8,7 +8,7 @@ import WarrantySection from "./WarrantySection";
 import ReceiptPrintTemplate from "./ReceiptPrintTemplate";
 import FormModalShell from "./FormModalShell";
 import { todayStr, formatMoney } from "../utils/format";
-import { RACK_KEYWORDS, BALL_JOINT_KEYWORDS, ALL_WARRANTY_KEYWORDS, applyWarrantyToItems, findMatchingWarrantyId } from "../utils/warrantyKeywords";
+import { RACK_KEYWORDS, BALL_JOINT_KEYWORDS, ALL_WARRANTY_KEYWORDS, applyWarrantyToItems, findMatchingWarrantyId, fillChosenWarranties } from "../utils/warrantyKeywords";
 
 export default function ReceiptFormModal({ onClose, onSuccess, receiptId }) {
   const [receiptNo, setReceiptNo] = useState('');
@@ -615,7 +615,10 @@ export default function ReceiptFormModal({ onClose, onSuccess, receiptId }) {
       return;
     }
 
-    const normalizedItems = validItems.map((item) => ({
+    // rows added or renamed after a warranty was picked still get it (see fillChosenWarranties)
+    const withWarranties = fillChosenWarranties(validItems, warranties,
+      { rack: rackWarrantyId, ballJoint: ballJointWarrantyId, other: otherWarrantyId }, 'product_name_snapshot');
+    const normalizedItems = withWarranties.map((item) => ({
       service_item_id: item.service_item_id,
       product_name_snapshot: item.product_name_snapshot,
       qty: Number(item.qty || 0),

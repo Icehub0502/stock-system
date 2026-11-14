@@ -5,7 +5,7 @@ import { useDocHeader } from '../hooks/useDocHeader';
 import { docThemeStyle } from '../utils/docTheme';
 import { formatMoney } from '../utils/format';
 import { highlightDeposit } from '../utils/highlightDeposit';
-import { ALL_WARRANTY_KEYWORDS } from '../utils/warrantyKeywords';
+import { ALL_WARRANTY_KEYWORDS, RACK_KEYWORDS, BALL_JOINT_KEYWORDS, nameHasKeyword } from '../utils/warrantyKeywords';
 
 // Mirrors ReceiptPrintTemplate.jsx's layout/pagination approach, so a
 // quotation and a receipt look like the same physical document family —
@@ -14,8 +14,8 @@ import { ALL_WARRANTY_KEYWORDS } from '../utils/warrantyKeywords';
 // ITEMS_PER_PAGE is re-measured whenever the fixed (non-item-row) content on
 // the page changes — see the comment at its assignment below.
 const WARRANTY_SLOTS = [
-  { label: 'แร็คพวงมาลัย', matchKeyword: 'แร็ค' },
-  { label: 'ลูกหมากช่วงล่าง', matchKeyword: 'ลูกหมาก' },
+  { label: 'แร็คพวงมาลัย', matchKeywords: RACK_KEYWORDS },
+  { label: 'ลูกหมากช่วงล่าง', matchKeywords: BALL_JOINT_KEYWORDS },
   { label: 'อื่นๆ', isOther: true },
 ];
 
@@ -33,8 +33,8 @@ function findWarrantySlotText(items, slot, excludeWarrantyNames = []) {
     if (!name || !it.warranty_name) return false;
     if (slot.isOther && excludeWarrantyNames.includes(it.warranty_name)) return false;
     return slot.isOther
-      ? !ALL_WARRANTY_KEYWORDS.some((kw) => name.includes(kw))
-      : name.includes(slot.matchKeyword);
+      ? !nameHasKeyword(name, ALL_WARRANTY_KEYWORDS)
+      : nameHasKeyword(name, slot.matchKeywords); // same matching as the form (any marks, any case)
   });
   return match ? match.warranty_name : '';
 }

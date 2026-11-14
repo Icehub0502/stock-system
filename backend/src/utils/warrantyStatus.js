@@ -12,8 +12,12 @@ const hasWord = (text, words) => {
   const lower = String(text ?? '').toLowerCase();
   return words.some((word) => lower.includes(word));
 };
-const isRackText = (text) => hasWord(text, RACK_WORDS);
-const isRegisterText = (text) => hasWord(text, REGISTER_WORDS);
+// Names are typed by hand with any mark over the letters: "แร๊ค", "แร้ค" are racks too. With the marks (ไม้ไต่คู้ and
+// the tone marks, U+0E47–U+0E4C) taken out they all read "แรค". Only that word is compared this way: "แร็ก" without
+// its mark is "แรก" ("first"), which would make "ครั้งแรก" a rack.
+const withoutMarks = (text) => String(text ?? '').toLowerCase().replace(/[็-์]/g, '');
+const isRackText = (text) => hasWord(text, RACK_WORDS) || withoutMarks(text).includes('แรค');
+const isRegisterText = (text) => hasWord(text, REGISTER_WORDS) || isRackText(text);
 
 function pad(n) {
   return String(n).padStart(2, '0');

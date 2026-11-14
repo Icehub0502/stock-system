@@ -10,7 +10,7 @@ import CarModelPicker from "./CarModelPicker";
 import { useAuth } from "../context/AuthContext";
 import { canChange } from "../utils/roles";
 import { todayStr, formatMoney } from "../utils/format";
-import { RACK_KEYWORDS, BALL_JOINT_KEYWORDS, ALL_WARRANTY_KEYWORDS, applyWarrantyToItems, findMatchingWarrantyId } from "../utils/warrantyKeywords";
+import { RACK_KEYWORDS, BALL_JOINT_KEYWORDS, ALL_WARRANTY_KEYWORDS, applyWarrantyToItems, findMatchingWarrantyId, fillChosenWarranties } from "../utils/warrantyKeywords";
 
 const defaultItem = {
   product_id: null,
@@ -784,11 +784,12 @@ export default function QuotationFormModal({ quotation, onClose, onSuccess, onDe
     // still be saved (as ฿0), not silently dropped for lacking a price.
     // ไม่บังคับต้องมีรายการสินค้า — กรอกแค่ข้อมูลลูกค้าก็บันทึกได้เลย
     // เอาไว้ให้คนหน้างานมาเพิ่มรายการทีหลังตอนเสนอราคาจริง
-    const validItems = items.filter((item) => {
+    // rows added or renamed after a warranty was picked still get it (see fillChosenWarranties)
+    const validItems = fillChosenWarranties(items.filter((item) => {
       const name = item.product_name?.toString().trim();
       const qty = Number(item.quantity || 0);
       return Boolean(name) && qty > 0;
-    });
+    }), warranties, { rack: rackWarrantyId, ballJoint: ballJointWarrantyId, other: otherWarrantyId }, 'product_name');
 
     setLoading(true);
     try {
