@@ -1207,6 +1207,15 @@ async function initDatabase() {
   // rack warranty numbers per branch (see warrantySchema.js)
   await require('./warrantySchema').migrateWarrantyRegister(conn);
 
+  // one row per shop and document type, locked while a document number is taken (see utils/docNumberLock.js)
+  await conn.query(`
+    CREATE TABLE IF NOT EXISTS doc_number_locks (
+      shop_id INT NOT NULL,
+      doc_type VARCHAR(30) NOT NULL,
+      PRIMARY KEY (shop_id, doc_type)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+
   // Manager page starts from zero on 2026-10-30: only cars / quotations / deposits from that day on are counted
   // (INSERT IGNORE: a cutoff that is already stored is never moved)
   await conn.query("INSERT IGNORE INTO app_settings (shop_id, `key`, value) SELECT id, 'manager_page_since', '2026-10-30' FROM shops");

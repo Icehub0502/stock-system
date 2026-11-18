@@ -7,9 +7,13 @@
 // -> lineWebhook.routes.js เป็น require chain ที่มีอยู่แล้ว — ถ้า lineWebhook.routes.js
 // require jobs.routes.js ตรง ๆ จะเกิด circular require กลับมาที่ quotations.routes.js
 // จนโมดูลนั้นโหลดไม่ครบ (generateQuotationNo ฯลฯ จะเป็น undefined)
+const { lockDocNumbers } = require('./docNumberLock');
+
 async function generateJobNo(conn, jobDate, shopId) {
   const [y, m, d] = jobDate.split('-');
   const prefix = `JB-${y.slice(-2)}${m}${d}-`;
+  // one job number at a time per shop, or the first two jobs of a day deadlock (see docNumberLock.js)
+  await lockDocNumbers(conn, shopId, 'job');
   const [rows] = await conn.execute(
     'SELECT MAX(CAST(SUBSTRING(job_no, -3) AS UNSIGNED)) AS maxNo FROM jobs WHERE shop_id = ? AND job_no LIKE ? FOR UPDATE',
     [shopId, `${prefix}%`]

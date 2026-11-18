@@ -8,6 +8,7 @@ const { formatPhone } = require('../utils/parseLineQueueMessage');
 const { applyReceiptSplits, allowedMethodsForReceipt } = require('../utils/paymentMethods');
 const { emitReceiptEvent, emitQuotationEvent } = require('../realtime');
 const { ownsAll } = require('../utils/tenant');
+const { lockDocNumbers } = require('../utils/docNumberLock');
 
 // ทำให้ตรงรูปแบบเดียวกับที่ customers.routes.js ใช้ กันเบอร์ที่พิมพ์ไม่มีขีดตรงนี้
 // ไปหลุดจากการค้นหาของบอทไลน์ (lineWebhook.routes.js เทียบแบบ phone = ? ตรง ๆ)
@@ -51,6 +52,9 @@ function formatDate(date) {
 async function generateReceiptNo(conn, shopId) {
   const today = new Date();
   const dateStr = formatDate(today);
+  // one bill number at a time per shop, or the first two of a day deadlock (see utils/docNumberLock.js); it also
+  // covers generateCarSequenceNo below. The /next-no preview runs on the pool and takes no lock.
+  if (conn !== pool) await lockDocNumbers(conn, shopId, 'receipt');
   const [rows] = await conn.execute(
     'SELECT MAX(CAST(SUBSTRING(receipt_no, -3) AS UNSIGNED)) AS maxNo FROM receipts WHERE shop_id = ? AND receipt_no LIKE ? FOR UPDATE',
     [shopId, `RC${dateStr}%`]
