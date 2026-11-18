@@ -8,6 +8,7 @@ const { deductStock } = require('../utils/stockDeduct');
 const { positionLabel } = require('../utils/stockPositions');
 const { getShopPaymentMethods } = require('../utils/paymentMethods');
 const { generateReceiptNo, generateCarSequenceNo } = require('./quotations.routes');
+const { lockDocNumbers } = require('../utils/docNumberLock');
 
 const router = express.Router();
 router.use(authenticate);
@@ -105,6 +106,9 @@ function earlierRoundsText(kase, items) {
 async function generateClaimNo(conn, shopId) {
   const dateStr = todayStr().replace(/-/g, '').slice(2); // YYMMDD
   const prefix = `CLM-${dateStr}-`;
+  // one claim number at a time per shop, or the first two of a day deadlock (see utils/docNumberLock.js);
+  // the /next-no preview runs on the pool and takes no lock
+  if (conn !== pool) await lockDocNumbers(conn, shopId, 'claim');
   const [rows] = await conn.execute(
     "SELECT MAX(CAST(SUBSTRING(claim_no, ?) AS UNSIGNED)) AS maxNo FROM claims WHERE shop_id = ? AND claim_no LIKE ? FOR UPDATE",
     [prefix.length + 1, shopId, `${prefix}%`]

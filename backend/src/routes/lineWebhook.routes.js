@@ -17,6 +17,7 @@ const parseLineQueueMessage = require('../utils/parseLineQueueMessage');
 const { parseItemSectionLines } = require('../utils/parseLineQueueMessage');
 const { emitQuotationEvent, emitReceiptEvent, emitJobEvent } = require('../realtime');
 const { generateJobNo } = require('../utils/generateJobNo');
+const { lockDocNumbers } = require('../utils/docNumberLock');
 const { syncJobOnQuotationStatusChange, closeWaitingJobs } = require('../utils/jobQuotationSync');
 const { LINE_MESSAGE_DEFAULTS } = require('../utils/lineMessageDefaults');
 const {
@@ -254,6 +255,8 @@ async function generateQuotationNo(conn, shopId = LINE_SHOP_ID) {
   // FOR UPDATE ล็อกแถวที่อ่านไว้จนกว่า transaction นี้จะ commit — กัน 2 ข้อความ
   // ไลน์ที่มาถึงพร้อมกันอ่าน MAX เดิมแล้วได้เลขใบเสนอราคาซ้ำกัน (แบบเดียวกับที่
   // ล็อก queue_no ไว้ด้านบนใน createQuotationFromQueue)
+  // same per-shop lock as quotations.routes.js, so bot and web quotations of the same day never deadlock
+  await lockDocNumbers(conn, shopId, 'quotation');
   const [rows] = await conn.execute(
     'SELECT MAX(CAST(SUBSTRING(quotation_no, -3) AS UNSIGNED)) as maxNo FROM quotations WHERE shop_id = ? AND quotation_no LIKE ? FOR UPDATE',
     [shopId, `IV${dateStr}%`]
@@ -285,6 +288,8 @@ function formatReceiptDate(date) {
 async function generateReceiptNo(conn, shopId = LINE_SHOP_ID) {
   const dateStr = formatReceiptDate(new Date());
   // FOR UPDATE เหตุผลเดียวกับตัวสร้างเลขเอกสารด้านบน
+  // same per-shop receipt lock as quotations.routes.js / receipts.routes.js (see utils/docNumberLock.js)
+  await lockDocNumbers(conn, shopId, 'receipt');
   const [rows] = await conn.execute(
     'SELECT MAX(CAST(SUBSTRING(receipt_no, -3) AS UNSIGNED)) AS maxNo FROM receipts WHERE shop_id = ? AND receipt_no LIKE ? FOR UPDATE',
     [shopId, `RC${dateStr}%`]

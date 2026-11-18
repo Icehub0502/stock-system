@@ -10,6 +10,7 @@ const { QUOTATION_RELEASED_STATUSES } = require('../utils/jobStatusFlow');
 const { applyReceiptSplits, allowedMethodsForReceipt } = require('../utils/paymentMethods');
 const { ownsAll } = require('../utils/tenant');
 const { recordQuotationPrices } = require('../utils/modelPrices');
+const { lockDocNumbers } = require('../utils/docNumberLock');
 
 // ทำให้ตรงรูปแบบเดียวกับที่ customers.routes.js ใช้ กันเบอร์ที่พิมพ์ไม่มีขีดตรงนี้
 // ไปหลุดจากการค้นหาของบอทไลน์ (lineWebhook.routes.js เทียบแบบ phone = ? ตรง ๆ)
@@ -39,6 +40,9 @@ async function generateQuotationNo(conn, shopId) {
                 + String(today.getMonth() + 1).padStart(2, '0')
                 + String(today.getFullYear()).slice(-2);
 
+  // one quotation number at a time per shop, or the first two of a day deadlock (see utils/docNumberLock.js);
+  // the /next-no preview runs on the pool, outside any transaction, and takes no lock
+  if (conn !== pool) await lockDocNumbers(conn, shopId, 'quotation');
   const [rows] = await conn.execute(
     'SELECT MAX(CAST(SUBSTRING(quotation_no, -3) AS UNSIGNED)) as maxNo FROM quotations WHERE shop_id = ? AND quotation_no LIKE ? FOR UPDATE',
     [shopId, `IV${dateStr}%`]
@@ -62,6 +66,9 @@ async function generateReceiptNo(conn, shopId) {
   const dateStr = formatReceiptDate(new Date());
   // FOR UPDATE ล็อกแถว receipt_no วันนี้ไว้จนกว่า transaction ผู้เรียกจะ commit —
   // กันคำขออนุมัติใบเสนอราคา 2 ใบพร้อมกันอ่าน MAX เดิมแล้วได้เลขบิลซ้ำกัน
+  // the per-shop lock keeps the first two bills of a day from deadlocking (see utils/docNumberLock.js); it also
+  // covers generateCarSequenceNo, which every caller runs right after this
+  await lockDocNumbers(conn, shopId, 'receipt');
   const [rows] = await conn.execute(
     'SELECT MAX(CAST(SUBSTRING(receipt_no, -3) AS UNSIGNED)) AS maxNo FROM receipts WHERE shop_id = ? AND receipt_no LIKE ? FOR UPDATE',
     [shopId, `RC${dateStr}%`]
