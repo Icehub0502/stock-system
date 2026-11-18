@@ -145,6 +145,48 @@ describe('cost of what is received', () => {
     await commit(s);
     expect(await avgCost(item)).toBe(90);
   });
+
+  test('a wrong price on a closed bill is listed with the costs already typed, corrected, and the old price is logged', async () => {
+    const item = await newItem();
+    const good = await newSession('PMC');
+    await addLine(good, item, 1, 100);
+    await commit(good);
+    const typo = await newSession('PMC');
+    await addLine(typo, item, 1, 1000); // meant 100
+    await commit(typo);
+    expect(await avgCost(item)).toBe(550);
+
+    const filled = await request(app).get('/api/stock-receive/costs/filled').set(as(shopA.token)).query({ search: typo.invoice_no });
+    expect(filled.status).toBe(200);
+    expect(filled.body.data.lines).toHaveLength(1);
+    const line = filled.body.data.lines[0];
+    expect(line).toMatchObject({ item_id: item, unit_cost: 1000, invoice_no: typo.invoice_no });
+    expect((await request(app).get('/api/stock-receive/costs/filled').set(as(shopB.token)).query({ search: typo.invoice_no })).body.data.lines).toEqual([]);
+    expect((await request(app).get('/api/stock-receive/costs/filled').set(as(shopA.token)).query({ search: '%' })).body.data.lines).toEqual([]);
+
+    expect((await request(app).put(`/api/stock-receive/costs/lines/${line.id}`).set(as(shopA.token)).send({ unit_cost: 100 })).status).toBe(200);
+    expect(await avgCost(item)).toBe(100);
+    expect((await request(app).put(`/api/stock-receive/costs/lines/${line.id}`).set(as(shopA.token)).send({ unit_cost: '' })).status).toBe(400);
+
+    let entry;
+    for (let i = 0; i < 40 && !entry; i += 1) {
+      [[entry]] = await pool.query(
+        'SELECT before_data FROM activity_log WHERE shop_id = ? AND path LIKE ? AND status = 200 ORDER BY id DESC LIMIT 1',
+        [shopA.shopId, `%/costs/lines/${line.id}`]
+      );
+      if (!entry) await new Promise((r) => setTimeout(r, 100));
+    }
+    expect(Number(JSON.parse(entry.before_data).unit_cost)).toBe(1000);
+  });
+
+  test('a hand-typed cost is listed for correction', async () => {
+    const item = await newItem();
+    await request(app).put(`/api/stock-receive/costs/items/${item}`).set(as(shopA.managerToken)).send({ manual_cost: 400 });
+    const filled = await request(app).get('/api/stock-receive/costs/filled').set(as(shopA.managerToken)).query({ search: `item ${n}` });
+    expect(filled.body.data.items.find((i) => i.id === item)).toMatchObject({ manual_cost: 400 });
+    expect((await request(app).put(`/api/stock-receive/costs/items/${item}`).set(as(shopA.managerToken)).send({ manual_cost: 40 })).status).toBe(200);
+    expect(await avgCost(item)).toBe(40);
+  });
 });
 
 describe('cancelling what was received', () => {

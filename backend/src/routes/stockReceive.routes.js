@@ -912,7 +912,45 @@ router.get('/costs/missing', requireRole('office'), async (req, res) => {
   }
 });
 
-// Price per piece of a line on a bill that is already closed (forgotten at the time)
+// Costs already typed, so a wrong one can be corrected: priced lines of closed bills (newest bill first) and stock with a
+// cost typed by hand. `search` matches the item, its OEM code, the bill number or the supplier.
+router.get('/costs/filled', requireRole('office'), async (req, res) => {
+  const search = String(req.query.search ?? '').trim().slice(0, 100);
+  const like = `%${search.replace(/[\\%_]/g, '\\$&')}%`;
+  try {
+    const [lines] = await pool.query(
+      `SELECT l.id, l.qty, l.position, l.unit_cost, i.id AS item_id, i.description, i.oem_code, c.name AS category_name,
+              s.invoice_no, s.supplier_name, DATE_FORMAT(COALESCE(s.bill_date, DATE(s.created_at)), '%Y-%m-%d') AS bill_date
+       FROM stock_receive_lines l
+       JOIN receipt_sessions s ON s.id = l.receipt_session_id
+       JOIN stock_items i ON i.id = l.item_id JOIN stock_categories c ON c.id = i.category_id
+       WHERE s.shop_id = ? AND i.shop_id = ? AND l.applied_at IS NOT NULL AND l.voided_at IS NULL AND l.unit_cost IS NOT NULL
+         ${search ? 'AND (i.description LIKE ? OR i.oem_code LIKE ? OR s.invoice_no LIKE ? OR s.supplier_name LIKE ?)' : ''}
+       ORDER BY l.id DESC LIMIT 100`,
+      search ? [req.shopId, req.shopId, like, like, like, like] : [req.shopId, req.shopId]
+    );
+    const [items] = await pool.query(
+      `SELECT i.id, i.description, i.oem_code, i.stock_qty, i.manual_cost, c.name AS category_name
+       FROM stock_items i JOIN stock_categories c ON c.id = i.category_id
+       WHERE i.shop_id = ? AND i.is_active = 1 AND i.manual_cost IS NOT NULL
+         ${search ? 'AND (i.description LIKE ? OR i.oem_code LIKE ?)' : ''}
+       ORDER BY c.name, i.description LIMIT 100`,
+      search ? [req.shopId, like, like] : [req.shopId]
+    );
+    res.json({
+      success: true,
+      data: {
+        lines: lines.map((l) => ({ ...l, unit_cost: Number(l.unit_cost) })),
+        items: items.map((i) => ({ ...i, manual_cost: Number(i.manual_cost) })),
+      },
+    });
+  } catch (err) {
+    console.error('Error loading filled costs:', err);
+    res.status(500).json({ error: 'โหลดต้นทุนที่กรอกแล้วไม่สำเร็จ' });
+  }
+});
+
+// Price per piece of a line on a bill that is already closed: filling in one forgotten at the time, or correcting a wrong one
 router.put('/costs/lines/:id', requireRole('office'), async (req, res) => {
   const lineId = parseId(req.params.id);
   const cost = parseUnitCost(req.body?.unit_cost);
@@ -922,7 +960,8 @@ router.put('/costs/lines/:id', requireRole('office'), async (req, res) => {
     conn = await pool.getConnection();
     await conn.beginTransaction();
     const [[line]] = await conn.execute(
-      `SELECT l.id, l.item_id, l.applied_at, l.voided_at FROM stock_receive_lines l JOIN receipt_sessions s ON s.id = l.receipt_session_id
+      `SELECT l.id, l.item_id, l.applied_at, l.voided_at, l.unit_cost, s.invoice_no
+       FROM stock_receive_lines l JOIN receipt_sessions s ON s.id = l.receipt_session_id
        WHERE l.id = ? AND s.shop_id = ? FOR UPDATE`,
       [lineId, req.shopId]
     );
@@ -930,6 +969,8 @@ router.put('/costs/lines/:id', requireRole('office'), async (req, res) => {
       await conn.rollback();
       return res.status(404).json({ error: 'ไม่พบรายการ' });
     }
+    // the price before this change, kept in the activity log so a correction can be traced
+    res.locals.activityBefore = { line_id: line.id, item_id: line.item_id, invoice_no: line.invoice_no, unit_cost: line.unit_cost };
     if (line.voided_at) {
       await conn.rollback();
       return res.status(400).json({ error: 'รายการนี้ถูกยกเลิกการรับเข้าไปแล้ว' });
@@ -956,11 +997,16 @@ router.put('/costs/items/:id', requireManager, async (req, res) => {
   try {
     conn = await pool.getConnection();
     await conn.beginTransaction();
-    const [result] = await conn.execute('UPDATE stock_items SET manual_cost = ? WHERE id = ? AND shop_id = ?', [cost.value, itemId, req.shopId]);
-    if (result.affectedRows === 0) {
+    const [[item]] = await conn.execute(
+      'SELECT id, description, oem_code, manual_cost FROM stock_items WHERE id = ? AND shop_id = ? FOR UPDATE',
+      [itemId, req.shopId]
+    );
+    if (!item) {
       await conn.rollback();
       return res.status(404).json({ error: 'ไม่พบรายการนี้ในสต๊อก' });
     }
+    res.locals.activityBefore = item; // the cost before this change, for the activity log
+    await conn.execute('UPDATE stock_items SET manual_cost = ? WHERE id = ? AND shop_id = ?', [cost.value, itemId, req.shopId]);
     await recomputeItemCost(conn, itemId, req.shopId);
     await conn.commit();
     res.json({ success: true });

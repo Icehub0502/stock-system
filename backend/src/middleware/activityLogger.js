@@ -185,7 +185,8 @@ async function activityLogger(req, res, next) {
     return sendJson(payload);
   };
   res.on('finish', () => {
-    write(req, res, startedAt, before)
+    // a route can hand over its own "before" row (res.locals.activityBefore) when its path has no snapshot table
+    write(req, res, startedAt, before || (res.locals && res.locals.activityBefore) || null)
       .then(purgeOld)
       .catch((err) => console.error('activity log failed:', err.message));
   });

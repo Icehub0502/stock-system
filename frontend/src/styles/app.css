@@ -6805,6 +6805,8 @@ a.mg-row:hover { border-color: #111111; }
 .sc-error { color: #b91c1c; font-size: 0.85rem; }
 .sc-add { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
 .sc-add input { flex: 1 1 220px; }
+.sc-saved { color: #047857; font-size: 0.85rem; font-weight: 600; }
+.sc-cost { font-weight: 600; white-space: nowrap; }
 .scan-cost { margin: 10px 0; }
 
 /* ── scan page: type a code (or a USB barcode reader) instead of scanning ── */
