@@ -2185,17 +2185,73 @@ button:disabled { background: #f3f4f6; color: #9ca3af; cursor: not-allowed; }
   background: #f3f4f6;
   cursor: not-allowed;
 }
+/* Rendered into <body> with position: fixed (placed by TechnicianMultiSelect), so the scrolling bill table or the
+   modal around it cannot clip it; above the summary modal and its payment dialog (z-index 1100). */
 .tech-multiselect-panel {
-  position: absolute;
-  z-index: 20;
-  top: calc(100% + 4px);
-  left: 0;
-  min-width: 160px;
+  position: fixed;
+  z-index: 1200;
+  display: flex;
+  flex-direction: column;
   background: #fff;
   border: 1px solid #d1d5db;
   border-radius: 6px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
   padding: 6px;
+}
+.tech-multiselect-options {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+/* Phones: a sheet from the bottom of the screen, rows big enough to tap */
+.tech-multiselect-sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: flex;
+  align-items: flex-end;
+  background: rgba(15, 23, 42, 0.45);
+}
+.tech-multiselect-sheet {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-height: 70vh;
+  padding: 8px 12px calc(12px + env(safe-area-inset-bottom));
+  background: #fff;
+  border-radius: 14px 14px 0 0;
+  box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.18);
+}
+.tech-multiselect-sheet-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 4px 10px;
+  border-bottom: 1px solid #e5e7eb;
+  font-weight: 700;
+  color: #111827;
+}
+.tech-multiselect-done {
+  padding: 6px 16px;
+  font-weight: 700;
+  color: #fff;
+  background: #4f46e5;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.tech-multiselect-sheet .tech-multiselect-option {
+  padding: 12px 6px;
+  font-size: 1rem;
+}
+.tech-multiselect-sheet .tech-multiselect-option input {
+  width: 20px;
+  height: 20px;
+}
+.tech-multiselect-sheet .tech-multiselect-add {
+  padding: 12px 6px;
+  font-size: 0.95rem;
 }
 .tech-multiselect-option {
   display: flex;
@@ -2211,7 +2267,11 @@ button:disabled { background: #f3f4f6; color: #9ca3af; cursor: not-allowed; }
 .tech-multiselect-option:hover {
   background: #f3f4f6;
 }
+/* the global 42px input min-height (touch targets) made every checkbox row 50px tall; the whole row is the label,
+   so the row itself is what gets tapped */
 .tech-multiselect-option input {
+  min-height: 0;
+  margin: 0;
   cursor: pointer;
 }
 .tech-multiselect-add {
