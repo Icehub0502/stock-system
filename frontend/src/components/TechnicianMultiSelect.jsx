@@ -17,6 +17,31 @@ function parseNames(value) {
   return (value || '').split(',').map((s) => s.trim()).filter(Boolean);
 }
 
+// One request for the whole page: every row of the summary has its own dropdown, and each used to fetch the same list
+// (11 bills = 11 requests). Kept for a minute, then fetched again so a technician added elsewhere shows up.
+const LIST_TTL_MS = 60 * 1000;
+let listRequest = null;
+let listFetchedAt = 0;
+function loadTechnicians() {
+  if (!listRequest || Date.now() - listFetchedAt > LIST_TTL_MS) {
+    listFetchedAt = Date.now();
+    listRequest = client.get('/technicians')
+      .then((res) => res.data.data || [])
+      .catch((err) => {
+        listRequest = null; // a failed load is tried again by the next dropdown
+        throw err;
+      });
+  }
+  return listRequest;
+}
+// a technician added from one dropdown is seen by the next one opened
+function rememberTechnician(technician) {
+  if (!listRequest) return;
+  listRequest = listRequest.then((list) => (list.some((t) => t.id === technician.id)
+    ? list
+    : [...list, technician].sort((a, b) => a.name.localeCompare(b.name, 'th'))));
+}
+
 const isMobileScreen = () => typeof window !== 'undefined' && window.matchMedia(MOBILE_QUERY).matches;
 
 // Whether the button can still be seen: inside the window and inside every scrolling box around it (the bill table,
@@ -69,9 +94,11 @@ export default function TechnicianMultiSelect({ value, onChange, disabled }) {
   const panelRef = useRef(null);
 
   useEffect(() => {
-    client.get('/technicians')
-      .then((res) => setTechnicians(res.data.data || []))
+    let alive = true;
+    loadTechnicians()
+      .then((list) => { if (alive) setTechnicians(list); })
       .catch(() => {});
+    return () => { alive = false; };
   }, []);
 
   const close = useCallback(() => setOpen(false), []);
@@ -134,6 +161,7 @@ export default function TechnicianMultiSelect({ value, onChange, disabled }) {
     if (!name || !name.trim()) return;
     try {
       const res = await client.post('/technicians', { name: name.trim() });
+      rememberTechnician(res.data.data);
       setTechnicians((prev) => {
         if (prev.some((t) => t.id === res.data.data.id)) return prev;
         return [...prev, res.data.data].sort((a, b) => a.name.localeCompare(b.name, 'th'));
